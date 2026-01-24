@@ -100,6 +100,26 @@ export function SettingsPanel() {
                 />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Frame Rate (fps)
+                </label>
+                <select
+                  value={project.fps}
+                  onChange={(e) =>
+                    updateProjectSettings({ fps: Number(e.target.value) })
+                  }
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                >
+                  {[24, 25, 30, 50, 60].map((fps) => (
+                    <option key={fps} value={fps}>
+                      {fps}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
             <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
               <label className="text-xs text-muted-foreground">
                 Render Scale

@@ -29,7 +29,7 @@ interface ProjectStore {
   setZoom: (zoom: number) => void;
   splitClipAtTime: (id: string, time: number) => void;
   updateProjectSettings: (
-    settings: Partial<Pick<Project, 'renderScale' | 'background' | 'resolution'>>
+    settings: Partial<Pick<Project, 'renderScale' | 'background' | 'resolution' | 'fps'>>
   ) => void;
 
   getDuration: () => number;
@@ -370,6 +370,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
               height: Math.max(240, settings.resolution.height),
             }
           : state.project.resolution,
+        fps:
+          settings.fps !== undefined
+            ? Math.max(1, Math.min(240, settings.fps))
+            : state.project.fps,
       },
     })),
 
