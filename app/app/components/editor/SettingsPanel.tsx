@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { Video, Music, Type, Image as ImageIcon } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
+import { EditableInput } from "@/app/components/ui/EditableInput";
 import type { TimelineClip, VideoClip, AudioClip, TextClip, ImageClip } from "@/app/types/timeline";
 
 export function SettingsPanel() {
@@ -14,6 +15,11 @@ export function SettingsPanel() {
 
   const allClips = layers.flatMap((layer) => layer.clips);
   const selectedClip = allClips.find((clip) => clip.id === selectedClipId);
+
+  const toNumber = (raw: string) => {
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
 
   const handleUpdate = useCallback(
     (updates: Partial<TimelineClip>) => {
@@ -55,38 +61,42 @@ export function SettingsPanel() {
                 <label className="text-xs text-muted-foreground mb-1 block">
                   Width (px)
                 </label>
-                <input
+                <EditableInput
                   type="number"
                   value={project.resolution.width}
                   min={320}
-                  onChange={(e) =>
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  onValueCommit={(val) => {
+                    const next = toNumber(val);
+                    if (next === null) return;
                     updateProjectSettings({
                       resolution: {
-                        width: Number(e.target.value),
+                        width: next,
                         height: project.resolution.height,
                       },
-                    })
-                  }
-                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                    });
+                  }}
                 />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">
                   Height (px)
                 </label>
-                <input
+                <EditableInput
                   type="number"
                   value={project.resolution.height}
                   min={240}
-                  onChange={(e) =>
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  onValueCommit={(val) => {
+                    const next = toNumber(val);
+                    if (next === null) return;
                     updateProjectSettings({
                       resolution: {
                         width: project.resolution.width,
-                        height: Number(e.target.value),
+                        height: next,
                       },
-                    })
-                  }
-                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                    });
+                  }}
                 />
               </div>
             </div>
@@ -114,19 +124,20 @@ export function SettingsPanel() {
                 Background
               </label>
               <div className="flex items-center gap-2">
-                <input
+                <EditableInput
                   type="color"
                   value={project.background}
-                  onChange={(e) =>
-                    updateProjectSettings({ background: e.target.value })
+                  commitOnChange
+                  onValueCommit={(val) =>
+                    updateProjectSettings({ background: val })
                   }
                   className="w-10 h-10 rounded border border-border cursor-pointer"
                 />
-                <input
+                <EditableInput
                   type="text"
                   value={project.background}
-                  onChange={(e) =>
-                    updateProjectSettings({ background: e.target.value })
+                  onValueCommit={(val) =>
+                    updateProjectSettings({ background: val })
                   }
                   className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm"
                 />
@@ -157,11 +168,10 @@ export function SettingsPanel() {
               <label className="text-xs text-muted-foreground mb-1 block">
                 Name
               </label>
-              <input
-                type="text"
+              <EditableInput
                 value={selectedClip.name}
-                onChange={(e) => handleUpdate({ name: e.target.value })}
                 className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                onValueCommit={(val) => handleUpdate({ name: val })}
               />
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -169,31 +179,35 @@ export function SettingsPanel() {
                 <label className="text-xs text-muted-foreground mb-1 block">
                   Start (s)
                 </label>
-                <input
+                <EditableInput
                   type="number"
                   value={selectedClip.start}
-                  onChange={(e) =>
-                    handleUpdate({ start: Math.max(0, Number(e.target.value)) })
-                  }
                   step="0.1"
                   className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  onValueCommit={(val) => {
+                    const next = toNumber(val);
+                    if (next === null) return;
+                    handleUpdate({ start: Math.max(0, next) });
+                  }}
                 />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">
                   Duration (s)
                 </label>
-                <input
+                <EditableInput
                   type="number"
                   value={selectedClip.duration}
-                  onChange={(e) =>
-                    handleUpdate({
-                      duration: Math.max(0.1, Number(e.target.value)),
-                    })
-                  }
                   step="0.1"
                   min="0.1"
                   className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  onValueCommit={(val) => {
+                    const next = toNumber(val);
+                    if (next === null) return;
+                    handleUpdate({
+                      duration: Math.max(0.1, next),
+                    });
+                  }}
                 />
               </div>
             </div>
@@ -202,34 +216,38 @@ export function SettingsPanel() {
                 <label className="text-xs text-muted-foreground mb-1 block">
                   Offset (s)
                 </label>
-                <input
+                <EditableInput
                   type="number"
                   value={selectedClip.offset}
-                  onChange={(e) =>
-                    handleUpdate({
-                      offset: Math.max(0, Number(e.target.value)),
-                    })
-                  }
                   step="0.1"
                   min="0"
                   className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  onValueCommit={(val) => {
+                    const next = toNumber(val);
+                    if (next === null) return;
+                    handleUpdate({
+                      offset: Math.max(0, next),
+                    });
+                  }}
                 />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">
                   Speed
                 </label>
-                <input
+                <EditableInput
                   type="number"
                   value={selectedClip.speed}
-                  onChange={(e) =>
-                    handleUpdate({
-                      speed: Math.max(0.1, Number(e.target.value)),
-                    })
-                  }
                   step="0.1"
                   min="0.1"
                   className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  onValueCommit={(val) => {
+                    const next = toNumber(val);
+                    if (next === null) return;
+                    handleUpdate({
+                      speed: Math.max(0.1, next),
+                    });
+                  }}
                 />
               </div>
             </div>
@@ -238,77 +256,85 @@ export function SettingsPanel() {
                 <label className="text-xs text-muted-foreground mb-1 block">
                   Position X
                 </label>
-                <input
-                  type="number"
-                  value={selectedClip.position.x}
-                  onChange={(e) =>
-                    handleUpdate({
-                      position: {
-                        ...selectedClip.position,
-                        x: Number(e.target.value),
-                      },
-                    })
-                  }
-                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                />
+                  <EditableInput
+                    type="number"
+                    value={selectedClip.position.x}
+                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                    onValueCommit={(val) => {
+                      const next = toNumber(val);
+                      if (next === null) return;
+                      handleUpdate({
+                        position: {
+                          ...selectedClip.position,
+                          x: next,
+                        },
+                      });
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Position Y
+                  </label>
+                  <EditableInput
+                    type="number"
+                    value={selectedClip.position.y}
+                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                    onValueCommit={(val) => {
+                      const next = toNumber(val);
+                      if (next === null) return;
+                      handleUpdate({
+                        position: {
+                          ...selectedClip.position,
+                          y: next,
+                        },
+                      });
+                    }}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  Position Y
-                </label>
-                <input
-                  type="number"
-                  value={selectedClip.position.y}
-                  onChange={(e) =>
-                    handleUpdate({
-                      position: {
-                        ...selectedClip.position,
-                        y: Number(e.target.value),
-                      },
-                    })
-                  }
-                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
                 <label className="text-xs text-muted-foreground mb-1 block">
                   Scale X
                 </label>
-                <input
-                  type="number"
-                  value={selectedClip.scale.x}
-                  step="0.1"
-                  onChange={(e) =>
-                    handleUpdate({
-                      scale: {
-                        ...selectedClip.scale,
-                        x: Math.max(0.1, Number(e.target.value)),
-                      },
-                    })
-                  }
-                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  Scale Y
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={selectedClip.scale.y}
-                  onChange={(e) =>
-                    handleUpdate({
-                      scale: {
-                        ...selectedClip.scale,
-                        y: Math.max(0.1, Number(e.target.value)),
-                      },
-                    })
-                  }
-                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                />
+                  <EditableInput
+                    type="number"
+                    value={selectedClip.scale.x}
+                    step="0.1"
+                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                    onValueCommit={(val) => {
+                      const next = toNumber(val);
+                      if (next === null) return;
+                      handleUpdate({
+                        scale: {
+                          ...selectedClip.scale,
+                          x: Math.max(0.1, next),
+                        },
+                      });
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Scale Y
+                  </label>
+                  <EditableInput
+                    type="number"
+                    step="0.1"
+                    value={selectedClip.scale.y}
+                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                    onValueCommit={(val) => {
+                      const next = toNumber(val);
+                      if (next === null) return;
+                      handleUpdate({
+                        scale: {
+                          ...selectedClip.scale,
+                          y: Math.max(0.1, next),
+                        },
+                      });
+                    }}
+                  />
               </div>
             </div>
           </div>
@@ -325,11 +351,11 @@ export function SettingsPanel() {
                 <label className="text-xs text-muted-foreground mb-1 block">
                   Source URL
                 </label>
-                <input
+                <EditableInput
                   type="url"
                   value={(selectedClip as VideoClip).src}
-                  onChange={(e) => handleUpdate({ src: e.target.value })}
                   className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  onValueCommit={(val) => handleUpdate({ src: val })}
                 />
               </div>
             </div>
@@ -347,11 +373,11 @@ export function SettingsPanel() {
                 <label className="text-xs text-muted-foreground mb-1 block">
                   Source URL
                 </label>
-                <input
+                <EditableInput
                   type="url"
                   value={(selectedClip as AudioClip).src}
-                  onChange={(e) => handleUpdate({ src: e.target.value })}
                   className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  onValueCommit={(val) => handleUpdate({ src: val })}
                 />
               </div>
               <div>
@@ -397,38 +423,39 @@ export function SettingsPanel() {
                   <label className="text-xs text-muted-foreground mb-1 block">
                     Font Size
                   </label>
-                <input
+                <EditableInput
                   type="number"
                   value={(selectedClip as TextClip).fontSize ?? 48}
-                    onChange={(e) =>
-                      handleUpdate({
-                        fontSize: Math.max(1, Number(e.target.value)),
-                      })
-                    }
-                    min="1"
-                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                  />
+                  min="1"
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  onValueCommit={(val) => {
+                    const next = toNumber(val);
+                    if (next === null) return;
+                    handleUpdate({
+                      fontSize: Math.max(1, next),
+                    });
+                  }}
+                />
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">
                     Opacity
                   </label>
-                <input
+                <EditableInput
                   type="number"
                   value={(selectedClip as TextClip).opacity ?? 1}
-                    onChange={(e) =>
-                      handleUpdate({
-                        opacity: Math.max(
-                          0,
-                          Math.min(1, Number(e.target.value))
-                        ),
-                      })
-                    }
-                    step="0.1"
-                    min="0"
-                    max="1"
-                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                  />
+                  step="0.1"
+                  min="0"
+                  max="1"
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  onValueCommit={(val) => {
+                    const next = toNumber(val);
+                    if (next === null) return;
+                    handleUpdate({
+                      opacity: Math.max(0, Math.min(1, next)),
+                    });
+                  }}
+                />
                 </div>
               </div>
               <div>
@@ -436,19 +463,20 @@ export function SettingsPanel() {
                   Color
                 </label>
                 <div className="flex gap-2">
-                <input
+                <EditableInput
                   type="color"
                   value={(selectedClip as TextClip).fill ?? "#ffffff"}
-                    onChange={(e) => handleUpdate({ fill: e.target.value })}
-                    className="w-12 h-9 rounded border border-border cursor-pointer"
-                  />
-                <input
+                  commitOnChange
+                  onValueCommit={(val) => handleUpdate({ fill: val })}
+                  className="w-12 h-9 rounded border border-border cursor-pointer"
+                />
+                <EditableInput
                   type="text"
                   value={(selectedClip as TextClip).fill ?? "#ffffff"}
-                    onChange={(e) => handleUpdate({ fill: e.target.value })}
-                    className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                    placeholder="#ffffff"
-                  />
+                  onValueCommit={(val) => handleUpdate({ fill: val })}
+                  className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  placeholder="#ffffff"
+                />
                 </div>
               </div>
             </div>
@@ -466,11 +494,11 @@ export function SettingsPanel() {
                 <label className="text-xs text-muted-foreground mb-1 block">
                   Source URL
                 </label>
-                <input
+                <EditableInput
                   type="url"
                   value={(selectedClip as ImageClip).src}
-                  onChange={(e) => handleUpdate({ src: e.target.value })}
                   className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  onValueCommit={(val) => handleUpdate({ src: val })}
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -478,28 +506,32 @@ export function SettingsPanel() {
                   <label className="text-xs text-muted-foreground mb-1 block">
                     Width (px)
                   </label>
-                  <input
+                  <EditableInput
                     type="number"
                     value={(selectedClip as ImageClip).width ?? ""}
                     placeholder="Auto"
-                    onChange={(e) =>
-                      handleUpdate({ width: e.target.value ? Number(e.target.value) : undefined })
-                    }
                     className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                    onValueCommit={(val) =>
+                      handleUpdate({
+                        width: val === "" ? undefined : toNumber(val) ?? undefined,
+                      })
+                    }
                   />
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">
                     Height (px)
                   </label>
-                  <input
+                  <EditableInput
                     type="number"
                     value={(selectedClip as ImageClip).height ?? ""}
                     placeholder="Auto"
-                    onChange={(e) =>
-                      handleUpdate({ height: e.target.value ? Number(e.target.value) : undefined })
-                    }
                     className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                    onValueCommit={(val) =>
+                      handleUpdate({
+                        height: val === "" ? undefined : toNumber(val) ?? undefined,
+                      })
+                    }
                   />
                 </div>
               </div>
