@@ -28,6 +28,9 @@ interface ProjectStore {
   setIsPlaying: (playing: boolean) => void;
   setZoom: (zoom: number) => void;
   splitClipAtTime: (id: string, time: number) => void;
+  updateProjectSettings: (
+    settings: Partial<Pick<Project, 'renderScale' | 'background' | 'resolution'>>
+  ) => void;
 
   getDuration: () => number;
   getActiveVideoClip: (time: number) => VideoClip | undefined;
@@ -65,6 +68,8 @@ const defaultProject: Project = {
   name: 'Untitled Project',
   resolution: { width: 1920, height: 1080 },
   fps: 30,
+  renderScale: 1,
+  background: '#141417',
   layers: [
     {
       id: 'layer-video-1',
@@ -346,6 +351,27 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   setIsPlaying: (playing) => set({ isPlaying: playing }),
 
   setZoom: (zoom) => set({ zoom: clampZoom(zoom) }),
+
+  updateProjectSettings: (settings) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        renderScale:
+          settings.renderScale !== undefined
+            ? Math.max(0.25, Math.min(4, settings.renderScale))
+            : state.project.renderScale,
+        background:
+          settings.background !== undefined
+            ? settings.background
+            : state.project.background,
+        resolution: settings.resolution
+          ? {
+              width: Math.max(320, settings.resolution.width),
+              height: Math.max(240, settings.resolution.height),
+            }
+          : state.project.resolution,
+      },
+    })),
 
   splitClipAtTime: (id, time) => {
     const state = get();

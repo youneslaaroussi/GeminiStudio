@@ -7,8 +7,10 @@ import type { TimelineClip, VideoClip, AudioClip, TextClip, ImageClip } from "@/
 
 export function SettingsPanel() {
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
-  const layers = useProjectStore((s) => s.project.layers);
+  const project = useProjectStore((s) => s.project);
+  const layers = project.layers;
   const updateClip = useProjectStore((s) => s.updateClip);
+  const updateProjectSettings = useProjectStore((s) => s.updateProjectSettings);
 
   const allClips = layers.flatMap((layer) => layer.clips);
   const selectedClip = allClips.find((clip) => clip.id === selectedClipId);
@@ -21,23 +23,7 @@ export function SettingsPanel() {
     [selectedClipId, selectedClip, updateClip]
   );
 
-  if (!selectedClip) {
-    return (
-      <div className="flex h-full flex-col">
-        <div className="border-b border-border px-3 py-2">
-          <h2 className="text-sm font-semibold text-foreground">Settings</h2>
-          <p className="text-xs text-muted-foreground">Select a clip to edit</p>
-        </div>
-        <div className="flex-1 flex items-center justify-center p-4">
-          <p className="text-sm text-muted-foreground text-center">
-            No clip selected
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  const clipType = selectedClip.type;
+  const clipType = selectedClip?.type;
   const icon =
     clipType === "video" ? (
       <Video className="size-4 text-blue-400" />
@@ -45,23 +31,122 @@ export function SettingsPanel() {
       <Music className="size-4 text-green-400" />
     ) : clipType === "text" ? (
       <Type className="size-4 text-purple-400" />
-    ) : (
+    ) : clipType === "image" ? (
       <ImageIcon className="size-4 text-orange-400" />
-    );
+    ) : null;
 
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-3 py-2">
-        <div className="flex items-center gap-2">
-          {icon}
-          <h2 className="text-sm font-semibold text-foreground">Settings</h2>
-        </div>
+        <h2 className="text-sm font-semibold text-foreground">Settings</h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          {selectedClip.name}
+          Configure the scene and selected clip
         </p>
       </div>
 
-      <div className="flex-1 overflow-auto p-3 space-y-4">
+      <div className="flex-1 overflow-auto p-4 space-y-4">
+        <div>
+          <h3 className="text-xs font-medium text-muted-foreground mb-2">
+            Scene Settings
+          </h3>
+          <div className="space-y-3 rounded-md border border-border p-5 bg-muted/10">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Width (px)
+                </label>
+                <input
+                  type="number"
+                  value={project.resolution.width}
+                  min={320}
+                  onChange={(e) =>
+                    updateProjectSettings({
+                      resolution: {
+                        width: Number(e.target.value),
+                        height: project.resolution.height,
+                      },
+                    })
+                  }
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Height (px)
+                </label>
+                <input
+                  type="number"
+                  value={project.resolution.height}
+                  min={240}
+                  onChange={(e) =>
+                    updateProjectSettings({
+                      resolution: {
+                        width: project.resolution.width,
+                        height: Number(e.target.value),
+                      },
+                    })
+                  }
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+              <label className="text-xs text-muted-foreground">
+                Render Scale
+              </label>
+              <input
+                type="range"
+                min={0.5}
+                max={2}
+                step={0.1}
+                value={project.renderScale}
+                onChange={(e) =>
+                  updateProjectSettings({ renderScale: Number(e.target.value) })
+                }
+                className="w-full"
+              />
+              <span className="text-xs font-mono text-muted-foreground">
+                {project.renderScale.toFixed(1)}x
+              </span>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Background
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={project.background}
+                  onChange={(e) =>
+                    updateProjectSettings({ background: e.target.value })
+                  }
+                  className="w-10 h-10 rounded border border-border cursor-pointer"
+                />
+                <input
+                  type="text"
+                  value={project.background}
+                  onChange={(e) =>
+                    updateProjectSettings({ background: e.target.value })
+                  }
+                  className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {!selectedClip && (
+          <div className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+            Select a clip to edit clip-specific settings.
+          </div>
+        )}
+
+        {selectedClip && (
+        <>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wide">
+          {icon}
+          <span className="font-medium text-foreground normal-case">{selectedClip.name}</span>
+        </div>
         {/* Common Properties */}
         <div>
           <h3 className="text-xs font-medium text-muted-foreground mb-2">
@@ -420,6 +505,8 @@ export function SettingsPanel() {
               </div>
             </div>
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

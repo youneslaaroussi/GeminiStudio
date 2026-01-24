@@ -58,6 +58,8 @@ export interface Project {
   resolution: { width: number; height: number };
   fps: number;
   layers: Layer[];
+  renderScale: number;
+  background: string;
 }
 
 // Test videos for development

@@ -7,7 +7,6 @@ import { useDrag } from '@/app/hooks/use-drag';
 
 const SCENE_URL = '/scene/src/project.js';
 const PREVIEW_FPS = 30;
-const DEFAULT_SIZE = new Vector2(1920, 1080);
 const ZOOM_SPEED = 0.1;
 
 interface ScenePlayerProps {
@@ -16,6 +15,11 @@ interface ScenePlayerProps {
   duration?: number;
   currentTime?: number;
   onTimeUpdate?: (time: number) => void;
+  sceneConfig: {
+    resolution: { width: number; height: number };
+    renderScale: number;
+    background: string;
+  };
 }
 
 export function ScenePlayer({
@@ -24,6 +28,7 @@ export function ScenePlayer({
   duration = 10,
   currentTime = 0,
   onTimeUpdate,
+  sceneConfig,
 }: ScenePlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState<Stage | null>(null);
@@ -105,7 +110,10 @@ export function ScenePlayer({
 
   // Calculate Transform
   const transform = useMemo(() => {
-    const projectSize = project?.meta.shared.size.get() || DEFAULT_SIZE;
+    const targetSize = new Vector2(
+      sceneConfig.resolution.width,
+      sceneConfig.resolution.height
+    );
     
     // Default / Manual state
     let currentZoom = zoom;
@@ -113,8 +121,8 @@ export function ScenePlayer({
     let y = position.y;
 
     if (zoomToFit && containerSize.width > 0 && containerSize.height > 0) {
-      const widthRatio = containerSize.width / projectSize.width;
-      const heightRatio = containerSize.height / projectSize.height;
+      const widthRatio = containerSize.width / targetSize.width;
+      const heightRatio = containerSize.height / targetSize.height;
       // 90% fit to have some padding
       currentZoom = Math.min(widthRatio, heightRatio) * 0.9;
       x = 0;
@@ -122,7 +130,7 @@ export function ScenePlayer({
     }
 
     return { zoom: currentZoom, x, y };
-  }, [project, zoomToFit, zoom, position, containerSize]);
+  }, [zoomToFit, zoom, position, containerSize, sceneConfig.resolution]);
 
   // Refs for event handlers to avoid re-binding listeners
   const transformRef = useRef(transform);
@@ -216,8 +224,10 @@ export function ScenePlayer({
     const m = project;
     const meta = m.meta;
     const preview = meta.preview.get();
-    const size = meta.shared.size.get();
-    const initialSize = size.x > 0 && size.y > 0 ? size : DEFAULT_SIZE;
+    const initialSize = new Vector2(
+      sceneConfig.resolution.width,
+      sceneConfig.resolution.height
+    );
 
     const stageInstance = new Stage();
     const playerInstance = new Player(m, {
@@ -225,7 +235,7 @@ export function ScenePlayer({
       size: initialSize,
       range: [0, duration * PREVIEW_FPS], // Convert to frames
       fps: PREVIEW_FPS,
-      resolutionScale: 1,
+      resolutionScale: sceneConfig.renderScale,
     });
 
     playerInstance.onRender.subscribe(async () => {
@@ -242,8 +252,8 @@ export function ScenePlayer({
 
     stageInstance.configure({
       size: initialSize,
-      resolutionScale: 1,
-      background: null,
+      resolutionScale: sceneConfig.renderScale,
+      background: sceneConfig.background,
     });
 
     // Provide initial variables so the scene can render immediately.
@@ -257,6 +267,9 @@ export function ScenePlayer({
     // Style the canvas
     const canvas = stageInstance.finalBuffer;
     canvas.style.width = `${initialSize.width}px`;
+    canvas.style.height = `${initialSize.height}px`;
+    canvas.style.maxWidth = '100%';
+    canvas.style.maxHeight = '100%';
     canvas.style.height = `${initialSize.height}px`;
     canvas.style.display = 'block';
     
@@ -275,7 +288,15 @@ export function ScenePlayer({
       setPlayer(null);
       onPlayerChange?.(null);
     };
-  }, [project, onPlayerChange, duration]);
+  }, [
+    project,
+    onPlayerChange,
+    duration,
+    sceneConfig.resolution.width,
+    sceneConfig.resolution.height,
+    sceneConfig.renderScale,
+    sceneConfig.background,
+  ]);
 
   // Update canvas transform
   useEffect(() => {
@@ -283,6 +304,27 @@ export function ScenePlayer({
       stage.finalBuffer.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.zoom})`;
     }
   }, [stage, transform]);
+
+  useEffect(() => {
+    if (!stage || !player) return;
+    stage.configure({
+      size: new Vector2(sceneConfig.resolution.width, sceneConfig.resolution.height),
+      resolutionScale: sceneConfig.renderScale,
+      background: sceneConfig.background,
+    });
+    if (stage.finalBuffer) {
+      stage.finalBuffer.style.width = `${sceneConfig.resolution.width}px`;
+      stage.finalBuffer.style.height = `${sceneConfig.resolution.height}px`;
+    }
+    player.requestRender();
+  }, [
+    stage,
+    player,
+    sceneConfig.resolution.width,
+    sceneConfig.resolution.height,
+    sceneConfig.renderScale,
+    sceneConfig.background,
+  ]);
 
   // Update variables when clips or duration change
   useEffect(() => {
@@ -349,10 +391,11 @@ export function ScenePlayer({
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col min-w-0 min-h-0">
       <div
         ref={containerRef}
-        className="flex flex-1 items-center justify-center overflow-hidden bg-black relative"
+        className="flex flex-1 min-h-0 min-w-0 items-center justify-center overflow-hidden relative"
+        style={{ background: sceneConfig.background }}
         onMouseDown={(e) => {
           // Middle click or Shift+Left click
           if (e.button === 1 || (e.button === 0 && e.shiftKey)) {

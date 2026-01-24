@@ -20,7 +20,8 @@ export function EditorLayout() {
   // Connect to Zustand store
   const isPlaying = useProjectStore((s) => s.isPlaying);
   const setIsPlaying = useProjectStore((s) => s.setIsPlaying);
-  const layers = useProjectStore((s) => s.project.layers);
+  const project = useProjectStore((s) => s.project);
+  const layers = project.layers;
   const currentTime = useProjectStore((s) => s.currentTime);
   const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
   const getDuration = useProjectStore((s) => s.getDuration);
@@ -54,7 +55,7 @@ export function EditorLayout() {
           <ResizablePanelGroup direction="horizontal" className="h-full">
             {/* Left: Assets */}
             <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
-              <div className="h-full bg-card border-r border-border">
+              <div className="h-full bg-card border-r border-border min-w-0">
                 <AssetsPanel />
               </div>
             </ResizablePanel>
@@ -62,14 +63,19 @@ export function EditorLayout() {
             <ResizableHandle withHandle />
 
             {/* Center: Preview */}
-            <ResizablePanel defaultSize={60} minSize={30}>
-              <div className="h-full bg-card">
+            <ResizablePanel defaultSize={60} minSize={30} className="min-w-0">
+              <div className="h-full bg-card min-w-0">
                 <PreviewPanel
                   onPlayerChange={setPlayer}
                   layers={layers}
                   duration={getDuration()}
                   currentTime={currentTime}
                   onTimeUpdate={handleTimeUpdate}
+                  sceneConfig={{
+                    resolution: project.resolution,
+                    renderScale: project.renderScale,
+                    background: project.background,
+                  }}
                 />
               </div>
             </ResizablePanel>
@@ -77,8 +83,8 @@ export function EditorLayout() {
             <ResizableHandle withHandle />
 
             {/* Right: Settings */}
-            <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
-              <div className="h-full bg-card border-l border-border">
+            <ResizablePanel defaultSize={25} minSize={18} maxSize={35}>
+              <div className="h-full bg-card border-l border-border min-w-[260px]">
                 <SettingsPanel />
               </div>
             </ResizablePanel>

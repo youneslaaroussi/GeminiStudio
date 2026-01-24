@@ -10,6 +10,11 @@ interface PreviewPanelProps {
   duration: number;
   currentTime: number;
   onTimeUpdate: (time: number) => void;
+  sceneConfig: {
+    resolution: { width: number; height: number };
+    renderScale: number;
+    background: string;
+  };
 }
 
 export function PreviewPanel({
@@ -18,6 +23,7 @@ export function PreviewPanel({
   duration,
   currentTime,
   onTimeUpdate,
+  sceneConfig,
 }: PreviewPanelProps) {
   const totalClips = layers.reduce((acc, layer) => acc + layer.clips.length, 0);
   const counts = layers.reduce<Record<"video" | "audio" | "text" | "image", number>>(
@@ -29,7 +35,7 @@ export function PreviewPanel({
   );
   
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col min-w-0">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Preview</h2>
@@ -50,6 +56,7 @@ export function PreviewPanel({
           duration={duration}
           currentTime={currentTime}
           onTimeUpdate={onTimeUpdate}
+          sceneConfig={sceneConfig}
         />
       </div>
     </div>
