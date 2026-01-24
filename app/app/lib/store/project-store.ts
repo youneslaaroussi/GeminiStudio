@@ -17,6 +17,9 @@ interface ProjectStore {
   selectedClipId: string | null;
   isPlaying: boolean;
   zoom: number; // pixels per second
+  isMuted: boolean;
+  isLooping: boolean;
+  playbackSpeed: number;
 
   addLayer: (layer: Layer) => void;
   addClip: (clip: TimelineClip, layerId?: string) => void;
@@ -27,6 +30,9 @@ interface ProjectStore {
   setSelectedClip: (id: string | null) => void;
   setIsPlaying: (playing: boolean) => void;
   setZoom: (zoom: number) => void;
+  setMuted: (muted: boolean) => void;
+  setLooping: (looping: boolean) => void;
+  setPlaybackSpeed: (speed: number) => void;
   splitClipAtTime: (id: string, time: number) => void;
   updateProjectSettings: (
     settings: Partial<Pick<Project, 'renderScale' | 'background' | 'resolution' | 'fps' | 'name'>>
@@ -71,142 +77,7 @@ const defaultProject: Project = {
   fps: 30,
   renderScale: 1,
   background: '#141417',
-  layers: [
-    {
-      id: 'layer-video-1',
-      name: 'Video 1',
-      type: 'video',
-      clips: [
-        {
-          id: 'clip-1',
-          type: 'video',
-          name: 'Big Buck Bunny',
-          src: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-          start: 0,
-          duration: 10,
-          offset: 0,
-          speed: 1,
-          position: { x: 0, y: 0 },
-          scale: { x: 1, y: 1 },
-        },
-        {
-          id: 'clip-2',
-          type: 'video',
-          name: 'Elephant Dream',
-          src: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-          start: 10,
-          duration: 8,
-          offset: 30,
-          speed: 1,
-          position: { x: 0, y: 0 },
-          scale: { x: 1, y: 1 },
-        },
-        {
-          id: 'clip-3',
-          type: 'video',
-          name: 'Sintel',
-          src: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
-          start: 18,
-          duration: 12,
-          offset: 60,
-          speed: 1,
-          position: { x: 0, y: 0 },
-          scale: { x: 1, y: 1 },
-        },
-      ],
-    },
-    {
-      id: 'layer-audio-1',
-      name: 'Audio 1',
-      type: 'audio',
-      clips: [
-        {
-          id: 'audio-1',
-          type: 'audio',
-          name: 'Ambient Background',
-          src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-          start: 0,
-          duration: 15,
-          offset: 0,
-          speed: 1,
-          volume: 0.5,
-          position: { x: 0, y: 0 },
-          scale: { x: 1, y: 1 },
-        },
-        {
-          id: 'audio-2',
-          type: 'audio',
-          name: 'Upbeat Music',
-          src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
-          start: 15,
-          duration: 15,
-          offset: 0,
-          speed: 1,
-          volume: 0.5,
-          position: { x: 0, y: 0 },
-          scale: { x: 1, y: 1 },
-        },
-      ],
-    },
-    {
-      id: 'layer-text-1',
-      name: 'Text 1',
-      type: 'text',
-      clips: [
-        {
-          id: 'text-1',
-          type: 'text',
-          name: 'Title',
-          text: 'Welcome to Gemini Studio',
-          start: 2,
-          duration: 5,
-          offset: 0,
-          speed: 1,
-          fontSize: 64,
-          fill: '#ffffff',
-          opacity: 1,
-          position: { x: 0, y: -200 },
-          scale: { x: 1, y: 1 },
-        },
-        {
-          id: 'text-2',
-          type: 'text',
-          name: 'Subtitle',
-          text: 'Create amazing videos',
-          start: 7,
-          duration: 4,
-          offset: 0,
-          speed: 1,
-          fontSize: 36,
-          fill: '#cccccc',
-          opacity: 1,
-          position: { x: 0, y: -100 },
-          scale: { x: 1, y: 1 },
-        },
-      ],
-    },
-    {
-      id: 'layer-image-1',
-      name: 'Image 1',
-      type: 'image',
-      clips: [
-        {
-          id: 'image-1',
-          type: 'image',
-          name: 'Overlay Image',
-          src: 'https://placehold.co/600x400/png',
-          start: 5,
-          duration: 5,
-          offset: 0,
-          speed: 1,
-          width: 400,
-          height: 300,
-          position: { x: 0, y: 0 },
-          scale: { x: 1, y: 1 },
-        },
-      ],
-    },
-  ],
+  layers: [],
 };
 
 const clampZoom = (zoom: number) => Math.max(10, Math.min(200, zoom));
@@ -223,6 +94,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   selectedClipId: null,
   isPlaying: false,
   zoom: 50,
+  isMuted: false,
+  isLooping: true,
+  playbackSpeed: 1,
 
   addLayer: (layer) =>
     set((state) => ({
@@ -353,6 +227,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   setZoom: (zoom) => set({ zoom: clampZoom(zoom) }),
 
+  setMuted: (muted) => set({ isMuted: muted }),
+
+  setLooping: (looping) => set({ isLooping: looping }),
+
+  setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
+
   updateProjectSettings: (settings) =>
     set((state) => ({
       project: {
@@ -436,7 +316,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   getDuration: () => {
     const { layers } = get().project;
     const allClips = layers.flatMap((layer) => layer.clips);
-    if (allClips.length === 0) return 10;
+    if (allClips.length === 0) return 0;
     return Math.max(...allClips.map(getClipEnd));
   },
 

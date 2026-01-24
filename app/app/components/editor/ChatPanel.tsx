@@ -225,7 +225,7 @@ function renderMessagePart(part: MessagePart, key: string) {
   }
 
   if (typeof part.type === "string" && part.type.startsWith("tool-")) {
-    return renderToolPart(part as ToolPart, key);
+    return renderToolPart(part as ToolPart);
   }
 
   if (part.type === "step-start") {
@@ -239,7 +239,7 @@ function renderMessagePart(part: MessagePart, key: string) {
   );
 }
 
-function renderToolPart(part: ToolPart, key: string) {
+function renderToolPart(part: ToolPart) {
   const label = part.type.replace(/^tool-/, "").replace(/-/g, " ");
 
   switch (part.state) {

@@ -1,25 +1,51 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Pause, Play, ZoomIn, ZoomOut, Scissors, SkipBack, SkipForward, Plus } from "lucide-react";
+import {
+  Pause,
+  Play,
+  ZoomIn,
+  ZoomOut,
+  Scissors,
+  SkipBack,
+  SkipForward,
+  Plus,
+  Volume2,
+  VolumeX,
+  Repeat,
+} from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
+import { cn } from "@/lib/utils";
 import { TimeRuler } from "../timeline/TimeRuler";
 import { LayerTrack } from "../timeline/LayerTrack";
 import { Playhead } from "../timeline/Playhead";
 import type { ClipType } from "@/app/types/timeline";
 import { createLayerTemplate } from "@/app/lib/store/project-store";
 import { TRACK_LABEL_WIDTH } from "../timeline/constants";
+import { createClipFromAsset, hasAssetDragData, readDraggedAsset } from "@/app/lib/assets/drag";
 
 interface TimelinePanelProps {
   hasPlayer: boolean;
   playing: boolean;
   onTogglePlay: () => void;
+  muted: boolean;
+  loop: boolean;
+  speed: number;
+  onToggleMute: () => void;
+  onToggleLoop: () => void;
+  onSpeedChange: (speed: number) => void;
 }
 
 export function TimelinePanel({
   hasPlayer,
   playing,
   onTogglePlay,
+  muted,
+  loop,
+  speed,
+  onToggleMute,
+  onToggleLoop,
+  onSpeedChange,
 }: TimelinePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(600);
@@ -33,8 +59,11 @@ export function TimelinePanel({
   const splitClipAtTime = useProjectStore((s) => s.splitClipAtTime);
   const layers = useProjectStore((s) => s.project.layers);
   const addLayer = useProjectStore((s) => s.addLayer);
+  const addClip = useProjectStore((s) => s.addClip);
 
+  const timelineAreaRef = useRef<HTMLDivElement>(null);
   const [newLayerType, setNewLayerType] = useState<ClipType>("video");
+  const hasClips = useMemo(() => layers.some((layer) => layer.clips.length > 0), [layers]);
 
   const layerCounts = useMemo(() => {
     return layers.reduce<Record<ClipType, number>>(
@@ -50,6 +79,32 @@ export function TimelinePanel({
     const count = layerCounts[newLayerType] + 1;
     addLayer(createLayerTemplate(newLayerType, `${newLayerType} ${count}`));
   }, [addLayer, newLayerType, layerCounts]);
+
+  const handleTimelineDragOver = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!hasAssetDragData(event)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    },
+    []
+  );
+
+  const handleTimelineDrop = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!hasAssetDragData(event)) return;
+      event.preventDefault();
+      const asset = readDraggedAsset(event);
+      if (!asset) return;
+      const area = timelineAreaRef.current;
+      if (!area) return;
+      const rect = area.getBoundingClientRect();
+      const x = event.clientX - rect.left - TRACK_LABEL_WIDTH;
+      const start = Math.max(0, x / zoom);
+      const clip = createClipFromAsset(asset, start);
+      addClip(clip);
+    },
+    [addClip, zoom]
+  );
 
   // Update container width on resize
   const updateWidth = useCallback(() => {
@@ -160,6 +215,51 @@ export function TimelinePanel({
 
           <div className="w-px h-4 bg-border mx-1" />
 
+          {/* Mute toggle */}
+          <button
+            type="button"
+            onClick={onToggleMute}
+            className="flex size-7 items-center justify-center rounded-md hover:bg-accent text-muted-foreground"
+            title={muted ? "Unmute preview audio" : "Mute preview audio"}
+          >
+            {muted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
+          </button>
+
+          <div className="w-px h-4 bg-border mx-1" />
+
+          {/* Loop toggle */}
+          <button
+            type="button"
+            onClick={onToggleLoop}
+            className={cn(
+              "flex size-7 items-center justify-center rounded-md border border-transparent hover:bg-accent text-muted-foreground",
+              loop && "text-primary border-primary/40 bg-primary/10"
+            )}
+            title={loop ? "Disable looping" : "Enable looping"}
+          >
+            <Repeat className="size-3.5" />
+          </button>
+
+          <div className="w-px h-4 bg-border mx-1" />
+
+          {/* Speed */}
+          <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            Speed
+            <select
+              value={speed}
+              onChange={(e) => onSpeedChange(Number(e.target.value))}
+              className="rounded border border-border bg-background px-2 py-1 text-xs"
+            >
+              {[0.25, 0.5, 0.75, 1, 1.5, 2, 4].map((value) => (
+                <option key={value} value={value}>
+                  {value}x
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="w-px h-4 bg-border mx-1" />
+
           {/* Split button */}
           <button
             type="button"
@@ -202,8 +302,11 @@ export function TimelinePanel({
       {/* Timeline content */}
       <div className="flex-1 overflow-auto" onLoad={updateWidth}>
         <div
-          className="relative min-w-full"
+          ref={timelineAreaRef}
+          className="relative min-w-full min-h-full"
           onClick={handleTimelineClick}
+          onDragOver={handleTimelineDragOver}
+          onDrop={handleTimelineDrop}
           onKeyDown={(e) => {
             if (e.key === "ArrowLeft") setCurrentTime(currentTime - 1);
             if (e.key === "ArrowRight") setCurrentTime(currentTime + 1);
@@ -236,6 +339,14 @@ export function TimelinePanel({
 
           {/* Playhead */}
           <Playhead />
+
+          {!hasClips && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="rounded-lg border border-dashed border-border/80 bg-background/90 px-6 py-4 text-center text-sm text-muted-foreground">
+                Timeline is empty. Upload assets or add clips to start building your project.
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -6,7 +6,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AssetsPanel } from "./AssetsPanel";
 import { PreviewPanel } from "./PreviewPanel";
 import { TimelinePanel } from "./TimelinePanel";
@@ -22,6 +22,12 @@ export function EditorLayout() {
   // Connect to Zustand store
   const isPlaying = useProjectStore((s) => s.isPlaying);
   const setIsPlaying = useProjectStore((s) => s.setIsPlaying);
+  const isMuted = useProjectStore((s) => s.isMuted);
+  const setMuted = useProjectStore((s) => s.setMuted);
+  const isLooping = useProjectStore((s) => s.isLooping);
+  const setLooping = useProjectStore((s) => s.setLooping);
+  const playbackSpeed = useProjectStore((s) => s.playbackSpeed);
+  const setPlaybackSpeed = useProjectStore((s) => s.setPlaybackSpeed);
   const project = useProjectStore((s) => s.project);
   const layers = project.layers;
   const currentTime = useProjectStore((s) => s.currentTime);
@@ -31,14 +37,31 @@ export function EditorLayout() {
   const togglePlay = useCallback(() => {
     if (!player) return;
     player.togglePlayback();
-    setIsPlaying(!isPlaying);
-  }, [player, isPlaying, setIsPlaying]);
+  }, [player]);
 
   const handleTimeUpdate = useCallback(
     (time: number) => {
       setCurrentTime(time);
     },
     [setCurrentTime]
+  );
+
+  const handleToggleMute = useCallback(() => {
+    if (!player) return;
+    player.toggleAudio();
+  }, [player]);
+
+  const handleToggleLoop = useCallback(() => {
+    if (!player) return;
+    player.toggleLoop();
+  }, [player]);
+
+  const handleSpeedChange = useCallback(
+    (value: number) => {
+      if (!player) return;
+      player.setSpeed(value);
+    },
+    [player]
   );
 
   useShortcuts([
@@ -48,6 +71,19 @@ export function EditorLayout() {
       preventDefault: true,
     },
   ]);
+
+  useEffect(() => {
+    if (!player) return;
+    const unsubscribe = player.onStateChanged.subscribe((state) => {
+      setIsPlaying(!state.paused);
+      setMuted(state.muted);
+      setLooping(state.loop);
+      setPlaybackSpeed(state.speed);
+    });
+    return () => {
+      unsubscribe?.();
+    };
+  }, [player, setIsPlaying, setLooping, setMuted, setPlaybackSpeed]);
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background">
@@ -106,6 +142,12 @@ export function EditorLayout() {
                     hasPlayer={!!player}
                     playing={isPlaying}
                     onTogglePlay={togglePlay}
+                    muted={isMuted}
+                    loop={isLooping}
+                    speed={playbackSpeed}
+                    onToggleMute={handleToggleMute}
+                    onToggleLoop={handleToggleLoop}
+                    onSpeedChange={handleSpeedChange}
                   />
                 </div>
               </ResizablePanel>
