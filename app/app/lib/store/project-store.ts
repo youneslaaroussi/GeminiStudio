@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { VideoClip, AudioClip, TextClip, Project, TimelineClip } from '@/app/types/timeline';
+import type { VideoClip, AudioClip, TextClip, ImageClip, Project, TimelineClip } from '@/app/types/timeline';
 import { getClipEnd } from '@/app/types/timeline';
 
 interface ProjectStore {
@@ -14,9 +14,11 @@ interface ProjectStore {
   addVideoClip: (clip: VideoClip) => void;
   addAudioClip: (clip: AudioClip) => void;
   addTextClip: (clip: TextClip) => void;
+  addImageClip: (clip: ImageClip) => void;
   updateVideoClip: (id: string, updates: Partial<VideoClip>) => void;
   updateAudioClip: (id: string, updates: Partial<AudioClip>) => void;
   updateTextClip: (id: string, updates: Partial<TextClip>) => void;
+  updateImageClip: (id: string, updates: Partial<ImageClip>) => void;
   deleteClip: (id: string) => void;
   setCurrentTime: (time: number) => void;
   setSelectedClip: (id: string | null) => void;
@@ -29,6 +31,7 @@ interface ProjectStore {
   getActiveVideoClip: (time: number) => VideoClip | undefined;
   getActiveAudioClips: (time: number) => AudioClip[];
   getActiveTextClips: (time: number) => TextClip[];
+  getActiveImageClips: (time: number) => ImageClip[];
 }
 
 const defaultProject: Project = {
@@ -123,6 +126,22 @@ const defaultProject: Project = {
       opacity: 1,
     },
   ],
+  imageClips: [
+    {
+      id: 'image-1',
+      type: 'image',
+      name: 'Overlay Image',
+      src: 'https://placehold.co/600x400/png',
+      start: 5,
+      duration: 5,
+      offset: 0,
+      speed: 1,
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 300,
+    },
+  ],
 };
 
 export const useProjectStore = create<ProjectStore>((set, get) => ({
@@ -158,6 +177,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       },
     })),
 
+  addImageClip: (clip) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        imageClips: [...state.project.imageClips, clip],
+      },
+    })),
+
   updateVideoClip: (id, updates) =>
     set((state) => ({
       project: {
@@ -188,6 +215,16 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       },
     })),
 
+  updateImageClip: (id, updates) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        imageClips: state.project.imageClips.map((clip) =>
+          clip.id === id ? { ...clip, ...updates } : clip
+        ),
+      },
+    })),
+
   deleteClip: (id) =>
     set((state) => ({
       project: {
@@ -195,6 +232,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         videoClips: state.project.videoClips.filter((clip) => clip.id !== id),
         audioClips: state.project.audioClips.filter((clip) => clip.id !== id),
         textClips: state.project.textClips.filter((clip) => clip.id !== id),
+        imageClips: state.project.imageClips.filter((clip) => clip.id !== id),
       },
       selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,
     })),
@@ -212,6 +250,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const videoClip = state.project.videoClips.find((c) => c.id === id);
     const audioClip = state.project.audioClips.find((c) => c.id === id);
     const textClip = state.project.textClips.find((c) => c.id === id);
+    const imageClip = state.project.imageClips.find((c) => c.id === id);
 
     if (videoClip) {
       const clipEnd = getClipEnd(videoClip);
@@ -308,12 +347,44 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         },
       }));
     }
+
+    if (imageClip) {
+      const clipEnd = getClipEnd(imageClip);
+      if (time <= imageClip.start || time >= clipEnd) return;
+
+      const firstDuration = (time - imageClip.start) * imageClip.speed;
+      const secondDuration = imageClip.duration - firstDuration;
+
+      const firstClip: ImageClip = {
+        ...imageClip,
+        duration: firstDuration,
+      };
+
+      const secondClip: ImageClip = {
+        ...imageClip,
+        id: crypto.randomUUID(),
+        start: time,
+        offset: imageClip.offset + firstDuration,
+        duration: secondDuration,
+      };
+
+      set((s) => ({
+        project: {
+          ...s.project,
+          imageClips: [
+            ...s.project.imageClips.filter((c) => c.id !== id),
+            firstClip,
+            secondClip,
+          ],
+        },
+      }));
+    }
   },
 
   // Computed helpers
   getDuration: () => {
-    const { videoClips, audioClips, textClips } = get().project;
-    const allClips = [...videoClips, ...audioClips, ...textClips];
+    const { videoClips, audioClips, textClips, imageClips } = get().project;
+    const allClips = [...videoClips, ...audioClips, ...textClips, ...imageClips];
     if (allClips.length === 0) return 10; // Default 10s timeline
     return Math.max(...allClips.map(getClipEnd));
   },
@@ -335,6 +406,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   getActiveTextClips: (time) => {
     const { textClips } = get().project;
     return textClips.filter(
+      (clip) => time >= clip.start && time < getClipEnd(clip)
+    );
+  },
+
+  getActiveImageClips: (time) => {
+    const { imageClips } = get().project;
+    return imageClips.filter(
       (clip) => time >= clip.start && time < getClipEnd(clip)
     );
   },

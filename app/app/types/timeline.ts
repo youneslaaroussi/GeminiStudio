@@ -32,7 +32,17 @@ export interface TextClip extends BaseClip {
   opacity?: number;    // Opacity 0-1
 }
 
-export type TimelineClip = VideoClip | AudioClip | TextClip;
+export interface ImageClip extends BaseClip {
+  type: 'image';
+  src: string;        // External URL
+  name: string;       // Display name
+  x?: number;         // X position (0 = center)
+  y?: number;         // Y position (0 = center)
+  width?: number;     // Width in pixels
+  height?: number;    // Height in pixels
+}
+
+export type TimelineClip = VideoClip | AudioClip | TextClip | ImageClip;
 
 export interface Project {
   name: string;
@@ -41,6 +51,7 @@ export interface Project {
   videoClips: VideoClip[];
   audioClips: AudioClip[];
   textClips: TextClip[];
+  imageClips: ImageClip[];
 }
 
 // Test videos for development
@@ -88,6 +99,20 @@ export const TEST_AUDIOS = [
     name: 'Electronic Beat',
     url: 'https://www2.cs.uic.edu/~i101/SoundFiles/BabyElephantWalk60.wav',
     duration: 60,
+  },
+];
+
+// Test images for development
+export const TEST_IMAGES = [
+  {
+    name: 'Placeholder 1',
+    url: 'https://placehold.co/600x400/png',
+    duration: 5,
+  },
+  {
+    name: 'Placeholder 2',
+    url: 'https://placehold.co/600x400/orange/white/png',
+    duration: 5,
   },
 ];
 
@@ -151,6 +176,27 @@ export function createTextClip(
     x: 0,
     y: -200,
     opacity: 1,
+  };
+}
+
+// Helper to create a new image clip
+export function createImageClip(
+  src: string,
+  name: string,
+  start: number,
+  duration: number
+): ImageClip {
+  return {
+    id: crypto.randomUUID(),
+    type: 'image',
+    src,
+    name,
+    start,
+    duration,
+    offset: 0,
+    speed: 1,
+    x: 0,
+    y: 0,
   };
 }
 

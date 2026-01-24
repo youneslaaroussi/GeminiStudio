@@ -1,41 +1,47 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Plus, Video, Music, Gauge, Type } from "lucide-react";
+import { Plus, Video, Music, Gauge, Type, Image as ImageIcon } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import {
   TEST_VIDEOS,
   TEST_AUDIOS,
+  TEST_IMAGES,
   createVideoClip,
   createAudioClip,
   createTextClip,
+  createImageClip,
 } from "@/app/types/timeline";
 
 export function AssetsPanel() {
   const [customUrl, setCustomUrl] = useState("");
   const [customName, setCustomName] = useState("");
   const [customDuration, setCustomDuration] = useState(10);
-  const [assetType, setAssetType] = useState<"video" | "audio">("video");
+  const [assetType, setAssetType] = useState<"video" | "audio" | "image">("video");
   const [textContent, setTextContent] = useState("");
   const [textName, setTextName] = useState("");
 
   const addVideoClip = useProjectStore((s) => s.addVideoClip);
   const addAudioClip = useProjectStore((s) => s.addAudioClip);
   const addTextClip = useProjectStore((s) => s.addTextClip);
+  const addImageClip = useProjectStore((s) => s.addImageClip);
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
   const videoClips = useProjectStore((s) => s.project.videoClips);
   const audioClips = useProjectStore((s) => s.project.audioClips);
   const textClips = useProjectStore((s) => s.project.textClips);
+  const imageClips = useProjectStore((s) => s.project.imageClips);
   const updateVideoClip = useProjectStore((s) => s.updateVideoClip);
   const updateAudioClip = useProjectStore((s) => s.updateAudioClip);
   const updateTextClip = useProjectStore((s) => s.updateTextClip);
+  const updateImageClip = useProjectStore((s) => s.updateImageClip);
   const getDuration = useProjectStore((s) => s.getDuration);
 
   // Find selected clip
   const selectedVideoClip = videoClips.find((c) => c.id === selectedClipId);
   const selectedAudioClip = audioClips.find((c) => c.id === selectedClipId);
   const selectedTextClip = textClips.find((c) => c.id === selectedClipId);
-  const selectedClip = selectedVideoClip || selectedAudioClip || selectedTextClip;
+  const selectedImageClip = imageClips.find((c) => c.id === selectedClipId);
+  const selectedClip = selectedVideoClip || selectedAudioClip || selectedTextClip || selectedImageClip;
 
   const handleAddTestVideo = useCallback(
     (video: (typeof TEST_VIDEOS)[number]) => {
@@ -63,6 +69,19 @@ export function AssetsPanel() {
     [addAudioClip, getDuration]
   );
 
+  const handleAddTestImage = useCallback(
+    (image: (typeof TEST_IMAGES)[number]) => {
+      const clip = createImageClip(
+        image.url,
+        image.name,
+        getDuration(), // Add at end of timeline
+        image.duration
+      );
+      addImageClip(clip);
+    },
+    [addImageClip, getDuration]
+  );
+
   const handleAddCustomAsset = useCallback(() => {
     if (!customUrl.trim()) return;
 
@@ -72,9 +91,12 @@ export function AssetsPanel() {
     if (assetType === "video") {
       const clip = createVideoClip(customUrl, name, start, customDuration);
       addVideoClip(clip);
-    } else {
+    } else if (assetType === "audio") {
       const clip = createAudioClip(customUrl, name, start, customDuration);
       addAudioClip(clip);
+    } else {
+      const clip = createImageClip(customUrl, name, start, customDuration);
+      addImageClip(clip);
     }
 
     setCustomUrl("");
@@ -86,6 +108,7 @@ export function AssetsPanel() {
     assetType,
     addVideoClip,
     addAudioClip,
+    addImageClip,
     getDuration,
   ]);
 
@@ -113,9 +136,11 @@ export function AssetsPanel() {
         updateAudioClip(selectedClipId, { speed });
       } else if (selectedTextClip) {
         updateTextClip(selectedClipId, { speed });
+      } else if (selectedImageClip) {
+        updateImageClip(selectedClipId, { speed });
       }
     },
-    [selectedClipId, selectedVideoClip, selectedAudioClip, selectedTextClip, updateVideoClip, updateAudioClip, updateTextClip]
+    [selectedClipId, selectedVideoClip, selectedAudioClip, selectedTextClip, selectedImageClip, updateVideoClip, updateAudioClip, updateTextClip, updateImageClip]
   );
 
   return (
@@ -162,6 +187,27 @@ export function AssetsPanel() {
               >
                 <Music className="size-4 text-green-400" />
                 <span className="flex-1 truncate">{audio.name}</span>
+                <Plus className="size-3 text-muted-foreground" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Test Images */}
+        <div>
+          <h3 className="text-xs font-medium text-muted-foreground mb-2">
+            Test Images
+          </h3>
+          <div className="space-y-1">
+            {TEST_IMAGES.map((image) => (
+              <button
+                key={image.url}
+                type="button"
+                onClick={() => handleAddTestImage(image)}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+              >
+                <ImageIcon className="size-4 text-orange-400" />
+                <span className="flex-1 truncate">{image.name}</span>
                 <Plus className="size-3 text-muted-foreground" />
               </button>
             ))}
@@ -230,6 +276,18 @@ export function AssetsPanel() {
               >
                 <Music className="size-3 inline mr-1" />
                 Audio
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssetType("image")}
+                className={`flex-1 rounded px-2 py-1 text-xs ${
+                  assetType === "image"
+                    ? "bg-orange-500/20 text-orange-400"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                <ImageIcon className="size-3 inline mr-1" />
+                Image
               </button>
             </div>
             <input

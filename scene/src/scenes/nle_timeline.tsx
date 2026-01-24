@@ -1,4 +1,4 @@
-import { Video, Rect, Txt, makeScene2D } from '@motion-canvas/2d';
+import { Video, Rect, Txt, Img, makeScene2D } from '@motion-canvas/2d';
 import { all, createRef, Reference, useScene, waitFor } from '@motion-canvas/core';
 
 // Type definitions matching the app's types
@@ -41,6 +41,21 @@ interface TextClip {
   opacity?: number;
 }
 
+interface ImageClip {
+  id: string;
+  type: 'image';
+  src: string;
+  name: string;
+  start: number;
+  duration: number;
+  offset: number;
+  speed: number;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+}
+
 export default makeScene2D(function* (view) {
   const scene = useScene();
 
@@ -51,12 +66,14 @@ export default makeScene2D(function* (view) {
   const videoClips = scene.variables.get<VideoClip[]>('videoClips', [])();
   const audioClips = scene.variables.get<AudioClip[]>('audioClips', [])();
   const textClips = scene.variables.get<TextClip[]>('textClips', [])();
+  const imageClips = scene.variables.get<ImageClip[]>('imageClips', [])();
   const totalDuration = scene.variables.get<number>('duration', 10)();
 
   // Sort clips by start time
   const sortedVideoClips = [...videoClips].sort((a, b) => a.start - b.start);
   const sortedAudioClips = [...audioClips].sort((a, b) => a.start - b.start);
   const sortedTextClips = [...textClips].sort((a, b) => a.start - b.start);
+  const sortedImageClips = [...imageClips].sort((a, b) => a.start - b.start);
 
   // Create refs
   const videoRef = createRef<Video>();
@@ -241,6 +258,64 @@ export default makeScene2D(function* (view) {
     }
   }
 
+  // Process image clips in parallel
+  function* processImageClips() {
+    if (!sortedImageClips || sortedImageClips.length === 0) return;
+
+    // Create image elements for each image clip
+    const imageRefs: Reference<Img>[] = [];
+    for (let i = 0; i < sortedImageClips.length; i++) {
+      const clip = sortedImageClips[i];
+      const imageRef = createRef<Img>();
+      imageRefs.push(imageRef);
+      
+      const props: any = {
+        ref: imageRef,
+        src: clip.src,
+        x: clip.x ?? 0,
+        y: clip.y ?? 0,
+        opacity: 0,
+      };
+      
+      if (clip.width) props.width = clip.width;
+      if (clip.height) props.height = clip.height;
+
+      view.add(<Img {...props} />);
+    }
+
+    // Create a generator function for each image clip
+    const playImage = (clip: ImageClip, imageRef: Reference<Img>) =>
+      function* () {
+        const speed = clip.speed ?? 1;
+        const safeSpeed = Math.max(speed, 0.0001);
+        const startAt = Math.max(clip.start, 0);
+        const timelineDuration = clip.duration / safeSpeed;
+
+        // Wait until this clip's start time
+        if (startAt > 0) {
+          yield* waitFor(startAt);
+        }
+
+        const image = imageRef();
+        if (!image) return;
+
+        // Show image
+        image.opacity(1);
+
+        // Wait for clip duration
+        yield* waitFor(timelineDuration);
+
+        // Hide image
+        image.opacity(0);
+      };
+
+    // Create generators for each image clip and run them all in parallel
+    const runners = sortedImageClips.map((clip, index) => playImage(clip, imageRefs[index]));
+    if (runners.length > 0) {
+      yield* all(...runners.map(r => r()));
+    }
+  }
+
   // Process audio tracks in parallel (following Vidova's pattern)
   function* processAudioTracks() {
     if (!sortedAudioClips || sortedAudioClips.length === 0) return;
@@ -298,6 +373,7 @@ export default makeScene2D(function* (view) {
     processVideoClips(),
     processAudioTracks(),
     processTextClips(),
+    processImageClips(),
   );
 
   // Final cleanup - pause all media

@@ -1,27 +1,30 @@
 "use client";
 
 import { useCallback } from "react";
-import { Video, Music, Type, Settings } from "lucide-react";
+import { Video, Music, Type, Settings, Image as ImageIcon } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
-import type { VideoClip, AudioClip, TextClip } from "@/app/types/timeline";
+import type { VideoClip, AudioClip, TextClip, ImageClip } from "@/app/types/timeline";
 
 export function SettingsPanel() {
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
   const videoClips = useProjectStore((s) => s.project.videoClips);
   const audioClips = useProjectStore((s) => s.project.audioClips);
   const textClips = useProjectStore((s) => s.project.textClips);
+  const imageClips = useProjectStore((s) => s.project.imageClips);
   const updateVideoClip = useProjectStore((s) => s.updateVideoClip);
   const updateAudioClip = useProjectStore((s) => s.updateAudioClip);
   const updateTextClip = useProjectStore((s) => s.updateTextClip);
+  const updateImageClip = useProjectStore((s) => s.updateImageClip);
 
   // Find selected clip
   const selectedVideoClip = videoClips.find((c) => c.id === selectedClipId);
   const selectedAudioClip = audioClips.find((c) => c.id === selectedClipId);
   const selectedTextClip = textClips.find((c) => c.id === selectedClipId);
-  const selectedClip = selectedVideoClip || selectedAudioClip || selectedTextClip;
+  const selectedImageClip = imageClips.find((c) => c.id === selectedClipId);
+  const selectedClip = selectedVideoClip || selectedAudioClip || selectedTextClip || selectedImageClip;
 
   const handleUpdate = useCallback(
-    (updates: Partial<VideoClip> | Partial<AudioClip> | Partial<TextClip>) => {
+    (updates: Partial<VideoClip> | Partial<AudioClip> | Partial<TextClip> | Partial<ImageClip>) => {
       if (!selectedClipId || !selectedClip) return;
 
       if (selectedVideoClip) {
@@ -30,9 +33,11 @@ export function SettingsPanel() {
         updateAudioClip(selectedClipId, updates as Partial<AudioClip>);
       } else if (selectedTextClip) {
         updateTextClip(selectedClipId, updates as Partial<TextClip>);
+      } else if (selectedImageClip) {
+        updateImageClip(selectedClipId, updates as Partial<ImageClip>);
       }
     },
-    [selectedClipId, selectedClip, selectedVideoClip, selectedAudioClip, selectedTextClip, updateVideoClip, updateAudioClip, updateTextClip]
+    [selectedClipId, selectedClip, selectedVideoClip, selectedAudioClip, selectedTextClip, selectedImageClip, updateVideoClip, updateAudioClip, updateTextClip, updateImageClip]
   );
 
   if (!selectedClip) {
@@ -57,8 +62,10 @@ export function SettingsPanel() {
       <Video className="size-4 text-blue-400" />
     ) : clipType === "audio" ? (
       <Music className="size-4 text-green-400" />
-    ) : (
+    ) : clipType === "text" ? (
       <Type className="size-4 text-purple-400" />
+    ) : (
+      <ImageIcon className="size-4 text-orange-400" />
     );
 
   return (
@@ -323,6 +330,86 @@ export function SettingsPanel() {
                     value={selectedTextClip.y ?? -200}
                     onChange={(e) =>
                       handleUpdate({ y: Number(e.target.value) })
+                    }
+                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Image-specific Properties */}
+        {selectedImageClip && (
+          <div>
+            <h3 className="text-xs font-medium text-muted-foreground mb-2">
+              Image Properties
+            </h3>
+            <div className="space-y-2">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Source URL
+                </label>
+                <input
+                  type="url"
+                  value={selectedImageClip.src}
+                  onChange={(e) => handleUpdate({ src: e.target.value })}
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    X Position
+                  </label>
+                  <input
+                    type="number"
+                    value={selectedImageClip.x ?? 0}
+                    onChange={(e) =>
+                      handleUpdate({ x: Number(e.target.value) })
+                    }
+                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Y Position
+                  </label>
+                  <input
+                    type="number"
+                    value={selectedImageClip.y ?? 0}
+                    onChange={(e) =>
+                      handleUpdate({ y: Number(e.target.value) })
+                    }
+                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Width (px)
+                  </label>
+                  <input
+                    type="number"
+                    value={selectedImageClip.width ?? ""}
+                    placeholder="Auto"
+                    onChange={(e) =>
+                      handleUpdate({ width: e.target.value ? Number(e.target.value) : undefined })
+                    }
+                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Height (px)
+                  </label>
+                  <input
+                    type="number"
+                    value={selectedImageClip.height ?? ""}
+                    placeholder="Auto"
+                    onChange={(e) =>
+                      handleUpdate({ height: e.target.value ? Number(e.target.value) : undefined })
                     }
                     className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
                   />

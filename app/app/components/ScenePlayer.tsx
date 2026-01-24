@@ -2,7 +2,7 @@
 
 import { Player, Stage, Vector2, type Project } from '@motion-canvas/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { VideoClip, AudioClip, TextClip } from '@/app/types/timeline';
+import type { VideoClip, AudioClip, TextClip, ImageClip } from '@/app/types/timeline';
 import { useDrag } from '@/app/hooks/use-drag';
 
 const SCENE_URL = '/scene/src/project.js';
@@ -15,6 +15,7 @@ interface ScenePlayerProps {
   videoClips?: VideoClip[];
   audioClips?: AudioClip[];
   textClips?: TextClip[];
+  imageClips?: ImageClip[];
   duration?: number;
   currentTime?: number;
   onTimeUpdate?: (time: number) => void;
@@ -25,6 +26,7 @@ export function ScenePlayer({
   videoClips = [],
   audioClips = [],
   textClips = [],
+  imageClips = [],
   duration = 10,
   currentTime = 0,
   onTimeUpdate,
@@ -249,6 +251,7 @@ export function ScenePlayer({
       videoClips,
       audioClips,
       textClips,
+      imageClips,
       duration,
     });
 
@@ -290,11 +293,12 @@ export function ScenePlayer({
       videoClips,
       audioClips,
       textClips,
+      imageClips,
       duration,
     });
     (player as unknown as { requestRecalculation?: () => void }).requestRecalculation?.();
     player.requestRender();
-  }, [player, videoClips, audioClips, textClips, duration]);
+  }, [player, videoClips, audioClips, textClips, imageClips, duration]);
 
   // Sync playhead time from player back to the store during playback
   useEffect(() => {

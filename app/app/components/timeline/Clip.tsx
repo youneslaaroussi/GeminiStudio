@@ -1,14 +1,14 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import type { VideoClip, AudioClip, TextClip } from "@/app/types/timeline";
+import type { VideoClip, AudioClip, TextClip, ImageClip } from "@/app/types/timeline";
 import { getClipEnd } from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { cn } from "@/lib/utils";
 
 interface ClipProps {
-  clip: VideoClip | AudioClip | TextClip;
-  type: "video" | "audio" | "text";
+  clip: VideoClip | AudioClip | TextClip | ImageClip;
+  type: "video" | "audio" | "text" | "image";
 }
 
 export function Clip({ clip, type }: ClipProps) {
@@ -18,6 +18,7 @@ export function Clip({ clip, type }: ClipProps) {
   const updateVideoClip = useProjectStore((s) => s.updateVideoClip);
   const updateAudioClip = useProjectStore((s) => s.updateAudioClip);
   const updateTextClip = useProjectStore((s) => s.updateTextClip);
+  const updateImageClip = useProjectStore((s) => s.updateImageClip);
   const deleteClip = useProjectStore((s) => s.deleteClip);
 
   const [isDragging, setIsDragging] = useState(false);
@@ -34,7 +35,9 @@ export function Clip({ clip, type }: ClipProps) {
       ? updateVideoClip
       : type === "audio"
       ? updateAudioClip
-      : updateTextClip;
+      : type === "text"
+      ? updateTextClip
+      : updateImageClip;
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent, action: "drag" | "resize-left" | "resize-right") => {
@@ -118,7 +121,9 @@ export function Clip({ clip, type }: ClipProps) {
           ? "bg-blue-500/80 border-blue-400"
           : type === "audio"
           ? "bg-green-500/80 border-green-400"
-          : "bg-purple-500/80 border-purple-400",
+          : type === "text"
+          ? "bg-purple-500/80 border-purple-400"
+          : "bg-orange-500/80 border-orange-400",
         isSelected && "ring-2 ring-white ring-offset-1 ring-offset-background",
         (isDragging || isResizing) && "opacity-80"
       )}

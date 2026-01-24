@@ -7,6 +7,7 @@ import { TimeRuler } from "../timeline/TimeRuler";
 import { VideoTrack } from "../timeline/VideoTrack";
 import { AudioTrack } from "../timeline/AudioTrack";
 import { TextTrack } from "../timeline/TextTrack";
+import { ImageTrack } from "../timeline/ImageTrack";
 import { Playhead } from "../timeline/Playhead";
 
 interface TimelinePanelProps {
@@ -155,6 +156,7 @@ export function TimelinePanel({
           <VideoTrack width={containerWidth} />
           <AudioTrack width={containerWidth} />
           <TextTrack width={containerWidth} />
+          <ImageTrack width={containerWidth} />
 
           {/* Playhead */}
           <Playhead />

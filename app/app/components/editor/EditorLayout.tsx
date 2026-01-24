@@ -22,6 +22,7 @@ export function EditorLayout() {
   const videoClips = useProjectStore((s) => s.project.videoClips);
   const audioClips = useProjectStore((s) => s.project.audioClips);
   const textClips = useProjectStore((s) => s.project.textClips);
+  const imageClips = useProjectStore((s) => s.project.imageClips);
   const currentTime = useProjectStore((s) => s.currentTime);
   const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
   const getDuration = useProjectStore((s) => s.getDuration);
@@ -61,6 +62,7 @@ export function EditorLayout() {
                   videoClips={videoClips}
                   audioClips={audioClips}
                   textClips={textClips}
+                  imageClips={imageClips}
                   duration={getDuration()}
                   currentTime={currentTime}
                   onTimeUpdate={handleTimeUpdate}
