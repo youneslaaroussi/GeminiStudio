@@ -1,5 +1,5 @@
 import { Video, Rect, Txt, Img, makeScene2D } from '@motion-canvas/2d';
-import { all, createRef, Reference, useScene, waitFor } from '@motion-canvas/core';
+import { Vector2, all, createRef, Reference, useScene, waitFor } from '@motion-canvas/core';
 
 // Type definitions matching the app's types
 interface Transform {
@@ -74,6 +74,8 @@ interface Layer {
   clips: TimelineClip[];
 }
 
+const toVector = (transform: Transform) => new Vector2(transform.x, transform.y);
+
 export default makeScene2D(function* (view) {
   const scene = useScene();
 
@@ -82,11 +84,8 @@ export default makeScene2D(function* (view) {
 
   // Get variables from the player
   const layers = scene.variables.get<Layer[]>('layers', [])();
-  const totalDuration = scene.variables.get<number>('duration', 10)();
+  scene.variables.get<number>('duration', 10)();
 
-  const videoClips = layers
-    .filter((layer) => layer.type === 'video')
-    .flatMap((layer) => layer.clips as VideoClip[]);
   const audioClips = layers
     .filter((layer) => layer.type === 'audio')
     .flatMap((layer) => layer.clips as AudioClip[]);
@@ -98,14 +97,12 @@ export default makeScene2D(function* (view) {
     .flatMap((layer) => layer.clips as ImageClip[]);
 
   // Sort clips by start time
-  const sortedVideoClips = [...videoClips].sort((a, b) => a.start - b.start);
   const sortedAudioClips = [...audioClips].sort((a, b) => a.start - b.start);
   const sortedTextClips = [...textClips].sort((a, b) => a.start - b.start);
   const sortedImageClips = [...imageClips].sort((a, b) => a.start - b.start);
 
   // Create refs
-  const videoRef = createRef<Video>();
-  const placeholderRef = createRef<Rect>();
+  const videoEntries: Array<{clip: VideoClip; ref: Reference<Video>}> = [];
 
   // Background
   view.add(
@@ -116,39 +113,26 @@ export default makeScene2D(function* (view) {
     />
   );
 
-  // Video element for main video track (initially hidden)
-  view.add(
-    <Video
-      key="main-video"
-      ref={videoRef}
-      src=""
-      width={1920}
-      height={1080}
-      opacity={0}
-      x={0}
-      y={0}
-      scale={1}
-    />
-  );
-
-  // Placeholder when no video clip
-  view.add(
-    <Rect
-      ref={placeholderRef}
-      width={400}
-      height={225}
-      fill="#1e1e22"
-      radius={8}
-      opacity={1}
-    >
-      <Txt
-        text="No clip at current time"
-        fill="#666"
-        fontSize={18}
-        fontFamily="system-ui"
-      />
-    </Rect>
-  );
+  // Video elements per clip, respecting layer order
+  for (const layer of layers) {
+    if (layer.type !== 'video') continue;
+    for (const clip of layer.clips as VideoClip[]) {
+      const ref = createRef<Video>();
+      videoEntries.push({clip, ref});
+      view.add(
+        <Video
+          key={`video-clip-${clip.id}`}
+          ref={ref}
+          src={clip.src}
+          width={1920}
+          height={1080}
+          opacity={0}
+          position={toVector(clip.position)}
+          scale={toVector(clip.scale)}
+        />
+      );
+    }
+  }
 
   // Create audio elements (1px videos positioned at bottom right for audio-only playback)
   // Position at bottom right: x = width/2 - 0.5, y = height/2 - 0.5
@@ -169,72 +153,36 @@ export default makeScene2D(function* (view) {
     );
   }
 
-  // Generator function to play a single video clip
-  function* playVideoClip(clip: VideoClip, startDelay: number) {
-    if (startDelay > 0) {
-      yield* waitFor(startDelay);
-    }
+  const playVideo = (clip: VideoClip, videoRef: Reference<Video>) =>
+    function* () {
+      const speed = clip.speed ?? 1;
+      const safeSpeed = Math.max(speed, 0.0001);
+      const startAt = Math.max(clip.start, 0);
+      const timelineDuration = clip.duration / safeSpeed;
 
-    const clipSpeed = clip.speed ?? 1;
-    const timelineDuration = clip.duration / clipSpeed;
-
-    // Set up and play this clip
-    videoRef().src(clip.src);
-    videoRef().seek(clip.offset);
-    videoRef().playbackRate(clipSpeed);
-    videoRef().x(clip.position.x);
-    videoRef().y(clip.position.y);
-    videoRef().scale(clip.scale);
-
-    // Show video, hide placeholder
-    videoRef().opacity(1);
-    placeholderRef().opacity(0);
-
-    // Start playback
-    videoRef().play();
-
-    // Wait for clip duration
-    yield* waitFor(timelineDuration);
-
-    // Pause after clip ends
-    videoRef().pause();
-
-    // Show placeholder after clip
-    videoRef().opacity(0);
-    placeholderRef().opacity(1);
-  }
-
-  // Process video clips sequentially
-  function* processVideoClips() {
-    let currentTime = 0;
-
-    for (const clip of sortedVideoClips) {
-      const clipSpeed = clip.speed ?? 1;
-      const timelineDuration = clip.duration / clipSpeed;
-      const clipEnd = clip.start + timelineDuration;
-
-      // Wait for gap before this clip
-      const waitTime = clip.start - currentTime;
-      if (waitTime > 0) {
-        // Show placeholder during gap
-        videoRef().opacity(0);
-        placeholderRef().opacity(1);
-        yield* waitFor(waitTime);
-        currentTime = clip.start;
+      if (startAt > 0) {
+        yield* waitFor(startAt);
       }
 
-      // Play the clip
-      yield* playVideoClip(clip, 0);
-      currentTime = clipEnd;
-    }
+      const video = videoRef();
+      if (!video) return;
 
-    // After all clips, wait for remaining time
-    const remainingTime = totalDuration - currentTime;
-    if (remainingTime > 0) {
-      videoRef().opacity(0);
-      placeholderRef().opacity(1);
-      yield* waitFor(remainingTime);
-    }
+      video.seek(clip.offset);
+      video.playbackRate(safeSpeed);
+      video.position(toVector(clip.position));
+      video.scale(toVector(clip.scale));
+      video.opacity(1);
+      video.play();
+
+      yield* waitFor(timelineDuration);
+
+      video.opacity(0);
+      video.pause();
+    };
+
+  function* processVideoClips() {
+    if (videoEntries.length === 0) return;
+    yield* all(...videoEntries.map(({clip, ref}) => playVideo(clip, ref)()));
   }
 
   // Process text clips in parallel
@@ -416,6 +364,12 @@ export default makeScene2D(function* (view) {
   );
 
   // Final cleanup - pause all media
-  videoRef().pause();
+  videoEntries.forEach(({ref}) => {
+    const node = ref();
+    if (node) {
+      node.pause();
+      node.opacity(0);
+    }
+  });
   audioRefs.forEach(ref => ref().pause());
 });

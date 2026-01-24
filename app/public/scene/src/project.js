@@ -11668,21 +11668,19 @@ function makeScene2D(runner) {
     plugins: ["@motion-canvas/2d/editor"]
   };
 }
+const toVector = (transform) => new Vector2(transform.x, transform.y);
 const description = makeScene2D(function* (view) {
   const scene = useScene();
   const { width, height } = scene.getSize();
   const layers = scene.variables.get("layers", [])();
-  const totalDuration = scene.variables.get("duration", 10)();
-  const videoClips = layers.filter((layer) => layer.type === "video").flatMap((layer) => layer.clips);
+  scene.variables.get("duration", 10)();
   const audioClips = layers.filter((layer) => layer.type === "audio").flatMap((layer) => layer.clips);
   const textClips = layers.filter((layer) => layer.type === "text").flatMap((layer) => layer.clips);
   const imageClips = layers.filter((layer) => layer.type === "image").flatMap((layer) => layer.clips);
-  const sortedVideoClips = [...videoClips].sort((a, b) => a.start - b.start);
   const sortedAudioClips = [...audioClips].sort((a, b) => a.start - b.start);
   const sortedTextClips = [...textClips].sort((a, b) => a.start - b.start);
   const sortedImageClips = [...imageClips].sort((a, b) => a.start - b.start);
-  const videoRef = createRef();
-  const placeholderRef = createRef();
+  const videoEntries = [];
   view.add(
     /* @__PURE__ */ jsx(
       Rect,
@@ -11693,44 +11691,28 @@ const description = makeScene2D(function* (view) {
       }
     )
   );
-  view.add(
-    /* @__PURE__ */ jsx(
-      Video,
-      {
-        ref: videoRef,
-        src: "",
-        width: 1920,
-        height: 1080,
-        opacity: 0,
-        x: 0,
-        y: 0,
-        scale: 1
-      },
-      "main-video"
-    )
-  );
-  view.add(
-    /* @__PURE__ */ jsx(
-      Rect,
-      {
-        ref: placeholderRef,
-        width: 400,
-        height: 225,
-        fill: "#1e1e22",
-        radius: 8,
-        opacity: 1,
-        children: /* @__PURE__ */ jsx(
-          Txt,
+  for (const layer of layers) {
+    if (layer.type !== "video") continue;
+    for (const clip of layer.clips) {
+      const ref = createRef();
+      videoEntries.push({ clip, ref });
+      view.add(
+        /* @__PURE__ */ jsx(
+          Video,
           {
-            text: "No clip at current time",
-            fill: "#666",
-            fontSize: 18,
-            fontFamily: "system-ui"
-          }
+            ref,
+            src: clip.src,
+            width: 1920,
+            height: 1080,
+            opacity: 0,
+            position: toVector(clip.position),
+            scale: toVector(clip.scale)
+          },
+          `video-clip-${clip.id}`
         )
-      }
-    )
-  );
+      );
+    }
+  }
   const audioRefs = [];
   for (let i = 0; i < sortedAudioClips.length; i++) {
     const clip = sortedAudioClips[i];
@@ -11750,45 +11732,29 @@ const description = makeScene2D(function* (view) {
       )
     );
   }
-  function* playVideoClip(clip, startDelay) {
-    const clipSpeed = clip.speed ?? 1;
-    const timelineDuration = clip.duration / clipSpeed;
-    videoRef().src(clip.src);
-    videoRef().seek(clip.offset);
-    videoRef().playbackRate(clipSpeed);
-    videoRef().x(clip.position.x);
-    videoRef().y(clip.position.y);
-    videoRef().scale(clip.scale);
-    videoRef().opacity(1);
-    placeholderRef().opacity(0);
-    videoRef().play();
+  const playVideo = (clip, videoRef) => function* () {
+    const speed = clip.speed ?? 1;
+    const safeSpeed = Math.max(speed, 1e-4);
+    const startAt = Math.max(clip.start, 0);
+    const timelineDuration = clip.duration / safeSpeed;
+    if (startAt > 0) {
+      yield* waitFor(startAt);
+    }
+    const video = videoRef();
+    if (!video) return;
+    video.seek(clip.offset);
+    video.playbackRate(safeSpeed);
+    video.position(toVector(clip.position));
+    video.scale(toVector(clip.scale));
+    video.opacity(1);
+    video.play();
     yield* waitFor(timelineDuration);
-    videoRef().pause();
-    videoRef().opacity(0);
-    placeholderRef().opacity(1);
-  }
+    video.opacity(0);
+    video.pause();
+  };
   function* processVideoClips() {
-    let currentTime = 0;
-    for (const clip of sortedVideoClips) {
-      const clipSpeed = clip.speed ?? 1;
-      const timelineDuration = clip.duration / clipSpeed;
-      const clipEnd = clip.start + timelineDuration;
-      const waitTime = clip.start - currentTime;
-      if (waitTime > 0) {
-        videoRef().opacity(0);
-        placeholderRef().opacity(1);
-        yield* waitFor(waitTime);
-        currentTime = clip.start;
-      }
-      yield* playVideoClip(clip);
-      currentTime = clipEnd;
-    }
-    const remainingTime = totalDuration - currentTime;
-    if (remainingTime > 0) {
-      videoRef().opacity(0);
-      placeholderRef().opacity(1);
-      yield* waitFor(remainingTime);
-    }
+    if (videoEntries.length === 0) return;
+    yield* all(...videoEntries.map(({ clip, ref }) => playVideo(clip, ref)()));
   }
   function* processTextClips() {
     if (!sortedTextClips || sortedTextClips.length === 0) return;
@@ -11909,7 +11875,13 @@ const description = makeScene2D(function* (view) {
     processTextClips(),
     processImageClips()
   );
-  videoRef().pause();
+  videoEntries.forEach(({ ref }) => {
+    const node = ref();
+    if (node) {
+      node.pause();
+      node.opacity(0);
+    }
+  });
   audioRefs.forEach((ref) => ref().pause());
 });
 description.name = "nle_timeline";

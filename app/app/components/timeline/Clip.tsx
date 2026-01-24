@@ -1,24 +1,50 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import type { TimelineClip } from "@/app/types/timeline";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ClipType, TimelineClip } from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { cn } from "@/lib/utils";
 
 interface ClipProps {
   clip: TimelineClip;
+  layerId: string;
 }
 
-export function Clip({ clip }: ClipProps) {
+export function Clip({ clip, layerId }: ClipProps) {
   const zoom = useProjectStore((s) => s.zoom);
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
   const setSelectedClip = useProjectStore((s) => s.setSelectedClip);
   const updateClip = useProjectStore((s) => s.updateClip);
   const deleteClip = useProjectStore((s) => s.deleteClip);
+  const moveClipToLayer = useProjectStore((s) => s.moveClipToLayer);
 
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState<"left" | "right" | null>(null);
   const dragStartRef = useRef({ x: 0, start: 0, duration: 0, offset: 0 });
+  const activeLayerIdRef = useRef(layerId);
+
+  useEffect(() => {
+    activeLayerIdRef.current = layerId;
+  }, [layerId]);
+
+  const maybeMoveToLayer = useCallback(
+    (clientX: number, clientY: number) => {
+      const target = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+      const layerElement = target?.closest("[data-layer-id]") as HTMLElement | null;
+      const targetLayerId = layerElement?.dataset.layerId;
+      const targetLayerType = layerElement?.dataset.layerType as ClipType | undefined;
+
+      if (
+        targetLayerId &&
+        targetLayerType === clip.type &&
+        targetLayerId !== activeLayerIdRef.current
+      ) {
+        moveClipToLayer(clip.id, targetLayerId);
+        activeLayerIdRef.current = targetLayerId;
+      }
+    },
+    [clip.id, clip.type, moveClipToLayer]
+  );
 
   const isSelected = selectedClipId === clip.id;
   const displayDuration = clip.duration / clip.speed;
@@ -50,6 +76,7 @@ export function Clip({ clip }: ClipProps) {
         if (action === "drag") {
           const newStart = Math.max(0, dragStartRef.current.start + deltaTime);
           updateClip(clip.id, { start: newStart });
+          maybeMoveToLayer(moveEvent.clientX, moveEvent.clientY);
         } else if (action === "resize-left") {
           // Resize from left: adjust start, offset, and duration
           const maxDelta = dragStartRef.current.duration / clip.speed - 0.1;
@@ -77,9 +104,12 @@ export function Clip({ clip }: ClipProps) {
         }
       };
 
-      const handleMouseUp = () => {
+      const handleMouseUp = (upEvent: MouseEvent) => {
         setIsDragging(false);
         setIsResizing(null);
+        if (action === "drag") {
+          maybeMoveToLayer(upEvent.clientX, upEvent.clientY);
+        }
         document.removeEventListener("mousemove", handleMouseMove);
         document.removeEventListener("mouseup", handleMouseUp);
       };
@@ -87,7 +117,7 @@ export function Clip({ clip }: ClipProps) {
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
     },
-    [clip, zoom, updateClip, setSelectedClip]
+    [clip, zoom, updateClip, setSelectedClip, maybeMoveToLayer]
   );
 
   const handleKeyDown = useCallback(

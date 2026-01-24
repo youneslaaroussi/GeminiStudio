@@ -23,7 +23,11 @@ export function LayerTrack({ layer, width, labelWidth }: LayerTrackProps) {
   const duration = useProjectStore((s) => s.getDuration());
 
   return (
-    <div className="flex items-stretch border-b border-border">
+    <div
+      className="flex items-stretch border-b border-border"
+      data-layer-id={layer.id}
+      data-layer-type={layer.type}
+    >
       <div
         className="flex shrink-0 items-center gap-1.5 border-r border-border bg-muted/30 px-2 py-2"
         style={{ width: labelWidth }}
@@ -41,9 +45,11 @@ export function LayerTrack({ layer, width, labelWidth }: LayerTrackProps) {
       <div
         className="relative h-12 bg-muted/10"
         style={{ width: Math.max(width - labelWidth, duration * zoom) }}
+        data-layer-id={layer.id}
+        data-layer-type={layer.type}
       >
         {layer.clips.map((clip) => (
-          <Clip key={clip.id} clip={clip} />
+          <Clip key={clip.id} clip={clip} layerId={layer.id} />
         ))}
       </div>
     </div>
