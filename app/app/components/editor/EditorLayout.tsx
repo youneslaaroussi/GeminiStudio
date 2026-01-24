@@ -12,6 +12,7 @@ import { PreviewPanel } from "./PreviewPanel";
 import { TimelinePanel } from "./TimelinePanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { TopBar } from "./TopBar";
+import { ChatPanel } from "./ChatPanel";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useShortcuts } from "@/app/hooks/use-shortcuts";
 
@@ -52,61 +53,74 @@ export function EditorLayout() {
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background">
       <TopBar />
       <div className="flex-1 min-h-0">
-      <ResizablePanelGroup direction="vertical" className="h-full">
-        {/* Top Area: Assets | Preview | Settings */}
-        <ResizablePanel defaultSize={60} minSize={30}>
-          <ResizablePanelGroup direction="horizontal" className="h-full">
-            {/* Left: Assets */}
-            <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
-              <div className="h-full bg-card border-r border-border min-w-0">
-                <AssetsPanel />
-              </div>
-            </ResizablePanel>
+        <ResizablePanelGroup direction="horizontal" className="h-full">
+          <ResizablePanel defaultSize={78} minSize={60} className="min-w-0">
+            <ResizablePanelGroup direction="vertical" className="h-full">
+              {/* Top Area: Assets | Preview | Settings */}
+              <ResizablePanel defaultSize={60} minSize={30}>
+                <ResizablePanelGroup direction="horizontal" className="h-full">
+                  {/* Left: Assets */}
+                  <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
+                    <div className="h-full bg-card border-r border-border min-w-0">
+                      <AssetsPanel />
+                    </div>
+                  </ResizablePanel>
 
-            <ResizableHandle withHandle />
+                  <ResizableHandle withHandle />
 
-            {/* Center: Preview */}
-            <ResizablePanel defaultSize={60} minSize={30} className="min-w-0">
-              <div className="h-full bg-card min-w-0">
-                <PreviewPanel
-                  onPlayerChange={setPlayer}
-                  layers={layers}
-                  duration={getDuration()}
-                  currentTime={currentTime}
-                  onTimeUpdate={handleTimeUpdate}
-                  sceneConfig={{
-                    resolution: project.resolution,
-                    renderScale: project.renderScale,
-                    background: project.background,
-                  }}
-                />
-              </div>
-            </ResizablePanel>
+                  {/* Center: Preview */}
+                  <ResizablePanel defaultSize={60} minSize={30} className="min-w-0">
+                    <div className="h-full bg-card min-w-0">
+                      <PreviewPanel
+                        onPlayerChange={setPlayer}
+                        layers={layers}
+                        duration={getDuration()}
+                        currentTime={currentTime}
+                        onTimeUpdate={handleTimeUpdate}
+                        sceneConfig={{
+                          resolution: project.resolution,
+                          renderScale: project.renderScale,
+                          background: project.background,
+                        }}
+                      />
+                    </div>
+                  </ResizablePanel>
 
-            <ResizableHandle withHandle />
+                  <ResizableHandle withHandle />
 
-            {/* Right: Settings */}
-            <ResizablePanel defaultSize={25} minSize={18} maxSize={35}>
-              <div className="h-full bg-card border-l border-border min-w-[260px]">
-                <SettingsPanel />
-              </div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </ResizablePanel>
+                  {/* Settings */}
+                  <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
+                    <div className="h-full bg-card border-l border-border min-w-[260px]">
+                      <SettingsPanel />
+                    </div>
+                  </ResizablePanel>
+                </ResizablePanelGroup>
+              </ResizablePanel>
 
-        <ResizableHandle withHandle />
+              <ResizableHandle withHandle />
 
-        {/* Bottom: Timeline */}
-        <ResizablePanel defaultSize={40} minSize={20}>
-          <div className="h-full bg-card border-t border-border">
-            <TimelinePanel
-              hasPlayer={!!player}
-              playing={isPlaying}
-              onTogglePlay={togglePlay}
-            />
-          </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
+              {/* Bottom: Timeline */}
+              <ResizablePanel defaultSize={40} minSize={20}>
+                <div className="h-full bg-card border-t border-border">
+                  <TimelinePanel
+                    hasPlayer={!!player}
+                    playing={isPlaying}
+                    onTogglePlay={togglePlay}
+                  />
+                </div>
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </ResizablePanel>
+
+          <ResizableHandle withHandle />
+
+          {/* Persistent Rightmost Chat */}
+          <ResizablePanel defaultSize={22} minSize={15} maxSize={40}>
+            <div className="h-full bg-card border-l border-border min-w-[260px]">
+              <ChatPanel />
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
     </div>
   );

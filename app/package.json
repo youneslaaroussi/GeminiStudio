@@ -10,16 +10,22 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.13",
+    "@ai-sdk/react": "^3.0.51",
     "@motion-canvas/2d": "^3.17.2",
     "@motion-canvas/core": "^3.17.2",
+    "ai": "^6.0.49",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.563.0",
+    "marked": "^17.0.1",
     "next": "16.1.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.5.1",
     "tailwind-merge": "^3.4.0",
+    "zod": "^4.3.6",
     "zustand": "^5.0.10"
   },
   "devDependencies": {
