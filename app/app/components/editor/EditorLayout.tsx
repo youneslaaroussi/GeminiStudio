@@ -10,6 +10,7 @@ import { useCallback, useState } from "react";
 import { AssetsPanel } from "./AssetsPanel";
 import { PreviewPanel } from "./PreviewPanel";
 import { TimelinePanel } from "./TimelinePanel";
+import { SettingsPanel } from "./SettingsPanel";
 import { useProjectStore } from "@/app/lib/store/project-store";
 
 export function EditorLayout() {
@@ -20,6 +21,7 @@ export function EditorLayout() {
   const setIsPlaying = useProjectStore((s) => s.setIsPlaying);
   const videoClips = useProjectStore((s) => s.project.videoClips);
   const audioClips = useProjectStore((s) => s.project.audioClips);
+  const textClips = useProjectStore((s) => s.project.textClips);
   const currentTime = useProjectStore((s) => s.currentTime);
   const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
   const getDuration = useProjectStore((s) => s.getDuration);
@@ -49,8 +51,8 @@ export function EditorLayout() {
 
         <ResizableHandle withHandle />
 
-        {/* Right: Preview (top) + Timeline (bottom) */}
-        <ResizablePanel defaultSize={82} minSize={50}>
+        {/* Center: Preview (top) + Timeline (bottom) */}
+        <ResizablePanel defaultSize={64} minSize={40}>
           <ResizablePanelGroup direction="vertical" className="h-full">
             <ResizablePanel defaultSize={70} minSize={30}>
               <div className="h-full bg-card">
@@ -58,6 +60,7 @@ export function EditorLayout() {
                   onPlayerChange={setPlayer}
                   videoClips={videoClips}
                   audioClips={audioClips}
+                  textClips={textClips}
                   duration={getDuration()}
                   currentTime={currentTime}
                   onTimeUpdate={handleTimeUpdate}
@@ -77,6 +80,15 @@ export function EditorLayout() {
               </div>
             </ResizablePanel>
           </ResizablePanelGroup>
+        </ResizablePanel>
+
+        <ResizableHandle withHandle />
+
+        {/* Right: Settings */}
+        <ResizablePanel defaultSize={18} minSize={15} maxSize={30}>
+          <div className="h-full bg-card">
+            <SettingsPanel />
+          </div>
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>

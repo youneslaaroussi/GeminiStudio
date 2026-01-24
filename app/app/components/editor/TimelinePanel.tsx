@@ -6,6 +6,7 @@ import { useProjectStore } from "@/app/lib/store/project-store";
 import { TimeRuler } from "../timeline/TimeRuler";
 import { VideoTrack } from "../timeline/VideoTrack";
 import { AudioTrack } from "../timeline/AudioTrack";
+import { TextTrack } from "../timeline/TextTrack";
 import { Playhead } from "../timeline/Playhead";
 
 interface TimelinePanelProps {
@@ -153,6 +154,7 @@ export function TimelinePanel({
           {/* Tracks */}
           <VideoTrack width={containerWidth} />
           <AudioTrack width={containerWidth} />
+          <TextTrack width={containerWidth} />
 
           {/* Playhead */}
           <Playhead />

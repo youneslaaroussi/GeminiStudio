@@ -25,6 +25,22 @@ interface AudioClip {
   volume: number;
 }
 
+interface TextClip {
+  id: string;
+  type: 'text';
+  text: string;
+  name: string;
+  start: number;
+  duration: number;
+  offset: number;
+  speed: number;
+  fontSize?: number;
+  fill?: string;
+  x?: number;
+  y?: number;
+  opacity?: number;
+}
+
 export default makeScene2D(function* (view) {
   const scene = useScene();
 
@@ -34,11 +50,13 @@ export default makeScene2D(function* (view) {
   // Get variables from the player
   const videoClips = scene.variables.get<VideoClip[]>('videoClips', [])();
   const audioClips = scene.variables.get<AudioClip[]>('audioClips', [])();
+  const textClips = scene.variables.get<TextClip[]>('textClips', [])();
   const totalDuration = scene.variables.get<number>('duration', 10)();
 
   // Sort clips by start time
   const sortedVideoClips = [...videoClips].sort((a, b) => a.start - b.start);
   const sortedAudioClips = [...audioClips].sort((a, b) => a.start - b.start);
+  const sortedTextClips = [...textClips].sort((a, b) => a.start - b.start);
 
   // Create refs
   const videoRef = createRef<Video>();
@@ -167,6 +185,62 @@ export default makeScene2D(function* (view) {
     }
   }
 
+  // Process text clips in parallel
+  function* processTextClips() {
+    if (!sortedTextClips || sortedTextClips.length === 0) return;
+
+    // Create text elements for each text clip
+    const textRefs: Reference<Txt>[] = [];
+    for (let i = 0; i < sortedTextClips.length; i++) {
+      const clip = sortedTextClips[i];
+      const textRef = createRef<Txt>();
+      textRefs.push(textRef);
+      view.add(
+        <Txt
+          ref={textRef}
+          text={clip.text}
+          fontSize={clip.fontSize ?? 48}
+          fill={clip.fill ?? '#ffffff'}
+          x={clip.x ?? 0}
+          y={clip.y ?? -200}
+          opacity={0}
+        />
+      );
+    }
+
+    // Create a generator function for each text clip
+    const playText = (clip: TextClip, textRef: Reference<Txt>) =>
+      function* () {
+        const speed = clip.speed ?? 1;
+        const safeSpeed = Math.max(speed, 0.0001);
+        const startAt = Math.max(clip.start, 0);
+        const timelineDuration = clip.duration / safeSpeed;
+
+        // Wait until this clip's start time
+        if (startAt > 0) {
+          yield* waitFor(startAt);
+        }
+
+        const text = textRef();
+        if (!text) return;
+
+        // Show text
+        text.opacity(clip.opacity ?? 1);
+
+        // Wait for clip duration
+        yield* waitFor(timelineDuration);
+
+        // Hide text
+        text.opacity(0);
+      };
+
+    // Create generators for each text clip and run them all in parallel
+    const runners = sortedTextClips.map((clip, index) => playText(clip, textRefs[index]));
+    if (runners.length > 0) {
+      yield* all(...runners.map(r => r()));
+    }
+  }
+
   // Process audio tracks in parallel (following Vidova's pattern)
   function* processAudioTracks() {
     if (!sortedAudioClips || sortedAudioClips.length === 0) return;
@@ -219,10 +293,11 @@ export default makeScene2D(function* (view) {
     }
   }
 
-  // Run video and all audio tracks in parallel
+  // Run video, audio, and text tracks in parallel
   yield* all(
     processVideoClips(),
     processAudioTracks(),
+    processTextClips(),
   );
 
   // Final cleanup - pause all media

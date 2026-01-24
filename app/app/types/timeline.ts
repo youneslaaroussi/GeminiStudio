@@ -21,7 +21,18 @@ export interface AudioClip extends BaseClip {
   volume: number;     // 0-1
 }
 
-export type TimelineClip = VideoClip | AudioClip;
+export interface TextClip extends BaseClip {
+  type: 'text';
+  text: string;       // Text content
+  name: string;       // Display name
+  fontSize?: number;   // Font size in pixels
+  fill?: string;       // Text color
+  x?: number;         // X position (0 = center)
+  y?: number;         // Y position (0 = center)
+  opacity?: number;    // Opacity 0-1
+}
+
+export type TimelineClip = VideoClip | AudioClip | TextClip;
 
 export interface Project {
   name: string;
@@ -29,6 +40,7 @@ export interface Project {
   fps: number;
   videoClips: VideoClip[];
   audioClips: AudioClip[];
+  textClips: TextClip[];
 }
 
 // Test videos for development
@@ -115,6 +127,30 @@ export function createAudioClip(
     offset: 0,
     speed: 1,
     volume: 1,
+  };
+}
+
+// Helper to create a new text clip
+export function createTextClip(
+  text: string,
+  name: string,
+  start: number,
+  duration: number
+): TextClip {
+  return {
+    id: crypto.randomUUID(),
+    type: 'text',
+    text,
+    name,
+    start,
+    duration,
+    offset: 0,
+    speed: 1,
+    fontSize: 48,
+    fill: '#ffffff',
+    x: 0,
+    y: -200,
+    opacity: 1,
   };
 }
 

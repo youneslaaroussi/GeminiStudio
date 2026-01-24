@@ -11417,9 +11417,11 @@ const description = makeScene2D(function* (view) {
   const { width, height } = scene.getSize();
   const videoClips = scene.variables.get("videoClips", [])();
   const audioClips = scene.variables.get("audioClips", [])();
+  const textClips = scene.variables.get("textClips", [])();
   const totalDuration = scene.variables.get("duration", 10)();
   const sortedVideoClips = [...videoClips].sort((a, b) => a.start - b.start);
   const sortedAudioClips = [...audioClips].sort((a, b) => a.start - b.start);
+  const sortedTextClips = [...textClips].sort((a, b) => a.start - b.start);
   const videoRef = createRef();
   const placeholderRef = createRef();
   view.add(
@@ -11522,6 +11524,47 @@ const description = makeScene2D(function* (view) {
       yield* waitFor(remainingTime);
     }
   }
+  function* processTextClips() {
+    if (!sortedTextClips || sortedTextClips.length === 0) return;
+    const textRefs = [];
+    for (let i = 0; i < sortedTextClips.length; i++) {
+      const clip = sortedTextClips[i];
+      const textRef = createRef();
+      textRefs.push(textRef);
+      view.add(
+        /* @__PURE__ */ jsx(
+          Txt,
+          {
+            ref: textRef,
+            text: clip.text,
+            fontSize: clip.fontSize ?? 48,
+            fill: clip.fill ?? "#ffffff",
+            x: clip.x ?? 0,
+            y: clip.y ?? -200,
+            opacity: 0
+          }
+        )
+      );
+    }
+    const playText = (clip, textRef) => function* () {
+      const speed = clip.speed ?? 1;
+      const safeSpeed = Math.max(speed, 1e-4);
+      const startAt = Math.max(clip.start, 0);
+      const timelineDuration = clip.duration / safeSpeed;
+      if (startAt > 0) {
+        yield* waitFor(startAt);
+      }
+      const text = textRef();
+      if (!text) return;
+      text.opacity(clip.opacity ?? 1);
+      yield* waitFor(timelineDuration);
+      text.opacity(0);
+    };
+    const runners = sortedTextClips.map((clip, index) => playText(clip, textRefs[index]));
+    if (runners.length > 0) {
+      yield* all(...runners.map((r) => r()));
+    }
+  }
   function* processAudioTracks() {
     if (!sortedAudioClips || sortedAudioClips.length === 0) return;
     const playTrack = (clip, audioRef) => function* () {
@@ -11555,7 +11598,8 @@ const description = makeScene2D(function* (view) {
   }
   yield* all(
     processVideoClips(),
-    processAudioTracks()
+    processAudioTracks(),
+    processTextClips()
   );
   videoRef().pause();
   audioRefs.forEach((ref) => ref().pause());
@@ -11571,6 +11615,8 @@ const config = makeProject({
     videoClips: [],
     // Audio clips on the timeline
     audioClips: [],
+    // Text clips on the timeline
+    textClips: [],
     // Total timeline duration
     duration: 10
   }

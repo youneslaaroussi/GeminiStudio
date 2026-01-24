@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Plus, Video, Music, Gauge } from "lucide-react";
+import { Plus, Video, Music, Gauge, Type } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import {
   TEST_VIDEOS,
   TEST_AUDIOS,
   createVideoClip,
   createAudioClip,
+  createTextClip,
 } from "@/app/types/timeline";
 
 export function AssetsPanel() {
@@ -15,20 +16,26 @@ export function AssetsPanel() {
   const [customName, setCustomName] = useState("");
   const [customDuration, setCustomDuration] = useState(10);
   const [assetType, setAssetType] = useState<"video" | "audio">("video");
+  const [textContent, setTextContent] = useState("");
+  const [textName, setTextName] = useState("");
 
   const addVideoClip = useProjectStore((s) => s.addVideoClip);
   const addAudioClip = useProjectStore((s) => s.addAudioClip);
+  const addTextClip = useProjectStore((s) => s.addTextClip);
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
   const videoClips = useProjectStore((s) => s.project.videoClips);
   const audioClips = useProjectStore((s) => s.project.audioClips);
+  const textClips = useProjectStore((s) => s.project.textClips);
   const updateVideoClip = useProjectStore((s) => s.updateVideoClip);
   const updateAudioClip = useProjectStore((s) => s.updateAudioClip);
+  const updateTextClip = useProjectStore((s) => s.updateTextClip);
   const getDuration = useProjectStore((s) => s.getDuration);
 
   // Find selected clip
   const selectedVideoClip = videoClips.find((c) => c.id === selectedClipId);
   const selectedAudioClip = audioClips.find((c) => c.id === selectedClipId);
-  const selectedClip = selectedVideoClip || selectedAudioClip;
+  const selectedTextClip = textClips.find((c) => c.id === selectedClipId);
+  const selectedClip = selectedVideoClip || selectedAudioClip || selectedTextClip;
 
   const handleAddTestVideo = useCallback(
     (video: (typeof TEST_VIDEOS)[number]) => {
@@ -82,6 +89,21 @@ export function AssetsPanel() {
     getDuration,
   ]);
 
+  const handleAddText = useCallback(() => {
+    if (!textContent.trim()) return;
+
+    const name = textName.trim() || "Text";
+    const clip = createTextClip(
+      textContent,
+      name,
+      getDuration(),
+      5 // Default 5 seconds
+    );
+    addTextClip(clip);
+    setTextContent("");
+    setTextName("");
+  }, [textContent, textName, addTextClip, getDuration]);
+
   const handleSpeedChange = useCallback(
     (speed: number) => {
       if (!selectedClipId) return;
@@ -89,9 +111,11 @@ export function AssetsPanel() {
         updateVideoClip(selectedClipId, { speed });
       } else if (selectedAudioClip) {
         updateAudioClip(selectedClipId, { speed });
+      } else if (selectedTextClip) {
+        updateTextClip(selectedClipId, { speed });
       }
     },
-    [selectedClipId, selectedVideoClip, selectedAudioClip, updateVideoClip, updateAudioClip]
+    [selectedClipId, selectedVideoClip, selectedAudioClip, selectedTextClip, updateVideoClip, updateAudioClip, updateTextClip]
   );
 
   return (
@@ -141,6 +165,38 @@ export function AssetsPanel() {
                 <Plus className="size-3 text-muted-foreground" />
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Add Text */}
+        <div>
+          <h3 className="text-xs font-medium text-muted-foreground mb-2">
+            Add Text
+          </h3>
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={textName}
+              onChange={(e) => setTextName(e.target.value)}
+              placeholder="Name (optional)"
+              className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+            />
+            <textarea
+              value={textContent}
+              onChange={(e) => setTextContent(e.target.value)}
+              placeholder="Enter text..."
+              rows={3}
+              className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm resize-none"
+            />
+            <button
+              type="button"
+              onClick={handleAddText}
+              disabled={!textContent.trim()}
+              className="w-full rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
+            >
+              <Type className="size-3 inline mr-1" />
+              Add Text to Timeline
+            </button>
           </div>
         </div>
 

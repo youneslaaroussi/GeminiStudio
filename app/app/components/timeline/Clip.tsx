@@ -1,14 +1,14 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import type { VideoClip, AudioClip } from "@/app/types/timeline";
+import type { VideoClip, AudioClip, TextClip } from "@/app/types/timeline";
 import { getClipEnd } from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { cn } from "@/lib/utils";
 
 interface ClipProps {
-  clip: VideoClip | AudioClip;
-  type: "video" | "audio";
+  clip: VideoClip | AudioClip | TextClip;
+  type: "video" | "audio" | "text";
 }
 
 export function Clip({ clip, type }: ClipProps) {
@@ -17,6 +17,7 @@ export function Clip({ clip, type }: ClipProps) {
   const setSelectedClip = useProjectStore((s) => s.setSelectedClip);
   const updateVideoClip = useProjectStore((s) => s.updateVideoClip);
   const updateAudioClip = useProjectStore((s) => s.updateAudioClip);
+  const updateTextClip = useProjectStore((s) => s.updateTextClip);
   const deleteClip = useProjectStore((s) => s.deleteClip);
 
   const [isDragging, setIsDragging] = useState(false);
@@ -28,7 +29,12 @@ export function Clip({ clip, type }: ClipProps) {
   const left = clip.start * zoom;
   const width = displayDuration * zoom;
 
-  const updateClip = type === "video" ? updateVideoClip : updateAudioClip;
+  const updateClip =
+    type === "video"
+      ? updateVideoClip
+      : type === "audio"
+      ? updateAudioClip
+      : updateTextClip;
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent, action: "drag" | "resize-left" | "resize-right") => {
@@ -110,7 +116,9 @@ export function Clip({ clip, type }: ClipProps) {
         "absolute top-1 bottom-1 rounded border cursor-move select-none overflow-hidden",
         type === "video"
           ? "bg-blue-500/80 border-blue-400"
-          : "bg-green-500/80 border-green-400",
+          : type === "audio"
+          ? "bg-green-500/80 border-green-400"
+          : "bg-purple-500/80 border-purple-400",
         isSelected && "ring-2 ring-white ring-offset-1 ring-offset-background",
         (isDragging || isResizing) && "opacity-80"
       )}
