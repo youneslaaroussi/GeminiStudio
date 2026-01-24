@@ -2,14 +2,11 @@
 
 import type { Player } from "@motion-canvas/core";
 import { ScenePlayer } from "../ScenePlayer";
-import type { VideoClip, AudioClip, TextClip, ImageClip } from "@/app/types/timeline";
+import type { Layer } from "@/app/types/timeline";
 
 interface PreviewPanelProps {
   onPlayerChange: (player: Player | null) => void;
-  videoClips: VideoClip[];
-  audioClips: AudioClip[];
-  textClips: TextClip[];
-  imageClips: ImageClip[];
+  layers: Layer[];
   duration: number;
   currentTime: number;
   onTimeUpdate: (time: number) => void;
@@ -17,15 +14,19 @@ interface PreviewPanelProps {
 
 export function PreviewPanel({
   onPlayerChange,
-  videoClips,
-  audioClips,
-  textClips,
-  imageClips,
+  layers,
   duration,
   currentTime,
   onTimeUpdate,
 }: PreviewPanelProps) {
-  const totalClips = videoClips.length + audioClips.length + textClips.length + imageClips.length;
+  const totalClips = layers.reduce((acc, layer) => acc + layer.clips.length, 0);
+  const counts = layers.reduce<Record<"video" | "audio" | "text" | "image", number>>(
+    (acc, layer) => {
+      acc[layer.type] += layer.clips.length;
+      return acc;
+    },
+    { video: 0, audio: 0, text: 0, image: 0 }
+  );
   
   return (
     <div className="h-full flex flex-col">
@@ -34,9 +35,9 @@ export function PreviewPanel({
           <h2 className="text-sm font-semibold text-foreground">Preview</h2>
           <p className="text-xs text-muted-foreground">
             {totalClips} clip{totalClips !== 1 ? "s" : ""} on timeline
-            {(videoClips.length > 0 || audioClips.length > 0 || textClips.length > 0 || imageClips.length > 0) && (
+            {totalClips > 0 && (
               <span className="ml-1">
-                ({videoClips.length} video, {audioClips.length} audio, {textClips.length} text, {imageClips.length} image)
+                ({counts.video} video, {counts.audio} audio, {counts.text} text, {counts.image} image)
               </span>
             )}
           </p>
@@ -45,10 +46,7 @@ export function PreviewPanel({
       <div className="flex-1 overflow-hidden">
         <ScenePlayer
           onPlayerChange={onPlayerChange}
-          videoClips={videoClips}
-          audioClips={audioClips}
-          textClips={textClips}
-          imageClips={imageClips}
+          layers={layers}
           duration={duration}
           currentTime={currentTime}
           onTimeUpdate={onTimeUpdate}

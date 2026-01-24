@@ -2,6 +2,11 @@ import { Video, Rect, Txt, Img, makeScene2D } from '@motion-canvas/2d';
 import { all, createRef, Reference, useScene, waitFor } from '@motion-canvas/core';
 
 // Type definitions matching the app's types
+interface Transform {
+  x: number;
+  y: number;
+}
+
 interface VideoClip {
   id: string;
   type: 'video';
@@ -11,6 +16,8 @@ interface VideoClip {
   duration: number;
   offset: number;
   speed: number;
+  position: Transform;
+  scale: Transform;
 }
 
 interface AudioClip {
@@ -23,6 +30,8 @@ interface AudioClip {
   offset: number;
   speed: number;
   volume: number;
+  position: Transform;
+  scale: Transform;
 }
 
 interface TextClip {
@@ -36,9 +45,9 @@ interface TextClip {
   speed: number;
   fontSize?: number;
   fill?: string;
-  x?: number;
-  y?: number;
   opacity?: number;
+  position: Transform;
+  scale: Transform;
 }
 
 interface ImageClip {
@@ -50,10 +59,19 @@ interface ImageClip {
   duration: number;
   offset: number;
   speed: number;
-  x?: number;
-  y?: number;
   width?: number;
   height?: number;
+  position: Transform;
+  scale: Transform;
+}
+
+type TimelineClip = VideoClip | AudioClip | TextClip | ImageClip;
+
+interface Layer {
+  id: string;
+  name: string;
+  type: TimelineClip['type'];
+  clips: TimelineClip[];
 }
 
 export default makeScene2D(function* (view) {
@@ -63,11 +81,21 @@ export default makeScene2D(function* (view) {
   const { width, height } = scene.getSize();
 
   // Get variables from the player
-  const videoClips = scene.variables.get<VideoClip[]>('videoClips', [])();
-  const audioClips = scene.variables.get<AudioClip[]>('audioClips', [])();
-  const textClips = scene.variables.get<TextClip[]>('textClips', [])();
-  const imageClips = scene.variables.get<ImageClip[]>('imageClips', [])();
+  const layers = scene.variables.get<Layer[]>('layers', [])();
   const totalDuration = scene.variables.get<number>('duration', 10)();
+
+  const videoClips = layers
+    .filter((layer) => layer.type === 'video')
+    .flatMap((layer) => layer.clips as VideoClip[]);
+  const audioClips = layers
+    .filter((layer) => layer.type === 'audio')
+    .flatMap((layer) => layer.clips as AudioClip[]);
+  const textClips = layers
+    .filter((layer) => layer.type === 'text')
+    .flatMap((layer) => layer.clips as TextClip[]);
+  const imageClips = layers
+    .filter((layer) => layer.type === 'image')
+    .flatMap((layer) => layer.clips as ImageClip[]);
 
   // Sort clips by start time
   const sortedVideoClips = [...videoClips].sort((a, b) => a.start - b.start);
@@ -91,11 +119,15 @@ export default makeScene2D(function* (view) {
   // Video element for main video track (initially hidden)
   view.add(
     <Video
+      key="main-video"
       ref={videoRef}
       src=""
       width={1920}
       height={1080}
       opacity={0}
+      x={0}
+      y={0}
+      scale={1}
     />
   );
 
@@ -150,6 +182,9 @@ export default makeScene2D(function* (view) {
     videoRef().src(clip.src);
     videoRef().seek(clip.offset);
     videoRef().playbackRate(clipSpeed);
+    videoRef().x(clip.position.x);
+    videoRef().y(clip.position.y);
+    videoRef().scale(clip.scale);
 
     // Show video, hide placeholder
     videoRef().opacity(1);
@@ -214,12 +249,14 @@ export default makeScene2D(function* (view) {
       textRefs.push(textRef);
       view.add(
         <Txt
+          key={`text-clip-${clip.id}`}
           ref={textRef}
           text={clip.text}
           fontSize={clip.fontSize ?? 48}
           fill={clip.fill ?? '#ffffff'}
-          x={clip.x ?? 0}
-          y={clip.y ?? -200}
+          x={clip.position.x}
+          y={clip.position.y}
+          scale={clip.scale}
           opacity={0}
         />
       );
@@ -270,10 +307,12 @@ export default makeScene2D(function* (view) {
       imageRefs.push(imageRef);
       
       const props: any = {
+        key: `image-clip-${clip.id}`,
         ref: imageRef,
         src: clip.src,
-        x: clip.x ?? 0,
-        y: clip.y ?? 0,
+        x: clip.position.x,
+        y: clip.position.y,
+        scale: clip.scale,
         opacity: 0,
       };
       

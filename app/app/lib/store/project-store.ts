@@ -1,148 +1,214 @@
 import { create } from 'zustand';
-import type { VideoClip, AudioClip, TextClip, ImageClip, Project, TimelineClip } from '@/app/types/timeline';
+import type {
+  AudioClip,
+  ClipType,
+  ImageClip,
+  Layer,
+  Project,
+  TextClip,
+  TimelineClip,
+  VideoClip,
+} from '@/app/types/timeline';
 import { getClipEnd } from '@/app/types/timeline';
 
 interface ProjectStore {
-  // State
   project: Project;
   currentTime: number;
   selectedClipId: string | null;
   isPlaying: boolean;
   zoom: number; // pixels per second
 
-  // Actions
-  addVideoClip: (clip: VideoClip) => void;
-  addAudioClip: (clip: AudioClip) => void;
-  addTextClip: (clip: TextClip) => void;
-  addImageClip: (clip: ImageClip) => void;
-  updateVideoClip: (id: string, updates: Partial<VideoClip>) => void;
-  updateAudioClip: (id: string, updates: Partial<AudioClip>) => void;
-  updateTextClip: (id: string, updates: Partial<TextClip>) => void;
-  updateImageClip: (id: string, updates: Partial<ImageClip>) => void;
+  addLayer: (layer: Layer) => void;
+  addClip: (clip: TimelineClip, layerId?: string) => void;
+  updateClip: (id: string, updates: Partial<TimelineClip>) => void;
   deleteClip: (id: string) => void;
+  moveClipToLayer: (clipId: string, targetLayerId: string) => void;
   setCurrentTime: (time: number) => void;
   setSelectedClip: (id: string | null) => void;
   setIsPlaying: (playing: boolean) => void;
   setZoom: (zoom: number) => void;
   splitClipAtTime: (id: string, time: number) => void;
 
-  // Computed helpers
   getDuration: () => number;
   getActiveVideoClip: (time: number) => VideoClip | undefined;
   getActiveAudioClips: (time: number) => AudioClip[];
   getActiveTextClips: (time: number) => TextClip[];
   getActiveImageClips: (time: number) => ImageClip[];
+  getClipById: (id: string) => TimelineClip | undefined;
 }
+
+export const createLayerTemplate = (type: ClipType, name?: string): Layer => ({
+  id: crypto.randomUUID(),
+  name: name ?? `${type.charAt(0).toUpperCase() + type.slice(1)} Layer`,
+  type,
+  clips: [],
+});
+
+const findClipLocation = (project: Project, clipId: string) => {
+  for (let layerIndex = 0; layerIndex < project.layers.length; layerIndex++) {
+    const layer = project.layers[layerIndex];
+    const clipIndex = layer.clips.findIndex((clip) => clip.id === clipId);
+    if (clipIndex !== -1) {
+      return {
+        layerIndex,
+        clipIndex,
+        layer,
+        clip: layer.clips[clipIndex],
+      };
+    }
+  }
+
+  return null;
+};
 
 const defaultProject: Project = {
   name: 'Untitled Project',
   resolution: { width: 1920, height: 1080 },
   fps: 30,
-  videoClips: [
+  layers: [
     {
-      id: 'clip-1',
+      id: 'layer-video-1',
+      name: 'Video 1',
       type: 'video',
-      name: 'Big Buck Bunny',
-      src: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-      start: 0,
-      duration: 10,
-      offset: 0,
-      speed: 1,
+      clips: [
+        {
+          id: 'clip-1',
+          type: 'video',
+          name: 'Big Buck Bunny',
+          src: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+          start: 0,
+          duration: 10,
+          offset: 0,
+          speed: 1,
+          position: { x: 0, y: 0 },
+          scale: { x: 1, y: 1 },
+        },
+        {
+          id: 'clip-2',
+          type: 'video',
+          name: 'Elephant Dream',
+          src: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+          start: 10,
+          duration: 8,
+          offset: 30,
+          speed: 1,
+          position: { x: 0, y: 0 },
+          scale: { x: 1, y: 1 },
+        },
+        {
+          id: 'clip-3',
+          type: 'video',
+          name: 'Sintel',
+          src: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+          start: 18,
+          duration: 12,
+          offset: 60,
+          speed: 1,
+          position: { x: 0, y: 0 },
+          scale: { x: 1, y: 1 },
+        },
+      ],
     },
     {
-      id: 'clip-2',
-      type: 'video',
-      name: 'Elephant Dream',
-      src: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-      start: 10,
-      duration: 8,
-      offset: 30,
-      speed: 1,
-    },
-    {
-      id: 'clip-3',
-      type: 'video',
-      name: 'Sintel',
-      src: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
-      start: 18,
-      duration: 12,
-      offset: 60,
-      speed: 1,
-    },
-  ],
-  audioClips: [
-    {
-      id: 'audio-1',
+      id: 'layer-audio-1',
+      name: 'Audio 1',
       type: 'audio',
-      name: 'Ambient Background',
-      src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-      start: 0,
-      duration: 15,
-      offset: 0,
-      speed: 1,
-      volume: 0.5,
+      clips: [
+        {
+          id: 'audio-1',
+          type: 'audio',
+          name: 'Ambient Background',
+          src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+          start: 0,
+          duration: 15,
+          offset: 0,
+          speed: 1,
+          volume: 0.5,
+          position: { x: 0, y: 0 },
+          scale: { x: 1, y: 1 },
+        },
+        {
+          id: 'audio-2',
+          type: 'audio',
+          name: 'Upbeat Music',
+          src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
+          start: 15,
+          duration: 15,
+          offset: 0,
+          speed: 1,
+          volume: 0.5,
+          position: { x: 0, y: 0 },
+          scale: { x: 1, y: 1 },
+        },
+      ],
     },
     {
-      id: 'audio-2',
-      type: 'audio',
-      name: 'Upbeat Music',
-      src: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
-      start: 15,
-      duration: 15,
-      offset: 0,
-      speed: 1,
-      volume: 0.5,
-    },
-  ],
-  textClips: [
-    {
-      id: 'text-1',
+      id: 'layer-text-1',
+      name: 'Text 1',
       type: 'text',
-      name: 'Title',
-      text: 'Welcome to Gemini Studio',
-      start: 2,
-      duration: 5,
-      offset: 0,
-      speed: 1,
-      fontSize: 64,
-      fill: '#ffffff',
-      x: 0,
-      y: -200,
-      opacity: 1,
+      clips: [
+        {
+          id: 'text-1',
+          type: 'text',
+          name: 'Title',
+          text: 'Welcome to Gemini Studio',
+          start: 2,
+          duration: 5,
+          offset: 0,
+          speed: 1,
+          fontSize: 64,
+          fill: '#ffffff',
+          opacity: 1,
+          position: { x: 0, y: -200 },
+          scale: { x: 1, y: 1 },
+        },
+        {
+          id: 'text-2',
+          type: 'text',
+          name: 'Subtitle',
+          text: 'Create amazing videos',
+          start: 7,
+          duration: 4,
+          offset: 0,
+          speed: 1,
+          fontSize: 36,
+          fill: '#cccccc',
+          opacity: 1,
+          position: { x: 0, y: -100 },
+          scale: { x: 1, y: 1 },
+        },
+      ],
     },
     {
-      id: 'text-2',
-      type: 'text',
-      name: 'Subtitle',
-      text: 'Create amazing videos',
-      start: 7,
-      duration: 4,
-      offset: 0,
-      speed: 1,
-      fontSize: 36,
-      fill: '#cccccc',
-      x: 0,
-      y: -100,
-      opacity: 1,
-    },
-  ],
-  imageClips: [
-    {
-      id: 'image-1',
+      id: 'layer-image-1',
+      name: 'Image 1',
       type: 'image',
-      name: 'Overlay Image',
-      src: 'https://placehold.co/600x400/png',
-      start: 5,
-      duration: 5,
-      offset: 0,
-      speed: 1,
-      x: 0,
-      y: 0,
-      width: 400,
-      height: 300,
+      clips: [
+        {
+          id: 'image-1',
+          type: 'image',
+          name: 'Overlay Image',
+          src: 'https://placehold.co/600x400/png',
+          start: 5,
+          duration: 5,
+          offset: 0,
+          speed: 1,
+          width: 400,
+          height: 300,
+          position: { x: 0, y: 0 },
+          scale: { x: 1, y: 1 },
+        },
+      ],
     },
   ],
 };
+
+const clampZoom = (zoom: number) => Math.max(10, Math.min(200, zoom));
+
+const removeClipFromLayer = (layer: Layer, clipIndex: number): Layer => ({
+  ...layer,
+  clips: layer.clips.filter((_, index) => index !== clipIndex),
+});
 
 export const useProjectStore = create<ProjectStore>((set, get) => ({
   // Initial state
@@ -150,92 +216,128 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   currentTime: 0,
   selectedClipId: null,
   isPlaying: false,
-  zoom: 50, // 50 pixels per second
+  zoom: 50,
 
-  // Actions
-  addVideoClip: (clip) =>
+  addLayer: (layer) =>
     set((state) => ({
       project: {
         ...state.project,
-        videoClips: [...state.project.videoClips, clip],
+        layers: [...state.project.layers, layer],
       },
     })),
 
-  addAudioClip: (clip) =>
-    set((state) => ({
-      project: {
-        ...state.project,
-        audioClips: [...state.project.audioClips, clip],
-      },
-    })),
+  addClip: (clip, layerId) =>
+    set((state) => {
+      const layers = [...state.project.layers];
+      const targetIndex = typeof layerId === 'string'
+        ? layers.findIndex((layer) => layer.id === layerId)
+        : layers.findIndex((layer) => layer.type === clip.type);
 
-  addTextClip: (clip) =>
-    set((state) => ({
-      project: {
-        ...state.project,
-        textClips: [...state.project.textClips, clip],
-      },
-    })),
+      if (targetIndex === -1) {
+        const newLayer: Layer = {
+          ...createLayerTemplate(clip.type),
+          clips: [clip],
+        };
+        return {
+          project: {
+            ...state.project,
+            layers: [...layers, newLayer],
+          },
+        };
+      }
 
-  addImageClip: (clip) =>
-    set((state) => ({
-      project: {
-        ...state.project,
-        imageClips: [...state.project.imageClips, clip],
-      },
-    })),
+      const targetLayer = layers[targetIndex];
+      layers[targetIndex] = {
+        ...targetLayer,
+        clips: [...targetLayer.clips, clip],
+      };
 
-  updateVideoClip: (id, updates) =>
-    set((state) => ({
-      project: {
-        ...state.project,
-        videoClips: state.project.videoClips.map((clip) =>
-          clip.id === id ? { ...clip, ...updates } : clip
-        ),
-      },
-    })),
+      return {
+        project: {
+          ...state.project,
+          layers,
+        },
+      };
+    }),
 
-  updateAudioClip: (id, updates) =>
-    set((state) => ({
-      project: {
-        ...state.project,
-        audioClips: state.project.audioClips.map((clip) =>
-          clip.id === id ? { ...clip, ...updates } : clip
-        ),
-      },
-    })),
+  updateClip: (id, updates) =>
+    set((state) => {
+      const location = findClipLocation(state.project, id);
+      if (!location) return state;
 
-  updateTextClip: (id, updates) =>
-    set((state) => ({
-      project: {
-        ...state.project,
-        textClips: state.project.textClips.map((clip) =>
-          clip.id === id ? { ...clip, ...updates } : clip
-        ),
-      },
-    })),
+      const { layerIndex, clipIndex, layer, clip } = location;
+      const layers = state.project.layers.map((existingLayer, index) => {
+        if (index !== layerIndex) return existingLayer;
+        return {
+          ...layer,
+          clips: layer.clips.map((existingClip, cIndex) =>
+            cIndex === clipIndex
+              ? ({ ...clip, ...updates } as TimelineClip)
+              : existingClip
+          ),
+        };
+      });
 
-  updateImageClip: (id, updates) =>
-    set((state) => ({
-      project: {
-        ...state.project,
-        imageClips: state.project.imageClips.map((clip) =>
-          clip.id === id ? { ...clip, ...updates } : clip
-        ),
-      },
-    })),
+      return {
+        project: {
+          ...state.project,
+          layers,
+        },
+      };
+    }),
 
   deleteClip: (id) =>
-    set((state) => ({
-      project: {
-        ...state.project,
-        videoClips: state.project.videoClips.filter((clip) => clip.id !== id),
-        audioClips: state.project.audioClips.filter((clip) => clip.id !== id),
-        textClips: state.project.textClips.filter((clip) => clip.id !== id),
-        imageClips: state.project.imageClips.filter((clip) => clip.id !== id),
-      },
-      selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,
-    })),
+    set((state) => {
+      const location = findClipLocation(state.project, id);
+      if (!location) return state;
+
+      const { layerIndex, clipIndex } = location;
+      const layers = state.project.layers.map((layer, index) =>
+        index === layerIndex ? removeClipFromLayer(layer, clipIndex) : layer
+      );
+
+      return {
+        project: {
+          ...state.project,
+          layers,
+        },
+        selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,
+      };
+    }),
+
+  moveClipToLayer: (clipId, targetLayerId) =>
+    set((state) => {
+      const location = findClipLocation(state.project, clipId);
+      if (!location) return state;
+
+      const targetIndex = state.project.layers.findIndex(
+        (layer) => layer.id === targetLayerId
+      );
+      if (targetIndex === -1) return state;
+
+      const { layerIndex, clipIndex, clip } = location;
+      if (layerIndex === targetIndex) return state;
+
+      const layers = state.project.layers.map((layer, index) => {
+        if (index === layerIndex) {
+          return removeClipFromLayer(layer, clipIndex);
+        }
+        if (index === targetIndex) {
+          return {
+            ...layer,
+            clips: [...layer.clips, clip],
+          };
+        }
+        return layer;
+      });
+
+      return {
+        project: {
+          ...state.project,
+          layers,
+        },
+      };
+    }),
 
   setCurrentTime: (time) => set({ currentTime: Math.max(0, time) }),
 
@@ -243,177 +345,90 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   setIsPlaying: (playing) => set({ isPlaying: playing }),
 
-  setZoom: (zoom) => set({ zoom: Math.max(10, Math.min(200, zoom)) }),
+  setZoom: (zoom) => set({ zoom: clampZoom(zoom) }),
 
   splitClipAtTime: (id, time) => {
     const state = get();
-    const videoClip = state.project.videoClips.find((c) => c.id === id);
-    const audioClip = state.project.audioClips.find((c) => c.id === id);
-    const textClip = state.project.textClips.find((c) => c.id === id);
-    const imageClip = state.project.imageClips.find((c) => c.id === id);
+    const location = findClipLocation(state.project, id);
+    if (!location) return;
 
-    if (videoClip) {
-      const clipEnd = getClipEnd(videoClip);
-      if (time <= videoClip.start || time >= clipEnd) return;
+    const { layerIndex, clipIndex, clip, layer } = location;
+    const clipEnd = getClipEnd(clip);
+    if (time <= clip.start || time >= clipEnd) return;
 
-      const firstDuration = (time - videoClip.start) * videoClip.speed;
-      const secondDuration = videoClip.duration - firstDuration;
+    const firstDuration = (time - clip.start) * clip.speed;
+    const secondDuration = clip.duration - firstDuration;
 
-      const firstClip: VideoClip = {
-        ...videoClip,
-        duration: firstDuration,
-      };
+    const firstClip: TimelineClip = {
+      ...clip,
+      duration: firstDuration,
+    };
 
-      const secondClip: VideoClip = {
-        ...videoClip,
-        id: crypto.randomUUID(),
-        start: time,
-        offset: videoClip.offset + firstDuration,
-        duration: secondDuration,
-      };
+    const secondClip: TimelineClip = {
+      ...clip,
+      id: crypto.randomUUID(),
+      start: time,
+      offset: clip.offset + firstDuration,
+      duration: secondDuration,
+    };
 
-      set((s) => ({
-        project: {
-          ...s.project,
-          videoClips: [
-            ...s.project.videoClips.filter((c) => c.id !== id),
-            firstClip,
-            secondClip,
-          ],
-        },
-      }));
-    }
-
-    if (audioClip) {
-      const clipEnd = getClipEnd(audioClip);
-      if (time <= audioClip.start || time >= clipEnd) return;
-
-      const firstDuration = (time - audioClip.start) * audioClip.speed;
-      const secondDuration = audioClip.duration - firstDuration;
-
-      const firstClip: AudioClip = {
-        ...audioClip,
-        duration: firstDuration,
-      };
-
-      const secondClip: AudioClip = {
-        ...audioClip,
-        id: crypto.randomUUID(),
-        start: time,
-        offset: audioClip.offset + firstDuration,
-        duration: secondDuration,
-      };
-
-      set((s) => ({
-        project: {
-          ...s.project,
-          audioClips: [
-            ...s.project.audioClips.filter((c) => c.id !== id),
-            firstClip,
-            secondClip,
-          ],
-        },
-      }));
-    }
-
-    if (textClip) {
-      const clipEnd = getClipEnd(textClip);
-      if (time <= textClip.start || time >= clipEnd) return;
-
-      const firstDuration = (time - textClip.start) * textClip.speed;
-      const secondDuration = textClip.duration - firstDuration;
-
-      const firstClip: TextClip = {
-        ...textClip,
-        duration: firstDuration,
-      };
-
-      const secondClip: TextClip = {
-        ...textClip,
-        id: crypto.randomUUID(),
-        start: time,
-        offset: textClip.offset + firstDuration,
-        duration: secondDuration,
-      };
-
-      set((s) => ({
-        project: {
-          ...s.project,
-          textClips: [
-            ...s.project.textClips.filter((c) => c.id !== id),
-            firstClip,
-            secondClip,
-          ],
-        },
-      }));
-    }
-
-    if (imageClip) {
-      const clipEnd = getClipEnd(imageClip);
-      if (time <= imageClip.start || time >= clipEnd) return;
-
-      const firstDuration = (time - imageClip.start) * imageClip.speed;
-      const secondDuration = imageClip.duration - firstDuration;
-
-      const firstClip: ImageClip = {
-        ...imageClip,
-        duration: firstDuration,
-      };
-
-      const secondClip: ImageClip = {
-        ...imageClip,
-        id: crypto.randomUUID(),
-        start: time,
-        offset: imageClip.offset + firstDuration,
-        duration: secondDuration,
-      };
-
-      set((s) => ({
-        project: {
-          ...s.project,
-          imageClips: [
-            ...s.project.imageClips.filter((c) => c.id !== id),
-            firstClip,
-            secondClip,
-          ],
-        },
-      }));
-    }
+    set((s) => ({
+      project: {
+        ...s.project,
+        layers: s.project.layers.map((existingLayer, idx) => {
+          if (idx !== layerIndex) return existingLayer;
+          const newClips = [...layer.clips];
+          newClips.splice(clipIndex, 1, firstClip, secondClip);
+          return {
+            ...layer,
+            clips: newClips,
+          };
+        }),
+      },
+    }));
   },
 
-  // Computed helpers
   getDuration: () => {
-    const { videoClips, audioClips, textClips, imageClips } = get().project;
-    const allClips = [...videoClips, ...audioClips, ...textClips, ...imageClips];
-    if (allClips.length === 0) return 10; // Default 10s timeline
+    const { layers } = get().project;
+    const allClips = layers.flatMap((layer) => layer.clips);
+    if (allClips.length === 0) return 10;
     return Math.max(...allClips.map(getClipEnd));
   },
 
   getActiveVideoClip: (time) => {
-    const { videoClips } = get().project;
-    return videoClips.find(
-      (clip) => time >= clip.start && time < getClipEnd(clip)
-    );
+    const { layers } = get().project;
+    return layers
+      .filter((layer) => layer.type === 'video')
+      .flatMap((layer) => layer.clips as VideoClip[])
+      .find((clip) => time >= clip.start && time < getClipEnd(clip));
   },
 
   getActiveAudioClips: (time) => {
-    const { audioClips } = get().project;
-    return audioClips.filter(
-      (clip) => time >= clip.start && time < getClipEnd(clip)
-    );
+    const { layers } = get().project;
+    return layers
+      .filter((layer) => layer.type === 'audio')
+      .flatMap((layer) => layer.clips as AudioClip[])
+      .filter((clip) => time >= clip.start && time < getClipEnd(clip));
   },
 
   getActiveTextClips: (time) => {
-    const { textClips } = get().project;
-    return textClips.filter(
-      (clip) => time >= clip.start && time < getClipEnd(clip)
-    );
+    const { layers } = get().project;
+    return layers
+      .filter((layer) => layer.type === 'text')
+      .flatMap((layer) => layer.clips as TextClip[])
+      .filter((clip) => time >= clip.start && time < getClipEnd(clip));
   },
 
   getActiveImageClips: (time) => {
-    const { imageClips } = get().project;
-    return imageClips.filter(
-      (clip) => time >= clip.start && time < getClipEnd(clip)
-    );
+    const { layers } = get().project;
+    return layers
+      .filter((layer) => layer.type === 'image')
+      .flatMap((layer) => layer.clips as ImageClip[])
+      .filter((clip) => time >= clip.start && time < getClipEnd(clip));
+  },
+
+  getClipById: (id) => {
+    const location = findClipLocation(get().project, id);
+    return location?.clip;
   },
 }));

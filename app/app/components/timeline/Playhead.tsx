@@ -1,12 +1,13 @@
 "use client";
 
 import { useProjectStore } from "@/app/lib/store/project-store";
+import { TRACK_LABEL_WIDTH } from "./constants";
 
 export function Playhead() {
   const currentTime = useProjectStore((s) => s.currentTime);
   const zoom = useProjectStore((s) => s.zoom);
 
-  const left = currentTime * zoom + 80; // 80px offset for track labels
+  const left = currentTime * zoom + TRACK_LABEL_WIDTH;
 
   return (
     <div

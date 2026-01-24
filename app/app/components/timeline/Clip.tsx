@@ -1,24 +1,19 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import type { VideoClip, AudioClip, TextClip, ImageClip } from "@/app/types/timeline";
-import { getClipEnd } from "@/app/types/timeline";
+import type { TimelineClip } from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { cn } from "@/lib/utils";
 
 interface ClipProps {
-  clip: VideoClip | AudioClip | TextClip | ImageClip;
-  type: "video" | "audio" | "text" | "image";
+  clip: TimelineClip;
 }
 
-export function Clip({ clip, type }: ClipProps) {
+export function Clip({ clip }: ClipProps) {
   const zoom = useProjectStore((s) => s.zoom);
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
   const setSelectedClip = useProjectStore((s) => s.setSelectedClip);
-  const updateVideoClip = useProjectStore((s) => s.updateVideoClip);
-  const updateAudioClip = useProjectStore((s) => s.updateAudioClip);
-  const updateTextClip = useProjectStore((s) => s.updateTextClip);
-  const updateImageClip = useProjectStore((s) => s.updateImageClip);
+  const updateClip = useProjectStore((s) => s.updateClip);
   const deleteClip = useProjectStore((s) => s.deleteClip);
 
   const [isDragging, setIsDragging] = useState(false);
@@ -29,15 +24,6 @@ export function Clip({ clip, type }: ClipProps) {
   const displayDuration = clip.duration / clip.speed;
   const left = clip.start * zoom;
   const width = displayDuration * zoom;
-
-  const updateClip =
-    type === "video"
-      ? updateVideoClip
-      : type === "audio"
-      ? updateAudioClip
-      : type === "text"
-      ? updateTextClip
-      : updateImageClip;
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent, action: "drag" | "resize-left" | "resize-right") => {
@@ -117,11 +103,11 @@ export function Clip({ clip, type }: ClipProps) {
     <div
       className={cn(
         "absolute top-1 bottom-1 rounded border cursor-move select-none overflow-hidden",
-        type === "video"
+        clip.type === "video"
           ? "bg-blue-500/80 border-blue-400"
-          : type === "audio"
+          : clip.type === "audio"
           ? "bg-green-500/80 border-green-400"
-          : type === "text"
+          : clip.type === "text"
           ? "bg-purple-500/80 border-purple-400"
           : "bg-orange-500/80 border-orange-400",
         isSelected && "ring-2 ring-white ring-offset-1 ring-offset-background",
@@ -132,7 +118,7 @@ export function Clip({ clip, type }: ClipProps) {
       onKeyDown={handleKeyDown}
       tabIndex={0}
       role="button"
-      aria-label={`${type} clip: ${clip.name}`}
+      aria-label={`${clip.type} clip: ${clip.name}`}
     >
       {/* Left resize handle */}
       <div

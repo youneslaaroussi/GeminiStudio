@@ -11671,11 +11671,12 @@ function makeScene2D(runner) {
 const description = makeScene2D(function* (view) {
   const scene = useScene();
   const { width, height } = scene.getSize();
-  const videoClips = scene.variables.get("videoClips", [])();
-  const audioClips = scene.variables.get("audioClips", [])();
-  const textClips = scene.variables.get("textClips", [])();
-  const imageClips = scene.variables.get("imageClips", [])();
+  const layers = scene.variables.get("layers", [])();
   const totalDuration = scene.variables.get("duration", 10)();
+  const videoClips = layers.filter((layer) => layer.type === "video").flatMap((layer) => layer.clips);
+  const audioClips = layers.filter((layer) => layer.type === "audio").flatMap((layer) => layer.clips);
+  const textClips = layers.filter((layer) => layer.type === "text").flatMap((layer) => layer.clips);
+  const imageClips = layers.filter((layer) => layer.type === "image").flatMap((layer) => layer.clips);
   const sortedVideoClips = [...videoClips].sort((a, b) => a.start - b.start);
   const sortedAudioClips = [...audioClips].sort((a, b) => a.start - b.start);
   const sortedTextClips = [...textClips].sort((a, b) => a.start - b.start);
@@ -11700,8 +11701,12 @@ const description = makeScene2D(function* (view) {
         src: "",
         width: 1920,
         height: 1080,
-        opacity: 0
-      }
+        opacity: 0,
+        x: 0,
+        y: 0,
+        scale: 1
+      },
+      "main-video"
     )
   );
   view.add(
@@ -11751,6 +11756,9 @@ const description = makeScene2D(function* (view) {
     videoRef().src(clip.src);
     videoRef().seek(clip.offset);
     videoRef().playbackRate(clipSpeed);
+    videoRef().x(clip.position.x);
+    videoRef().y(clip.position.y);
+    videoRef().scale(clip.scale);
     videoRef().opacity(1);
     placeholderRef().opacity(0);
     videoRef().play();
@@ -11797,10 +11805,12 @@ const description = makeScene2D(function* (view) {
             text: clip.text,
             fontSize: clip.fontSize ?? 48,
             fill: clip.fill ?? "#ffffff",
-            x: clip.x ?? 0,
-            y: clip.y ?? -200,
+            x: clip.position.x,
+            y: clip.position.y,
+            scale: clip.scale,
             opacity: 0
-          }
+          },
+          `text-clip-${clip.id}`
         )
       );
     }
@@ -11831,10 +11841,12 @@ const description = makeScene2D(function* (view) {
       const imageRef = createRef();
       imageRefs.push(imageRef);
       const props = {
+        key: `image-clip-${clip.id}`,
         ref: imageRef,
         src: clip.src,
-        x: clip.x ?? 0,
-        y: clip.y ?? 0,
+        x: clip.position.x,
+        y: clip.position.y,
+        scale: clip.scale,
         opacity: 0
       };
       if (clip.width) props.width = clip.width;
@@ -11907,12 +11919,7 @@ const config = makeProject({
   name: "gemini-studio-scene",
   scenes: [description],
   variables: {
-    // Video clips on the timeline
-    videoClips: [],
-    // Audio clips on the timeline
-    audioClips: [],
-    // Text clips on the timeline
-    textClips: [],
+    layers: [],
     // Total timeline duration
     duration: 10
   }

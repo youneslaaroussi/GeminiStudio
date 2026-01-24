@@ -1,43 +1,24 @@
 "use client";
 
 import { useCallback } from "react";
-import { Video, Music, Type, Settings, Image as ImageIcon } from "lucide-react";
+import { Video, Music, Type, Image as ImageIcon } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
-import type { VideoClip, AudioClip, TextClip, ImageClip } from "@/app/types/timeline";
+import type { TimelineClip, VideoClip, AudioClip, TextClip, ImageClip } from "@/app/types/timeline";
 
 export function SettingsPanel() {
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
-  const videoClips = useProjectStore((s) => s.project.videoClips);
-  const audioClips = useProjectStore((s) => s.project.audioClips);
-  const textClips = useProjectStore((s) => s.project.textClips);
-  const imageClips = useProjectStore((s) => s.project.imageClips);
-  const updateVideoClip = useProjectStore((s) => s.updateVideoClip);
-  const updateAudioClip = useProjectStore((s) => s.updateAudioClip);
-  const updateTextClip = useProjectStore((s) => s.updateTextClip);
-  const updateImageClip = useProjectStore((s) => s.updateImageClip);
+  const layers = useProjectStore((s) => s.project.layers);
+  const updateClip = useProjectStore((s) => s.updateClip);
 
-  // Find selected clip
-  const selectedVideoClip = videoClips.find((c) => c.id === selectedClipId);
-  const selectedAudioClip = audioClips.find((c) => c.id === selectedClipId);
-  const selectedTextClip = textClips.find((c) => c.id === selectedClipId);
-  const selectedImageClip = imageClips.find((c) => c.id === selectedClipId);
-  const selectedClip = selectedVideoClip || selectedAudioClip || selectedTextClip || selectedImageClip;
+  const allClips = layers.flatMap((layer) => layer.clips);
+  const selectedClip = allClips.find((clip) => clip.id === selectedClipId);
 
   const handleUpdate = useCallback(
-    (updates: Partial<VideoClip> | Partial<AudioClip> | Partial<TextClip> | Partial<ImageClip>) => {
+    (updates: Partial<TimelineClip>) => {
       if (!selectedClipId || !selectedClip) return;
-
-      if (selectedVideoClip) {
-        updateVideoClip(selectedClipId, updates as Partial<VideoClip>);
-      } else if (selectedAudioClip) {
-        updateAudioClip(selectedClipId, updates as Partial<AudioClip>);
-      } else if (selectedTextClip) {
-        updateTextClip(selectedClipId, updates as Partial<TextClip>);
-      } else if (selectedImageClip) {
-        updateImageClip(selectedClipId, updates as Partial<ImageClip>);
-      }
+      updateClip(selectedClipId, updates);
     },
-    [selectedClipId, selectedClip, selectedVideoClip, selectedAudioClip, selectedTextClip, selectedImageClip, updateVideoClip, updateAudioClip, updateTextClip, updateImageClip]
+    [selectedClipId, selectedClip, updateClip]
   );
 
   if (!selectedClip) {
@@ -167,11 +148,89 @@ export function SettingsPanel() {
                 />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Position X
+                </label>
+                <input
+                  type="number"
+                  value={selectedClip.position.x}
+                  onChange={(e) =>
+                    handleUpdate({
+                      position: {
+                        ...selectedClip.position,
+                        x: Number(e.target.value),
+                      },
+                    })
+                  }
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Position Y
+                </label>
+                <input
+                  type="number"
+                  value={selectedClip.position.y}
+                  onChange={(e) =>
+                    handleUpdate({
+                      position: {
+                        ...selectedClip.position,
+                        y: Number(e.target.value),
+                      },
+                    })
+                  }
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Scale X
+                </label>
+                <input
+                  type="number"
+                  value={selectedClip.scale.x}
+                  step="0.1"
+                  onChange={(e) =>
+                    handleUpdate({
+                      scale: {
+                        ...selectedClip.scale,
+                        x: Math.max(0.1, Number(e.target.value)),
+                      },
+                    })
+                  }
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Scale Y
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={selectedClip.scale.y}
+                  onChange={(e) =>
+                    handleUpdate({
+                      scale: {
+                        ...selectedClip.scale,
+                        y: Math.max(0.1, Number(e.target.value)),
+                      },
+                    })
+                  }
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Video-specific Properties */}
-        {selectedVideoClip && (
+        {selectedClip?.type === "video" && (
           <div>
             <h3 className="text-xs font-medium text-muted-foreground mb-2">
               Video Properties
@@ -183,7 +242,7 @@ export function SettingsPanel() {
                 </label>
                 <input
                   type="url"
-                  value={selectedVideoClip.src}
+                  value={(selectedClip as VideoClip).src}
                   onChange={(e) => handleUpdate({ src: e.target.value })}
                   className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
                 />
@@ -193,7 +252,7 @@ export function SettingsPanel() {
         )}
 
         {/* Audio-specific Properties */}
-        {selectedAudioClip && (
+        {selectedClip?.type === "audio" && (
           <div>
             <h3 className="text-xs font-medium text-muted-foreground mb-2">
               Audio Properties
@@ -205,21 +264,21 @@ export function SettingsPanel() {
                 </label>
                 <input
                   type="url"
-                  value={selectedAudioClip.src}
+                  value={(selectedClip as AudioClip).src}
                   onChange={(e) => handleUpdate({ src: e.target.value })}
                   className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
                 />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">
-                  Volume: {(selectedAudioClip.volume * 100).toFixed(0)}%
+                  Volume: {(((selectedClip as AudioClip).volume) * 100).toFixed(0)}%
                 </label>
                 <input
                   type="range"
                   min="0"
                   max="1"
                   step="0.01"
-                  value={selectedAudioClip.volume}
+                  value={(selectedClip as AudioClip).volume}
                   onChange={(e) =>
                     handleUpdate({ volume: Number(e.target.value) })
                   }
@@ -231,7 +290,7 @@ export function SettingsPanel() {
         )}
 
         {/* Text-specific Properties */}
-        {selectedTextClip && (
+        {selectedClip?.type === "text" && (
           <div>
             <h3 className="text-xs font-medium text-muted-foreground mb-2">
               Text Properties
@@ -242,7 +301,7 @@ export function SettingsPanel() {
                   Text Content
                 </label>
                 <textarea
-                  value={selectedTextClip.text}
+                  value={(selectedClip as TextClip).text}
                   onChange={(e) => handleUpdate({ text: e.target.value })}
                   rows={3}
                   className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm resize-none"
@@ -253,9 +312,9 @@ export function SettingsPanel() {
                   <label className="text-xs text-muted-foreground mb-1 block">
                     Font Size
                   </label>
-                  <input
-                    type="number"
-                    value={selectedTextClip.fontSize ?? 48}
+                <input
+                  type="number"
+                  value={(selectedClip as TextClip).fontSize ?? 48}
                     onChange={(e) =>
                       handleUpdate({
                         fontSize: Math.max(1, Number(e.target.value)),
@@ -269,9 +328,9 @@ export function SettingsPanel() {
                   <label className="text-xs text-muted-foreground mb-1 block">
                     Opacity
                   </label>
-                  <input
-                    type="number"
-                    value={selectedTextClip.opacity ?? 1}
+                <input
+                  type="number"
+                  value={(selectedClip as TextClip).opacity ?? 1}
                     onChange={(e) =>
                       handleUpdate({
                         opacity: Math.max(
@@ -292,46 +351,18 @@ export function SettingsPanel() {
                   Color
                 </label>
                 <div className="flex gap-2">
-                  <input
-                    type="color"
-                    value={selectedTextClip.fill ?? "#ffffff"}
+                <input
+                  type="color"
+                  value={(selectedClip as TextClip).fill ?? "#ffffff"}
                     onChange={(e) => handleUpdate({ fill: e.target.value })}
                     className="w-12 h-9 rounded border border-border cursor-pointer"
                   />
-                  <input
-                    type="text"
-                    value={selectedTextClip.fill ?? "#ffffff"}
+                <input
+                  type="text"
+                  value={(selectedClip as TextClip).fill ?? "#ffffff"}
                     onChange={(e) => handleUpdate({ fill: e.target.value })}
                     className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm"
                     placeholder="#ffffff"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">
-                    X Position
-                  </label>
-                  <input
-                    type="number"
-                    value={selectedTextClip.x ?? 0}
-                    onChange={(e) =>
-                      handleUpdate({ x: Number(e.target.value) })
-                    }
-                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">
-                    Y Position
-                  </label>
-                  <input
-                    type="number"
-                    value={selectedTextClip.y ?? -200}
-                    onChange={(e) =>
-                      handleUpdate({ y: Number(e.target.value) })
-                    }
-                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
                   />
                 </div>
               </div>
@@ -340,7 +371,7 @@ export function SettingsPanel() {
         )}
 
         {/* Image-specific Properties */}
-        {selectedImageClip && (
+        {selectedClip?.type === "image" && (
           <div>
             <h3 className="text-xs font-medium text-muted-foreground mb-2">
               Image Properties
@@ -352,38 +383,10 @@ export function SettingsPanel() {
                 </label>
                 <input
                   type="url"
-                  value={selectedImageClip.src}
+                  value={(selectedClip as ImageClip).src}
                   onChange={(e) => handleUpdate({ src: e.target.value })}
                   className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
                 />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">
-                    X Position
-                  </label>
-                  <input
-                    type="number"
-                    value={selectedImageClip.x ?? 0}
-                    onChange={(e) =>
-                      handleUpdate({ x: Number(e.target.value) })
-                    }
-                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">
-                    Y Position
-                  </label>
-                  <input
-                    type="number"
-                    value={selectedImageClip.y ?? 0}
-                    onChange={(e) =>
-                      handleUpdate({ y: Number(e.target.value) })
-                    }
-                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                  />
-                </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -392,7 +395,7 @@ export function SettingsPanel() {
                   </label>
                   <input
                     type="number"
-                    value={selectedImageClip.width ?? ""}
+                    value={(selectedClip as ImageClip).width ?? ""}
                     placeholder="Auto"
                     onChange={(e) =>
                       handleUpdate({ width: e.target.value ? Number(e.target.value) : undefined })
@@ -406,7 +409,7 @@ export function SettingsPanel() {
                   </label>
                   <input
                     type="number"
-                    value={selectedImageClip.height ?? ""}
+                    value={(selectedClip as ImageClip).height ?? ""}
                     placeholder="Auto"
                     onChange={(e) =>
                       handleUpdate({ height: e.target.value ? Number(e.target.value) : undefined })

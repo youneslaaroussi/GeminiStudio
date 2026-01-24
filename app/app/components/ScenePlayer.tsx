@@ -1,8 +1,8 @@
 'use client';
 
-import { Player, Stage, Vector2, type Project } from '@motion-canvas/core';
+import { Player, Stage, Vector2, type Project, type Scene } from '@motion-canvas/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { VideoClip, AudioClip, TextClip, ImageClip } from '@/app/types/timeline';
+import type { Layer } from '@/app/types/timeline';
 import { useDrag } from '@/app/hooks/use-drag';
 
 const SCENE_URL = '/scene/src/project.js';
@@ -12,10 +12,7 @@ const ZOOM_SPEED = 0.1;
 
 interface ScenePlayerProps {
   onPlayerChange?: (player: Player | null) => void;
-  videoClips?: VideoClip[];
-  audioClips?: AudioClip[];
-  textClips?: TextClip[];
-  imageClips?: ImageClip[];
+  layers?: Layer[];
   duration?: number;
   currentTime?: number;
   onTimeUpdate?: (time: number) => void;
@@ -23,10 +20,7 @@ interface ScenePlayerProps {
 
 export function ScenePlayer({
   onPlayerChange,
-  videoClips = [],
-  audioClips = [],
-  textClips = [],
-  imageClips = [],
+  layers = [],
   duration = 10,
   currentTime = 0,
   onTimeUpdate,
@@ -37,6 +31,11 @@ export function ScenePlayer({
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState<string | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const latestLayersRef = useRef(layers);
+
+  useEffect(() => {
+    latestLayersRef.current = layers;
+  }, [layers]);
 
   // Viewport State
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -230,11 +229,12 @@ export function ScenePlayer({
     });
 
     playerInstance.onRender.subscribe(async () => {
+      const currentScene = playerInstance.playback.currentScene as Scene | null;
+      if (!currentScene) return;
+
       try {
-        await stageInstance.render(
-          playerInstance.playback.currentScene as any,
-          playerInstance.playback.previousScene as any
-        );
+        const previousScene = playerInstance.playback.previousScene as Scene | null;
+        await stageInstance.render(currentScene, previousScene ?? undefined);
       } catch (err) {
         console.error('Render error:', err);
       }
@@ -246,14 +246,13 @@ export function ScenePlayer({
       background: null,
     });
 
-    // Set initial variables
+    // Provide initial variables so the scene can render immediately.
     playerInstance.setVariables({
-      videoClips,
-      audioClips,
-      textClips,
-      imageClips,
+      layers: latestLayersRef.current,
       duration,
     });
+    (playerInstance as unknown as { requestRecalculation?: () => void }).requestRecalculation?.();
+    playerInstance.requestRender();
 
     // Style the canvas
     const canvas = stageInstance.finalBuffer;
@@ -276,7 +275,7 @@ export function ScenePlayer({
       setPlayer(null);
       onPlayerChange?.(null);
     };
-  }, [project, onPlayerChange]);
+  }, [project, onPlayerChange, duration]);
 
   // Update canvas transform
   useEffect(() => {
@@ -290,15 +289,12 @@ export function ScenePlayer({
     if (!player) return;
 
     player.setVariables({
-      videoClips,
-      audioClips,
-      textClips,
-      imageClips,
+      layers,
       duration,
     });
     (player as unknown as { requestRecalculation?: () => void }).requestRecalculation?.();
     player.requestRender();
-  }, [player, videoClips, audioClips, textClips, imageClips, duration]);
+  }, [player, layers, duration]);
 
   // Sync playhead time from player back to the store during playback
   useEffect(() => {

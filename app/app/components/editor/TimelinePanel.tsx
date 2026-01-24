@@ -1,14 +1,14 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { Pause, Play, ZoomIn, ZoomOut, Scissors, SkipBack, SkipForward } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Pause, Play, ZoomIn, ZoomOut, Scissors, SkipBack, SkipForward, Plus } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { TimeRuler } from "../timeline/TimeRuler";
-import { VideoTrack } from "../timeline/VideoTrack";
-import { AudioTrack } from "../timeline/AudioTrack";
-import { TextTrack } from "../timeline/TextTrack";
-import { ImageTrack } from "../timeline/ImageTrack";
+import { LayerTrack } from "../timeline/LayerTrack";
 import { Playhead } from "../timeline/Playhead";
+import type { ClipType } from "@/app/types/timeline";
+import { createLayerTemplate } from "@/app/lib/store/project-store";
+import { TRACK_LABEL_WIDTH } from "../timeline/constants";
 
 interface TimelinePanelProps {
   hasPlayer: boolean;
@@ -31,6 +31,25 @@ export function TimelinePanel({
   const duration = useProjectStore((s) => s.getDuration());
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
   const splitClipAtTime = useProjectStore((s) => s.splitClipAtTime);
+  const layers = useProjectStore((s) => s.project.layers);
+  const addLayer = useProjectStore((s) => s.addLayer);
+
+  const [newLayerType, setNewLayerType] = useState<ClipType>("video");
+
+  const layerCounts = useMemo(() => {
+    return layers.reduce<Record<ClipType, number>>(
+      (acc, layer) => {
+        acc[layer.type] += 1;
+        return acc;
+      },
+      { video: 0, audio: 0, text: 0, image: 0 }
+    );
+  }, [layers]);
+
+  const handleAddLayer = useCallback(() => {
+    const count = layerCounts[newLayerType] + 1;
+    addLayer(createLayerTemplate(newLayerType, `${newLayerType} ${count}`));
+  }, [addLayer, newLayerType, layerCounts]);
 
   // Update container width on resize
   const updateWidth = useCallback(() => {
@@ -43,7 +62,7 @@ export function TimelinePanel({
   const handleTimelineClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX - rect.left - 80; // 80px track label offset
+      const x = e.clientX - rect.left - TRACK_LABEL_WIDTH;
       const time = Math.max(0, x / zoom);
       setCurrentTime(time);
     },
@@ -117,6 +136,30 @@ export function TimelinePanel({
 
         {/* Right: Tools & Zoom */}
         <div className="flex items-center gap-2 z-10 justify-end w-1/3">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <select
+              value={newLayerType}
+              onChange={(e) => setNewLayerType(e.target.value as ClipType)}
+              className="rounded border border-border bg-background px-2 py-1"
+            >
+              <option value="video">Video</option>
+              <option value="audio">Audio</option>
+              <option value="text">Text</option>
+              <option value="image">Image</option>
+            </select>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-accent"
+              onClick={handleAddLayer}
+              title="Add new layer"
+            >
+              <Plus className="size-3" />
+              Add Layer
+            </button>
+          </div>
+
+          <div className="w-px h-4 bg-border mx-1" />
+
           {/* Split button */}
           <button
             type="button"
@@ -174,15 +217,22 @@ export function TimelinePanel({
         >
           {/* Time ruler with track label offset */}
           <div className="flex">
-            <div className="w-20 shrink-0 bg-muted/30 border-r border-border" />
-            <TimeRuler width={containerWidth - 80} />
+            <div
+              className="shrink-0 bg-muted/30 border-r border-border"
+              style={{ width: TRACK_LABEL_WIDTH }}
+            />
+            <TimeRuler width={containerWidth - TRACK_LABEL_WIDTH} />
           </div>
 
           {/* Tracks */}
-          <VideoTrack width={containerWidth} />
-          <AudioTrack width={containerWidth} />
-          <TextTrack width={containerWidth} />
-          <ImageTrack width={containerWidth} />
+          {layers.map((layer) => (
+            <LayerTrack
+              key={layer.id}
+              layer={layer}
+              width={containerWidth}
+              labelWidth={TRACK_LABEL_WIDTH}
+            />
+          ))}
 
           {/* Playhead */}
           <Playhead />

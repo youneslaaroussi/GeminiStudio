@@ -1,57 +1,63 @@
 // Timeline clip types for NLE editor
 
+export type ClipType = 'video' | 'audio' | 'text' | 'image';
+
+export interface Vec2 {
+  x: number;
+  y: number;
+}
+
 export interface BaseClip {
   id: string;
-  start: number;      // Timeline position (seconds)
-  duration: number;   // Clip length on timeline (seconds)
-  offset: number;     // Start offset in source media (seconds)
-  speed: number;      // Playback speed (1.0 = normal)
+  name: string;        // Display name
+  start: number;       // Timeline position (seconds)
+  duration: number;    // Clip length on timeline (seconds)
+  offset: number;      // Start offset in source media (seconds)
+  speed: number;       // Playback speed (1.0 = normal)
+  position: Vec2;      // Scene position in pixels
+  scale: Vec2;         // Scale multiplier (1 = 100%)
 }
 
 export interface VideoClip extends BaseClip {
   type: 'video';
   src: string;        // External URL
-  name: string;       // Display name
 }
 
 export interface AudioClip extends BaseClip {
   type: 'audio';
   src: string;        // External URL
-  name: string;       // Display name
   volume: number;     // 0-1
 }
 
 export interface TextClip extends BaseClip {
   type: 'text';
   text: string;       // Text content
-  name: string;       // Display name
-  fontSize?: number;   // Font size in pixels
-  fill?: string;       // Text color
-  x?: number;         // X position (0 = center)
-  y?: number;         // Y position (0 = center)
-  opacity?: number;    // Opacity 0-1
+  fontSize?: number;  // Font size in pixels
+  fill?: string;      // Text color
+  opacity?: number;   // Opacity 0-1
 }
 
 export interface ImageClip extends BaseClip {
   type: 'image';
   src: string;        // External URL
-  name: string;       // Display name
-  x?: number;         // X position (0 = center)
-  y?: number;         // Y position (0 = center)
   width?: number;     // Width in pixels
   height?: number;    // Height in pixels
 }
 
 export type TimelineClip = VideoClip | AudioClip | TextClip | ImageClip;
 
+export interface Layer {
+  id: string;
+  name: string;
+  type: ClipType;
+  clips: TimelineClip[];
+}
+
 export interface Project {
   name: string;
   resolution: { width: number; height: number };
   fps: number;
-  videoClips: VideoClip[];
-  audioClips: AudioClip[];
-  textClips: TextClip[];
-  imageClips: ImageClip[];
+  layers: Layer[];
 }
 
 // Test videos for development
@@ -126,12 +132,14 @@ export function createVideoClip(
   return {
     id: crypto.randomUUID(),
     type: 'video',
-    src,
     name,
+    src,
     start,
     duration,
     offset: 0,
     speed: 1,
+    position: { x: 0, y: 0 },
+    scale: { x: 1, y: 1 },
   };
 }
 
@@ -145,13 +153,15 @@ export function createAudioClip(
   return {
     id: crypto.randomUUID(),
     type: 'audio',
-    src,
     name,
+    src,
     start,
     duration,
     offset: 0,
     speed: 1,
     volume: 1,
+    position: { x: 0, y: 0 },
+    scale: { x: 1, y: 1 },
   };
 }
 
@@ -165,16 +175,16 @@ export function createTextClip(
   return {
     id: crypto.randomUUID(),
     type: 'text',
-    text,
     name,
+    text,
     start,
     duration,
     offset: 0,
     speed: 1,
     fontSize: 48,
     fill: '#ffffff',
-    x: 0,
-    y: -200,
+    position: { x: 0, y: -200 },
+    scale: { x: 1, y: 1 },
     opacity: 1,
   };
 }
@@ -189,14 +199,14 @@ export function createImageClip(
   return {
     id: crypto.randomUUID(),
     type: 'image',
-    src,
     name,
+    src,
     start,
     duration,
     offset: 0,
     speed: 1,
-    x: 0,
-    y: 0,
+    position: { x: 0, y: 0 },
+    scale: { x: 1, y: 1 },
   };
 }
 

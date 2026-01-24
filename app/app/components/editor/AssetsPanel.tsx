@@ -12,6 +12,7 @@ import {
   createTextClip,
   createImageClip,
 } from "@/app/types/timeline";
+import type { TimelineClip } from "@/app/types/timeline";
 
 export function AssetsPanel() {
   const [customUrl, setCustomUrl] = useState("");
@@ -21,27 +22,16 @@ export function AssetsPanel() {
   const [textContent, setTextContent] = useState("");
   const [textName, setTextName] = useState("");
 
-  const addVideoClip = useProjectStore((s) => s.addVideoClip);
-  const addAudioClip = useProjectStore((s) => s.addAudioClip);
-  const addTextClip = useProjectStore((s) => s.addTextClip);
-  const addImageClip = useProjectStore((s) => s.addImageClip);
+  const addClip = useProjectStore((s) => s.addClip);
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
-  const videoClips = useProjectStore((s) => s.project.videoClips);
-  const audioClips = useProjectStore((s) => s.project.audioClips);
-  const textClips = useProjectStore((s) => s.project.textClips);
-  const imageClips = useProjectStore((s) => s.project.imageClips);
-  const updateVideoClip = useProjectStore((s) => s.updateVideoClip);
-  const updateAudioClip = useProjectStore((s) => s.updateAudioClip);
-  const updateTextClip = useProjectStore((s) => s.updateTextClip);
-  const updateImageClip = useProjectStore((s) => s.updateImageClip);
+  const layers = useProjectStore((s) => s.project.layers);
+  const updateClip = useProjectStore((s) => s.updateClip);
   const getDuration = useProjectStore((s) => s.getDuration);
 
-  // Find selected clip
-  const selectedVideoClip = videoClips.find((c) => c.id === selectedClipId);
-  const selectedAudioClip = audioClips.find((c) => c.id === selectedClipId);
-  const selectedTextClip = textClips.find((c) => c.id === selectedClipId);
-  const selectedImageClip = imageClips.find((c) => c.id === selectedClipId);
-  const selectedClip = selectedVideoClip || selectedAudioClip || selectedTextClip || selectedImageClip;
+  const allClips = layers.flatMap((layer) => layer.clips);
+  const selectedClip: TimelineClip | undefined = allClips.find(
+    (clip) => clip.id === selectedClipId
+  );
 
   const handleAddTestVideo = useCallback(
     (video: (typeof TEST_VIDEOS)[number]) => {
@@ -51,9 +41,9 @@ export function AssetsPanel() {
         getDuration(), // Add at end of timeline
         Math.min(video.duration, 30) // Cap at 30s for preview
       );
-      addVideoClip(clip);
+      addClip(clip);
     },
-    [addVideoClip, getDuration]
+    [addClip, getDuration]
   );
 
   const handleAddTestAudio = useCallback(
@@ -64,9 +54,9 @@ export function AssetsPanel() {
         getDuration(), // Add at end of timeline
         Math.min(audio.duration, 60) // Cap at 60s for preview
       );
-      addAudioClip(clip);
+      addClip(clip);
     },
-    [addAudioClip, getDuration]
+    [addClip, getDuration]
   );
 
   const handleAddTestImage = useCallback(
@@ -77,9 +67,9 @@ export function AssetsPanel() {
         getDuration(), // Add at end of timeline
         image.duration
       );
-      addImageClip(clip);
+      addClip(clip);
     },
-    [addImageClip, getDuration]
+    [addClip, getDuration]
   );
 
   const handleAddCustomAsset = useCallback(() => {
@@ -90,13 +80,13 @@ export function AssetsPanel() {
 
     if (assetType === "video") {
       const clip = createVideoClip(customUrl, name, start, customDuration);
-      addVideoClip(clip);
+      addClip(clip);
     } else if (assetType === "audio") {
       const clip = createAudioClip(customUrl, name, start, customDuration);
-      addAudioClip(clip);
+      addClip(clip);
     } else {
       const clip = createImageClip(customUrl, name, start, customDuration);
-      addImageClip(clip);
+      addClip(clip);
     }
 
     setCustomUrl("");
@@ -106,9 +96,7 @@ export function AssetsPanel() {
     customName,
     customDuration,
     assetType,
-    addVideoClip,
-    addAudioClip,
-    addImageClip,
+    addClip,
     getDuration,
   ]);
 
@@ -122,25 +110,17 @@ export function AssetsPanel() {
       getDuration(),
       5 // Default 5 seconds
     );
-    addTextClip(clip);
+    addClip(clip);
     setTextContent("");
     setTextName("");
-  }, [textContent, textName, addTextClip, getDuration]);
+  }, [textContent, textName, addClip, getDuration]);
 
   const handleSpeedChange = useCallback(
     (speed: number) => {
       if (!selectedClipId) return;
-      if (selectedVideoClip) {
-        updateVideoClip(selectedClipId, { speed });
-      } else if (selectedAudioClip) {
-        updateAudioClip(selectedClipId, { speed });
-      } else if (selectedTextClip) {
-        updateTextClip(selectedClipId, { speed });
-      } else if (selectedImageClip) {
-        updateImageClip(selectedClipId, { speed });
-      }
+      updateClip(selectedClipId, { speed });
     },
-    [selectedClipId, selectedVideoClip, selectedAudioClip, selectedTextClip, selectedImageClip, updateVideoClip, updateAudioClip, updateTextClip, updateImageClip]
+    [selectedClipId, updateClip]
   );
 
   return (

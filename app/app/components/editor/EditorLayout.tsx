@@ -20,10 +20,7 @@ export function EditorLayout() {
   // Connect to Zustand store
   const isPlaying = useProjectStore((s) => s.isPlaying);
   const setIsPlaying = useProjectStore((s) => s.setIsPlaying);
-  const videoClips = useProjectStore((s) => s.project.videoClips);
-  const audioClips = useProjectStore((s) => s.project.audioClips);
-  const textClips = useProjectStore((s) => s.project.textClips);
-  const imageClips = useProjectStore((s) => s.project.imageClips);
+  const layers = useProjectStore((s) => s.project.layers);
   const currentTime = useProjectStore((s) => s.currentTime);
   const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
   const getDuration = useProjectStore((s) => s.getDuration);
@@ -69,10 +66,7 @@ export function EditorLayout() {
               <div className="h-full bg-card">
                 <PreviewPanel
                   onPlayerChange={setPlayer}
-                  videoClips={videoClips}
-                  audioClips={audioClips}
-                  textClips={textClips}
-                  imageClips={imageClips}
+                  layers={layers}
                   duration={getDuration()}
                   currentTime={currentTime}
                   onTimeUpdate={handleTimeUpdate}
