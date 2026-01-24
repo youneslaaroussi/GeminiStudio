@@ -44,7 +44,7 @@ export function ScenePlayer({
 
   // Viewport State
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-  const [zoomToFit, setZoomToFit] = useState(true);
+  const [zoomToFit, setZoomToFit] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
 
@@ -268,9 +268,6 @@ export function ScenePlayer({
     const canvas = stageInstance.finalBuffer;
     canvas.style.width = `${initialSize.width}px`;
     canvas.style.height = `${initialSize.height}px`;
-    canvas.style.maxWidth = '100%';
-    canvas.style.maxHeight = '100%';
-    canvas.style.height = `${initialSize.height}px`;
     canvas.style.display = 'block';
     
     containerRef.current.append(canvas);
@@ -393,19 +390,31 @@ export function ScenePlayer({
   return (
     <div className="flex h-full flex-col min-w-0 min-h-0">
       <div
-        ref={containerRef}
-        className="flex flex-1 min-h-0 min-w-0 items-center justify-center overflow-hidden relative"
-        style={{ background: sceneConfig.background }}
-        onMouseDown={(e) => {
-          // Middle click or Shift+Left click
-          if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
-            handleDrag(e);
-          }
-        }}
-        onContextMenu={(e) => e.preventDefault()}
-      />
+        className="relative flex flex-1 min-h-0 min-w-0 overflow-auto bg-black"
+        style={{ contain: "layout paint" }}
+      >
+        <div
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+          style={{
+            width: sceneConfig.resolution.width,
+            height: sceneConfig.resolution.height,
+            background: sceneConfig.background,
+          }}
+        >
+          <div
+            ref={containerRef}
+            className="w-full h-full"
+            onMouseDown={(e) => {
+              if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
+                handleDrag(e);
+              }
+            }}
+            onContextMenu={(e) => e.preventDefault()}
+          />
+        </div>
+      </div>
       {!project && !error && (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <p className="text-sm text-muted-foreground">Loading scene…</p>
         </div>
       )}

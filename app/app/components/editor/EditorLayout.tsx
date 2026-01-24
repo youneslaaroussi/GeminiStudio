@@ -11,6 +11,7 @@ import { AssetsPanel } from "./AssetsPanel";
 import { PreviewPanel } from "./PreviewPanel";
 import { TimelinePanel } from "./TimelinePanel";
 import { SettingsPanel } from "./SettingsPanel";
+import { TopBar } from "./TopBar";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useShortcuts } from "@/app/hooks/use-shortcuts";
 
@@ -48,7 +49,9 @@ export function EditorLayout() {
   ]);
 
   return (
-    <div className="h-screen w-full overflow-hidden bg-background">
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-background">
+      <TopBar />
+      <div className="flex-1 min-h-0">
       <ResizablePanelGroup direction="vertical" className="h-full">
         {/* Top Area: Assets | Preview | Settings */}
         <ResizablePanel defaultSize={60} minSize={30}>
@@ -104,6 +107,7 @@ export function EditorLayout() {
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
+      </div>
     </div>
   );
 }
