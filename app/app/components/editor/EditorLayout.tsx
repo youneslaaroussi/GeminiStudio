@@ -12,6 +12,7 @@ import { PreviewPanel } from "./PreviewPanel";
 import { TimelinePanel } from "./TimelinePanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { useProjectStore } from "@/app/lib/store/project-store";
+import { useShortcuts } from "@/app/hooks/use-shortcuts";
 
 export function EditorLayout() {
   const [player, setPlayer] = useState<Player | null>(null);
@@ -40,22 +41,31 @@ export function EditorLayout() {
     [setCurrentTime]
   );
 
+  useShortcuts([
+    {
+      key: " ",
+      handler: togglePlay,
+      preventDefault: true,
+    },
+  ]);
+
   return (
     <div className="h-screen w-full overflow-hidden bg-background">
-      <ResizablePanelGroup direction="horizontal" className="h-full">
-        {/* Left: Assets */}
-        <ResizablePanel defaultSize={18} minSize={12} maxSize={30}>
-          <div className="h-full bg-card">
-            <AssetsPanel />
-          </div>
-        </ResizablePanel>
+      <ResizablePanelGroup direction="vertical" className="h-full">
+        {/* Top Area: Assets | Preview | Settings */}
+        <ResizablePanel defaultSize={60} minSize={30}>
+          <ResizablePanelGroup direction="horizontal" className="h-full">
+            {/* Left: Assets */}
+            <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
+              <div className="h-full bg-card border-r border-border">
+                <AssetsPanel />
+              </div>
+            </ResizablePanel>
 
-        <ResizableHandle withHandle />
+            <ResizableHandle withHandle />
 
-        {/* Center: Preview (top) + Timeline (bottom) */}
-        <ResizablePanel defaultSize={64} minSize={40}>
-          <ResizablePanelGroup direction="vertical" className="h-full">
-            <ResizablePanel defaultSize={70} minSize={30}>
+            {/* Center: Preview */}
+            <ResizablePanel defaultSize={60} minSize={30}>
               <div className="h-full bg-card">
                 <PreviewPanel
                   onPlayerChange={setPlayer}
@@ -72,13 +82,10 @@ export function EditorLayout() {
 
             <ResizableHandle withHandle />
 
-            <ResizablePanel defaultSize={30} minSize={15} maxSize={50}>
-              <div className="h-full bg-card">
-                <TimelinePanel
-                  hasPlayer={!!player}
-                  playing={isPlaying}
-                  onTogglePlay={togglePlay}
-                />
+            {/* Right: Settings */}
+            <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
+              <div className="h-full bg-card border-l border-border">
+                <SettingsPanel />
               </div>
             </ResizablePanel>
           </ResizablePanelGroup>
@@ -86,10 +93,14 @@ export function EditorLayout() {
 
         <ResizableHandle withHandle />
 
-        {/* Right: Settings */}
-        <ResizablePanel defaultSize={18} minSize={15} maxSize={30}>
-          <div className="h-full bg-card">
-            <SettingsPanel />
+        {/* Bottom: Timeline */}
+        <ResizablePanel defaultSize={40} minSize={20}>
+          <div className="h-full bg-card border-t border-border">
+            <TimelinePanel
+              hasPlayer={!!player}
+              playing={isPlaying}
+              onTogglePlay={togglePlay}
+            />
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
