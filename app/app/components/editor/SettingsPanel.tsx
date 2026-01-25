@@ -456,6 +456,118 @@ export function SettingsPanel() {
                   onValueCommit={(val) => handleUpdate({ src: val })}
                 />
               </div>
+
+              <div className="pt-4 border-t border-border mt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-medium text-muted-foreground">
+                    Focus Area
+                  </h3>
+                  {!(selectedClip as VideoClip).focus ? (
+                    <button
+                      className="text-[10px] font-medium text-primary hover:underline"
+                      onClick={() => handleUpdate({ 
+                        focus: { x: 0, y: 0, width: 400, height: 400, padding: 50 } 
+                      })}
+                    >
+                      Add Focus
+                    </button>
+                  ) : (
+                    <button
+                      className="text-[10px] font-medium text-destructive hover:underline"
+                      onClick={() => handleUpdate({ focus: undefined })}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+
+                {(selectedClip as VideoClip).focus && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">X</label>
+                        <EditableInput
+                          type="number"
+                          value={(selectedClip as VideoClip).focus!.x}
+                          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                          onValueCommit={(val) => {
+                             const next = toNumber(val);
+                             if (next === null) return;
+                             handleUpdate({
+                               focus: { ...(selectedClip as VideoClip).focus!, x: next }
+                             });
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Y</label>
+                         <EditableInput
+                          type="number"
+                          value={(selectedClip as VideoClip).focus!.y}
+                          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                          onValueCommit={(val) => {
+                             const next = toNumber(val);
+                             if (next === null) return;
+                             handleUpdate({
+                               focus: { ...(selectedClip as VideoClip).focus!, y: next }
+                             });
+                          }}
+                        />
+                      </div>
+                    </div>
+                     <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Width</label>
+                        <EditableInput
+                          type="number"
+                          value={(selectedClip as VideoClip).focus!.width}
+                          min={1}
+                          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                          onValueCommit={(val) => {
+                             const next = toNumber(val);
+                             if (next === null) return;
+                             handleUpdate({
+                               focus: { ...(selectedClip as VideoClip).focus!, width: Math.max(1, next) }
+                             });
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Height</label>
+                         <EditableInput
+                          type="number"
+                          value={(selectedClip as VideoClip).focus!.height}
+                          min={1}
+                          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                          onValueCommit={(val) => {
+                             const next = toNumber(val);
+                             if (next === null) return;
+                             handleUpdate({
+                               focus: { ...(selectedClip as VideoClip).focus!, height: Math.max(1, next) }
+                             });
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">Padding</label>
+                         <EditableInput
+                          type="number"
+                          value={(selectedClip as VideoClip).focus!.padding}
+                          min={0}
+                          className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                          onValueCommit={(val) => {
+                             const next = toNumber(val);
+                             if (next === null) return;
+                             handleUpdate({
+                               focus: { ...(selectedClip as VideoClip).focus!, padding: Math.max(0, next) }
+                             });
+                          }}
+                        />
+                      </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

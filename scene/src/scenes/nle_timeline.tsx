@@ -8,6 +8,14 @@ interface Transform {
   y: number;
 }
 
+interface Focus {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  padding: number;
+}
+
 interface VideoClip {
   id: string;
   type: 'video';
@@ -19,6 +27,7 @@ interface VideoClip {
   speed: number;
   position: Transform;
   scale: Transform;
+  focus?: Focus;
 }
 
 interface AudioClip {
@@ -320,10 +329,35 @@ export default makeScene2D(function* (view) {
         video.seek(safeOffset);
         video.playbackRate(safeSpeed);
         
+        // Calculate Focus Transforms
+        let baseScale = toVector(clip.scale);
+        let basePos = toVector(clip.position);
+
+        if (clip.focus) {
+          const { x, y, width: fw, height: fh, padding } = clip.focus;
+          const vidW = 1920; 
+          const vidH = 1080;
+          
+          // Fit ratio
+          const sX = (vidW / Math.max(1, fw + padding * 2));
+          const sY = (vidH / Math.max(1, fh + padding * 2));
+          const s = Math.min(sX, sY); 
+          
+          baseScale = baseScale.mul(s);
+          
+          // Focus Center relative to Video Center
+          const fvx = (x + fw / 2) - vidW / 2;
+          const fvy = (y + fh / 2) - vidH / 2;
+          const focusOffset = new Vector2(fvx, fvy);
+          
+          // Adjust position
+          basePos = basePos.sub(focusOffset.mul(baseScale));
+        }
+        
         // Initial State
-        const initialPos = toVector(clip.position);
+        const initialPos = basePos;
         video.position(initialPos);
-        video.scale(toVector(clip.scale));
+        video.scale(baseScale);
         
         // Initial Opacity
         if (enter && enter.type === 'fade') {

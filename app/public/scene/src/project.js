@@ -12072,9 +12072,24 @@ const description = makeScene2D(function* (view) {
       const safeOffset = Math.max(0, offset);
       video.seek(safeOffset);
       video.playbackRate(safeSpeed);
-      const initialPos = toVector(clip.position);
+      let baseScale = toVector(clip.scale);
+      let basePos = toVector(clip.position);
+      if (clip.focus) {
+        const { x, y, width: fw, height: fh, padding } = clip.focus;
+        const vidW = 1920;
+        const vidH = 1080;
+        const sX = vidW / Math.max(1, fw + padding * 2);
+        const sY = vidH / Math.max(1, fh + padding * 2);
+        const s = Math.min(sX, sY);
+        baseScale = baseScale.mul(s);
+        const fvx = x + fw / 2 - vidW / 2;
+        const fvy = y + fh / 2 - vidH / 2;
+        const focusOffset = new Vector2(fvx, fvy);
+        basePos = basePos.sub(focusOffset.mul(baseScale));
+      }
+      const initialPos = basePos;
       video.position(initialPos);
-      video.scale(toVector(clip.scale));
+      video.scale(baseScale);
       if (enter && enter.type === "fade") {
         video.opacity(0);
       } else {

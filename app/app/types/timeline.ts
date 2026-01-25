@@ -37,6 +37,14 @@ export interface Vec2 {
   y: number;
 }
 
+export interface Focus {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  padding: number;
+}
+
 export interface BaseClip {
   id: string;
   name: string;        // Display name
@@ -57,6 +65,7 @@ export interface VideoClip extends BaseClip {
   src: string;        // External URL
   width?: number;     // Width in pixels
   height?: number;    // Height in pixels
+  focus?: Focus;
 }
 
 export interface AudioClip extends BaseClip {
