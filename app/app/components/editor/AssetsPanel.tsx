@@ -44,7 +44,7 @@ import { ASSET_DRAG_DATA_MIME, DEFAULT_ASSET_DURATIONS } from "@/app/types/asset
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { toast } from "sonner";
 import type { TranscriptionSegment } from "@/app/types/transcription";
-import type { PipelineStepState } from "@/app/types/pipeline";
+import type { PipelineStepState, PipelineStepStatus } from "@/app/types/pipeline";
 
 interface PromptSuggestion {
   cinematography: string;
@@ -80,6 +80,40 @@ interface ApiTranscriptionJob {
   updatedAt: string;
   languageCodes?: string[];
   segments?: TranscriptionSegment[];
+}
+
+const STEP_STATUS_BADGE_STYLES: Record<PipelineStepStatus, string> = {
+  idle: "bg-muted text-muted-foreground border border-border/60",
+  queued: "bg-amber-500/15 text-amber-700 border border-amber-200 dark:text-amber-200 dark:border-amber-500/40",
+  running: "bg-blue-500/15 text-blue-700 border border-blue-200 dark:text-blue-200 dark:border-blue-500/40",
+  waiting: "bg-slate-500/15 text-slate-700 border border-slate-200 dark:text-slate-200 dark:border-slate-500/40",
+  succeeded: "bg-emerald-500/15 text-emerald-700 border border-emerald-200 dark:text-emerald-200 dark:border-emerald-500/40",
+  failed: "bg-destructive/15 text-destructive border border-destructive/30",
+};
+
+const STEP_STATUS_DOT_STYLES: Record<PipelineStepStatus, string> = {
+  idle: "bg-muted-foreground/50",
+  queued: "bg-amber-500",
+  running: "bg-blue-500",
+  waiting: "bg-slate-400",
+  succeeded: "bg-emerald-500",
+  failed: "bg-destructive",
+};
+
+function StepStatusBadge({ status }: { status: PipelineStepStatus }) {
+  const style = STEP_STATUS_BADGE_STYLES[status] ?? STEP_STATUS_BADGE_STYLES.idle;
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${style}`}
+    >
+      {status}
+    </span>
+  );
+}
+
+function StepStatusDot({ status }: { status: PipelineStepStatus }) {
+  const style = STEP_STATUS_DOT_STYLES[status] ?? STEP_STATUS_DOT_STYLES.idle;
+  return <span className={`inline-block h-2.5 w-2.5 rounded-full ${style}`} />;
 }
 
 function createId() {
@@ -982,6 +1016,31 @@ export function AssetsPanel() {
   const selectedDetailsTranscription = detailsDialogAssetId
     ? transcriptions[detailsDialogAssetId]
     : undefined;
+  const uploadMetadata = useMemo(() => {
+    const metadata = selectedDetailsSteps.find((step) => step.id === "cloud-upload")?.metadata;
+    if (!metadata) return undefined;
+    return {
+      gcsUri: typeof metadata["gcsUri"] === "string" ? (metadata["gcsUri"] as string) : undefined,
+      signedUrl: typeof metadata["signedUrl"] === "string" ? (metadata["signedUrl"] as string) : undefined,
+      bucket: typeof metadata["bucket"] === "string" ? (metadata["bucket"] as string) : undefined,
+      objectName: typeof metadata["objectName"] === "string" ? (metadata["objectName"] as string) : undefined,
+    };
+  }, [selectedDetailsSteps]);
+
+  const copyToClipboard = useCallback(async (value: string, label: string) => {
+    if (!value) return;
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        toast.success(`${label} copied`);
+      } else {
+        throw new Error("Clipboard API unavailable");
+      }
+    } catch (error) {
+      console.error("Unable to copy value", error);
+      toast.error(`Unable to copy ${label.toLowerCase()}`);
+    }
+  }, []);
 
   return (
     <>
@@ -1322,7 +1381,7 @@ export function AssetsPanel() {
           }
         }}
       >
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-5xl">
           <DialogHeader>
             <DialogTitle>Asset Details</DialogTitle>
             <DialogDescription>
@@ -1332,61 +1391,228 @@ export function AssetsPanel() {
             </DialogDescription>
           </DialogHeader>
           {selectedDetailsAsset ? (
-            <div className="space-y-6">
-              <section className="space-y-2">
+            <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-1">
+              <section className="space-y-3">
                 <h4 className="text-sm font-semibold text-foreground">General</h4>
-                <div className="rounded-md border border-border p-3 text-sm space-y-1">
-                  <p>
-                    <span className="font-medium">Type:</span> {selectedDetailsAsset.type}
-                  </p>
-                  <p>
-                    <span className="font-medium">Uploaded:</span>{" "}
-                    {new Date(selectedDetailsAsset.uploadedAt).toLocaleString()}
-                  </p>
-                  <p>
-                    <span className="font-medium">Size:</span> {formatBytes(selectedDetailsAsset.size)}
-                  </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg border border-border/70 bg-muted/10 p-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Name</p>
+                    <p className="text-sm font-medium text-foreground truncate" title={selectedDetailsAsset.name}>
+                      {selectedDetailsAsset.name}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border/70 bg-muted/10 p-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Type</p>
+                    <p className="text-sm font-medium capitalize">{selectedDetailsAsset.type}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/70 bg-muted/10 p-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Uploaded</p>
+                    <p className="text-sm font-medium">
+                      {new Date(selectedDetailsAsset.uploadedAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border/70 bg-muted/10 p-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Size</p>
+                    <p className="text-sm font-medium">{formatBytes(selectedDetailsAsset.size)}</p>
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg border border-border/70 bg-background/40 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+                      <span>Asset ID</span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={() => copyToClipboard(selectedDetailsAsset.id, "Asset ID")}
+                      >
+                        Copy
+                      </Button>
+                    </div>
+                    <p className="text-xs font-mono break-all">{selectedDetailsAsset.id}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/70 bg-background/40 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+                      <span>Local asset URL</span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={() => copyToClipboard(selectedDetailsAsset.url, "Local URL")}
+                      >
+                        Copy
+                      </Button>
+                    </div>
+                    <p className="text-xs font-mono break-all">{selectedDetailsAsset.url}</p>
+                  </div>
                 </div>
               </section>
 
-              <section className="space-y-2">
-                <h4 className="text-sm font-semibold text-foreground">Pipeline Steps</h4>
-                <div className="rounded-md border border-border divide-y divide-border overflow-hidden">
-                  {selectedDetailsSteps.length ? (
-                    selectedDetailsSteps.map((step) => (
-                      <div key={step.id} className="p-3 space-y-2 text-sm">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{step.label}</span>
-                          <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                            {step.status}
-                          </span>
+              {uploadMetadata && (
+                <section className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-sm font-semibold text-foreground">Cloud Storage</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {uploadMetadata.signedUrl && (
+                        <Button type="button" size="sm" variant="outline" asChild>
+                          <a href={uploadMetadata.signedUrl} target="_blank" rel="noreferrer">
+                            Open signed URL
+                          </a>
+                        </Button>
+                      )}
+                      {uploadMetadata.signedUrl && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => copyToClipboard(uploadMetadata.signedUrl!, "Signed URL")}
+                        >
+                          Copy signed URL
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-3 rounded-lg border border-border/70 bg-muted/5 p-3">
+                    {uploadMetadata.gcsUri && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
+                          <span>GCS URI</span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-[11px]"
+                            onClick={() => copyToClipboard(uploadMetadata.gcsUri!, "GCS URI")}
+                          >
+                            Copy
+                          </Button>
                         </div>
-                        {step.error && <p className="text-xs text-destructive">{step.error}</p>}
-                        {step.metadata && Object.keys(step.metadata).length > 0 && (
-                          <pre className="text-[11px] bg-muted/40 rounded p-2 overflow-x-auto">
-                            {JSON.stringify(step.metadata, null, 2)}
-                          </pre>
-                        )}
+                        <p className="text-xs font-mono break-all">{uploadMetadata.gcsUri}</p>
+                      </div>
+                    )}
+                    {uploadMetadata.bucket && (
+                      <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Bucket</p>
+                        <p className="text-sm font-medium">{uploadMetadata.bucket}</p>
+                      </div>
+                    )}
+                    {uploadMetadata.objectName && (
+                      <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Object name</p>
+                        <p className="text-xs font-mono break-all">{uploadMetadata.objectName}</p>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              <section className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-sm font-semibold text-foreground">Pipeline Steps</h4>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedDetailsSteps.length
+                      ? "Auto-run steps with live status"
+                      : "Pipeline has not started yet"}
+                  </p>
+                </div>
+                <div className="space-y-4">
+                  {selectedDetailsSteps.length ? (
+                    selectedDetailsSteps.map((step, index) => (
+                      <div key={step.id} className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <div className="rounded-full border border-border/60 bg-background/80 p-1">
+                            <StepStatusDot status={step.status} />
+                          </div>
+                          {index < selectedDetailsSteps.length - 1 && (
+                            <div className="mt-1 w-px flex-1 bg-border/70" />
+                          )}
+                        </div>
+                        <div className="flex-1 rounded-lg border border-border/70 bg-background/60 p-4 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">{step.label}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Updated {step.updatedAt ? new Date(step.updatedAt).toLocaleString() : "–"}
+                              </p>
+                            </div>
+                            <StepStatusBadge status={step.status} />
+                          </div>
+                          {step.error && (
+                            <p className="rounded-md bg-destructive/10 p-2 text-xs text-destructive">
+                              {step.error}
+                            </p>
+                          )}
+                          {step.metadata && Object.keys(step.metadata).length > 0 && (
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
+                                <span>Metadata</span>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-[11px]"
+                                  onClick={() =>
+                                    copyToClipboard(
+                                      JSON.stringify(step.metadata, null, 2),
+                                      `${step.label} metadata`
+                                    )
+                                  }
+                                >
+                                  Copy JSON
+                                </Button>
+                              </div>
+                              <pre className="text-[11px] bg-muted/40 rounded p-2 overflow-x-auto">
+                                {JSON.stringify(step.metadata, null, 2)}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))
                   ) : (
-                    <p className="p-3 text-sm text-muted-foreground">No pipeline steps run yet.</p>
+                    <p className="text-sm text-muted-foreground">No pipeline steps have run yet.</p>
                   )}
                 </div>
               </section>
 
-              <section className="space-y-2">
-                <h4 className="text-sm font-semibold text-foreground">Transcription</h4>
-                <div className="rounded-md border border-border p-3 text-sm">
+              <section className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-sm font-semibold text-foreground">Transcription</h4>
+                  {selectedDetailsTranscription && (
+                    <span className="text-xs text-muted-foreground capitalize">
+                      {selectedDetailsTranscription.status}
+                    </span>
+                  )}
+                </div>
+                <div className="rounded-lg border border-border/70 bg-muted/5 p-3 text-sm">
                   {selectedDetailsTranscription?.transcript ? (
                     <div className="space-y-2">
-                      <p className="text-xs text-muted-foreground">
-                        Status: {selectedDetailsTranscription.status}
-                      </p>
-                      <div className="max-h-48 overflow-y-auto rounded bg-muted/30 p-2 text-sm whitespace-pre-wrap">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Full transcript</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-[11px]"
+                          onClick={() =>
+                            copyToClipboard(selectedDetailsTranscription.transcript!, "Transcript")
+                          }
+                        >
+                          Copy text
+                        </Button>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto rounded bg-background/40 p-2 text-sm whitespace-pre-wrap">
                         {selectedDetailsTranscription.transcript}
                       </div>
                     </div>
+                  ) : selectedDetailsTranscription ? (
+                    <p className="text-sm text-muted-foreground">
+                      {selectedDetailsTranscription.status === "processing"
+                        ? "Transcription is still processing."
+                        : selectedDetailsTranscription.error || "No transcription available."}
+                    </p>
                   ) : (
                     <p className="text-sm text-muted-foreground">No transcription available.</p>
                   )}

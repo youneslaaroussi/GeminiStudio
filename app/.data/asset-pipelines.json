@@ -1,0 +1,174 @@
+[
+  {
+    "assetId": "8d9c5bd6-3e4a-4e26-afa2-4c08f25735a0",
+    "steps": [
+      {
+        "id": "metadata",
+        "label": "Extract metadata",
+        "status": "succeeded",
+        "updatedAt": "2026-01-25T22:50:51.570Z",
+        "startedAt": "2026-01-25T22:50:51.568Z",
+        "metadata": {
+          "mimeType": "video/mp4",
+          "size": 734839,
+          "uploadedAt": "2026-01-25T22:50:51.563Z",
+          "type": "video",
+          "fileSize": 734839,
+          "lastModified": "2026-01-25T22:50:51.563Z"
+        }
+      },
+      {
+        "id": "cloud-upload",
+        "label": "Upload to Cloud Storage",
+        "status": "failed",
+        "updatedAt": "2026-01-25T22:50:52.166Z",
+        "startedAt": "2026-01-25T22:50:51.574Z",
+        "error": "Failed to upload to Cloud Storage: {\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"geministudio@experiments-484119.iam.gserviceaccount.com does not have storage.objects.create access to the Google Cloud Storage object. Permission 'storage.objects.create' denied on resource (or it may not exist).\",\n    \"errors\": [\n      {\n        \"message\": \"geministudio@experiments-484119.iam.gserviceaccount.com does not have storage.objects.create access to the Google Cloud Storage object. Permission 'storage.objects.create' denied on resource (or it may not exist).\",\n        \"domain\": \"global\",\n        \"reason\": \"forbidden\"\n      }\n    ]\n  }\n}\n"
+      },
+      {
+        "id": "transcription",
+        "label": "Transcribe audio/video",
+        "status": "idle",
+        "updatedAt": "2026-01-25T22:50:51.565Z"
+      },
+      {
+        "id": "face-detection",
+        "label": "Detect faces",
+        "status": "idle",
+        "updatedAt": "2026-01-25T22:50:51.565Z"
+      }
+    ],
+    "updatedAt": "2026-01-25T22:50:52.167Z"
+  },
+  {
+    "assetId": "ead18a14-0791-418a-aef4-4a93477b4f00",
+    "steps": [
+      {
+        "id": "metadata",
+        "label": "Extract metadata",
+        "status": "succeeded",
+        "updatedAt": "2026-01-25T22:52:40.140Z",
+        "startedAt": "2026-01-25T22:52:40.138Z",
+        "metadata": {
+          "mimeType": "video/mp4",
+          "size": 734839,
+          "uploadedAt": "2026-01-25T22:52:40.134Z",
+          "type": "video",
+          "fileSize": 734839,
+          "lastModified": "2026-01-25T22:52:40.135Z"
+        }
+      },
+      {
+        "id": "cloud-upload",
+        "label": "Upload to Cloud Storage",
+        "status": "succeeded",
+        "updatedAt": "2026-01-25T22:52:40.845Z",
+        "startedAt": "2026-01-25T22:52:40.142Z",
+        "metadata": {
+          "gcsUri": "gs://gemini-studio-storage/assets/ead18a14-0791-418a-aef4-4a93477b4f00/1769381560133-3a09d50b-2794-41d3-8ad8-4ef2a08fbeb8.mp4",
+          "signedUrl": "https://storage.googleapis.com/gemini-studio-storage/assets/ead18a14-0791-418a-aef4-4a93477b4f00/1769381560133-3a09d50b-2794-41d3-8ad8-4ef2a08fbeb8.mp4?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=geministudio%40experiments-484119.iam.gserviceaccount.com%2F20260125%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260125T225240Z&X-Goog-Expires=604800&X-Goog-SignedHeaders=host&X-Goog-Signature=6bd392fc03b168a0df6938ddc022f337b754856cacfbc430484e92d93dff786710bf268a27f994195a61867d448b6b29c88a1dcbaf112bddb1e4abd96ec537764b0f107229afef386f7697cfc27b15d50dab8e43b4b1c41b723a223fddbc64b01da51aa86eb4106db6a97b4980843392795ba0b7077811979ef4eedccb48049aa55d59d7881589ebd41d1fb96e11fdbdd658e653010e9e4ce10582069a1a8c02e675ea8c6e5eb938d1e206e82dd47977f559a5c0b1910a1e2ff5af7f8ca00cf3830292bad1832b42e7467f338dacc3a177dc0d9736ce955261e2cb06cc0311eff15d9b61e87b432e0510b9feb62d96a06bf8d72d459cbedb1937b2cbb4300a44",
+          "bucket": "gemini-studio-storage",
+          "objectName": "assets/ead18a14-0791-418a-aef4-4a93477b4f00/1769381560133-3a09d50b-2794-41d3-8ad8-4ef2a08fbeb8.mp4"
+        }
+      },
+      {
+        "id": "transcription",
+        "label": "Transcribe audio/video",
+        "status": "idle",
+        "updatedAt": "2026-01-25T22:52:40.136Z"
+      },
+      {
+        "id": "face-detection",
+        "label": "Detect faces",
+        "status": "succeeded",
+        "updatedAt": "2026-01-25T22:52:52.027Z",
+        "startedAt": "2026-01-25T22:52:40.854Z",
+        "metadata": {
+          "faceCount": 3,
+          "faces": [
+            {
+              "faceIndex": 0,
+              "trackCount": 1,
+              "attributes": [
+                "looking_at_camera",
+                "eyes_visible",
+                "mouth_open",
+                "smiling",
+                "glasses",
+                "headwear"
+              ],
+              "segments": [
+                {
+                  "start": {
+                    "low": 2,
+                    "high": 0,
+                    "unsigned": false
+                  },
+                  "end": {
+                    "low": 4,
+                    "high": 0,
+                    "unsigned": false
+                  }
+                }
+              ]
+            },
+            {
+              "faceIndex": 1,
+              "trackCount": 1,
+              "attributes": [
+                "glasses",
+                "headwear",
+                "eyes_visible",
+                "mouth_open",
+                "looking_at_camera",
+                "smiling"
+              ],
+              "segments": [
+                {
+                  "start": {
+                    "low": 0,
+                    "high": 0,
+                    "unsigned": false
+                  },
+                  "end": {
+                    "low": 2,
+                    "high": 0,
+                    "unsigned": false
+                  }
+                }
+              ]
+            },
+            {
+              "faceIndex": 2,
+              "trackCount": 1,
+              "attributes": [
+                "glasses",
+                "headwear",
+                "eyes_visible",
+                "mouth_open",
+                "looking_at_camera",
+                "smiling"
+              ],
+              "segments": [
+                {
+                  "start": {
+                    "low": 0,
+                    "high": 0,
+                    "unsigned": false
+                  },
+                  "end": {
+                    "low": 0,
+                    "high": 0,
+                    "unsigned": false
+                  }
+                }
+              ]
+            }
+          ],
+          "gcsUri": "gs://gemini-studio-storage/assets/ead18a14-0791-418a-aef4-4a93477b4f00/1769381560133-3a09d50b-2794-41d3-8ad8-4ef2a08fbeb8.mp4"
+        }
+      }
+    ],
+    "updatedAt": "2026-01-25T22:52:52.028Z"
+  }
+]

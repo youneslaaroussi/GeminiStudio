@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleAuth } from "google-auth-library";
 import { saveBufferAsAsset } from "@/app/lib/server/asset-storage";
+import { parseGoogleServiceAccount, assertGoogleCredentials } from "@/app/lib/server/google-cloud";
 
 export const runtime = "nodejs";
 
 const PROJECT_ID = process.env.VEO_PROJECT_ID;
 const LOCATION = process.env.VEO_LOCATION || "us-central1";
 const MODEL_ID = process.env.VEO_MODEL_ID || "veo-3.0-generate-001";
-const SERVICE_ACCOUNT_KEY = process.env.VEO_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
 
 const BASE_URL = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}`;
 const PREDICT_URL = `${BASE_URL}:predictLongRunning`;
@@ -42,34 +42,30 @@ function toVeoMedia(media?: MediaInput) {
   };
 }
 
+const VEO_SERVICE_ACCOUNT_ENV = ["VEO_SERVICE_ACCOUNT_KEY"] as const;
+
 function assertEnv() {
   if (!PROJECT_ID) {
     throw new Error("VEO_PROJECT_ID is not configured");
   }
-  if (!SERVICE_ACCOUNT_KEY) {
-    throw new Error("VEO_SERVICE_ACCOUNT_KEY (or GOOGLE_SERVICE_ACCOUNT_KEY) is not configured");
-  }
-}
-
-function parseServiceAccount() {
-  assertEnv();
-  try {
-    return JSON.parse(SERVICE_ACCOUNT_KEY!);
-  } catch {
-    throw new Error("Invalid JSON in VEO_SERVICE_ACCOUNT_KEY");
-  }
+  assertGoogleCredentials({ preferredEnvVars: [...VEO_SERVICE_ACCOUNT_ENV] });
 }
 
 async function getAccessToken() {
+  assertEnv();
+  const creds = parseGoogleServiceAccount({ preferredEnvVars: [...VEO_SERVICE_ACCOUNT_ENV] });
+  console.log("[VEO] using service account", creds.client_email, "project", creds.project_id);
   const auth = new GoogleAuth({
-    credentials: parseServiceAccount(),
+    credentials: creds,
     scopes: ["https://www.googleapis.com/auth/cloud-platform"],
   });
   const client = await auth.getClient();
-  const token = await client.getAccessToken();
+  const tokenResult = await client.getAccessToken();
+  const token = typeof tokenResult === "string" ? tokenResult : tokenResult?.token || null;
   if (!token) {
     throw new Error("Unable to acquire Google Cloud access token");
   }
+  console.log("[VEO] token prefix", token.slice(0, 10));
   return token;
 }
 

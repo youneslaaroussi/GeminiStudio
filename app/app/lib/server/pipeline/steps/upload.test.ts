@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { uploadStep } from './upload';
 import { promises as fs } from 'fs';
 import { getGoogleAccessToken } from '@/app/lib/server/google-cloud';
+import { createV4SignedUrl } from '@/app/lib/server/gcs-signed-url';
 
 // Mock dependencies
 vi.mock('fs', () => ({
@@ -12,6 +13,10 @@ vi.mock('fs', () => ({
 
 vi.mock('@/app/lib/server/google-cloud', () => ({
   getGoogleAccessToken: vi.fn(),
+}));
+
+vi.mock('@/app/lib/server/gcs-signed-url', () => ({
+  createV4SignedUrl: vi.fn(),
 }));
 
 // Mock global fetch
@@ -25,7 +30,8 @@ describe('uploadStep', () => {
     vi.resetAllMocks();
     process.env = { ...originalEnv };
     process.env.ASSET_GCS_BUCKET = 'test-bucket';
-    process.env.ASSET_PUBLIC_BASE_URL = 'https://example.com/assets';
+    process.env.ASSET_SIGNED_URL_TTL_SECONDS = '3600';
+    vi.mocked(createV4SignedUrl).mockReturnValue('https://signed-url');
   });
 
   afterEach(() => {
@@ -57,13 +63,18 @@ describe('uploadStep', () => {
     expect(result.status).toBe('succeeded');
     expect(result.metadata).toEqual({
       gcsUri: 'gs://test-bucket/assets/123/test.mp4',
-      publicUrl: 'https://example.com/assets/assets/123/test.mp4',
+      signedUrl: 'https://signed-url',
       bucket: 'test-bucket',
       objectName: 'assets/123/test.mp4',
     });
 
     expect(fs.readFile).toHaveBeenCalled();
     expect(getGoogleAccessToken).toHaveBeenCalled();
+    expect(createV4SignedUrl).toHaveBeenCalledWith({
+      bucket: 'test-bucket',
+      objectName: 'assets/123/test.mp4',
+      expiresInSeconds: 3600,
+    });
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('https://storage.googleapis.com/upload/storage/v1/b/test-bucket/o'),
       expect.objectContaining({

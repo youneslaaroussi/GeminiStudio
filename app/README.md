@@ -40,7 +40,9 @@ Create an `.env.local` based on `env.template` with the following values:
 - `VEO_PROJECT_ID`: Google Cloud project that has Vertex AI enabled.
 - `VEO_LOCATION`: Vertex AI region (for example `us-central1`).
 - `VEO_MODEL_ID`: Veo model id, defaults to `veo-3.0-generate-001`.
-- `VEO_SERVICE_ACCOUNT_KEY`: JSON for a service account with `aiplatform.predict` permissions (wrap the JSON on one line).
+- `VEO_SERVICE_ACCOUNT_KEY`: Path (relative to the project root or absolute) to a service-account JSON with `aiplatform.predict` permissions.
+- `ASSET_GCS_BUCKET`: Google Cloud Storage bucket where uploaded assets are stored (objects stay private).
+- `ASSET_SIGNED_URL_TTL_SECONDS` (optional): Lifetime of generated download URLs in seconds (defaults to 7 days).
 - `BANANA_MODEL_ID` (optional): override Gemini Banana Pro model id, defaults to `gemini-3-pro-image-preview`.
 - `PROMPT_MODEL_ID` (optional): Gemini text model used to expand prompts (defaults to `gemini-1.5-flash-latest`).
 

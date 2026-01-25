@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
   }
 
   const manifest = await readManifest();
+  const newAssets: StoredAsset[] = [];
   const uploaded: RemoteAsset[] = [];
 
   for (const file of files) {
@@ -70,12 +71,14 @@ export async function POST(request: NextRequest) {
     };
 
     manifest.push(asset);
+    newAssets.push(asset);
     uploaded.push(storedAssetToRemote(asset));
-
-    await runAutoStepsForAsset(asset.id);
   }
 
   await writeManifest(manifest);
+  for (const asset of newAssets) {
+    await runAutoStepsForAsset(asset.id);
+  }
 
   return NextResponse.json({ assets: uploaded }, { status: 201 });
 }

@@ -3,6 +3,7 @@ import path from "path";
 import type { PipelineStepDefinition } from "../types";
 import { getGoogleAccessToken } from "@/app/lib/server/google-cloud";
 import { UPLOAD_DIR } from "@/app/lib/server/asset-storage";
+import { createV4SignedUrl } from "@/app/lib/server/gcs-signed-url";
 
 
 async function uploadBufferToBucket(
@@ -14,7 +15,7 @@ async function uploadBufferToBucket(
 ) {
   const url =
     `https://storage.googleapis.com/upload/storage/v1/b/${bucket}/o` +
-    `?uploadType=media&name=${encodeURIComponent(destination)}&predefinedAcl=publicRead`;
+    `?uploadType=media&name=${encodeURIComponent(destination)}`;
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -39,12 +40,9 @@ export const uploadStep: PipelineStepDefinition = {
   autoStart: true,
   run: async ({ asset }) => {
     const BUCKET = process.env.ASSET_GCS_BUCKET;
-    const PUBLIC_BASE_URL =
-      process.env.ASSET_PUBLIC_BASE_URL ||
-      (BUCKET ? `https://storage.googleapis.com/${BUCKET}` : undefined);
-
-    if (!BUCKET || !PUBLIC_BASE_URL) {
-      throw new Error("ASSET_GCS_BUCKET and ASSET_PUBLIC_BASE_URL must be configured");
+    const signedUrlTtl = Number(process.env.ASSET_SIGNED_URL_TTL_SECONDS ?? 60 * 60 * 24 * 7);
+    if (!BUCKET) {
+      throw new Error("ASSET_GCS_BUCKET must be configured");
     }
 
     const token = await getGoogleAccessToken("https://www.googleapis.com/auth/devstorage.full_control");
@@ -53,13 +51,17 @@ export const uploadStep: PipelineStepDefinition = {
     const objectName = `assets/${asset.id}/${asset.fileName}`;
     const storedName = await uploadBufferToBucket(token, BUCKET, objectName, buffer, asset.mimeType);
     const gcsUri = `gs://${BUCKET}/${storedName}`;
-    const publicUrl = `${PUBLIC_BASE_URL.replace(/\/$/, "")}/${storedName}`;
+    const signedUrl = createV4SignedUrl({
+      bucket: BUCKET,
+      objectName: storedName,
+      expiresInSeconds: Number.isFinite(signedUrlTtl) ? signedUrlTtl : 60 * 60 * 24 * 7,
+    });
 
     return {
       status: "succeeded" as const,
       metadata: {
         gcsUri,
-        publicUrl,
+        signedUrl,
         bucket: BUCKET,
         objectName: storedName,
       },

@@ -6,5 +6,45 @@
     "mimeType": "video/mp4",
     "size": 9254987,
     "uploadedAt": "2026-01-24T22:21:46.511Z"
+  },
+  {
+    "id": "027940f1-084c-434d-8138-f8280eeeaf81",
+    "name": "this is a test.mp4",
+    "fileName": "1769380666453-9f934892-2a7f-4696-bb16-0af3a19c1049.mp4",
+    "mimeType": "video/mp4",
+    "size": 734839,
+    "uploadedAt": "2026-01-25T22:37:46.455Z"
+  },
+  {
+    "id": "8d9c5bd6-3e4a-4e26-afa2-4c08f25735a0",
+    "name": "this is a test.mp4",
+    "fileName": "1769381451562-784a52f5-6205-41ab-b0e5-143066494757.mp4",
+    "mimeType": "video/mp4",
+    "size": 734839,
+    "uploadedAt": "2026-01-25T22:50:51.563Z"
+  },
+  {
+    "id": "ead18a14-0791-418a-aef4-4a93477b4f00",
+    "name": "this is a test.mp4",
+    "fileName": "1769381560133-3a09d50b-2794-41d3-8ad8-4ef2a08fbeb8.mp4",
+    "mimeType": "video/mp4",
+    "size": 734839,
+    "uploadedAt": "2026-01-25T22:52:40.134Z"
+  },
+  {
+    "id": "18539a21-4a7f-4785-839a-6eb43836c4c7",
+    "name": "banana-1769383676997.jpg",
+    "fileName": "1769383676998-b0d89c87-8c24-4b95-ac00-96cb491876a3.jpg",
+    "mimeType": "image/jpeg",
+    "size": 569099,
+    "uploadedAt": "2026-01-25T23:27:57.000Z"
+  },
+  {
+    "id": "4fb318a8-3948-45aa-bcf3-c92e6f87817e",
+    "name": "veo-1769384600195.mp4",
+    "fileName": "1769384600196-67a34904-4b17-42e4-b922-684d7073243a.mp4",
+    "mimeType": "video/mp4",
+    "size": 2076058,
+    "uploadedAt": "2026-01-25T23:43:20.199Z"
   }
 ]
