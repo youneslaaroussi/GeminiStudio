@@ -1,6 +1,36 @@
+import type { ProjectTranscription } from "./transcription";
+
 // Timeline clip types for NLE editor
 
 export type ClipType = 'video' | 'audio' | 'text' | 'image';
+
+export type TransitionType =
+  | 'none'
+  | 'fade'
+  | 'slide-left'
+  | 'slide-right'
+  | 'slide-up'
+  | 'slide-down';
+
+export interface ClipTransition {
+  type: TransitionType;
+  duration: number;
+}
+
+export type TransitionKey = `${string}->${string}`;
+
+export const DEFAULT_TRANSITION: ClipTransition = {
+  type: 'fade',
+  duration: 0.5,
+};
+
+export const makeTransitionKey = (fromId: string, toId: string): TransitionKey =>
+  `${fromId}->${toId}`;
+
+export const parseTransitionKey = (key: string) => {
+  const [fromId = '', toId = ''] = key.split('->');
+  return { fromId, toId };
+};
 
 export interface Vec2 {
   x: number;
@@ -16,11 +46,17 @@ export interface BaseClip {
   speed: number;       // Playback speed (1.0 = normal)
   position: Vec2;      // Scene position in pixels
   scale: Vec2;         // Scale multiplier (1 = 100%)
+  /**
+   * Optional asset identifier, used for caching waveform data or resolving metadata
+   */
+  assetId?: string;
 }
 
 export interface VideoClip extends BaseClip {
   type: 'video';
   src: string;        // External URL
+  width?: number;     // Width in pixels
+  height?: number;    // Height in pixels
 }
 
 export interface AudioClip extends BaseClip {
@@ -60,6 +96,8 @@ export interface Project {
   layers: Layer[];
   renderScale: number;
   background: string;
+  transcriptions?: Record<string, ProjectTranscription>;
+  transitions?: Record<TransitionKey, ClipTransition>;
 }
 
 // Test videos for development
@@ -129,7 +167,8 @@ export function createVideoClip(
   src: string,
   name: string,
   start: number,
-  duration: number
+  duration: number,
+  options?: { assetId?: string; width?: number; height?: number }
 ): VideoClip {
   return {
     id: crypto.randomUUID(),
@@ -142,6 +181,9 @@ export function createVideoClip(
     speed: 1,
     position: { x: 0, y: 0 },
     scale: { x: 1, y: 1 },
+    assetId: options?.assetId,
+    width: options?.width,
+    height: options?.height,
   };
 }
 
@@ -150,7 +192,8 @@ export function createAudioClip(
   src: string,
   name: string,
   start: number,
-  duration: number
+  duration: number,
+  options?: { assetId?: string }
 ): AudioClip {
   return {
     id: crypto.randomUUID(),
@@ -164,6 +207,7 @@ export function createAudioClip(
     volume: 1,
     position: { x: 0, y: 0 },
     scale: { x: 1, y: 1 },
+    assetId: options?.assetId,
   };
 }
 
@@ -196,7 +240,8 @@ export function createImageClip(
   src: string,
   name: string,
   start: number,
-  duration: number
+  duration: number,
+  options?: { assetId?: string; width?: number; height?: number }
 ): ImageClip {
   return {
     id: crypto.randomUUID(),
@@ -209,6 +254,9 @@ export function createImageClip(
     speed: 1,
     position: { x: 0, y: 0 },
     scale: { x: 1, y: 1 },
+    assetId: options?.assetId,
+    width: options?.width,
+    height: options?.height,
   };
 }
 

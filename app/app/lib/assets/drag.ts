@@ -37,14 +37,19 @@ export function createClipFromAsset(payload: AssetDragPayload, start: number): T
       ? payload.duration
       : DEFAULT_ASSET_DURATIONS[payload.type] ?? 5;
   const name = payload.name || "Uploaded Asset";
+  const options = {
+    assetId: payload.id,
+    width: payload.width,
+    height: payload.height,
+  };
   switch (payload.type) {
     case "audio":
-      return createAudioClip(payload.url, name, start, duration);
+      return createAudioClip(payload.url, name, start, duration, { assetId: payload.id });
     case "image":
-      return createImageClip(payload.url, name, start, duration);
+      return createImageClip(payload.url, name, start, duration, options);
     case "video":
     case "other":
     default:
-      return createVideoClip(payload.url, name, start, duration);
+      return createVideoClip(payload.url, name, start, duration, options);
   }
 }

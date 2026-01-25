@@ -3,6 +3,7 @@
 import { Player, Stage, Vector2, type Project, type Scene } from '@motion-canvas/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Layer } from '@/app/types/timeline';
+import type { ProjectTranscription } from '@/app/types/transcription';
 import { useDrag } from '@/app/hooks/use-drag';
 
 const SCENE_URL = '/scene/src/project.js';
@@ -15,6 +16,8 @@ interface ScenePlayerProps {
   duration?: number;
   currentTime?: number;
   onTimeUpdate?: (time: number) => void;
+  transcriptions?: Record<string, ProjectTranscription>;
+  transitions?: Record<string, any>;
   sceneConfig: {
     resolution: { width: number; height: number };
     renderScale: number;
@@ -28,6 +31,8 @@ export function ScenePlayer({
   duration = 10,
   currentTime = 0,
   onTimeUpdate,
+  transcriptions = {},
+  transitions = {},
   sceneConfig,
 }: ScenePlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -37,10 +42,20 @@ export function ScenePlayer({
   const [error, setError] = useState<string | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const latestLayersRef = useRef(layers);
+  const latestTranscriptionsRef = useRef(transcriptions);
+  const latestTransitionsRef = useRef(transitions);
 
   useEffect(() => {
     latestLayersRef.current = layers;
   }, [layers]);
+
+  useEffect(() => {
+    latestTranscriptionsRef.current = transcriptions;
+  }, [transcriptions]);
+
+  useEffect(() => {
+    latestTransitionsRef.current = transitions;
+  }, [transitions]);
 
   // Viewport State
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -260,6 +275,8 @@ export function ScenePlayer({
     playerInstance.setVariables({
       layers: latestLayersRef.current,
       duration,
+      transcriptions: latestTranscriptionsRef.current,
+      transitions: latestTransitionsRef.current,
     });
     (playerInstance as unknown as { requestRecalculation?: () => void }).requestRecalculation?.();
     playerInstance.requestRender();
@@ -289,6 +306,7 @@ export function ScenePlayer({
     project,
     onPlayerChange,
     duration,
+    transcriptions,
     sceneConfig.resolution.width,
     sceneConfig.resolution.height,
     sceneConfig.renderScale,
@@ -330,10 +348,12 @@ export function ScenePlayer({
     player.setVariables({
       layers,
       duration,
+      transcriptions,
+      transitions,
     });
     (player as unknown as { requestRecalculation?: () => void }).requestRecalculation?.();
     player.requestRender();
-  }, [player, layers, duration]);
+  }, [player, layers, duration, transcriptions, transitions]);
 
   // Sync playhead time from player back to the store during playback
   useEffect(() => {

@@ -10,11 +10,13 @@ import type {
   VideoClip,
 } from '@/app/types/timeline';
 import { getClipEnd } from '@/app/types/timeline';
+import type { ProjectTranscription } from '@/app/types/transcription';
 
 interface ProjectStore {
   project: Project;
   currentTime: number;
   selectedClipId: string | null;
+  selectedTransitionKey: string | null;
   isPlaying: boolean;
   zoom: number; // pixels per second
   isMuted: boolean;
@@ -28,6 +30,7 @@ interface ProjectStore {
   moveClipToLayer: (clipId: string, targetLayerId: string) => void;
   setCurrentTime: (time: number) => void;
   setSelectedClip: (id: string | null) => void;
+  setSelectedTransition: (key: string | null) => void;
   setIsPlaying: (playing: boolean) => void;
   setZoom: (zoom: number) => void;
   setMuted: (muted: boolean) => void;
@@ -38,6 +41,13 @@ interface ProjectStore {
     settings: Partial<Pick<Project, 'renderScale' | 'background' | 'resolution' | 'fps' | 'name'>>
   ) => void;
   setProject: (project: Project) => void;
+  upsertProjectTranscription: (transcription: ProjectTranscription) => void;
+  mergeProjectTranscription: (assetId: string, updates: Partial<ProjectTranscription>) => void;
+  removeProjectTranscription: (assetId: string) => void;
+  
+  // Transition actions
+  addTransition: (fromId: string, toId: string, transition: ClipTransition) => void;
+  removeTransition: (fromId: string, toId: string) => void;
 
   getDuration: () => number;
   getActiveVideoClip: (time: number) => VideoClip | undefined;
@@ -78,6 +88,8 @@ const defaultProject: Project = {
   renderScale: 1,
   background: '#141417',
   layers: [],
+  transcriptions: {},
+  transitions: {},
 };
 
 const clampZoom = (zoom: number) => Math.max(10, Math.min(200, zoom));
@@ -92,6 +104,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   project: defaultProject,
   currentTime: 0,
   selectedClipId: null,
+  selectedTransitionKey: null,
   isPlaying: false,
   zoom: 50,
   isMuted: false,
@@ -108,6 +121,19 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   addClip: (clip, layerId) =>
     set((state) => {
+      // Check if project is currently empty (has no clips) to potentially set resolution
+      const hasExistingClips = state.project.layers.some((l) => l.clips.length > 0);
+      let resolutionUpdate = {};
+
+      if (!hasExistingClips && (clip.type === "video" || clip.type === "image")) {
+        const visualClip = clip as VideoClip | ImageClip;
+        if (visualClip.width && visualClip.height) {
+          resolutionUpdate = {
+            resolution: { width: visualClip.width, height: visualClip.height },
+          };
+        }
+      }
+
       const layers = [...state.project.layers];
       const targetIndex = typeof layerId === 'string'
         ? layers.findIndex((layer) => layer.id === layerId)
@@ -121,6 +147,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         return {
           project: {
             ...state.project,
+            ...resolutionUpdate,
             layers: [...layers, newLayer],
           },
         };
@@ -135,6 +162,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       return {
         project: {
           ...state.project,
+          ...resolutionUpdate,
           layers,
         },
       };
@@ -221,7 +249,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   setCurrentTime: (time) => set({ currentTime: Math.max(0, time) }),
 
-  setSelectedClip: (id) => set({ selectedClipId: id }),
+  setSelectedClip: (id) => set({ selectedClipId: id, selectedTransitionKey: null }),
+  setSelectedTransition: (key) => set({ selectedTransitionKey: key, selectedClipId: null }),
 
   setIsPlaying: (playing) => set({ isPlaying: playing }),
 
@@ -263,14 +292,97 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     })),
 
   setProject: (project) =>
-    set((state) => ({
+    set(() => ({
       project: {
-        ...state.project,
         ...project,
+        transcriptions: project.transcriptions ?? {},
       },
       currentTime: 0,
       selectedClipId: null,
     })),
+
+  upsertProjectTranscription: (transcription) =>
+    set((state) => {
+      const existing = state.project.transcriptions ?? {};
+      const current = existing[transcription.assetId];
+      const createdAt = current?.createdAt ?? transcription.createdAt ?? new Date().toISOString();
+      const updatedAt = transcription.updatedAt ?? new Date().toISOString();
+      return {
+        project: {
+          ...state.project,
+          transcriptions: {
+            ...existing,
+            [transcription.assetId]: {
+              ...current,
+              ...transcription,
+              createdAt,
+              updatedAt,
+            },
+          },
+        },
+      };
+    }),
+
+  mergeProjectTranscription: (assetId, updates) =>
+    set((state) => {
+      const existing = state.project.transcriptions ?? {};
+      const current = existing[assetId];
+      if (!current) return state;
+      return {
+        project: {
+          ...state.project,
+          transcriptions: {
+            ...existing,
+            [assetId]: {
+              ...current,
+              ...updates,
+              updatedAt: updates.updatedAt ?? new Date().toISOString(),
+            },
+          },
+        },
+      };
+    }),
+
+  removeProjectTranscription: (assetId) =>
+    set((state) => {
+      const existing = state.project.transcriptions ?? {};
+      if (!(assetId in existing)) return state;
+      const rest = { ...existing };
+      delete rest[assetId];
+      return {
+        project: {
+          ...state.project,
+          transcriptions: rest,
+        },
+      };
+    }),
+
+  addTransition: (fromId, toId, transition) =>
+    set((state) => {
+      const key = `${fromId}->${toId}` as const;
+      return {
+        project: {
+          ...state.project,
+          transitions: {
+            ...state.project.transitions,
+            [key]: transition,
+          },
+        },
+      };
+    }),
+
+  removeTransition: (fromId, toId) =>
+    set((state) => {
+      const key = `${fromId}->${toId}` as const;
+      const transitions = { ...state.project.transitions };
+      delete transitions[key];
+      return {
+        project: {
+          ...state.project,
+          transitions,
+        },
+      };
+    }),
 
   splitClipAtTime: (id, time) => {
     const state = get();

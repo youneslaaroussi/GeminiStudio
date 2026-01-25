@@ -13,6 +13,7 @@ import { TimelinePanel } from "./TimelinePanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { TopBar } from "./TopBar";
 import { ChatPanel } from "./ChatPanel";
+import { ToolboxPanel } from "./ToolboxPanel";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useShortcuts } from "@/app/hooks/use-shortcuts";
 
@@ -113,6 +114,8 @@ export function EditorLayout() {
                         duration={getDuration()}
                         currentTime={currentTime}
                         onTimeUpdate={handleTimeUpdate}
+                        transcriptions={project.transcriptions ?? {}}
+                        transitions={project.transitions ?? {}}
                         sceneConfig={{
                           resolution: project.resolution,
                           renderScale: project.renderScale,
@@ -136,8 +139,8 @@ export function EditorLayout() {
               <ResizableHandle withHandle />
 
               {/* Bottom: Timeline */}
-              <ResizablePanel defaultSize={40} minSize={20}>
-                <div className="h-full bg-card border-t border-border">
+              <ResizablePanel defaultSize={40} minSize={20} className="min-w-0">
+                <div className="h-full w-full bg-card border-t border-border overflow-hidden">
                   <TimelinePanel
                     hasPlayer={!!player}
                     playing={isPlaying}
@@ -156,10 +159,18 @@ export function EditorLayout() {
 
           <ResizableHandle withHandle />
 
-          {/* Persistent Rightmost Chat */}
+          {/* Persistent Rightmost Toolbox + Chat */}
           <ResizablePanel defaultSize={22} minSize={15} maxSize={40}>
             <div className="h-full bg-card border-l border-border min-w-[260px]">
-              <ChatPanel />
+              <ResizablePanelGroup direction="vertical" className="h-full">
+                <ResizablePanel defaultSize={55} minSize={30}>
+                  <ToolboxPanel />
+                </ResizablePanel>
+                <ResizableHandle withHandle />
+                <ResizablePanel defaultSize={45} minSize={25}>
+                  <ChatPanel />
+                </ResizablePanel>
+              </ResizablePanelGroup>
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>

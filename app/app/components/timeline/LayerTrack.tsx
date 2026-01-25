@@ -5,8 +5,10 @@ import { Video, Music, Type, Image as ImageIcon } from "lucide-react";
 import type { Layer } from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { Clip } from "./Clip";
+import { TransitionHandle } from "./TransitionHandle";
 import { cn } from "@/lib/utils";
 import { assetMatchesLayer, createClipFromAsset, hasAssetDragData, readDraggedAsset } from "@/app/lib/assets/drag";
+import { makeTransitionKey } from "@/app/types/timeline";
 
 interface LayerTrackProps {
   layer: Layer;
@@ -23,6 +25,9 @@ const typeIcon: Record<Layer["type"], JSX.Element> = {
 
 export function LayerTrack({ layer, width, labelWidth }: LayerTrackProps) {
   const zoom = useProjectStore((s) => s.zoom);
+  const project = useProjectStore((s) => s.project);
+  const selectedTransitionKey = useProjectStore((s) => s.selectedTransitionKey);
+  const setSelectedTransition = useProjectStore((s) => s.setSelectedTransition);
   const duration = useProjectStore((s) => s.getDuration());
   const addClip = useProjectStore((s) => s.addClip);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -69,6 +74,8 @@ export function LayerTrack({ layer, width, labelWidth }: LayerTrackProps) {
     [addClip, layer.id, layer.type, zoom]
   );
 
+  const sortedClips = [...layer.clips].sort((a, b) => a.start - b.start);
+
   return (
     <div
       className="flex items-stretch border-b border-border"
@@ -102,9 +109,27 @@ export function LayerTrack({ layer, width, labelWidth }: LayerTrackProps) {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {layer.clips.map((clip) => (
-          <Clip key={clip.id} clip={clip} layerId={layer.id} />
-        ))}
+        {sortedClips.map((clip, index) => {
+          const nextClip = sortedClips[index + 1];
+          const isAdjacent = nextClip && 
+            Math.abs(nextClip.start - (clip.start + clip.duration / clip.speed)) < 0.1;
+          
+          return (
+            <div key={clip.id}>
+              <Clip clip={clip} layerId={layer.id} />
+              {isAdjacent && (
+                <TransitionHandle
+                  prevClip={clip}
+                  nextClip={nextClip}
+                  zoom={zoom}
+                  transition={project.transitions?.[makeTransitionKey(clip.id, nextClip.id)]}
+                  selected={selectedTransitionKey === makeTransitionKey(clip.id, nextClip.id)}
+                  onSelect={() => setSelectedTransition(makeTransitionKey(clip.id, nextClip.id))}
+                />
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

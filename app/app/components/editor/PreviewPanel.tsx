@@ -3,6 +3,7 @@
 import type { Player } from "@motion-canvas/core";
 import { ScenePlayer } from "../ScenePlayer";
 import type { Layer } from "@/app/types/timeline";
+import type { ProjectTranscription } from "@/app/types/transcription";
 
 interface PreviewPanelProps {
   onPlayerChange: (player: Player | null) => void;
@@ -10,6 +11,8 @@ interface PreviewPanelProps {
   duration: number;
   currentTime: number;
   onTimeUpdate: (time: number) => void;
+  transcriptions: Record<string, ProjectTranscription>;
+  transitions?: Record<string, any>;
   sceneConfig: {
     resolution: { width: number; height: number };
     renderScale: number;
@@ -23,6 +26,8 @@ export function PreviewPanel({
   duration,
   currentTime,
   onTimeUpdate,
+  transcriptions,
+  transitions,
   sceneConfig,
 }: PreviewPanelProps) {
   const totalClips = layers.reduce((acc, layer) => acc + layer.clips.length, 0);
@@ -50,14 +55,16 @@ export function PreviewPanel({
         </div>
       </div>
       <div className="flex-1 overflow-hidden">
-        <ScenePlayer
-          onPlayerChange={onPlayerChange}
-          layers={layers}
-          duration={duration}
-          currentTime={currentTime}
-          onTimeUpdate={onTimeUpdate}
-          sceneConfig={sceneConfig}
-        />
+          <ScenePlayer
+            onPlayerChange={onPlayerChange}
+            layers={layers}
+            duration={duration}
+            currentTime={currentTime}
+            onTimeUpdate={onTimeUpdate}
+            transcriptions={transcriptions}
+            transitions={transitions}
+            sceneConfig={sceneConfig}
+          />
       </div>
     </div>
   );

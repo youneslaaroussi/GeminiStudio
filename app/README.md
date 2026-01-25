@@ -20,6 +20,32 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## AI asset generators
+
+The Assets panel now includes integrated buttons for:
+
+- **Veo 3 video generation** via Vertex AI long-running predictions.
+- **Gemini Banana Pro image generation** via the Gemini API.
+- **Prompt enhancer** powered by Gemini that follows the Veo 3.1 prompting guide (cinematography + subject + action + context + style) so you can turn a rough idea into a structured shot description before sending it to Veo.
+- Advanced Veo workflows: animate an uploaded image, blend in reference images, lock the last frame, or extend an existing Veo clip—all from the Assets panel.
+- Nano Banana Pro now supports image-to-image editing by uploading a source frame alongside the prompt.
+
+Generated assets are persisted alongside uploaded files, so they immediately appear in the asset list and can be dragged into the timeline.
+
+### Required environment variables
+
+Create an `.env.local` based on `env.template` with the following values:
+
+- `GOOGLE_GENERATIVE_AI_API_KEY`: API key with access to Gemini image APIs.
+- `VEO_PROJECT_ID`: Google Cloud project that has Vertex AI enabled.
+- `VEO_LOCATION`: Vertex AI region (for example `us-central1`).
+- `VEO_MODEL_ID`: Veo model id, defaults to `veo-3.0-generate-001`.
+- `VEO_SERVICE_ACCOUNT_KEY`: JSON for a service account with `aiplatform.predict` permissions (wrap the JSON on one line).
+- `BANANA_MODEL_ID` (optional): override Gemini Banana Pro model id, defaults to `gemini-3-pro-image-preview`.
+- `PROMPT_MODEL_ID` (optional): Gemini text model used to expand prompts (defaults to `gemini-1.5-flash-latest`).
+
+Restart the dev server after editing the environment so the server routes can read the new values.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

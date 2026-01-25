@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Pause,
   Play,
@@ -48,6 +48,7 @@ export function TimelinePanel({
   onSpeedChange,
 }: TimelinePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(600);
 
   const currentTime = useProjectStore((s) => s.currentTime);
@@ -64,6 +65,11 @@ export function TimelinePanel({
   const timelineAreaRef = useRef<HTMLDivElement>(null);
   const [newLayerType, setNewLayerType] = useState<ClipType>("video");
   const hasClips = useMemo(() => layers.some((layer) => layer.clips.length > 0), [layers]);
+  const scrubTargetRef = useRef<EventTarget | null>(null);
+  const scrubPointerIdRef = useRef<number | null>(null);
+  const pointerMoveHandlerRef = useRef<((event: PointerEvent) => void) | null>(null);
+  const pointerUpHandlerRef = useRef<((event: PointerEvent) => void) | null>(null);
+  const gestureScaleRef = useRef(1);
 
   const layerCounts = useMemo(() => {
     return layers.reduce<Record<ClipType, number>>(
@@ -107,22 +113,190 @@ export function TimelinePanel({
   );
 
   // Update container width on resize
-  const updateWidth = useCallback(() => {
-    if (containerRef.current) {
-      setContainerWidth(containerRef.current.clientWidth);
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const element = containerRef.current;
+    const updateWidth = () => setContainerWidth(element.clientWidth);
+    updateWidth();
+    if (typeof ResizeObserver === "undefined") {
+      return;
     }
+    const observer = new ResizeObserver(updateWidth);
+    setContainerWidth(element.clientWidth);
+    observer.observe(element);
+    return () => observer.disconnect();
   }, []);
 
-  // Handle clicking on timeline to seek
-  const handleTimelineClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX - rect.left - TRACK_LABEL_WIDTH;
-      const time = Math.max(0, x / zoom);
-      setCurrentTime(time);
+  useEffect(() => {
+    const node = timelineAreaRef.current;
+    if (!node) return;
+    type GestureEventLike = Event & { scale?: number };
+
+    const handleGestureStart = (event: GestureEventLike) => {
+      event.preventDefault();
+      gestureScaleRef.current = event.scale ?? 1;
+    };
+
+    const handleGestureChange = (event: GestureEventLike) => {
+      event.preventDefault();
+      const scale = event.scale ?? 1;
+      const deltaScale = scale - gestureScaleRef.current;
+      gestureScaleRef.current = scale;
+      if (Math.abs(deltaScale) < 0.005) {
+        return;
+      }
+      const scroller = scrollContainerRef.current;
+      if (!scroller) return;
+      const sensitivity = 500;
+      scroller.scrollLeft -= deltaScale * sensitivity;
+    };
+
+    const handleGestureEnd = (event: GestureEventLike) => {
+      event.preventDefault();
+      gestureScaleRef.current = 1;
+    };
+
+    const passiveOptions = { passive: false } as AddEventListenerOptions;
+    node.addEventListener("gesturestart", handleGestureStart, passiveOptions);
+    node.addEventListener("gesturechange", handleGestureChange, passiveOptions);
+    node.addEventListener("gestureend", handleGestureEnd, passiveOptions);
+    return () => {
+      node.removeEventListener("gesturestart", handleGestureStart, passiveOptions);
+      node.removeEventListener("gesturechange", handleGestureChange, passiveOptions);
+      node.removeEventListener("gestureend", handleGestureEnd, passiveOptions);
+    };
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (pointerMoveHandlerRef.current) {
+        window.removeEventListener("pointermove", pointerMoveHandlerRef.current);
+        pointerMoveHandlerRef.current = null;
+      }
+      if (pointerUpHandlerRef.current) {
+        window.removeEventListener("pointerup", pointerUpHandlerRef.current);
+        pointerUpHandlerRef.current = null;
+      }
+      const target = scrubTargetRef.current as HTMLElement | null;
+      if (target) {
+        try {
+          const pointerId = scrubPointerIdRef.current;
+          if (pointerId !== null) {
+            target.releasePointerCapture?.(pointerId);
+          }
+        } catch {
+          // Ignore release issues
+        }
+      }
+      scrubPointerIdRef.current = null;
     },
-    [zoom, setCurrentTime]
+    []
   );
+
+    const convertClientXToTime = useCallback(
+    (clientX: number) => {
+      const area = timelineAreaRef.current;
+      if (!area) return 0;
+      const rect = area.getBoundingClientRect();
+      const x = clientX - rect.left - TRACK_LABEL_WIDTH;
+      const seconds = x / zoom;
+      return Math.min(Math.max(seconds, 0), duration);
+    },
+    [duration, zoom]
+  );
+
+  const handleScrubPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLElement>) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const captureTarget = event.currentTarget;
+      scrubTargetRef.current = captureTarget;
+      scrubPointerIdRef.current = event.pointerId;
+      try {
+        captureTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // Ignore if pointer capture isn't supported.
+      }
+      const updateFromClientX = (clientX: number) => {
+        setCurrentTime(convertClientXToTime(clientX));
+      };
+      updateFromClientX(event.clientX);
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        updateFromClientX(moveEvent.clientX);
+      };
+      const handlePointerUp = () => {
+        scrubTargetRef.current = null;
+        scrubPointerIdRef.current = null;
+        try {
+          captureTarget.releasePointerCapture(event.pointerId);
+        } catch {
+          // Ignore release failures
+        }
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+        pointerMoveHandlerRef.current = null;
+        pointerUpHandlerRef.current = null;
+      };
+
+      pointerMoveHandlerRef.current = handlePointerMove;
+      pointerUpHandlerRef.current = handlePointerUp;
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp);
+    },
+    [convertClientXToTime, setCurrentTime]
+  );
+
+  const handleTimelinePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-clip-id]") || target?.closest("[data-transition-handle]")) {
+        return;
+      }
+      handleScrubPointerDown(event);
+    },
+    [handleScrubPointerDown]
+  );
+
+  const handleTimelineWheel = useCallback(
+    (
+      event: Pick<
+        WheelEvent,
+        "preventDefault" | "stopPropagation" | "metaKey" | "ctrlKey" | "altKey" | "deltaX" | "deltaY"
+      >
+    ) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (event.metaKey || event.ctrlKey || event.altKey) {
+        const direction = Math.sign(event.deltaY || event.deltaX || 1);
+        const magnitude = Math.max(0.5, Math.abs(event.deltaY) * 0.05);
+        const nextZoom = zoom - direction * magnitude * 10;
+        setZoom(nextZoom);
+        return;
+      }
+
+      const scroller = scrollContainerRef.current;
+      if (!scroller) return;
+      const dominantDelta =
+        Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      scroller.scrollLeft += dominantDelta;
+    },
+    [setZoom, zoom]
+  );
+
+  useEffect(() => {
+    const node = timelineAreaRef.current;
+    if (!node) return;
+    const handleWheel = (event: WheelEvent) => {
+      handleTimelineWheel(event);
+    };
+    const options = { passive: false } as AddEventListenerOptions;
+    node.addEventListener("wheel", handleWheel, options);
+    return () => {
+      node.removeEventListener("wheel", handleWheel, options);
+    };
+  }, [handleTimelineWheel]);
 
   // Handle split action
   const handleSplit = useCallback(() => {
@@ -140,7 +314,7 @@ export function TimelinePanel({
   };
 
   return (
-    <div className="flex h-full flex-col" ref={containerRef}>
+    <div className="flex h-full flex-col min-w-0" ref={containerRef}>
       {/* Header */}
       <div className="relative flex items-center justify-between border-b border-border px-3 py-2 h-12">
         {/* Left: Time Display */}
@@ -300,16 +474,29 @@ export function TimelinePanel({
       </div>
 
       {/* Timeline content */}
-      <div className="flex-1 overflow-auto" onLoad={updateWidth}>
+      <div className="flex-1 overflow-hidden min-w-0">
         <div
-          ref={timelineAreaRef}
-          className="relative min-w-full min-h-full"
-          onClick={handleTimelineClick}
+          ref={scrollContainerRef}
+          className="h-full overflow-auto"
+        >
+          <div
+            ref={timelineAreaRef}
+            className="relative min-h-full touch-none"
+            style={{
+              width: Math.max(containerWidth, duration * zoom + TRACK_LABEL_WIDTH),
+            }}
+            onPointerDown={handleTimelinePointerDown}
           onDragOver={handleTimelineDragOver}
           onDrop={handleTimelineDrop}
           onKeyDown={(e) => {
-            if (e.key === "ArrowLeft") setCurrentTime(currentTime - 1);
-            if (e.key === "ArrowRight") setCurrentTime(currentTime + 1);
+            if (e.key === "ArrowLeft") {
+              e.preventDefault();
+              setCurrentTime(currentTime - 1);
+            }
+            if (e.key === "ArrowRight") {
+              e.preventDefault();
+              setCurrentTime(currentTime + 1);
+            }
           }}
           tabIndex={0}
           role="slider"
@@ -324,21 +511,25 @@ export function TimelinePanel({
               className="shrink-0 bg-muted/30 border-r border-border"
               style={{ width: TRACK_LABEL_WIDTH }}
             />
-            <TimeRuler width={containerWidth - TRACK_LABEL_WIDTH} />
+            <TimeRuler
+              width={Math.max(containerWidth - TRACK_LABEL_WIDTH, duration * zoom)}
+            />
           </div>
 
-          {/* Tracks */}
-          {layers.map((layer) => (
-            <LayerTrack
-              key={layer.id}
-              layer={layer}
-              width={containerWidth}
-              labelWidth={TRACK_LABEL_WIDTH}
-            />
-          ))}
+          <div className="relative overflow-auto">
+            {/* Tracks */}
+            {layers.map((layer) => (
+              <LayerTrack
+                key={layer.id}
+                layer={layer}
+                width={Math.max(containerWidth, duration * zoom + TRACK_LABEL_WIDTH)}
+                labelWidth={TRACK_LABEL_WIDTH}
+              />
+            ))}
 
-          {/* Playhead */}
-          <Playhead />
+            {/* Playhead */}
+            <Playhead onPointerDown={handleScrubPointerDown} />
+          </div>
 
           {!hasClips && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -350,5 +541,6 @@ export function TimelinePanel({
         </div>
       </div>
     </div>
+  </div>
   );
 }

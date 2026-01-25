@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ClipType, TimelineClip } from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { cn } from "@/lib/utils";
+import { useWaveform } from "@/app/hooks/use-waveform";
 
 interface ClipProps {
   clip: TimelineClip;
@@ -17,15 +18,83 @@ export function Clip({ clip, layerId }: ClipProps) {
   const updateClip = useProjectStore((s) => s.updateClip);
   const deleteClip = useProjectStore((s) => s.deleteClip);
   const moveClipToLayer = useProjectStore((s) => s.moveClipToLayer);
+  const layers = useProjectStore((s) => s.project.layers);
+  const currentTime = useProjectStore((s) => s.currentTime);
 
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState<"left" | "right" | null>(null);
   const dragStartRef = useRef({ x: 0, start: 0, duration: 0, offset: 0 });
   const activeLayerIdRef = useRef(layerId);
+  const clipRef = useRef<HTMLDivElement>(null);
+  const [clipHeight, setClipHeight] = useState(0);
+  const SNAP_THRESHOLD_PIXELS = 10;
 
   useEffect(() => {
     activeLayerIdRef.current = layerId;
   }, [layerId]);
+
+  useLayoutEffect(() => {
+    if (!clipRef.current) return;
+    const element = clipRef.current;
+    const updateHeight = () => setClipHeight(element.clientHeight);
+    updateHeight();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const gridInterval = useMemo(() => {
+    if (zoom >= 200) return 1 / 12; // ~5 frames at 60fps
+    if (zoom >= 150) return 1 / 6;
+    if (zoom >= 100) return 0.25;
+    if (zoom >= 60) return 0.5;
+    return 1;
+  }, [zoom]);
+
+  const snapTargets = useMemo(() => {
+    const targets = new Set<number>();
+    targets.add(0);
+    targets.add(currentTime);
+    layers.forEach((layer) => {
+      layer.clips.forEach((layerClip) => {
+        if (layerClip.id === clip.id) return;
+        targets.add(layerClip.start);
+        const end = layerClip.start + layerClip.duration / layerClip.speed;
+        targets.add(end);
+      });
+    });
+    return Array.from(targets);
+  }, [layers, clip.id, currentTime]);
+
+  const snapThresholdSeconds = SNAP_THRESHOLD_PIXELS / Math.max(zoom, 1);
+
+  const snapTime = useCallback(
+    (time: number) => {
+      let bestTime = Math.max(0, time);
+      let bestDiff = snapThresholdSeconds;
+
+      for (const target of snapTargets) {
+        const diff = Math.abs(target - time);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestTime = target;
+        }
+      }
+
+      if (gridInterval > 0) {
+        const gridTarget = Math.round(time / gridInterval) * gridInterval;
+        const diff = Math.abs(gridTarget - time);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestTime = gridTarget;
+        }
+      }
+
+      return Math.max(0, bestTime);
+    },
+    [gridInterval, snapTargets, snapThresholdSeconds]
+  );
 
   const maybeMoveToLayer = useCallback(
     (clientX: number, clientY: number) => {
@@ -50,6 +119,17 @@ export function Clip({ clip, layerId }: ClipProps) {
   const displayDuration = clip.duration / clip.speed;
   const left = clip.start * zoom;
   const width = displayDuration * zoom;
+  const waveformWidth = Math.max(width, 4);
+  const hasWaveform = clip.type === "audio" || clip.type === "video";
+  const waveformCacheKey = clip.assetId ?? clip.src;
+  const { path: waveformPath, isLoading: waveformLoading } = useWaveform({
+    src: hasWaveform ? clip.src : undefined,
+    cacheKey: hasWaveform ? waveformCacheKey : undefined,
+    width: waveformWidth,
+    height: clipHeight || 1,
+    offsetSeconds: clip.offset,
+    durationSeconds: clip.duration,
+  });
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent, action: "drag" | "resize-left" | "resize-right") => {
@@ -75,32 +155,46 @@ export function Clip({ clip, layerId }: ClipProps) {
 
         if (action === "drag") {
           const newStart = Math.max(0, dragStartRef.current.start + deltaTime);
-          updateClip(clip.id, { start: newStart });
+          const snappedStart = snapTime(newStart);
+          updateClip(clip.id, { start: snappedStart });
           maybeMoveToLayer(moveEvent.clientX, moveEvent.clientY);
         } else if (action === "resize-left") {
           // Resize from left: adjust start, offset, and duration
           const maxDelta = dragStartRef.current.duration / clip.speed - 0.1;
-          const clampedDelta = Math.max(
-            -dragStartRef.current.start,
-            Math.min(maxDelta, deltaTime)
-          );
+          const minDelta = -dragStartRef.current.start;
+          const clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaTime));
           const newStart = dragStartRef.current.start + clampedDelta;
-          const durationChange = clampedDelta * clip.speed;
-          const newDuration = dragStartRef.current.duration - durationChange;
-          const newOffset = dragStartRef.current.offset + durationChange;
+          const snappedStart = snapTime(newStart);
+          const snappedDelta = Math.max(
+            minDelta,
+            Math.min(maxDelta, snappedStart - dragStartRef.current.start)
+          );
+          const durationChange = snappedDelta * clip.speed;
+          const newDuration = Math.max(0.1, dragStartRef.current.duration - durationChange);
+          const newOffset = Math.max(0, dragStartRef.current.offset + durationChange);
           updateClip(clip.id, {
-            start: newStart,
-            duration: Math.max(0.1, newDuration),
-            offset: Math.max(0, newOffset),
+            start: dragStartRef.current.start + snappedDelta,
+            duration: newDuration,
+            offset: newOffset,
           });
         } else if (action === "resize-right") {
-          // Resize from right: only adjust duration
+          // Resize from right: adjust duration using snapped end time
           const durationChange = deltaTime * clip.speed;
-          const newDuration = Math.max(
+          const tentativeDuration = Math.max(
             0.1,
             dragStartRef.current.duration + durationChange
           );
-          updateClip(clip.id, { duration: newDuration });
+          const tentativeEnd =
+            dragStartRef.current.start + tentativeDuration / clip.speed;
+          const snappedEnd = Math.max(
+            dragStartRef.current.start + 0.1 / clip.speed,
+            snapTime(tentativeEnd)
+          );
+          const snappedDuration = Math.max(
+            0.1,
+            (snappedEnd - dragStartRef.current.start) * clip.speed
+          );
+          updateClip(clip.id, { duration: snappedDuration });
         }
       };
 
@@ -117,7 +211,7 @@ export function Clip({ clip, layerId }: ClipProps) {
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
     },
-    [clip, zoom, updateClip, setSelectedClip, maybeMoveToLayer]
+    [clip, zoom, updateClip, setSelectedClip, maybeMoveToLayer, snapTime]
   );
 
   const handleKeyDown = useCallback(
@@ -131,6 +225,7 @@ export function Clip({ clip, layerId }: ClipProps) {
 
   return (
     <div
+      ref={clipRef}
       className={cn(
         "absolute top-1 bottom-1 rounded border cursor-move select-none overflow-hidden",
         clip.type === "video"
@@ -143,13 +238,36 @@ export function Clip({ clip, layerId }: ClipProps) {
         isSelected && "ring-2 ring-white ring-offset-1 ring-offset-background",
         (isDragging || isResizing) && "opacity-80"
       )}
-      style={{ left, width: Math.max(width, 4) }}
+      style={{ left, width: waveformWidth }}
       onMouseDown={(e) => handleMouseDown(e, "drag")}
       onKeyDown={handleKeyDown}
       tabIndex={0}
       role="button"
       aria-label={`${clip.type} clip: ${clip.name}`}
+      data-clip-id={clip.id}
     >
+      {hasWaveform && (
+        <div className="pointer-events-none absolute inset-[2px] rounded-sm bg-black/20">
+          {waveformPath ? (
+            <svg
+              className="h-full w-full"
+              viewBox={`0 0 ${waveformWidth} ${clipHeight || 1}`}
+              preserveAspectRatio="none"
+            >
+              <path
+                d={waveformPath}
+                fill="white"
+                fillOpacity={clip.type === "audio" ? 0.85 : 0.5}
+              />
+            </svg>
+          ) : (
+            waveformLoading && (
+              <div className="h-full w-full animate-pulse bg-white/10" />
+            )
+          )}
+        </div>
+      )}
+
       {/* Left resize handle */}
       <div
         className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20"

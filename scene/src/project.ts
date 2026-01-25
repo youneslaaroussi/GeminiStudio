@@ -31,5 +31,13 @@ export default makeProject({
     }>,
     // Total timeline duration
     duration: 10,
+    transcriptions: {} as Record<
+      string,
+      {
+        assetId: string;
+        assetUrl: string;
+        segments?: { start: number; speech: string }[];
+      }
+    >,
   },
 });

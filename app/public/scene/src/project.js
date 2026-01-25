@@ -1,3 +1,6 @@
+var __defProp = Object.defineProperty;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 class EventDispatcherBase {
   constructor() {
     this.subscribable = new Subscribable(this);
@@ -1730,6 +1733,14 @@ function arcLerp(value, reverse, ratio) {
     [xValue, yValue] = [yValue, xValue];
   }
   return new Vector2(xValue, yValue);
+}
+function easeInCubic(value, from = 0, to = 1) {
+  value = value * value * value;
+  return map(from, to, value);
+}
+function easeOutCubic(value, from = 0, to = 1) {
+  value = 1 - Math.pow(1 - value, 3);
+  return map(from, to, value);
 }
 function easeInOutCubic(value, from = 0, to = 1) {
   value = value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2;
@@ -11668,18 +11679,305 @@ function makeScene2D(runner) {
     plugins: ["@motion-canvas/2d/editor"]
   };
 }
+const gaussianBlur = `#version 300 es
+precision highp float;
+
+in vec2 screenUV;
+in vec2 sourceUV;
+in vec2 destinationUV;
+
+out vec4 outColor;
+
+uniform float time;
+uniform float deltaTime;
+uniform float framerate;
+uniform int frame;
+uniform vec2 resolution;
+uniform sampler2D sourceTexture;
+uniform sampler2D destinationTexture;
+uniform mat4 sourceMatrix;
+uniform mat4 destinationMatrix;
+
+uniform float Size;
+uniform float Quality;
+uniform float Directions;
+
+const float Pi = 6.28318530718;
+
+vec4 safeTexture(sampler2D tex, vec2 uv) {
+    vec2 clampedUV = clamp(uv, 0.0, 1.0);
+    return texture(tex, clampedUV);
+}
+
+void main() {
+    vec2 radius = Size / resolution.xy;
+    vec4 color = safeTexture(sourceTexture, sourceUV);
+    float totalWeight = 1.0;
+
+    for (float d = 0.0; d < Pi; d += Pi / Directions) {
+        vec2 dir = vec2(cos(d), sin(d));
+
+        for (float i = 1.0; i <= Quality; i++) {
+            float dist = i / Quality;
+            float weight = 1.0 - smoothstep(0.0, 1.0, dist);
+
+            vec2 offset = dir * radius * dist;
+
+            color += safeTexture(sourceTexture, sourceUV + offset) * weight;
+            color += safeTexture(sourceTexture, sourceUV - offset) * weight;
+            totalWeight += 2.0 * weight;
+        }
+    }
+
+    outColor = color / totalWeight;
+}
+
+
+//# sourceURL=src/shaders/gaussianBlur.glsl`;
+var __defProp2 = Object.defineProperty;
+var __decorateClass = (decorators, target, key, kind) => {
+  var result = void 0;
+  for (var i = decorators.length - 1, decorator; i >= 0; i--)
+    if (decorator = decorators[i])
+      result = decorator(target, key, result) || result;
+  if (result) __defProp2(target, key, result);
+  return result;
+};
+const GO_UP = 8 / 30;
+const GO_DOWN = 5 / 30;
+class AnimatedCaptions extends Node {
+  constructor(props) {
+    super({ ...props });
+    __publicField(this, "CaptionText", createSignal(""));
+    __publicField(this, "Opacity", createSignal(0));
+    __publicField(this, "Blur", createSignal(0));
+    const ScaleFactor = createSignal(() => {
+      const height = this.SceneHeight();
+      return height > 0 ? height / 720 : 1;
+    });
+    this.add(
+      /* @__PURE__ */ jsx(
+        Rect,
+        {
+          opacity: () => this.ShowCaptions() && this.TranscriptionData().length > 0 && this.CaptionText().trim().replace(/\*/g, "").length > 0 ? this.Opacity() : 0,
+          layout: true,
+          alignItems: "center",
+          justifyContent: "center",
+          shaders: [
+            {
+              fragment: gaussianBlur,
+              uniforms: {
+                Directions: 12,
+                Size: this.Blur,
+                Quality: 10
+              }
+            }
+          ],
+          children: /* @__PURE__ */ jsx(
+            Rect,
+            {
+              fill: "rgba(0,0,0,0.9)",
+              shadowBlur: 50,
+              shadowColor: "rgba(0,0,0,0.8)",
+              layout: true,
+              alignItems: "center",
+              justifyContent: "center",
+              paddingTop: () => 10 * this.CaptionsSize() * ScaleFactor(),
+              paddingBottom: () => 6 * this.CaptionsSize() * ScaleFactor(),
+              paddingLeft: () => 14 * this.CaptionsSize() * ScaleFactor(),
+              paddingRight: () => 14 * this.CaptionsSize() * ScaleFactor(),
+              radius: () => 10 * this.CaptionsSize() * ScaleFactor(),
+              children: () => this.CaptionText().split("*").map((caption, index) => {
+                if (!caption) return null;
+                const [, secondary] = this.CaptionText().split("*");
+                return /* @__PURE__ */ jsx(
+                  Txt,
+                  {
+                    shadowBlur: 20,
+                    shadowColor: index === 0 ? "rgba(255,255,255,0.75)" : "rgba(0,0,0,0)",
+                    fill: index === 1 ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,1)",
+                    fontWeight: 400,
+                    fontFamily: "Inter Variable",
+                    text: caption.trim(),
+                    paddingRight: index === 0 && secondary ? 5 * this.CaptionsSize() * ScaleFactor() : 0,
+                    fontSize: () => this.CaptionsSize() * ScaleFactor() * 18
+                  },
+                  `${caption}-${index}`
+                );
+              })
+            }
+          )
+        }
+      )
+    );
+  }
+  *animate() {
+    var _a2;
+    const MAX_LENGTH = 50;
+    const filteredData = this.TranscriptionData().filter(
+      (entry) => entry.speech.trim().length > 0
+    );
+    if (filteredData.length === 0) {
+      this.CaptionText("");
+      return;
+    }
+    let currText = "";
+    let currSeconds = 0;
+    const captions = /* @__PURE__ */ new Map([
+      [currSeconds, /* @__PURE__ */ new Map()]
+    ]);
+    for (const entry of filteredData) {
+      currText += entry.speech;
+      (_a2 = captions.get(currSeconds)) == null ? void 0 : _a2.set(entry.start / 1e3, entry.speech);
+      if (currText.length > MAX_LENGTH) {
+        currSeconds = entry.start / 1e3;
+        currText = "";
+        captions.set(currSeconds, /* @__PURE__ */ new Map());
+      }
+    }
+    let index = 0;
+    for (const [seconds, shortcut] of captions.entries()) {
+      this.CaptionText("*" + Array.from(shortcut.values()).join(" "));
+      const prevShortcut = Array.from(captions.entries())[index - 1];
+      if (!prevShortcut || seconds - prevShortcut[0] >= this.CaptionsDuration()) {
+        yield* tween(GO_UP, (value) => {
+          this.Opacity(map(0, 1, easeInCubic(value)));
+          this.Blur(map(100, 0, easeInCubic(value)));
+        });
+      }
+      index++;
+      let prevSeconds = seconds;
+      if (prevShortcut) prevSeconds += GO_UP + GO_DOWN;
+      let i = 0;
+      for (const [startSeconds, caption] of shortcut.entries()) {
+        const text = Array.from(shortcut.values()).slice(0, i).join(" ") + ` ${caption}*` + Array.from(shortcut.values()).slice(i + 1).join(" ");
+        this.CaptionText(text);
+        yield* waitFor(startSeconds - prevSeconds);
+        prevSeconds = startSeconds;
+        i++;
+      }
+      if (prevSeconds < this.CaptionsDuration() + seconds) {
+        yield* waitFor(
+          this.CaptionsDuration() - prevSeconds + seconds - GO_DOWN - GO_UP
+        );
+      }
+      yield* tween(GO_DOWN, (value) => {
+        this.Opacity(map(1, 0, easeOutCubic(value)));
+        this.Blur(map(0, 100, easeOutCubic(value)));
+      });
+    }
+  }
+}
+__decorateClass([
+  initial(false),
+  signal()
+], AnimatedCaptions.prototype, "ShowCaptions");
+__decorateClass([
+  initial(1.5),
+  signal()
+], AnimatedCaptions.prototype, "CaptionsDuration");
+__decorateClass([
+  initial(1),
+  signal()
+], AnimatedCaptions.prototype, "CaptionsSize");
+__decorateClass([
+  initial([]),
+  signal()
+], AnimatedCaptions.prototype, "TranscriptionData");
+__decorateClass([
+  initial(0),
+  signal()
+], AnimatedCaptions.prototype, "SceneHeight");
 const toVector = (transform) => new Vector2(transform.x, transform.y);
 const description = makeScene2D(function* (view) {
   const scene = useScene();
   const { width, height } = scene.getSize();
   const layers = scene.variables.get("layers", [])();
   scene.variables.get("duration", 10)();
+  const transitions = scene.variables.get("transitions", {})();
   const audioClips = layers.filter((layer) => layer.type === "audio").flatMap((layer) => layer.clips);
+  const videoClips = layers.filter((layer) => layer.type === "video").flatMap((layer) => layer.clips);
   const textClips = layers.filter((layer) => layer.type === "text").flatMap((layer) => layer.clips);
   const imageClips = layers.filter((layer) => layer.type === "image").flatMap((layer) => layer.clips);
+  const transcriptionRecords = scene.variables.get("transcriptions", {})();
+  const transcriptionByUrl = /* @__PURE__ */ new Map();
+  Object.values(transcriptionRecords ?? {}).forEach((record) => {
+    if (record == null ? void 0 : record.assetUrl) {
+      transcriptionByUrl.set(record.assetUrl, record);
+    }
+  });
+  const makeKey = (from, to) => `${from}->${to}`;
+  const clipTransitions = /* @__PURE__ */ new Map();
+  for (const layer of layers) {
+    if (layer.type !== "video") continue;
+    const clips = layer.clips.sort((a, b) => a.start - b.start);
+    for (let i = 0; i < clips.length; i++) {
+      const clip = clips[i];
+      const prev = clips[i - 1];
+      const next = clips[i + 1];
+      const entry = {};
+      if (prev) {
+        const prevEnd = prev.start + prev.duration / (prev.speed || 1);
+        if (Math.abs(clip.start - prevEnd) < 0.1) {
+          const trans = transitions[makeKey(prev.id, clip.id)];
+          if (trans) entry.enter = trans;
+        }
+      }
+      if (next) {
+        const currentEnd = clip.start + clip.duration / (clip.speed || 1);
+        if (Math.abs(next.start - currentEnd) < 0.1) {
+          const trans = transitions[makeKey(clip.id, next.id)];
+          if (trans) entry.exit = trans;
+        }
+      }
+      clipTransitions.set(clip.id, entry);
+    }
+  }
   const sortedAudioClips = [...audioClips].sort((a, b) => a.start - b.start);
   const sortedTextClips = [...textClips].sort((a, b) => a.start - b.start);
   const sortedImageClips = [...imageClips].sort((a, b) => a.start - b.start);
+  const captionRefs = /* @__PURE__ */ new Map();
+  const clipCaptionData = /* @__PURE__ */ new Map();
+  const normalizeSegmentsForClip = (clip, segments) => {
+    if (!segments || segments.length === 0) return [];
+    const safeSpeed = Math.max(clip.speed ?? 1, 1e-4);
+    const offsetSeconds = clip.offset ?? 0;
+    const clipSourceEnd = offsetSeconds + clip.duration;
+    return segments.map((segment) => ({
+      startSeconds: segment.start / 1e3,
+      speech: segment.speech.trim()
+    })).filter(({ startSeconds, speech }) => speech.length > 0 && startSeconds >= offsetSeconds && startSeconds <= clipSourceEnd + 0.05).map(({ startSeconds, speech }) => ({
+      start: Math.max(0, (startSeconds - offsetSeconds) / safeSpeed * 1e3),
+      speech
+    })).sort((a, b) => a.start - b.start);
+  };
+  const registerCaptionForClip = (clip) => {
+    var _a2;
+    if (!clip.src) return;
+    const record = transcriptionByUrl.get(clip.src);
+    if (!((_a2 = record == null ? void 0 : record.segments) == null ? void 0 : _a2.length)) return;
+    const normalized = normalizeSegmentsForClip(clip, record.segments);
+    if (!normalized.length) return;
+    const ref = createRef();
+    captionRefs.set(clip.id, ref);
+    clipCaptionData.set(clip.id, normalized);
+    view.add(
+      /* @__PURE__ */ jsx(
+        AnimatedCaptions,
+        {
+          ref,
+          SceneHeight: height,
+          y: height / 2 - 140,
+          CaptionsSize: 1.1,
+          CaptionsDuration: 3,
+          ShowCaptions: false,
+          TranscriptionData: () => normalized,
+          zIndex: 1e3
+        },
+        `captions-${clip.id}`
+      )
+    );
+  };
   const videoEntries = [];
   view.add(
     /* @__PURE__ */ jsx(
@@ -11691,6 +11989,8 @@ const description = makeScene2D(function* (view) {
       }
     )
   );
+  videoClips.forEach(registerCaptionForClip);
+  sortedAudioClips.forEach(registerCaptionForClip);
   for (const layer of layers) {
     if (layer.type !== "video") continue;
     for (const clip of layer.clips) {
@@ -11732,25 +12032,103 @@ const description = makeScene2D(function* (view) {
       )
     );
   }
+  const createCaptionRunner = (clip) => {
+    const ref = captionRefs.get(clip.id);
+    const data = clipCaptionData.get(clip.id);
+    if (!ref || !(data == null ? void 0 : data.length)) return null;
+    return function* () {
+      const captionNode = ref();
+      if (!captionNode) return;
+      captionNode.TranscriptionData(data);
+      captionNode.ShowCaptions(true);
+      yield* captionNode.animate();
+      captionNode.ShowCaptions(false);
+    };
+  };
   const playVideo = (clip, videoRef) => function* () {
+    const transInfo = clipTransitions.get(clip.id);
+    const enter = transInfo == null ? void 0 : transInfo.enter;
+    const exit = transInfo == null ? void 0 : transInfo.exit;
     const speed = clip.speed ?? 1;
     const safeSpeed = Math.max(speed, 1e-4);
-    const startAt = Math.max(clip.start, 0);
-    const timelineDuration = clip.duration / safeSpeed;
-    if (startAt > 0) {
-      yield* waitFor(startAt);
+    let startAt = clip.start;
+    let timelineDuration = clip.duration / safeSpeed;
+    let offset = clip.offset;
+    if (enter) {
+      startAt -= enter.duration / 2;
+      timelineDuration += enter.duration / 2;
+      offset -= enter.duration / 2 * safeSpeed;
+    }
+    if (exit) {
+      timelineDuration += exit.duration / 2;
+    }
+    const waitTime = Math.max(startAt, 0);
+    if (waitTime > 0) {
+      yield* waitFor(waitTime);
     }
     const video = videoRef();
     if (!video) return;
-    video.seek(clip.offset);
-    video.playbackRate(safeSpeed);
-    video.position(toVector(clip.position));
-    video.scale(toVector(clip.scale));
-    video.opacity(1);
-    video.play();
-    yield* waitFor(timelineDuration);
-    video.opacity(0);
-    video.pause();
+    const playback = function* () {
+      const safeOffset = Math.max(0, offset);
+      video.seek(safeOffset);
+      video.playbackRate(safeSpeed);
+      const initialPos = toVector(clip.position);
+      video.position(initialPos);
+      video.scale(toVector(clip.scale));
+      if (enter && enter.type === "fade") {
+        video.opacity(0);
+      } else {
+        video.opacity(1);
+      }
+      if (enter && enter.type.startsWith("slide")) {
+        const w = width;
+        const h = height;
+        let startPos = initialPos;
+        if (enter.type === "slide-left") startPos = new Vector2(initialPos.x + w, initialPos.y);
+        else if (enter.type === "slide-right") startPos = new Vector2(initialPos.x - w, initialPos.y);
+        else if (enter.type === "slide-up") startPos = new Vector2(initialPos.x, initialPos.y + h);
+        else if (enter.type === "slide-down") startPos = new Vector2(initialPos.x, initialPos.y - h);
+        video.position(startPos);
+      }
+      video.play();
+      if (enter) {
+        if (enter.type === "fade") {
+          yield* video.opacity(1, enter.duration);
+        } else if (enter.type.startsWith("slide")) {
+          yield* video.position(initialPos, enter.duration);
+        } else {
+          yield* waitFor(enter.duration);
+        }
+      }
+      const mainDuration = timelineDuration - (enter ? enter.duration : 0) - (exit ? exit.duration : 0);
+      if (mainDuration > 0) {
+        yield* waitFor(mainDuration);
+      }
+      if (exit) {
+        if (exit.type === "fade") {
+          yield* video.opacity(0, exit.duration);
+        } else if (exit.type.startsWith("slide")) {
+          const w = width;
+          const h = height;
+          let endPos = initialPos;
+          if (exit.type === "slide-left") endPos = new Vector2(initialPos.x - w, initialPos.y);
+          else if (exit.type === "slide-right") endPos = new Vector2(initialPos.x + w, initialPos.y);
+          else if (exit.type === "slide-up") endPos = new Vector2(initialPos.x, initialPos.y - h);
+          else if (exit.type === "slide-down") endPos = new Vector2(initialPos.x, initialPos.y + h);
+          yield* video.position(endPos, exit.duration);
+        } else {
+          yield* waitFor(exit.duration);
+        }
+      }
+      video.opacity(0);
+      video.pause();
+    };
+    const captionsRunner = createCaptionRunner(clip);
+    if (captionsRunner) {
+      yield* all(playback(), captionsRunner());
+    } else {
+      yield* playback();
+    }
   };
   function* processVideoClips() {
     if (videoEntries.length === 0) return;
@@ -11850,19 +12228,27 @@ const description = makeScene2D(function* (view) {
       }
       const video = audioRef();
       if (!video) return;
-      video.seek(clip.offset);
-      video.playbackRate(safeSpeed);
-      try {
-        const htmlVideo = video.video();
-        if (htmlVideo) {
-          const trackVolume = Math.min(Math.max(clip.volume ?? 1, 0), 1);
-          htmlVideo.volume = trackVolume;
+      const playback = function* () {
+        video.seek(clip.offset);
+        video.playbackRate(safeSpeed);
+        try {
+          const htmlVideo = video.video();
+          if (htmlVideo) {
+            const trackVolume = Math.min(Math.max(clip.volume ?? 1, 0), 1);
+            htmlVideo.volume = trackVolume;
+          }
+        } catch {
         }
-      } catch (err) {
+        video.play();
+        yield* waitFor(timelineDuration);
+        video.pause();
+      };
+      const captionsRunner = createCaptionRunner(clip);
+      if (captionsRunner) {
+        yield* all(playback(), captionsRunner());
+      } else {
+        yield* playback();
       }
-      video.play();
-      yield* waitFor(timelineDuration);
-      video.pause();
     };
     const runners = sortedAudioClips.map((clip, index) => playTrack(clip, audioRefs[index]));
     if (runners.length > 0) {
@@ -11893,7 +12279,8 @@ const config = makeProject({
   variables: {
     layers: [],
     // Total timeline duration
-    duration: 10
+    duration: 10,
+    transcriptions: {}
   }
 });
 let meta;

@@ -1,20 +1,33 @@
 "use client";
 
 import { useCallback } from "react";
-import { Video, Music, Type, Image as ImageIcon } from "lucide-react";
+import { Video, Music, Type, Image as ImageIcon, ArrowLeftRight } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { EditableInput } from "@/app/components/ui/EditableInput";
-import type { TimelineClip, VideoClip, AudioClip, TextClip, ImageClip } from "@/app/types/timeline";
+import { 
+  parseTransitionKey, 
+  DEFAULT_TRANSITION, 
+  type TimelineClip, 
+  type VideoClip, 
+  type AudioClip, 
+  type TextClip, 
+  type ImageClip,
+  type TransitionType 
+} from "@/app/types/timeline";
 
 export function SettingsPanel() {
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
+  const selectedTransitionKey = useProjectStore((s) => s.selectedTransitionKey);
   const project = useProjectStore((s) => s.project);
   const layers = project.layers;
   const updateClip = useProjectStore((s) => s.updateClip);
   const updateProjectSettings = useProjectStore((s) => s.updateProjectSettings);
+  const addTransition = useProjectStore((s) => s.addTransition);
+  const removeTransition = useProjectStore((s) => s.removeTransition);
 
   const allClips = layers.flatMap((layer) => layer.clips);
   const selectedClip = allClips.find((clip) => clip.id === selectedClipId);
+  const selectedTransition = selectedTransitionKey ? project.transitions?.[selectedTransitionKey] : null;
 
   const toNumber = (raw: string) => {
     const parsed = Number(raw);
@@ -166,10 +179,75 @@ export function SettingsPanel() {
           </div>
         </div>
 
-        {!selectedClip && (
+        {!selectedClip && !selectedTransitionKey && (
           <div className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-            Select a clip to edit clip-specific settings.
+            Select a clip or transition to edit settings.
           </div>
+        )}
+
+        {selectedTransitionKey && (
+          <>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wide">
+              <ArrowLeftRight className="size-4 text-primary" />
+              <span className="font-medium text-foreground normal-case">Transition</span>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Type
+                </label>
+                <select
+                  value={selectedTransition?.type ?? 'none'}
+                  onChange={(e) => {
+                    const type = e.target.value as TransitionType;
+                    const { fromId, toId } = parseTransitionKey(selectedTransitionKey);
+                    
+                    if (type === 'none') {
+                      removeTransition(fromId, toId);
+                    } else {
+                      addTransition(fromId, toId, {
+                        type,
+                        duration: selectedTransition?.duration ?? DEFAULT_TRANSITION.duration,
+                      });
+                    }
+                  }}
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                >
+                  <option value="none">None</option>
+                  <option value="fade">Fade</option>
+                  <option value="slide-left">Slide Left</option>
+                  <option value="slide-right">Slide Right</option>
+                  <option value="slide-up">Slide Up</option>
+                  <option value="slide-down">Slide Down</option>
+                </select>
+              </div>
+
+              {selectedTransition && (
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    Duration (s)
+                  </label>
+                  <EditableInput
+                    type="number"
+                    value={selectedTransition.duration}
+                    step="0.1"
+                    min="0.1"
+                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                    onValueCommit={(val) => {
+                      const next = toNumber(val);
+                      if (next === null) return;
+                      const { fromId, toId } = parseTransitionKey(selectedTransitionKey);
+                      addTransition(fromId, toId, {
+                        ...selectedTransition,
+                        duration: Math.max(0.1, next),
+                      });
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          </>
         )}
 
         {selectedClip && (

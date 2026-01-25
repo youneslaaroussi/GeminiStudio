@@ -16,6 +16,8 @@ export interface AssetDragPayload {
   url: string;
   type: AssetType;
   duration?: number;
+  width?: number;
+  height?: number;
 }
 
 export const ASSET_DRAG_DATA_MIME = "application/x-gemini-asset";
