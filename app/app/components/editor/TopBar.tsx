@@ -119,7 +119,7 @@ export function TopBar() {
       if (!parsed || typeof parsed !== "object" || !parsed.project) {
         throw new Error("Invalid project file format");
       }
-      setProject(parsed.project as Project);
+      setProject(parsed.project as Project, { markSaved: true });
     },
     [setProject]
   );

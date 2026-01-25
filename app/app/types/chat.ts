@@ -85,3 +85,12 @@ export type TimelineChatMessage = UIMessage<
   UIDataTypes,
   ToolMap
 >;
+
+export interface AssistantChatSession {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  currentMode: ChatMode;
+  messages: TimelineChatMessage[];
+}

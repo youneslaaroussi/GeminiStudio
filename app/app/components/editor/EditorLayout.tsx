@@ -7,6 +7,16 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { useCallback, useEffect, useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { AssetsPanel } from "./AssetsPanel";
 import { PreviewPanel } from "./PreviewPanel";
 import { TimelinePanel } from "./TimelinePanel";
@@ -16,9 +26,14 @@ import { ChatPanel } from "./ChatPanel";
 import { ToolboxPanel } from "./ToolboxPanel";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useShortcuts } from "@/app/hooks/use-shortcuts";
+import { usePageReloadBlocker } from "@/app/hooks/use-page-reload-blocker";
 
 export function EditorLayout() {
   const [player, setPlayer] = useState<Player | null>(null);
+  const [isReloadDialogOpen, setReloadDialogOpen] = useState(false);
+  const [pendingReloadAction, setPendingReloadAction] = useState<
+    "save" | "discard" | null
+  >(null);
 
   // Connect to Zustand store
   const isPlaying = useProjectStore((s) => s.isPlaying);
@@ -34,6 +49,24 @@ export function EditorLayout() {
   const currentTime = useProjectStore((s) => s.currentTime);
   const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
   const getDuration = useProjectStore((s) => s.getDuration);
+  const hasUnsavedChanges = useProjectStore((s) => s.hasUnsavedChanges);
+  const saveProject = useProjectStore((s) => s.saveProject);
+
+  const handleReloadBlocked = useCallback(() => {
+    setReloadDialogOpen(true);
+  }, []);
+
+  const { allowReload } = usePageReloadBlocker({
+    enabled: hasUnsavedChanges,
+    onBlock: handleReloadBlocked,
+  });
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      setReloadDialogOpen(false);
+      setPendingReloadAction(null);
+    }
+  }, [hasUnsavedChanges]);
 
   const togglePlay = useCallback(() => {
     if (!player) return;
@@ -64,6 +97,34 @@ export function EditorLayout() {
     },
     [player]
   );
+
+  const handleCancelReload = useCallback(() => {
+    if (pendingReloadAction) return;
+    setReloadDialogOpen(false);
+  }, [pendingReloadAction]);
+
+  const handleDiscardAndReload = useCallback(() => {
+    if (pendingReloadAction) return;
+    setPendingReloadAction("discard");
+    allowReload();
+    window.location.reload();
+  }, [allowReload, pendingReloadAction]);
+
+  const handleSaveAndReload = useCallback(async () => {
+    if (pendingReloadAction) return;
+    setPendingReloadAction("save");
+    try {
+      await Promise.resolve(saveProject());
+      allowReload();
+      window.location.reload();
+    } catch (error) {
+      console.error("Failed to save project before reload", error);
+      setPendingReloadAction(null);
+      setReloadDialogOpen(false);
+    }
+  }, [allowReload, pendingReloadAction, saveProject]);
+
+  const isProcessingReload = pendingReloadAction !== null;
 
   useShortcuts([
     {
@@ -99,94 +160,143 @@ export function EditorLayout() {
   }, [player, setIsPlaying, setLooping, setMuted, setPlaybackSpeed]);
 
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-background">
-      <TopBar />
-      <div className="flex-1 min-h-0">
-        <ResizablePanelGroup direction="horizontal" className="h-full">
-          <ResizablePanel defaultSize={78} minSize={60} className="min-w-0">
-            <ResizablePanelGroup direction="vertical" className="h-full">
-              {/* Top Area: Assets | Preview | Settings */}
-              <ResizablePanel defaultSize={60} minSize={30}>
-                <ResizablePanelGroup direction="horizontal" className="h-full">
-                  {/* Left: Assets */}
-                  <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
-                    <div className="h-full bg-card border-r border-border min-w-0">
-                      <AssetsPanel />
-                    </div>
-                  </ResizablePanel>
-
-                  <ResizableHandle withHandle />
-
-                  {/* Center: Preview */}
-                  <ResizablePanel defaultSize={60} minSize={30} className="min-w-0">
-                    <div className="h-full bg-card min-w-0">
-                      <PreviewPanel
-                        onPlayerChange={setPlayer}
-                        layers={layers}
-                        duration={getDuration()}
-                        currentTime={currentTime}
-                        onTimeUpdate={handleTimeUpdate}
-                        transcriptions={project.transcriptions ?? {}}
-                        transitions={project.transitions ?? {}}
-                        sceneConfig={{
-                          resolution: project.resolution,
-                          renderScale: project.renderScale,
-                          background: project.background,
-                        }}
-                      />
-                    </div>
-                  </ResizablePanel>
-
-                  <ResizableHandle withHandle />
-
-                  {/* Settings */}
-                  <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
-                    <div className="h-full bg-card border-l border-border min-w-[260px]">
-                      <SettingsPanel />
-                    </div>
-                  </ResizablePanel>
-                </ResizablePanelGroup>
-              </ResizablePanel>
-
-              <ResizableHandle withHandle />
-
-              {/* Bottom: Timeline */}
-              <ResizablePanel defaultSize={40} minSize={20} className="min-w-0">
-                <div className="h-full w-full bg-card border-t border-border overflow-hidden">
-                  <TimelinePanel
-                    hasPlayer={!!player}
-                    playing={isPlaying}
-                    onTogglePlay={togglePlay}
-                    muted={isMuted}
-                    loop={isLooping}
-                    speed={playbackSpeed}
-                    onToggleMute={handleToggleMute}
-                    onToggleLoop={handleToggleLoop}
-                    onSpeedChange={handleSpeedChange}
-                  />
-                </div>
-              </ResizablePanel>
-            </ResizablePanelGroup>
-          </ResizablePanel>
-
-          <ResizableHandle withHandle />
-
-          {/* Persistent Rightmost Toolbox + Chat */}
-          <ResizablePanel defaultSize={22} minSize={15} maxSize={40}>
-            <div className="h-full bg-card border-l border-border min-w-[260px]">
+    <>
+      <div className="flex h-screen w-full flex-col overflow-hidden bg-background">
+        <TopBar />
+        <div className="flex-1 min-h-0">
+          <ResizablePanelGroup direction="horizontal" className="h-full">
+            <ResizablePanel defaultSize={78} minSize={60} className="min-w-0">
               <ResizablePanelGroup direction="vertical" className="h-full">
-                <ResizablePanel defaultSize={55} minSize={30}>
-                  <ToolboxPanel />
+                {/* Top Area: Assets | Preview | Settings */}
+                <ResizablePanel defaultSize={60} minSize={30}>
+                  <ResizablePanelGroup direction="horizontal" className="h-full">
+                    {/* Left: Assets */}
+                    <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
+                      <div className="h-full bg-card border-r border-border min-w-0">
+                        <AssetsPanel />
+                      </div>
+                    </ResizablePanel>
+
+                    <ResizableHandle withHandle />
+
+                    {/* Center: Preview */}
+                    <ResizablePanel defaultSize={60} minSize={30} className="min-w-0">
+                      <div className="h-full bg-card min-w-0">
+                        <PreviewPanel
+                          onPlayerChange={setPlayer}
+                          layers={layers}
+                          duration={getDuration()}
+                          currentTime={currentTime}
+                          onTimeUpdate={handleTimeUpdate}
+                          transcriptions={project.transcriptions ?? {}}
+                          transitions={project.transitions ?? {}}
+                          sceneConfig={{
+                            resolution: project.resolution,
+                            renderScale: project.renderScale,
+                            background: project.background,
+                          }}
+                        />
+                      </div>
+                    </ResizablePanel>
+
+                    <ResizableHandle withHandle />
+
+                    {/* Settings */}
+                    <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
+                      <div className="h-full bg-card border-l border-border min-w-[260px]">
+                        <SettingsPanel />
+                      </div>
+                    </ResizablePanel>
+                  </ResizablePanelGroup>
                 </ResizablePanel>
+
                 <ResizableHandle withHandle />
-                <ResizablePanel defaultSize={45} minSize={25}>
-                  <ChatPanel />
+
+                {/* Bottom: Timeline */}
+                <ResizablePanel defaultSize={40} minSize={20} className="min-w-0">
+                  <div className="h-full w-full bg-card border-t border-border overflow-hidden">
+                    <TimelinePanel
+                      hasPlayer={!!player}
+                      playing={isPlaying}
+                      onTogglePlay={togglePlay}
+                      muted={isMuted}
+                      loop={isLooping}
+                      speed={playbackSpeed}
+                      onToggleMute={handleToggleMute}
+                      onToggleLoop={handleToggleLoop}
+                      onSpeedChange={handleSpeedChange}
+                    />
+                  </div>
                 </ResizablePanel>
               </ResizablePanelGroup>
-            </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
+            </ResizablePanel>
+
+            <ResizableHandle withHandle />
+
+            {/* Persistent Rightmost Toolbox + Chat */}
+            <ResizablePanel defaultSize={22} minSize={15} maxSize={40}>
+              <div className="h-full bg-card border-l border-border min-w-[260px]">
+                <ResizablePanelGroup direction="vertical" className="h-full">
+                  <ResizablePanel defaultSize={55} minSize={30}>
+                    <ToolboxPanel />
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={45} minSize={25}>
+                    <ChatPanel />
+                  </ResizablePanel>
+                </ResizablePanelGroup>
+              </div>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </div>
       </div>
-    </div>
+
+      <Dialog
+        open={isReloadDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCancelReload();
+          }
+        }}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="size-4 text-amber-500" />
+              Unsaved changes
+            </DialogTitle>
+            <DialogDescription>
+              You have unsaved edits. Save your project before reloading, or reload anyway to
+              discard them.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={handleCancelReload}
+              disabled={isProcessingReload}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleDiscardAndReload}
+              disabled={isProcessingReload}
+            >
+              {pendingReloadAction === "discard" && (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              )}
+              Reload anyway
+            </Button>
+            <Button onClick={handleSaveAndReload} disabled={isProcessingReload}>
+              {pendingReloadAction === "save" && (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              )}
+              Save & reload
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

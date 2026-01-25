@@ -1,3 +1,4 @@
+import type { AssistantChatSession } from "./chat";
 import type { ProjectTranscription } from "./transcription";
 
 // Timeline clip types for NLE editor
@@ -110,6 +111,8 @@ export interface Project {
   background: string;
   transcriptions?: Record<string, ProjectTranscription>;
   transitions?: Record<TransitionKey, ClipTransition>;
+  assistantChats?: AssistantChatSession[];
+  activeAssistantChatId?: string | null;
 }
 
 // Test videos for development
