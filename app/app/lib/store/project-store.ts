@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { temporal } from 'zundo';
 import type {
   AudioClip,
   ClipType,
@@ -14,6 +15,7 @@ import type { ProjectTranscription } from '@/app/types/transcription';
 
 interface ProjectStore {
   project: Project;
+  projectId: string | null; // Added
   currentTime: number;
   selectedClipId: string | null;
   selectedTransitionKey: string | null;
@@ -55,6 +57,15 @@ interface ProjectStore {
   getActiveTextClips: (time: number) => TextClip[];
   getActiveImageClips: (time: number) => ImageClip[];
   getClipById: (id: string) => TimelineClip | undefined;
+  
+  // History
+  undo: () => void;
+  redo: () => void;
+  
+  // Persistence
+  loadProject: (id: string) => void;
+  saveProject: () => void;
+  exportProject: () => void;
 }
 
 export const createLayerTemplate = (type: ClipType, name?: string): Layer => ({
@@ -99,373 +110,450 @@ const removeClipFromLayer = (layer: Layer, clipIndex: number): Layer => ({
   clips: layer.clips.filter((_, index) => index !== clipIndex),
 });
 
-export const useProjectStore = create<ProjectStore>((set, get) => ({
-  // Initial state
-  project: defaultProject,
-  currentTime: 0,
-  selectedClipId: null,
-  selectedTransitionKey: null,
-  isPlaying: false,
-  zoom: 50,
-  isMuted: false,
-  isLooping: true,
-  playbackSpeed: 1,
-
-  addLayer: (layer) =>
-    set((state) => ({
-      project: {
-        ...state.project,
-        layers: [...state.project.layers, layer],
-      },
-    })),
-
-  addClip: (clip, layerId) =>
-    set((state) => {
-      // Check if project is currently empty (has no clips) to potentially set resolution
-      const hasExistingClips = state.project.layers.some((l) => l.clips.length > 0);
-      let resolutionUpdate = {};
-
-      if (!hasExistingClips && (clip.type === "video" || clip.type === "image")) {
-        const visualClip = clip as VideoClip | ImageClip;
-        if (visualClip.width && visualClip.height) {
-          resolutionUpdate = {
-            resolution: { width: visualClip.width, height: visualClip.height },
-          };
-        }
-      }
-
-      const layers = [...state.project.layers];
-      const targetIndex = typeof layerId === 'string'
-        ? layers.findIndex((layer) => layer.id === layerId)
-        : layers.findIndex((layer) => layer.type === clip.type);
-
-      if (targetIndex === -1) {
-        const newLayer: Layer = {
-          ...createLayerTemplate(clip.type),
-          clips: [clip],
-        };
-        return {
-          project: {
-            ...state.project,
-            ...resolutionUpdate,
-            layers: [...layers, newLayer],
-          },
-        };
-      }
-
-      const targetLayer = layers[targetIndex];
-      layers[targetIndex] = {
-        ...targetLayer,
-        clips: [...targetLayer.clips, clip],
-      };
-
-      return {
-        project: {
-          ...state.project,
-          ...resolutionUpdate,
-          layers,
-        },
-      };
-    }),
-
-  updateClip: (id, updates) =>
-    set((state) => {
-      const location = findClipLocation(state.project, id);
-      if (!location) return state;
-
-      const { layerIndex, clipIndex, layer, clip } = location;
-      const layers = state.project.layers.map((existingLayer, index) => {
-        if (index !== layerIndex) return existingLayer;
-        return {
-          ...layer,
-          clips: layer.clips.map((existingClip, cIndex) =>
-            cIndex === clipIndex
-              ? ({ ...clip, ...updates } as TimelineClip)
-              : existingClip
-          ),
-        };
-      });
-
-      return {
-        project: {
-          ...state.project,
-          layers,
-        },
-      };
-    }),
-
-  deleteClip: (id) =>
-    set((state) => {
-      const location = findClipLocation(state.project, id);
-      if (!location) return state;
-
-      const { layerIndex, clipIndex } = location;
-      const layers = state.project.layers.map((layer, index) =>
-        index === layerIndex ? removeClipFromLayer(layer, clipIndex) : layer
-      );
-
-      return {
-        project: {
-          ...state.project,
-          layers,
-        },
-        selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,
-      };
-    }),
-
-  moveClipToLayer: (clipId, targetLayerId) =>
-    set((state) => {
-      const location = findClipLocation(state.project, clipId);
-      if (!location) return state;
-
-      const targetIndex = state.project.layers.findIndex(
-        (layer) => layer.id === targetLayerId
-      );
-      if (targetIndex === -1) return state;
-
-      const { layerIndex, clipIndex, clip } = location;
-      if (layerIndex === targetIndex) return state;
-
-      const layers = state.project.layers.map((layer, index) => {
-        if (index === layerIndex) {
-          return removeClipFromLayer(layer, clipIndex);
-        }
-        if (index === targetIndex) {
-          return {
-            ...layer,
-            clips: [...layer.clips, clip],
-          };
-        }
-        return layer;
-      });
-
-      return {
-        project: {
-          ...state.project,
-          layers,
-        },
-      };
-    }),
-
-  setCurrentTime: (time) => set({ currentTime: Math.max(0, time) }),
-
-  setSelectedClip: (id) => set({ selectedClipId: id, selectedTransitionKey: null }),
-  setSelectedTransition: (key) => set({ selectedTransitionKey: key, selectedClipId: null }),
-
-  setIsPlaying: (playing) => set({ isPlaying: playing }),
-
-  setZoom: (zoom) => set({ zoom: clampZoom(zoom) }),
-
-  setMuted: (muted) => set({ isMuted: muted }),
-
-  setLooping: (looping) => set({ isLooping: looping }),
-
-  setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
-
-  updateProjectSettings: (settings) =>
-    set((state) => ({
-      project: {
-        ...state.project,
-        renderScale:
-          settings.renderScale !== undefined
-            ? Math.max(0.25, Math.min(4, settings.renderScale))
-            : state.project.renderScale,
-        background:
-          settings.background !== undefined
-            ? settings.background
-            : state.project.background,
-        name:
-          settings.name !== undefined
-            ? settings.name || "Untitled Project"
-            : state.project.name,
-        resolution: settings.resolution
-          ? {
-              width: Math.max(320, settings.resolution.width),
-              height: Math.max(240, settings.resolution.height),
-            }
-          : state.project.resolution,
-        fps:
-          settings.fps !== undefined
-            ? Math.max(1, Math.min(240, settings.fps))
-            : state.project.fps,
-      },
-    })),
-
-  setProject: (project) =>
-    set(() => ({
-      project: {
-        ...project,
-        transcriptions: project.transcriptions ?? {},
-      },
+export const useProjectStore = create<ProjectStore>()(
+  temporal(
+    (set, get) => ({
+      // Initial state
+      project: defaultProject,
+      projectId: null,
       currentTime: 0,
       selectedClipId: null,
-    })),
+      selectedTransitionKey: null,
+      isPlaying: false,
+      zoom: 50,
+      isMuted: false,
+      isLooping: true,
+      playbackSpeed: 1,
 
-  upsertProjectTranscription: (transcription) =>
-    set((state) => {
-      const existing = state.project.transcriptions ?? {};
-      const current = existing[transcription.assetId];
-      const createdAt = current?.createdAt ?? transcription.createdAt ?? new Date().toISOString();
-      const updatedAt = transcription.updatedAt ?? new Date().toISOString();
-      return {
-        project: {
-          ...state.project,
-          transcriptions: {
-            ...existing,
-            [transcription.assetId]: {
-              ...current,
-              ...transcription,
-              createdAt,
-              updatedAt,
-            },
+      // Placeholder for temporal actions (injected by middleware)
+      undo: () => {
+        const { undo } = useProjectStore.temporal.getState();
+        undo();
+      },
+      redo: () => {
+        const { redo } = useProjectStore.temporal.getState();
+        redo();
+      },
+
+      addLayer: (layer) =>
+        set((state) => ({
+          project: {
+            ...state.project,
+            layers: [...state.project.layers, layer],
           },
-        },
-      };
-    }),
+        })),
 
-  mergeProjectTranscription: (assetId, updates) =>
-    set((state) => {
-      const existing = state.project.transcriptions ?? {};
-      const current = existing[assetId];
-      if (!current) return state;
-      return {
-        project: {
-          ...state.project,
-          transcriptions: {
-            ...existing,
-            [assetId]: {
-              ...current,
-              ...updates,
-              updatedAt: updates.updatedAt ?? new Date().toISOString(),
-            },
-          },
-        },
-      };
-    }),
+      addClip: (clip, layerId) =>
+        set((state) => {
+          // Check if project is currently empty (has no clips) to potentially set resolution
+          const hasExistingClips = state.project.layers.some((l) => l.clips.length > 0);
+          let resolutionUpdate = {};
 
-  removeProjectTranscription: (assetId) =>
-    set((state) => {
-      const existing = state.project.transcriptions ?? {};
-      if (!(assetId in existing)) return state;
-      const rest = { ...existing };
-      delete rest[assetId];
-      return {
-        project: {
-          ...state.project,
-          transcriptions: rest,
-        },
-      };
-    }),
+          if (!hasExistingClips && (clip.type === "video" || clip.type === "image")) {
+            const visualClip = clip as VideoClip | ImageClip;
+            if (visualClip.width && visualClip.height) {
+              resolutionUpdate = {
+                resolution: { width: visualClip.width, height: visualClip.height },
+              };
+            }
+          }
 
-  addTransition: (fromId, toId, transition) =>
-    set((state) => {
-      const key = `${fromId}->${toId}` as const;
-      return {
-        project: {
-          ...state.project,
-          transitions: {
-            ...state.project.transitions,
-            [key]: transition,
-          },
-        },
-      };
-    }),
+          const layers = [...state.project.layers];
+          const targetIndex = typeof layerId === 'string'
+            ? layers.findIndex((layer) => layer.id === layerId)
+            : layers.findIndex((layer) => layer.type === clip.type);
 
-  removeTransition: (fromId, toId) =>
-    set((state) => {
-      const key = `${fromId}->${toId}` as const;
-      const transitions = { ...state.project.transitions };
-      delete transitions[key];
-      return {
-        project: {
-          ...state.project,
-          transitions,
-        },
-      };
-    }),
+          if (targetIndex === -1) {
+            const newLayer: Layer = {
+              ...createLayerTemplate(clip.type),
+              clips: [clip],
+            };
+            return {
+              project: {
+                ...state.project,
+                ...resolutionUpdate,
+                layers: [...layers, newLayer],
+              },
+            };
+          }
 
-  splitClipAtTime: (id, time) => {
-    const state = get();
-    const location = findClipLocation(state.project, id);
-    if (!location) return;
+          const targetLayer = layers[targetIndex];
+          layers[targetIndex] = {
+            ...targetLayer,
+            clips: [...targetLayer.clips, clip],
+          };
 
-    const { layerIndex, clipIndex, clip, layer } = location;
-    const clipEnd = getClipEnd(clip);
-    if (time <= clip.start || time >= clipEnd) return;
-
-    const firstDuration = (time - clip.start) * clip.speed;
-    const secondDuration = clip.duration - firstDuration;
-
-    const firstClip: TimelineClip = {
-      ...clip,
-      duration: firstDuration,
-    };
-
-    const secondClip: TimelineClip = {
-      ...clip,
-      id: crypto.randomUUID(),
-      start: time,
-      offset: clip.offset + firstDuration,
-      duration: secondDuration,
-    };
-
-    set((s) => ({
-      project: {
-        ...s.project,
-        layers: s.project.layers.map((existingLayer, idx) => {
-          if (idx !== layerIndex) return existingLayer;
-          const newClips = [...layer.clips];
-          newClips.splice(clipIndex, 1, firstClip, secondClip);
           return {
-            ...layer,
-            clips: newClips,
+            project: {
+              ...state.project,
+              ...resolutionUpdate,
+              layers,
+            },
           };
         }),
+
+      updateClip: (id, updates) =>
+        set((state) => {
+          const location = findClipLocation(state.project, id);
+          if (!location) return state;
+
+          const { layerIndex, clipIndex, layer, clip } = location;
+          const layers = state.project.layers.map((existingLayer, index) => {
+            if (index !== layerIndex) return existingLayer;
+            return {
+              ...layer,
+              clips: layer.clips.map((existingClip, cIndex) =>
+                cIndex === clipIndex
+                  ? ({ ...clip, ...updates } as TimelineClip)
+                  : existingClip
+              ),
+            };
+          });
+
+          return {
+            project: {
+              ...state.project,
+              layers,
+            },
+          };
+        }),
+
+      deleteClip: (id) =>
+        set((state) => {
+          const location = findClipLocation(state.project, id);
+          if (!location) return state;
+
+          const { layerIndex, clipIndex } = location;
+          const layers = state.project.layers.map((layer, index) =>
+            index === layerIndex ? removeClipFromLayer(layer, clipIndex) : layer
+          );
+
+          return {
+            project: {
+              ...state.project,
+              layers,
+            },
+            selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,
+          };
+        }),
+
+      moveClipToLayer: (clipId, targetLayerId) =>
+        set((state) => {
+          const location = findClipLocation(state.project, clipId);
+          if (!location) return state;
+
+          const targetIndex = state.project.layers.findIndex(
+            (layer) => layer.id === targetLayerId
+          );
+          if (targetIndex === -1) return state;
+
+          const { layerIndex, clipIndex, clip } = location;
+          if (layerIndex === targetIndex) return state;
+
+          const layers = state.project.layers.map((layer, index) => {
+            if (index === layerIndex) {
+              return removeClipFromLayer(layer, clipIndex);
+            }
+            if (index === targetIndex) {
+              return {
+                ...layer,
+                clips: [...layer.clips, clip],
+              };
+            }
+            return layer;
+          });
+
+          return {
+            project: {
+              ...state.project,
+              layers,
+            },
+          };
+        }),
+
+      setCurrentTime: (time) => set({ currentTime: Math.max(0, time) }),
+
+      setSelectedClip: (id) => set({ selectedClipId: id, selectedTransitionKey: null }),
+      setSelectedTransition: (key) => set({ selectedTransitionKey: key, selectedClipId: null }),
+
+      setIsPlaying: (playing) => set({ isPlaying: playing }),
+
+      setZoom: (zoom) => set({ zoom: clampZoom(zoom) }),
+
+      setMuted: (muted) => set({ isMuted: muted }),
+
+      setLooping: (looping) => set({ isLooping: looping }),
+
+      setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
+
+      updateProjectSettings: (settings) =>
+        set((state) => ({
+          project: {
+            ...state.project,
+            renderScale:
+              settings.renderScale !== undefined
+                ? Math.max(0.25, Math.min(4, settings.renderScale))
+                : state.project.renderScale,
+            background:
+              settings.background !== undefined
+                ? settings.background
+                : state.project.background,
+            name:
+              settings.name !== undefined
+                ? settings.name || "Untitled Project"
+                : state.project.name,
+            resolution: settings.resolution
+              ? {
+                  width: Math.max(320, settings.resolution.width),
+                  height: Math.max(240, settings.resolution.height),
+                }
+              : state.project.resolution,
+            fps:
+              settings.fps !== undefined
+                ? Math.max(1, Math.min(240, settings.fps))
+                : state.project.fps,
+          },
+        })),
+
+      setProject: (project) =>
+        set(() => ({
+          project: {
+            ...project,
+            transcriptions: project.transcriptions ?? {},
+          },
+          currentTime: 0,
+          selectedClipId: null,
+        })),
+
+      upsertProjectTranscription: (transcription) =>
+        set((state) => {
+          const existing = state.project.transcriptions ?? {};
+          const current = existing[transcription.assetId];
+          const createdAt = current?.createdAt ?? transcription.createdAt ?? new Date().toISOString();
+          const updatedAt = transcription.updatedAt ?? new Date().toISOString();
+          return {
+            project: {
+              ...state.project,
+              transcriptions: {
+                ...existing,
+                [transcription.assetId]: {
+                  ...current,
+                  ...transcription,
+                  createdAt,
+                  updatedAt,
+                },
+              },
+            },
+          };
+        }),
+
+      mergeProjectTranscription: (assetId, updates) =>
+        set((state) => {
+          const existing = state.project.transcriptions ?? {};
+          const current = existing[assetId];
+          if (!current) return state;
+          return {
+            project: {
+              ...state.project,
+              transcriptions: {
+                ...existing,
+                [assetId]: {
+                  ...current,
+                  ...updates,
+                  updatedAt: updates.updatedAt ?? new Date().toISOString(),
+                },
+              },
+            },
+          };
+        }),
+
+      removeProjectTranscription: (assetId) =>
+        set((state) => {
+          const existing = state.project.transcriptions ?? {};
+          if (!(assetId in existing)) return state;
+          const rest = { ...existing };
+          delete rest[assetId];
+          return {
+            project: {
+              ...state.project,
+              transcriptions: rest,
+            },
+          };
+        }),
+
+      addTransition: (fromId, toId, transition) =>
+        set((state) => {
+          const key = `${fromId}->${toId}` as const;
+          return {
+            project: {
+              ...state.project,
+              transitions: {
+                ...state.project.transitions,
+                [key]: transition,
+              },
+            },
+          };
+        }),
+
+      removeTransition: (fromId, toId) =>
+        set((state) => {
+          const key = `${fromId}->${toId}` as const;
+          const transitions = { ...state.project.transitions };
+          delete transitions[key];
+          return {
+            project: {
+              ...state.project,
+              transitions,
+            },
+          };
+        }),
+
+      splitClipAtTime: (id, time) => {
+        const state = get();
+        const location = findClipLocation(state.project, id);
+        if (!location) return;
+
+        const { layerIndex, clipIndex, clip, layer } = location;
+        const clipEnd = getClipEnd(clip);
+        if (time <= clip.start || time >= clipEnd) return;
+
+        const firstDuration = (time - clip.start) * clip.speed;
+        const secondDuration = clip.duration - firstDuration;
+
+        const firstClip: TimelineClip = {
+          ...clip,
+          duration: firstDuration,
+        };
+
+        const secondClip: TimelineClip = {
+          ...clip,
+          id: crypto.randomUUID(),
+          start: time,
+          offset: clip.offset + firstDuration,
+          duration: secondDuration,
+        };
+
+        set((s) => ({
+          project: {
+            ...s.project,
+            layers: s.project.layers.map((existingLayer, idx) => {
+              if (idx !== layerIndex) return existingLayer;
+              const newClips = [...layer.clips];
+              newClips.splice(clipIndex, 1, firstClip, secondClip);
+              return {
+                ...layer,
+                clips: newClips,
+              };
+            }),
+          },
+        }));
       },
-    }));
-  },
 
-  getDuration: () => {
-    const { layers } = get().project;
-    const allClips = layers.flatMap((layer) => layer.clips);
-    if (allClips.length === 0) return 0;
-    return Math.max(...allClips.map(getClipEnd));
-  },
+      getDuration: () => {
+        const { layers } = get().project;
+        const allClips = layers.flatMap((layer) => layer.clips);
+        if (allClips.length === 0) return 0;
+        return Math.max(...allClips.map(getClipEnd));
+      },
 
-  getActiveVideoClip: (time) => {
-    const { layers } = get().project;
-    return layers
-      .filter((layer) => layer.type === 'video')
-      .flatMap((layer) => layer.clips as VideoClip[])
-      .find((clip) => time >= clip.start && time < getClipEnd(clip));
-  },
+      getActiveVideoClip: (time) => {
+        const { layers } = get().project;
+        return layers
+          .filter((layer) => layer.type === 'video')
+          .flatMap((layer) => layer.clips as VideoClip[])
+          .find((clip) => time >= clip.start && time < getClipEnd(clip));
+      },
 
-  getActiveAudioClips: (time) => {
-    const { layers } = get().project;
-    return layers
-      .filter((layer) => layer.type === 'audio')
-      .flatMap((layer) => layer.clips as AudioClip[])
-      .filter((clip) => time >= clip.start && time < getClipEnd(clip));
-  },
+      getActiveAudioClips: (time) => {
+        const { layers } = get().project;
+        return layers
+          .filter((layer) => layer.type === 'audio')
+          .flatMap((layer) => layer.clips as AudioClip[])
+          .filter((clip) => time >= clip.start && time < getClipEnd(clip));
+      },
 
-  getActiveTextClips: (time) => {
-    const { layers } = get().project;
-    return layers
-      .filter((layer) => layer.type === 'text')
-      .flatMap((layer) => layer.clips as TextClip[])
-      .filter((clip) => time >= clip.start && time < getClipEnd(clip));
-  },
+      getActiveTextClips: (time) => {
+        const { layers } = get().project;
+        return layers
+          .filter((layer) => layer.type === 'text')
+          .flatMap((layer) => layer.clips as TextClip[])
+          .filter((clip) => time >= clip.start && time < getClipEnd(clip));
+      },
 
-  getActiveImageClips: (time) => {
-    const { layers } = get().project;
-    return layers
-      .filter((layer) => layer.type === 'image')
-      .flatMap((layer) => layer.clips as ImageClip[])
-      .filter((clip) => time >= clip.start && time < getClipEnd(clip));
-  },
+      getActiveImageClips: (time) => {
+        const { layers } = get().project;
+        return layers
+          .filter((layer) => layer.type === 'image')
+          .flatMap((layer) => layer.clips as ImageClip[])
+          .filter((clip) => time >= clip.start && time < getClipEnd(clip));
+      },
 
-  getClipById: (id) => {
-    const location = findClipLocation(get().project, id);
-    return location?.clip;
-  },
-}));
+      getClipById: (id) => {
+        const location = findClipLocation(get().project, id);
+        return location?.clip;
+      },
+
+      loadProject: (id) => {
+        if (typeof window === 'undefined') return;
+        const data = localStorage.getItem(`gemini-project-${id}`);
+        if (data) {
+          try {
+            const project = JSON.parse(data);
+            set({ 
+              projectId: id,
+              project: {
+                ...defaultProject,
+                ...project,
+                transcriptions: project.transcriptions ?? {},
+                transitions: project.transitions ?? {},
+              },
+              currentTime: 0,
+              selectedClipId: null,
+              selectedTransitionKey: null,
+              isPlaying: false,
+            });
+          } catch (e) {
+            console.error("Failed to load project", e);
+          }
+        } else {
+            set({ 
+                projectId: id,
+                project: { ...defaultProject, name: "New Project" }, 
+                currentTime: 0 
+            });
+        }
+      },
+
+      saveProject: () => {
+        if (typeof window === 'undefined') return;
+        const { project, projectId } = get();
+        if (!projectId) return;
+        localStorage.setItem(`gemini-project-${projectId}`, JSON.stringify(project));
+      },
+
+      exportProject: () => {
+        const { project } = get();
+        const data = JSON.stringify(project, null, 2);
+        const blob = new Blob([data], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${project.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.gemini.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+    }),
+    {
+      limit: 50,
+      partialize: (state) => ({
+        project: state.project,
+      }),
+      equality: (past, present) => JSON.stringify(past) === JSON.stringify(present),
+      handleSet: (handleSet) => {
+        return (state) => {
+          handleSet(state);
+        };
+      },
+    }
+  )
+);

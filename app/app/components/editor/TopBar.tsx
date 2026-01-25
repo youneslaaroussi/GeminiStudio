@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Save, Upload } from "lucide-react";
+import { Save, Upload, Check, Loader2 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import type { Project } from "@/app/types/timeline";
 import { EditableInput } from "@/app/components/ui/EditableInput";
+import { cn } from "@/lib/utils";
+import { HistoryControls } from "./HistoryControls";
 
 const supportsFileSystemAccess =
   typeof window !== "undefined" && "showSaveFilePicker" in window;
@@ -42,6 +44,7 @@ export function TopBar() {
   const setProject = useProjectStore((s) => s.setProject);
   const updateProjectSettings = useProjectStore((s) => s.updateProjectSettings);
   const [isBusy, setIsBusy] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   const payload = useMemo(
     () =>
@@ -59,7 +62,7 @@ export function TopBar() {
 
   const defaultFilename = `${sanitizeFilename(project.name)}.gemini.json`;
 
-  const handleSave = useCallback(async () => {
+  const handleExport = useCallback(async () => {
     setIsBusy(true);
     try {
       const blob = new Blob([payload], { type: "application/json" });
@@ -80,12 +83,35 @@ export function TopBar() {
         await downloadFallback(blob, defaultFilename);
       }
     } catch (error) {
-      console.error("Failed to save project", error);
-      alert("Failed to save project. Check console for details.");
+      console.error("Failed to export project", error);
+      alert("Failed to export project. Check console for details.");
     } finally {
       setIsBusy(false);
     }
   }, [payload, defaultFilename]);
+
+  const handleSave = useCallback(async () => {
+    if (saveStatus === 'saving') return;
+    setSaveStatus('saving');
+    // Add a small artificial delay so the user sees the spinner
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    try {
+      const save = useProjectStore.getState().saveProject;
+      save();
+      console.log("Project saved locally");
+      setSaveStatus('saved');
+      
+      // Reset to idle after 2 seconds
+      setTimeout(() => {
+        setSaveStatus('idle');
+      }, 2000);
+    } catch (error) {
+      console.error("Failed to save project:", error);
+      setSaveStatus('idle'); // Or error state if we had one
+    }
+  }, [saveStatus]);
+
 
   const parseAndLoadProject = useCallback(
     (raw: string) => {
@@ -146,18 +172,21 @@ export function TopBar() {
 
   return (
     <div className="flex items-center justify-between border-b border-border bg-card/80 px-4 py-2 backdrop-blur">
-      <div className="flex items-baseline gap-2">
-        <EditableInput
-          value={project.name}
-          onValueCommit={(val) =>
-            updateProjectSettings({ name: val || "Untitled Project" })
-          }
-          className="text-sm font-semibold text-foreground bg-transparent border border-transparent focus:border-border rounded px-1 py-0.5 min-w-[120px]"
-        />
-        <span className="text-xs text-muted-foreground">
-          {project.resolution.width}×{project.resolution.height} @ {project.fps}
-          fps
-        </span>
+      <div className="flex items-center gap-2">
+        <HistoryControls />
+        <div className="flex items-baseline gap-2">
+          <EditableInput
+            value={project.name}
+            onValueCommit={(val) =>
+              updateProjectSettings({ name: val || "Untitled Project" })
+            }
+            className="text-sm font-semibold text-foreground bg-transparent border border-transparent focus:border-border rounded px-1 py-0.5 min-w-[120px]"
+          />
+          <span className="text-xs text-muted-foreground">
+            {project.resolution.width}×{project.resolution.height} @ {project.fps}
+            fps
+          </span>
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <button
@@ -171,12 +200,33 @@ export function TopBar() {
         </button>
         <button
           type="button"
-          onClick={handleSave}
+          onClick={handleExport}
           disabled={isBusy}
-          className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
         >
-          <Save className="size-4" />
-          Save
+          <Upload className="size-4 rotate-180" />
+          Export
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isBusy || saveStatus === 'saving'}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-primary-foreground transition-all duration-200",
+            saveStatus === 'saved' 
+              ? "bg-green-600 hover:bg-green-700" 
+              : "bg-primary hover:bg-primary/90",
+            (isBusy || saveStatus === 'saving') && "opacity-50 cursor-not-allowed"
+          )}
+        >
+          {saveStatus === 'saving' ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : saveStatus === 'saved' ? (
+            <Check className="size-4" />
+          ) : (
+            <Save className="size-4" />
+          )}
+          {saveStatus === 'saved' ? "Saved" : "Save"}
         </button>
       </div>
     </div>

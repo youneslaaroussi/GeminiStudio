@@ -28,6 +28,7 @@ interface VideoClip {
   position: Transform;
   scale: Transform;
   focus?: Focus;
+  objectFit?: 'contain' | 'cover' | 'fill';
 }
 
 interface AudioClip {
@@ -329,14 +330,53 @@ export default makeScene2D(function* (view) {
         video.seek(safeOffset);
         video.playbackRate(safeSpeed);
         
+        // Calculate Base Dimensions (Object Fit)
+        const fit = clip.objectFit ?? 'fill';
+        let vidW = width; 
+        let vidH = height;
+        
+        if (fit !== 'fill') {
+           const domVideo = (video as any).video() as HTMLVideoElement | undefined;
+           const srcW = domVideo?.videoWidth || 1920;
+           const srcH = domVideo?.videoHeight || 1080;
+           
+           if (srcW > 0 && srcH > 0) {
+             const srcRatio = srcW / srcH;
+             const sceneRatio = width / height;
+             
+             if (fit === 'contain') {
+               if (srcRatio > sceneRatio) {
+                 vidW = width;
+                 vidH = width / srcRatio;
+               } else {
+                 vidH = height;
+                 vidW = height * srcRatio;
+               }
+             } else if (fit === 'cover') {
+               // For cover, we want the dimension that COVERS the scene
+               // If video is wider (srcRatio > sceneRatio), we match Height (so width overflows)
+               if (srcRatio > sceneRatio) {
+                 vidH = height;
+                 vidW = height * srcRatio;
+               } else {
+                 // If video is taller (srcRatio < sceneRatio), we match Width (so height overflows)
+                 vidW = width;
+                 vidH = width / srcRatio;
+               }
+             }
+           }
+        }
+        
+        video.width(vidW);
+        video.height(vidH);
+        
         // Calculate Focus Transforms
         let baseScale = toVector(clip.scale);
         let basePos = toVector(clip.position);
 
         if (clip.focus) {
           const { x, y, width: fw, height: fh, padding } = clip.focus;
-          const vidW = 1920; 
-          const vidH = 1080;
+          // Use dynamic video dimensions
           
           // Fit ratio
           const sX = (vidW / Math.max(1, fw + padding * 2));

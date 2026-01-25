@@ -6,7 +6,7 @@ import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
 } from "ai";
-import { Bot, Loader2, Send, Square } from "lucide-react";
+import { Bot, Loader2, Send, Square, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TimelineChatMessage } from "@/app/types/chat";
 import { MemoizedMarkdown } from "../MemoizedMarkdown";
@@ -52,6 +52,21 @@ export function ChatPanel() {
     setInput("");
   };
 
+  const handleExportChat = () => {
+    if (!messages || messages.length === 0) return;
+    
+    const data = JSON.stringify({ messages, exportedAt: new Date().toISOString() }, null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `chat-history-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex h-full flex-col bg-card">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
@@ -66,6 +81,13 @@ export function ChatPanel() {
             </p>
           </div>
         </div>
+        <button
+          onClick={handleExportChat}
+          className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
+          title="Export Chat History"
+        >
+          <Download className="size-4" />
+        </button>
       </div>
 
       <div className="relative flex-1 overflow-auto space-y-4 p-4 text-sm">

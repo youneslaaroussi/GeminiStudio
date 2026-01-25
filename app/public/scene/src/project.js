@@ -12072,12 +12072,41 @@ const description = makeScene2D(function* (view) {
       const safeOffset = Math.max(0, offset);
       video.seek(safeOffset);
       video.playbackRate(safeSpeed);
+      const fit = clip.objectFit ?? "fill";
+      let vidW = width;
+      let vidH = height;
+      if (fit !== "fill") {
+        const domVideo = video.video();
+        const srcW = (domVideo == null ? void 0 : domVideo.videoWidth) || 1920;
+        const srcH = (domVideo == null ? void 0 : domVideo.videoHeight) || 1080;
+        if (srcW > 0 && srcH > 0) {
+          const srcRatio = srcW / srcH;
+          const sceneRatio = width / height;
+          if (fit === "contain") {
+            if (srcRatio > sceneRatio) {
+              vidW = width;
+              vidH = width / srcRatio;
+            } else {
+              vidH = height;
+              vidW = height * srcRatio;
+            }
+          } else if (fit === "cover") {
+            if (srcRatio > sceneRatio) {
+              vidH = height;
+              vidW = height * srcRatio;
+            } else {
+              vidW = width;
+              vidH = width / srcRatio;
+            }
+          }
+        }
+      }
+      video.width(vidW);
+      video.height(vidH);
       let baseScale = toVector(clip.scale);
       let basePos = toVector(clip.position);
       if (clip.focus) {
         const { x, y, width: fw, height: fh, padding } = clip.focus;
-        const vidW = 1920;
-        const vidH = 1080;
         const sX = vidW / Math.max(1, fw + padding * 2);
         const sY = vidH / Math.max(1, fh + padding * 2);
         const s = Math.min(sX, sY);

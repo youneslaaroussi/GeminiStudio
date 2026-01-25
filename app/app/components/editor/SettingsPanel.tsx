@@ -447,6 +447,20 @@ export function SettingsPanel() {
             <div className="space-y-2">
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">
+                  Fill Mode
+                </label>
+                <select
+                  value={(selectedClip as VideoClip).objectFit ?? 'fill'}
+                  onChange={(e) => handleUpdate({ objectFit: e.target.value as any })}
+                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                >
+                  <option value="fill">Stretch</option>
+                  <option value="contain">Fit</option>
+                  <option value="cover">Cover</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
                   Source URL
                 </label>
                 <EditableInput

@@ -45,6 +45,8 @@ export interface Focus {
   padding: number;
 }
 
+export type ObjectFit = 'contain' | 'cover' | 'fill';
+
 export interface BaseClip {
   id: string;
   name: string;        // Display name
@@ -66,6 +68,7 @@ export interface VideoClip extends BaseClip {
   width?: number;     // Width in pixels
   height?: number;    // Height in pixels
   focus?: Focus;
+  objectFit?: ObjectFit;
 }
 
 export interface AudioClip extends BaseClip {

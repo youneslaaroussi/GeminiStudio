@@ -71,6 +71,18 @@ export function EditorLayout() {
       handler: togglePlay,
       preventDefault: true,
     },
+    {
+      key: 'z',
+      ctrlKey: true,
+      handler: useProjectStore.getState().undo,
+      preventDefault: true,
+    },
+    {
+      key: 'y',
+      ctrlKey: true,
+      handler: useProjectStore.getState().redo,
+      preventDefault: true,
+    },
   ]);
 
   useEffect(() => {
