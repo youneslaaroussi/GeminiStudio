@@ -1,15 +1,31 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
 } from "ai";
-import { Bot, Loader2, Send, Square, Download } from "lucide-react";
+import {
+  Bot,
+  Loader2,
+  Send,
+  Square,
+  Download,
+  ChevronDown,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { TimelineChatMessage } from "@/app/types/chat";
+import type {
+  ChatMode,
+  TaskListSnapshot,
+  TimelineChatMessage,
+} from "@/app/types/chat";
 import { MemoizedMarkdown } from "../MemoizedMarkdown";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 type ToolPartState =
   | "input-streaming"
@@ -28,14 +44,59 @@ interface ToolPart {
   approval?: { id: string };
 }
 
+const MODE_OPTIONS: { value: ChatMode; label: string; description: string }[] = [
+  {
+    value: "ask",
+    label: "Ask",
+    description: "Answer directly without using tools.",
+  },
+  {
+    value: "agent",
+    label: "Agent",
+    description: "Full tool access for autonomous help.",
+  },
+  {
+    value: "plan",
+    label: "Plan",
+    description: "Only planning tools to build task lists.",
+  },
+];
+
+const MODE_DETAILS: Record<ChatMode, string> = {
+  ask: "Ask mode keeps things conversational and tool-free.",
+  agent: "Agent mode lets the assistant call any tool.",
+  plan: "Plan mode limits the assistant to planning tools for task breakdowns.",
+};
+
+const TASK_STATUS_LABELS: Record<string, string> = {
+  pending: "Pending",
+  in_progress: "In Progress",
+  completed: "Done",
+};
+
+const TASK_STATUS_STYLES: Record<string, string> = {
+  pending: "bg-muted text-muted-foreground",
+  in_progress: "bg-amber-200/60 text-amber-900",
+  completed: "bg-emerald-200/70 text-emerald-900",
+};
+
 export function ChatPanel() {
   const [input, setInput] = useState("");
+  const [mode, setMode] = useState<ChatMode>("agent");
+  const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(true);
+
+  const chatTransport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        body: { mode },
+      }),
+    [mode]
+  );
 
   const { messages, sendMessage, status, error, clearError, stop } =
     useChat<TimelineChatMessage>({
-      transport: new DefaultChatTransport({
-        api: "/api/chat",
-      }),
+      transport: chatTransport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     });
 
@@ -43,19 +104,33 @@ export function ChatPanel() {
 
   const hasMessages = messages && messages.length > 0;
 
+  const taskListSnapshot = useMemo(
+    () => deriveTaskListSnapshot(messages),
+    [messages]
+  );
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = input.trim();
     if (!trimmed) return;
 
-    sendMessage({ text: trimmed });
+    sendMessage({ text: trimmed, metadata: { mode } });
     setInput("");
   };
 
   const handleExportChat = () => {
     if (!messages || messages.length === 0) return;
-    
-    const data = JSON.stringify({ messages, exportedAt: new Date().toISOString() }, null, 2);
+
+    const data = JSON.stringify(
+      {
+        exportedAt: new Date().toISOString(),
+        activeMode: mode,
+        taskList: taskListSnapshot,
+        messages,
+      },
+      null,
+      2
+    );
     const blob = new Blob([data], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -81,16 +156,51 @@ export function ChatPanel() {
             </p>
           </div>
         </div>
-        <button
-          onClick={handleExportChat}
-          className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
-          title="Export Chat History"
-        >
-          <Download className="size-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <label className="flex flex-col text-right">
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Mode
+            </span>
+            <select
+              value={mode}
+              onChange={(event) => setMode(event.target.value as ChatMode)}
+              className="rounded-md border border-border bg-background/80 px-2 py-1 text-xs font-medium text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              {MODE_OPTIONS.map((option) => (
+                <option
+                  key={option.value}
+                  value={option.value}
+                  title={option.description}
+                >
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span className="text-[10px] text-muted-foreground">
+              {MODE_DETAILS[mode]}
+            </span>
+          </label>
+          <button
+            onClick={handleExportChat}
+            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
+            title="Export Chat History"
+          >
+            <Download className="size-4" />
+          </button>
+        </div>
       </div>
 
       <div className="relative flex-1 overflow-auto space-y-4 p-4 text-sm">
+        {taskListSnapshot && (
+          <div className="sticky top-0 z-10">
+            <TaskListPanel
+              snapshot={taskListSnapshot}
+              open={isTaskPanelOpen}
+              onOpenChange={setIsTaskPanelOpen}
+            />
+          </div>
+        )}
+
         {!hasMessages && (
           <p className="text-xs text-muted-foreground text-center">
             Ask the assistant anything about your project. Try &quot;What is the
@@ -264,6 +374,20 @@ function renderMessagePart(part: MessagePart, key: string) {
 function renderToolPart(part: ToolPart) {
   const label = part.type.replace(/^tool-/, "").replace(/-/g, " ");
 
+  if (
+    part.state === "output-available" &&
+    typeof part.type === "string" &&
+    part.type.startsWith("tool-plan") &&
+    isPlanningToolOutput(part.output)
+  ) {
+    return (
+      <PlanningToolOutputView
+        label={label}
+        payload={part.output}
+      />
+    );
+  }
+
   switch (part.state) {
     case "input-streaming":
       return (
@@ -310,4 +434,172 @@ function formatToolOutput(output: unknown) {
   if (typeof output === "string") return output;
   if (output == null) return "No output.";
   return JSON.stringify(output);
+}
+
+function deriveTaskListSnapshot(
+  messages?: TimelineChatMessage[]
+): TaskListSnapshot | null {
+  if (!messages) return null;
+  let snapshot: TaskListSnapshot | null = null;
+
+  for (const message of messages) {
+    const parts = Array.isArray(message.parts) ? message.parts : [];
+    for (const part of parts) {
+      if (
+        part &&
+        typeof part === "object" &&
+        "type" in part &&
+        typeof part.type === "string" &&
+        part.type.startsWith("tool-plan") &&
+        (part as ToolPart).state === "output-available" &&
+        isPlanningToolOutput((part as ToolPart).output)
+      ) {
+        snapshot = (part as ToolPart).output.taskList;
+      }
+    }
+  }
+
+  return snapshot;
+}
+
+type PlanningToolLikeOutput = {
+  action?: string;
+  message?: string;
+  taskList: TaskListSnapshot;
+};
+
+function isPlanningToolOutput(
+  value: unknown
+): value is PlanningToolLikeOutput {
+  if (!value || typeof value !== "object") return false;
+  const maybe = value as PlanningToolLikeOutput;
+  return (
+    typeof maybe === "object" &&
+    typeof maybe.taskList === "object" &&
+    Array.isArray(maybe.taskList.tasks)
+  );
+}
+
+function PlanningToolOutputView({
+  label,
+  payload,
+}: {
+  label: string;
+  payload: PlanningToolLikeOutput;
+}) {
+  const taskCount = payload.taskList.tasks.length;
+  return (
+    <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-xs">
+      <p className="text-sm font-semibold text-primary">
+        {payload.message ?? label}
+      </p>
+      <p className="text-[11px] text-muted-foreground">
+        {taskCount} task{taskCount === 1 ? "" : "s"} tracked.
+      </p>
+    </div>
+  );
+}
+
+function TaskListPanel({
+  snapshot,
+  open,
+  onOpenChange,
+}: {
+  snapshot: TaskListSnapshot;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const total = snapshot.tasks.length;
+  const completed = snapshot.tasks.filter(
+    (task) => task.status === "completed"
+  ).length;
+  const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={onOpenChange}
+      className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-xs shadow-sm backdrop-blur-sm"
+    >
+      <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+        <div>
+          <p className="text-[11px] uppercase tracking-wide text-primary">
+            Agent Task List
+          </p>
+          <p className="text-sm font-semibold text-foreground">
+            {snapshot.title ?? "Project Plan"}
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            Updated {formatUpdatedTime(snapshot.updatedAt)}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+          <span>
+            {completed}/{total} complete
+          </span>
+          <ChevronDown
+            className={cn(
+              "size-4 transition-transform",
+              open ? "rotate-180" : "rotate-0"
+            )}
+          />
+        </div>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-3 pt-3 data-[state=closed]:animate-collapse-up data-[state=open]:animate-collapse-down">
+        <div className="h-1.5 rounded-full bg-primary/10">
+          <div
+            className="h-full rounded-full bg-primary transition-all"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+        <ul className="space-y-1.5">
+          {snapshot.tasks.length === 0 ? (
+            <li className="text-[11px] text-muted-foreground">
+              No tasks yet. Ask the agent to start planning.
+            </li>
+          ) : (
+            <>
+              {snapshot.tasks.slice(0, 6).map((task) => (
+                <li
+                  key={task.id}
+                  className="flex items-start gap-2 rounded-md border border-border/40 bg-card/80 p-2"
+                >
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2 py-[2px] text-[10px] font-semibold uppercase tracking-wide",
+                      TASK_STATUS_STYLES[task.status] ??
+                        "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {TASK_STATUS_LABELS[task.status] ?? task.status}
+                  </span>
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-foreground">
+                      {task.title}
+                    </p>
+                    {task.description && (
+                      <p className="text-[11px] text-muted-foreground">
+                        {task.description}
+                      </p>
+                    )}
+                  </div>
+                </li>
+              ))}
+              {total > 6 && (
+                <li className="text-[11px] text-muted-foreground">
+                  +{total - 6} more task{total - 6 === 1 ? "" : "s"} tracked
+                </li>
+              )}
+            </>
+          )}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function formatUpdatedTime(updatedAt: string) {
+  const date = new Date(updatedAt);
+  if (Number.isNaN(date.getTime())) return updatedAt;
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
