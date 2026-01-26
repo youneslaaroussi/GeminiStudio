@@ -8,6 +8,7 @@ import type { TranscriptionSegment } from "@/app/types/transcription";
 import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { toast } from "sonner";
+import { extractAudioFromVideo } from "@/app/lib/audio/extract-audio";
 
 interface ApiTranscriptionJob {
   id: string;
@@ -221,10 +222,54 @@ export function useAssets() {
       }
 
       try {
+        let paramOverrides: Record<string, unknown> = {};
+
+        // For video files, extract audio first since Speech-to-Text doesn't support MP4/AAC
+        if (asset.type === "video") {
+          const extractToastId = toast.loading("Extracting audio from video...", {
+            description: "This may take a moment.",
+          });
+
+          try {
+            const audioBlob = await extractAudioFromVideo(asset.url, (progress) => {
+              toast.loading(`Extracting audio... ${Math.round(progress * 100)}%`, {
+                id: extractToastId,
+              });
+            });
+
+            toast.loading("Uploading extracted audio...", { id: extractToastId });
+
+            // Upload the extracted audio
+            const formData = new FormData();
+            formData.append("audio", audioBlob, `${asset.name}.wav`);
+            formData.append("assetId", asset.id);
+
+            const uploadResponse = await fetch("/api/transcriptions/audio", {
+              method: "POST",
+              body: formData,
+            });
+
+            if (!uploadResponse.ok) {
+              const uploadError = (await uploadResponse.json()) as { error?: string };
+              throw new Error(uploadError.error || "Failed to upload extracted audio");
+            }
+
+            const { gcsUri: audioGcsUri } = (await uploadResponse.json()) as { gcsUri: string };
+            paramOverrides = { audioGcsUri };
+
+            toast.dismiss(extractToastId);
+          } catch (extractErr) {
+            toast.dismiss(extractToastId);
+            throw new Error(
+              `Audio extraction failed: ${extractErr instanceof Error ? extractErr.message : "Unknown error"}`
+            );
+          }
+        }
+
         const response = await fetch(`/api/assets/${asset.id}/pipeline`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ stepId: "transcription" }),
+          body: JSON.stringify({ stepId: "transcription", paramOverrides }),
         });
         const payload = (await response.json()) as {
           pipeline?: { assetId: string; steps: PipelineStepState[] };

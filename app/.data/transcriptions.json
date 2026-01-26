@@ -120,5 +120,125 @@
     "updatedAt": "2026-01-26T23:29:35.589Z",
     "operationName": "projects/828532255978/locations/us/operations/v2-6b699da0-0000-29dc-bdf2-d43a2cfd156f",
     "error": "Audio data does not appear to be in a supported encoding. If you believe this to be incorrect, try explicitly specifying the decoding parameters."
+  },
+  {
+    "id": "f02d6e3f-2a38-4a9d-b99c-b371bd1ebaec",
+    "assetId": "65c1ea16-f162-401b-8743-4fb2053dfbe5",
+    "assetName": "this is a test.mp4",
+    "assetUrl": "/uploads/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "fileName": "1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "mimeType": "video/mp4",
+    "gcsUri": "gs://gemini-studio-storage/transcription-audio/65c1ea16-f162-401b-8743-4fb2053dfbe5/1769471383295-4a5ec327-cd86-4dd1-bd6d-8f697a722b6c.wav",
+    "status": "completed",
+    "languageCodes": [
+      "en-US"
+    ],
+    "createdAt": "2026-01-26T23:49:44.473Z",
+    "updatedAt": "2026-01-26T23:49:50.243Z",
+    "operationName": "projects/828532255978/locations/us/operations/v2-699de3b3-0000-2a75-8d07-d43a2ccd9a6f",
+    "transcript": "",
+    "segments": []
+  },
+  {
+    "id": "cb9e1f58-b8c3-492c-91fb-347c63814fb4",
+    "assetId": "65c1ea16-f162-401b-8743-4fb2053dfbe5",
+    "assetName": "this is a test.mp4",
+    "assetUrl": "/uploads/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "fileName": "1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "mimeType": "video/mp4",
+    "gcsUri": "gs://gemini-studio-storage/transcription-audio/65c1ea16-f162-401b-8743-4fb2053dfbe5/1769471435237-71e9bc1d-873d-48c6-9c3b-744816c4021d.wav",
+    "status": "completed",
+    "languageCodes": [
+      "en-US"
+    ],
+    "createdAt": "2026-01-26T23:50:35.701Z",
+    "updatedAt": "2026-01-26T23:50:45.436Z",
+    "operationName": "projects/828532255978/locations/us/operations/v2-72b48858-0000-293c-865d-14223bc0c4ae",
+    "transcript": "This is a test, a very long very long test. This is a test.",
+    "segments": [
+      {
+        "start": 0,
+        "speech": "This is a test, a very long very long test."
+      },
+      {
+        "start": 4000,
+        "speech": "This is a test."
+      }
+    ]
+  },
+  {
+    "id": "307b7eea-ba8d-4516-9c57-59b4acc97462",
+    "assetId": "65c1ea16-f162-401b-8743-4fb2053dfbe5",
+    "assetName": "this is a test.mp4",
+    "assetUrl": "/uploads/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "fileName": "1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "mimeType": "video/mp4",
+    "gcsUri": "gs://gemini-studio-storage/transcription-audio/65c1ea16-f162-401b-8743-4fb2053dfbe5/1769471522843-1a706782-b868-41f8-bdd2-9b707cca0ad8.wav",
+    "status": "completed",
+    "languageCodes": [
+      "en-US"
+    ],
+    "createdAt": "2026-01-26T23:52:03.443Z",
+    "updatedAt": "2026-01-26T23:52:08.768Z",
+    "operationName": "projects/828532255978/locations/us/operations/v2-720e83bd-0000-2e62-99fa-d43a2cc5d517",
+    "transcript": "This is a test, a very long, very long test. This is a test.",
+    "segments": [
+      {
+        "start": 0,
+        "speech": "This"
+      },
+      {
+        "start": 600,
+        "speech": "is"
+      },
+      {
+        "start": 680,
+        "speech": "a"
+      },
+      {
+        "start": 720,
+        "speech": "test,"
+      },
+      {
+        "start": 1040,
+        "speech": "a"
+      },
+      {
+        "start": 1080,
+        "speech": "very"
+      },
+      {
+        "start": 1360,
+        "speech": "long,"
+      },
+      {
+        "start": 1600,
+        "speech": "very"
+      },
+      {
+        "start": 1840,
+        "speech": "long"
+      },
+      {
+        "start": 2080,
+        "speech": "test."
+      },
+      {
+        "start": 2400,
+        "speech": "This"
+      },
+      {
+        "start": 2560,
+        "speech": "is"
+      },
+      {
+        "start": 2680,
+        "speech": "a"
+      },
+      {
+        "start": 2720,
+        "speech": "test."
+      }
+    ]
   }
 ]

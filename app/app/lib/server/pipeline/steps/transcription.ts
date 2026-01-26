@@ -33,6 +33,9 @@ async function startBatchRecognize(
         autoDecodingConfig: {},
         languageCodes: languageCodes.length ? languageCodes : env.languageCodes,
         model: env.model,
+        features: {
+          enableWordTimeOffsets: true,
+        },
       },
       files: [{ uri: gcsUri }],
       recognitionOutputConfig: {
@@ -76,11 +79,17 @@ export const transcriptionStep: PipelineStepDefinition = {
       };
     }
 
-    const pipeline = await getPipelineStateForAsset(asset.id);
-    const uploadStep = pipeline.steps.find((step) => step.id === "cloud-upload");
-    const gcsUri = uploadStep?.metadata?.gcsUri as string | undefined;
+    // Use audioGcsUri if provided (for video files where audio was extracted client-side),
+    // otherwise fall back to the original asset's GCS URI from the cloud-upload step
+    let gcsUri = typeof params?.audioGcsUri === "string" ? params.audioGcsUri : undefined;
+
     if (!gcsUri) {
-      throw new Error("Cloud upload step must complete before transcription");
+      const pipeline = await getPipelineStateForAsset(asset.id);
+      const uploadStep = pipeline.steps.find((step) => step.id === "cloud-upload");
+      gcsUri = uploadStep?.metadata?.gcsUri as string | undefined;
+      if (!gcsUri) {
+        throw new Error("Cloud upload step must complete before transcription");
+      }
     }
 
     const env = getSpeechEnv();

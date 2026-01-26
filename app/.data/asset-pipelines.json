@@ -230,17 +230,75 @@
       {
         "id": "transcription",
         "label": "Transcribe audio/video",
-        "status": "failed",
-        "updatedAt": "2026-01-26T23:29:35.590Z",
-        "startedAt": "2026-01-26T23:29:30.367Z",
+        "status": "succeeded",
+        "updatedAt": "2026-01-26T23:52:08.769Z",
+        "startedAt": "2026-01-26T23:52:03.386Z",
         "metadata": {
-          "jobId": "d50bb60c-f1fe-4652-bc24-aefbbcf89183",
-          "createdAt": "2026-01-26T23:29:30.493Z",
+          "jobId": "307b7eea-ba8d-4516-9c57-59b4acc97462",
+          "createdAt": "2026-01-26T23:52:03.443Z",
           "languageCodes": [
             "en-US"
+          ],
+          "transcript": "This is a test, a very long, very long test. This is a test.",
+          "segments": [
+            {
+              "start": 0,
+              "speech": "This"
+            },
+            {
+              "start": 600,
+              "speech": "is"
+            },
+            {
+              "start": 680,
+              "speech": "a"
+            },
+            {
+              "start": 720,
+              "speech": "test,"
+            },
+            {
+              "start": 1040,
+              "speech": "a"
+            },
+            {
+              "start": 1080,
+              "speech": "very"
+            },
+            {
+              "start": 1360,
+              "speech": "long,"
+            },
+            {
+              "start": 1600,
+              "speech": "very"
+            },
+            {
+              "start": 1840,
+              "speech": "long"
+            },
+            {
+              "start": 2080,
+              "speech": "test."
+            },
+            {
+              "start": 2400,
+              "speech": "This"
+            },
+            {
+              "start": 2560,
+              "speech": "is"
+            },
+            {
+              "start": 2680,
+              "speech": "a"
+            },
+            {
+              "start": 2720,
+              "speech": "test."
+            }
           ]
-        },
-        "error": "Audio data does not appear to be in a supported encoding. If you believe this to be incorrect, try explicitly specifying the decoding parameters."
+        }
       },
       {
         "id": "face-detection",
@@ -320,6 +378,6 @@
         }
       }
     ],
-    "updatedAt": "2026-01-26T23:29:35.591Z"
+    "updatedAt": "2026-01-26T23:52:08.769Z"
   }
 ]

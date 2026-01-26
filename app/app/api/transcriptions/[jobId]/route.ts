@@ -75,15 +75,24 @@ function extractResults(payload: unknown, gcsUri: string): SpeechRecognitionResu
     const candidate = (record[gcsUri] ?? Object.values(record)[0]) as
       | SpeechRecognitionResult[]
       | SpeechRecognitionResult
+      | { transcript?: { results?: SpeechRecognitionResult[] }; inlineResult?: { transcript?: { results?: SpeechRecognitionResult[] } } }
       | undefined;
     if (!candidate) return [];
     if (Array.isArray(candidate)) {
       return candidate;
     }
-    if ("results" in candidate && Array.isArray(candidate.results)) {
-      return candidate.results;
+    // Handle nested transcript.results structure from batch recognize
+    if ("transcript" in candidate && candidate.transcript?.results) {
+      return candidate.transcript.results;
     }
-    return [candidate];
+    // Also check inlineResult.transcript.results
+    if ("inlineResult" in candidate && candidate.inlineResult?.transcript?.results) {
+      return candidate.inlineResult.transcript.results;
+    }
+    if ("results" in candidate && Array.isArray((candidate as SpeechRecognitionResult).results)) {
+      return (candidate as SpeechRecognitionResult).results!;
+    }
+    return [candidate as SpeechRecognitionResult];
   }
 
   return [];
