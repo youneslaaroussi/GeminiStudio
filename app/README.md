@@ -36,6 +36,7 @@ Generated assets are persisted alongside uploaded files, so they immediately app
 
 Create an `.env.local` based on `env.template` with the following values:
 
+- `AI_CHAT_GOOGLE_MODEL`: optional override for the Gemini chat model id used by the assistant.
 - `GOOGLE_GENERATIVE_AI_API_KEY`: API key with access to Gemini image APIs.
 - `VEO_PROJECT_ID`: Google Cloud project that has Vertex AI enabled.
 - `VEO_LOCATION`: Vertex AI region (for example `us-central1`).

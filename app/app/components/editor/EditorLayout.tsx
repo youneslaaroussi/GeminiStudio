@@ -16,11 +16,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Loader2 } from "lucide-react";
-import { AssetsPanel } from "./AssetsPanel";
+import { AlertTriangle, Loader2, Wrench, MessageSquare } from "lucide-react";
+import { AssetsPanel } from "./assets";
 import { PreviewPanel } from "./PreviewPanel";
 import { TimelinePanel } from "./TimelinePanel";
-import { SettingsPanel } from "./SettingsPanel";
+import { SettingsPanel } from "./settings";
 import { TopBar } from "./TopBar";
 import { ChatPanel } from "./ChatPanel";
 import { ToolboxPanel } from "./ToolboxPanel";
@@ -34,6 +34,7 @@ export function EditorLayout() {
   const [pendingReloadAction, setPendingReloadAction] = useState<
     "save" | "discard" | null
   >(null);
+  const [rightPanelTab, setRightPanelTab] = useState<"toolbox" | "chat">("chat");
 
   // Connect to Zustand store
   const isPlaying = useProjectStore((s) => s.isPlaying);
@@ -233,18 +234,43 @@ export function EditorLayout() {
 
             <ResizableHandle withHandle />
 
-            {/* Persistent Rightmost Toolbox + Chat */}
+            {/* Persistent Rightmost Toolbox + Chat (tabbed, both stay mounted) */}
             <ResizablePanel defaultSize={22} minSize={15} maxSize={40}>
-              <div className="h-full bg-card border-l border-border min-w-[260px]">
-                <ResizablePanelGroup direction="vertical" className="h-full">
-                  <ResizablePanel defaultSize={55} minSize={30}>
+              <div className="h-full bg-card border-l border-border min-w-[260px] flex flex-col">
+                {/* Tab buttons */}
+                <div className="flex border-b border-border shrink-0">
+                  <button
+                    onClick={() => setRightPanelTab("toolbox")}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${
+                      rightPanelTab === "toolbox"
+                        ? "text-foreground border-b-2 border-primary bg-muted/50"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                    }`}
+                  >
+                    <Wrench className="size-4" />
+                    Toolbox
+                  </button>
+                  <button
+                    onClick={() => setRightPanelTab("chat")}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${
+                      rightPanelTab === "chat"
+                        ? "text-foreground border-b-2 border-primary bg-muted/50"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                    }`}
+                  >
+                    <MessageSquare className="size-4" />
+                    Chat
+                  </button>
+                </div>
+                {/* Tab content - both stay mounted, visibility controlled by CSS */}
+                <div className="flex-1 min-h-0 relative">
+                  <div className={`absolute inset-0 ${rightPanelTab === "toolbox" ? "visible" : "invisible"}`}>
                     <ToolboxPanel />
-                  </ResizablePanel>
-                  <ResizableHandle withHandle />
-                  <ResizablePanel defaultSize={45} minSize={25}>
+                  </div>
+                  <div className={`absolute inset-0 ${rightPanelTab === "chat" ? "visible" : "invisible"}`}>
                     <ChatPanel />
-                  </ResizablePanel>
-                </ResizablePanelGroup>
+                  </div>
+                </div>
               </div>
             </ResizablePanel>
           </ResizablePanelGroup>

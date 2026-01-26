@@ -3,8 +3,15 @@ import { metadataStep } from "./steps/metadata";
 import { uploadStep } from "./steps/upload";
 import { transcriptionStep } from "./steps/transcription";
 import { faceDetectionStep } from "./steps/face-detection";
+import { shotDetectionStep } from "./steps/shot-detection";
 
-const registry: PipelineStepDefinition[] = [metadataStep, uploadStep, transcriptionStep, faceDetectionStep];
+const registry: PipelineStepDefinition[] = [
+  metadataStep,
+  uploadStep,
+  shotDetectionStep,
+  transcriptionStep,
+  faceDetectionStep,
+];
 
 export function getPipelineSteps() {
   return registry;

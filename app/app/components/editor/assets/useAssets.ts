@@ -1,0 +1,400 @@
+"use client";
+
+import { useState, useCallback, useEffect, useRef } from "react";
+import type { RemoteAsset } from "@/app/types/assets";
+import { DEFAULT_ASSET_DURATIONS } from "@/app/types/assets";
+import type { PipelineStepState } from "@/app/types/pipeline";
+import type { TranscriptionSegment } from "@/app/types/transcription";
+import { useAssetsStore } from "@/app/lib/store/assets-store";
+import { useProjectStore } from "@/app/lib/store/project-store";
+import { toast } from "sonner";
+
+interface ApiTranscriptionJob {
+  id: string;
+  assetId: string;
+  assetName: string;
+  assetUrl?: string;
+  status: "pending" | "processing" | "completed" | "error";
+  transcript?: string;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+  languageCodes?: string[];
+  segments?: TranscriptionSegment[];
+}
+
+export function useAssets() {
+  const [assets, setAssets] = useState<RemoteAsset[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pipelineStates, setPipelineStates] = useState<
+    Record<string, PipelineStepState[]>
+  >({});
+  const [assetDurations, setAssetDurations] = useState<Record<string, number>>(
+    {}
+  );
+
+  const publishAssets = useAssetsStore((state) => state.setAssets);
+  const upsertAssetMetadata = useAssetsStore((state) => state.upsertMetadata);
+  const metadata = useAssetsStore((state) => state.metadata);
+  const transcriptions = useProjectStore(
+    (s) => s.project.transcriptions ?? {}
+  );
+  const upsertProjectTranscription = useProjectStore(
+    (s) => s.upsertProjectTranscription
+  );
+
+  const assetsRef = useRef<RemoteAsset[]>([]);
+  const pollingJobsRef = useRef(new Set<string>());
+
+  const fetchPipelineStates = useCallback(async () => {
+    try {
+      const response = await fetch("/api/assets/pipeline");
+      if (!response.ok) throw new Error("Failed to load pipeline states");
+      const data = (await response.json()) as {
+        pipelines?: Array<{ assetId: string; steps: PipelineStepState[] }>;
+      };
+      const map = Object.fromEntries(
+        (data.pipelines ?? []).map((p) => [p.assetId, p.steps])
+      );
+      setPipelineStates(map);
+    } catch (err) {
+      console.error("Failed to fetch pipeline states", err);
+    }
+  }, []);
+
+  const fetchAssets = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/assets");
+      if (!response.ok) throw new Error("Failed to load assets");
+      const data = (await response.json()) as { assets: RemoteAsset[] };
+      setAssets(data.assets ?? []);
+      void fetchPipelineStates();
+    } catch (err) {
+      console.error(err);
+      setError("Could not load assets");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchPipelineStates]);
+
+  const addAssets = useCallback((newAssets: RemoteAsset[]) => {
+    setAssets((prev) => [...newAssets, ...prev]);
+  }, []);
+
+  const getPipelineStep = useCallback(
+    (assetId: string, stepId: string) =>
+      pipelineStates[assetId]?.find((step) => step.id === stepId),
+    [pipelineStates]
+  );
+
+  const resolveAssetDuration = useCallback(
+    (asset: RemoteAsset) =>
+      assetDurations[asset.id] ?? DEFAULT_ASSET_DURATIONS[asset.type] ?? 5,
+    [assetDurations]
+  );
+
+  // Poll transcription job
+  const pollTranscriptionJob = useCallback(
+    async (assetId: string, jobId: string) => {
+      const pollKey = `${assetId}:${jobId}`;
+      if (pollingJobsRef.current.has(pollKey)) return;
+      pollingJobsRef.current.add(pollKey);
+
+      const wait = (ms: number) =>
+        new Promise((resolve) => setTimeout(resolve, ms));
+
+      try {
+        for (let attempt = 0; attempt < 60; attempt += 1) {
+          if (attempt > 0) await wait(4000);
+          const response = await fetch(`/api/transcriptions/${jobId}`);
+          const payload = (await response.json()) as {
+            job?: ApiTranscriptionJob;
+            error?: string;
+          };
+          if (!response.ok || !payload.job) {
+            throw new Error(
+              payload.error || "Failed to fetch transcription status"
+            );
+          }
+
+          const assetSnapshot = assetsRef.current.find(
+            (entry) => entry.id === assetId
+          );
+          upsertProjectTranscription({
+            assetId,
+            assetName: assetSnapshot?.name ?? payload.job.assetName,
+            assetUrl: assetSnapshot?.url ?? payload.job.assetUrl ?? "",
+            jobId: payload.job.id,
+            status: payload.job.status,
+            languageCodes: payload.job.languageCodes ?? ["en-US"],
+            transcript: payload.job.transcript,
+            error: payload.job.error,
+            createdAt: payload.job.createdAt,
+            updatedAt: payload.job.updatedAt,
+            segments: payload.job.segments ?? [],
+          });
+
+          if (payload.job.status === "completed") {
+            toast.success("Transcription ready", {
+              description: assetSnapshot?.name
+                ? `"${assetSnapshot.name}" transcript is ready.`
+                : undefined,
+            });
+            void fetchPipelineStates();
+            return;
+          }
+
+          if (payload.job.status === "error") {
+            toast.error("Transcription failed", {
+              description: payload.job.error || "Please try again.",
+            });
+            void fetchPipelineStates();
+            return;
+          }
+        }
+
+        toast.error("Transcription timed out");
+        void fetchPipelineStates();
+      } catch (err) {
+        console.error("Polling transcription failed", err);
+        toast.error("Unable to poll transcription");
+        void fetchPipelineStates();
+      } finally {
+        pollingJobsRef.current.delete(pollKey);
+      }
+    },
+    [upsertProjectTranscription, fetchPipelineStates]
+  );
+
+  // Start transcription
+  const startTranscription = useCallback(
+    async (asset: RemoteAsset) => {
+      if (asset.type !== "audio" && asset.type !== "video") {
+        toast.error("Only audio or video assets can be transcribed.");
+        return;
+      }
+
+      const existingStep = getPipelineStep(asset.id, "transcription");
+      const existingJobId =
+        typeof existingStep?.metadata?.jobId === "string"
+          ? (existingStep.metadata.jobId as string)
+          : null;
+      if (
+        existingJobId &&
+        (existingStep?.status === "waiting" ||
+          existingStep?.status === "running")
+      ) {
+        toast.info("Transcription already running");
+        void pollTranscriptionJob(asset.id, existingJobId);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/assets/${asset.id}/pipeline`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stepId: "transcription" }),
+        });
+        const payload = (await response.json()) as {
+          pipeline?: { assetId: string; steps: PipelineStepState[] };
+          error?: string;
+        };
+        if (!response.ok || !payload.pipeline) {
+          throw new Error(payload.error || "Failed to start transcription");
+        }
+        setPipelineStates((prev) => ({
+          ...prev,
+          [asset.id]: payload.pipeline!.steps,
+        }));
+        const step = payload.pipeline.steps.find(
+          (s) => s.id === "transcription"
+        );
+        const jobId =
+          typeof step?.metadata?.jobId === "string"
+            ? (step.metadata.jobId as string)
+            : null;
+
+        if (
+          jobId &&
+          (step?.status === "waiting" || step?.status === "running")
+        ) {
+          toast.success("Transcription started", {
+            description: `We'll notify you when "${asset.name}" is ready.`,
+          });
+          void pollTranscriptionJob(asset.id, jobId);
+        } else if (step?.status === "succeeded") {
+          toast.success("Transcription ready");
+        }
+      } catch (err) {
+        console.error("Transcription request failed", err);
+        toast.error("Unable to start transcription", {
+          description: err instanceof Error ? err.message : "Unknown error",
+        });
+      }
+    },
+    [getPipelineStep, pollTranscriptionJob]
+  );
+
+  // Initial fetch
+  useEffect(() => {
+    void fetchAssets();
+  }, [fetchAssets]);
+
+  // Publish to global store
+  useEffect(() => {
+    publishAssets(assets);
+    assetsRef.current = assets;
+  }, [assets, publishAssets]);
+
+  // Sync transcription from pipeline states
+  useEffect(() => {
+    Object.entries(pipelineStates).forEach(([assetId, steps]) => {
+      const transcriptionStep = steps.find((step) => step.id === "transcription");
+      if (
+        transcriptionStep?.status === "succeeded" &&
+        typeof transcriptionStep.metadata?.transcript === "string"
+      ) {
+        const assetSnapshot = assetsRef.current.find(
+          (entry) => entry.id === assetId
+        );
+        if (!assetSnapshot) return;
+        upsertProjectTranscription({
+          assetId,
+          assetName: assetSnapshot.name,
+          assetUrl: assetSnapshot.url,
+          status: "completed",
+          jobId: (transcriptionStep.metadata.jobId as string) || undefined,
+          transcript: transcriptionStep.metadata.transcript as string,
+          languageCodes:
+            (transcriptionStep.metadata.languageCodes as string[]) ?? ["en-US"],
+          createdAt: transcriptionStep.startedAt ?? new Date().toISOString(),
+          updatedAt: transcriptionStep.updatedAt,
+          segments: Array.isArray(transcriptionStep.metadata.segments)
+            ? (transcriptionStep.metadata.segments as TranscriptionSegment[])
+            : [],
+        });
+      }
+    });
+  }, [pipelineStates, upsertProjectTranscription]);
+
+  // Auto-poll running transcriptions
+  useEffect(() => {
+    Object.entries(pipelineStates).forEach(([assetId, steps]) => {
+      const transcriptionStep = steps.find((step) => step.id === "transcription");
+      const jobId = transcriptionStep?.metadata?.jobId;
+      if (
+        typeof jobId === "string" &&
+        (transcriptionStep?.status === "waiting" ||
+          transcriptionStep?.status === "running")
+      ) {
+        void pollTranscriptionJob(assetId, jobId);
+      }
+    });
+  }, [pipelineStates, pollTranscriptionJob]);
+
+  // Load asset durations
+  useEffect(() => {
+    let cancelled = false;
+    const mediaElements: Array<HTMLMediaElement | HTMLImageElement> = [];
+
+    const missingDurations = assets.filter(
+      (asset) => assetDurations[asset.id] == null
+    );
+
+    missingDurations.forEach((asset) => {
+      const defaultDuration =
+        DEFAULT_ASSET_DURATIONS[asset.type] ?? DEFAULT_ASSET_DURATIONS.other;
+      if (asset.type === "image") {
+        setAssetDurations((prev) => {
+          if (prev[asset.id] != null) return prev;
+          return { ...prev, [asset.id]: defaultDuration };
+        });
+        upsertAssetMetadata(asset.id, { duration: defaultDuration });
+        const img = new Image();
+        img.src = asset.url;
+        img.onload = () => {
+          if (cancelled) return;
+          upsertAssetMetadata(asset.id, {
+            duration: defaultDuration,
+            width: img.naturalWidth,
+            height: img.naturalHeight,
+          });
+          img.remove();
+        };
+        img.onerror = () => img.remove();
+        mediaElements.push(img);
+        return;
+      }
+      const media =
+        asset.type === "audio"
+          ? document.createElement("audio")
+          : document.createElement("video");
+      media.preload = "metadata";
+      media.src = asset.url;
+      media.onloadedmetadata = () => {
+        if (cancelled) return;
+        const duration =
+          Number.isFinite(media.duration) && media.duration > 0
+            ? media.duration
+            : defaultDuration;
+        setAssetDurations((prev) => {
+          if (prev[asset.id] && prev[asset.id] === duration) return prev;
+          return { ...prev, [asset.id]: duration };
+        });
+        upsertAssetMetadata(asset.id, {
+          duration,
+          width:
+            asset.type === "video" && media instanceof HTMLVideoElement
+              ? media.videoWidth || undefined
+              : undefined,
+          height:
+            asset.type === "video" && media instanceof HTMLVideoElement
+              ? media.videoHeight || undefined
+              : undefined,
+        });
+        media.remove();
+      };
+      media.onerror = () => {
+        if (cancelled) return;
+        setAssetDurations((prev) => {
+          if (prev[asset.id] != null) return prev;
+          return { ...prev, [asset.id]: defaultDuration };
+        });
+        upsertAssetMetadata(asset.id, { duration: defaultDuration });
+        media.remove();
+      };
+      mediaElements.push(media);
+    });
+
+    return () => {
+      cancelled = true;
+      mediaElements.forEach((media) => {
+        if (media instanceof HTMLImageElement) {
+          media.onload = null;
+          media.onerror = null;
+        } else {
+          media.onloadedmetadata = null;
+          media.onerror = null;
+        }
+        media.remove();
+      });
+    };
+  }, [assets, assetDurations, upsertAssetMetadata]);
+
+  return {
+    assets,
+    isLoading,
+    error,
+    pipelineStates,
+    transcriptions,
+    metadata,
+    fetchAssets,
+    addAssets,
+    getPipelineStep,
+    resolveAssetDuration,
+    startTranscription,
+  };
+}

@@ -1,6 +1,13 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
@@ -13,6 +20,10 @@ import {
   Square,
   Download,
   ChevronDown,
+  ChevronRight,
+  Sparkles,
+  MessageSquare,
+  ListTodo,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
@@ -28,7 +39,10 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { toolRegistry, executeTool } from "@/app/lib/tools/tool-registry";
-import type { ToolDefinition, ToolExecutionResult } from "@/app/lib/tools/types";
+import type {
+  ToolDefinition,
+  ToolExecutionResult,
+} from "@/app/lib/tools/types";
 import { useProjectStore } from "@/app/lib/store/project-store";
 
 type ToolPartState =
@@ -48,46 +62,36 @@ interface ToolPart {
   approval?: { id: string };
 }
 
-const MODE_OPTIONS: { value: ChatMode; label: string; description: string }[] = [
-  {
-    value: "ask",
-    label: "Ask",
-    description: "Answer directly without using tools.",
-  },
-  {
-    value: "agent",
-    label: "Agent",
-    description: "Full tool access for autonomous help.",
-  },
-  {
-    value: "plan",
-    label: "Plan",
-    description: "Only planning tools to build task lists.",
-  },
-];
-
-const MODE_DETAILS: Record<ChatMode, string> = {
-  ask: "Ask mode keeps things conversational and tool-free.",
-  agent: "Agent mode lets the assistant call any tool.",
-  plan: "Plan mode limits the assistant to planning tools for task breakdowns.",
-};
-
-const TASK_STATUS_LABELS: Record<string, string> = {
-  pending: "Pending",
-  in_progress: "In Progress",
-  completed: "Done",
-};
+const MODE_OPTIONS: { value: ChatMode; label: string; description: string }[] =
+  [
+    {
+      value: "ask",
+      label: "Ask",
+      description: "Direct answers without tools",
+    },
+    {
+      value: "agent",
+      label: "Agent",
+      description: "Full tool access",
+    },
+    {
+      value: "plan",
+      label: "Plan",
+      description: "Task planning only",
+    },
+  ];
 
 const TASK_STATUS_STYLES: Record<string, string> = {
   pending: "bg-muted text-muted-foreground",
-  in_progress: "bg-amber-200/60 text-amber-900",
-  completed: "bg-emerald-200/70 text-emerald-900",
+  in_progress: "bg-amber-500/20 text-amber-600 dark:text-amber-400",
+  completed: "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400",
 };
 
 export function ChatPanel() {
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<ChatMode>("agent");
   const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(true);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const chatTransport = useMemo(
     () =>
@@ -105,7 +109,6 @@ export function ChatPanel() {
     });
 
   const isBusy = status === "submitted" || status === "streaming";
-
   const hasMessages = messages && messages.length > 0;
 
   const taskListSnapshot = useMemo(
@@ -124,6 +127,11 @@ export function ChatPanel() {
     return entries;
   }, [toolboxTools]);
   const handledToolCalls = useRef<Set<string>>(new Set());
+
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isBusy]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -234,56 +242,12 @@ export function ChatPanel() {
   }, [messages, clientToolMap, runClientToolForCall]);
 
   return (
-    <div className="flex h-full flex-col bg-card">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <div className="flex items-center gap-2">
-          <Bot className="size-4 text-primary" />
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">
-              AI Assistant
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Gemini 3 Pro with tool insights
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="flex flex-col text-right">
-            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Mode
-            </span>
-            <select
-              value={mode}
-              onChange={(event) => setMode(event.target.value as ChatMode)}
-              className="rounded-md border border-border bg-background/80 px-2 py-1 text-xs font-medium text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              {MODE_OPTIONS.map((option) => (
-                <option
-                  key={option.value}
-                  value={option.value}
-                  title={option.description}
-                >
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <span className="text-[10px] text-muted-foreground">
-              {MODE_DETAILS[mode]}
-            </span>
-          </label>
-          <button
-            onClick={handleExportChat}
-            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
-            title="Export Chat History"
-          >
-            <Download className="size-4" />
-          </button>
-        </div>
-      </div>
-
-      <div className="relative flex-1 overflow-auto space-y-4 p-4 text-sm">
+    <div className="flex h-full flex-col">
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Task List (sticky at top when present) */}
         {taskListSnapshot && (
-          <div className="sticky top-0 z-10">
+          <div className="sticky top-0 z-10 p-3 bg-gradient-to-b from-card via-card to-transparent pb-6">
             <TaskListPanel
               snapshot={taskListSnapshot}
               open={isTaskPanelOpen}
@@ -292,68 +256,85 @@ export function ChatPanel() {
           </div>
         )}
 
-        {!hasMessages && (
-          <p className="text-xs text-muted-foreground text-center">
-            Ask the assistant anything about your project. Try &quot;What is the
-            current timeline duration?&quot;
-          </p>
-        )}
-
-        {messages?.map((message) => {
-          const parts = Array.isArray(message.parts) ? message.parts : [];
-          return (
-            <div key={message.id} className="space-y-2">
-              <p className="text-xs uppercase text-muted-foreground tracking-wide">
-                {renderRoleLabel(message.role)}
+        <div className="px-3 pb-3 space-y-3">
+          {!hasMessages && (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                <Sparkles className="size-6 text-primary" />
+              </div>
+              <p className="text-sm font-medium text-foreground mb-1">
+                How can I help?
               </p>
-              <div className="space-y-3 rounded-2xl border border-border/60 bg-card/90 p-4 shadow-sm">
-                {parts.map((part, index) => {
-                  const content = renderMessagePart(
-                    part,
-                    `${message.id}-${index}`
-                  );
-                  if (!content) return null;
-                  return (
-                    <div
-                      key={`${message.id}-${index}`}
-                      className={
-                        part.type === "reasoning"
-                          ? "rounded-xl bg-muted/40 p-3 text-sm leading-relaxed ring-1 ring-border/60"
-                          : "leading-relaxed"
-                      }
-                    >
-                      {content}
-                    </div>
-                  );
-                })}
-              </div>
+              <p className="text-xs text-muted-foreground max-w-[200px]">
+                Ask about your project, generate content, or let me help edit
+                your timeline.
+              </p>
             </div>
-          );
-        })}
+          )}
 
-        {isBusy && (
-          <div className="space-y-2">
-            <p className="text-xs uppercase text-muted-foreground tracking-wide">
-              Assistant
-            </p>
-            <div className="space-y-2 rounded-2xl border border-border/60 bg-card/90 p-3 shadow-sm">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
-                Generating response…
+          {messages?.map((message) => {
+            const parts = Array.isArray(message.parts) ? message.parts : [];
+            const isUser = message.role === "user";
+            return (
+              <div
+                key={message.id}
+                className={cn("flex", isUser ? "justify-end" : "justify-start")}
+              >
+                <div
+                  className={cn(
+                    "max-w-[85%] rounded-2xl px-3 py-2 text-sm",
+                    isUser
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted/60"
+                  )}
+                >
+                  {parts.map((part, index) => {
+                    const content = renderMessagePart(
+                      part,
+                      `${message.id}-${index}`,
+                      isUser
+                    );
+                    if (!content) return null;
+                    return (
+                      <div
+                        key={`${message.id}-${index}`}
+                        className={cn(
+                          part.type === "reasoning" &&
+                            "text-xs opacity-70 italic mb-2"
+                        )}
+                      >
+                        {content}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          {isBusy && (
+            <div className="flex justify-start">
+              <div className="bg-muted/60 rounded-2xl px-3 py-2">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  <span>Thinking...</span>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
       </div>
+
+      {/* Error Banner */}
       {error && (
-        <div className="border-t border-border bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          <div className="flex justify-between gap-2">
-            <p className="whitespace-pre-wrap">
-              {error.message ?? "Failed to contact Gemini."}
-            </p>
+        <div className="border-t border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <div className="flex items-center justify-between gap-2">
+            <p className="truncate">{error.message ?? "Something went wrong"}</p>
             <button
               type="button"
-              className="font-medium underline decoration-dotted"
+              className="shrink-0 font-medium hover:underline"
               onClick={() => clearError?.()}
             >
               Dismiss
@@ -362,52 +343,74 @@ export function ChatPanel() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="border-t border-border p-3">
-        <div className="flex gap-2">
+      {/* Input Area */}
+      <div className="border-t border-border p-3 space-y-2">
+        {/* Mode Selector + Export */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex rounded-lg bg-muted/50 p-0.5">
+            {MODE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setMode(option.value)}
+                className={cn(
+                  "px-3 py-1 text-xs font-medium rounded-md transition-colors",
+                  mode === option.value
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                title={option.description}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={handleExportChat}
+            disabled={!hasMessages}
+            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors disabled:opacity-50"
+            title="Export chat"
+          >
+            <Download className="size-4" />
+          </button>
+        </div>
+
+        {/* Message Input */}
+        <form onSubmit={handleSubmit} className="flex gap-2">
           <input
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            placeholder="Ask the assistant…"
-            className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            placeholder={
+              mode === "ask"
+                ? "Ask a question..."
+                : mode === "plan"
+                  ? "Describe what to plan..."
+                  : "What would you like to do?"
+            }
+            className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
             disabled={isBusy}
           />
           {isBusy ? (
             <button
               type="button"
               onClick={() => stop?.()}
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-destructive/10 px-3 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/20"
+              className="shrink-0 rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2 text-destructive hover:bg-destructive/20 transition-colors"
             >
               <Square className="size-4 fill-current" />
-              Stop
             </button>
           ) : (
             <button
               type="submit"
               disabled={!input.trim()}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground shadow",
-                "hover:bg-primary/90 disabled:opacity-50"
-              )}
+              className="shrink-0 rounded-lg bg-primary px-3 py-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
               <Send className="size-4" />
-              Send
             </button>
           )}
-        </div>
-      </form>
+        </form>
+      </div>
     </div>
   );
-}
-
-function renderRoleLabel(role: string) {
-  switch (role) {
-    case "user":
-      return "You";
-    case "assistant":
-      return "Assistant";
-    default:
-      return role;
-  }
 }
 
 type MessagePart = {
@@ -417,7 +420,7 @@ type MessagePart = {
   [key: string]: unknown;
 };
 
-function renderMessagePart(part: MessagePart, key: string) {
+function renderMessagePart(part: MessagePart, key: string, isUser: boolean) {
   if (!part || typeof part !== "object") {
     return null;
   }
@@ -425,7 +428,7 @@ function renderMessagePart(part: MessagePart, key: string) {
   if (part.type === "text") {
     if (!part.text) return null;
     return (
-      <div className="prose prose-sm dark:prose-invert">
+      <div className={cn("prose prose-sm max-w-none", isUser && "prose-invert")}>
         <MemoizedMarkdown id={`${key}-text`} content={part.text} />
       </div>
     );
@@ -434,12 +437,10 @@ function renderMessagePart(part: MessagePart, key: string) {
   if (part.type === "reasoning" || part.type === "thinking") {
     if (!part.reasoning && !part.text) return null;
     return (
-      <div className="text-xs text-muted-foreground italic">
-        <MemoizedMarkdown
-          id={`${key}-reasoning`}
-          content={part.reasoning ?? part.text ?? ""}
-        />
-      </div>
+      <MemoizedMarkdown
+        id={`${key}-reasoning`}
+        content={part.reasoning ?? part.text ?? ""}
+      />
     );
   }
 
@@ -451,15 +452,7 @@ function renderMessagePart(part: MessagePart, key: string) {
     return renderToolPart(part as ToolPart);
   }
 
-  if (part.type === "step-start") {
-    return <div className="border-t border-dashed border-border my-2" />;
-  }
-
-  return (
-    <pre className="overflow-auto rounded bg-muted/40 p-2 text-xs text-muted-foreground">
-      {JSON.stringify(part, null, 2)}
-    </pre>
-  );
+  return null;
 }
 
 function renderToolPart(part: ToolPart) {
@@ -472,53 +465,124 @@ function renderToolPart(part: ToolPart) {
     isPlanningToolOutput(part.output)
   ) {
     return (
-      <PlanningToolOutputView
-        label={label}
-        payload={part.output}
-      />
+      <div className="text-xs text-muted-foreground flex items-center gap-1.5 py-1">
+        <ListTodo className="size-3.5" />
+        <span>Updated task list</span>
+      </div>
     );
   }
 
   switch (part.state) {
     case "input-streaming":
       return (
-        <div className="text-xs text-muted-foreground italic">
-          {label}: preparing input…
+        <div className="text-xs text-muted-foreground flex items-center gap-1.5 py-1">
+          <Loader2 className="size-3 animate-spin" />
+          <span>{label}...</span>
         </div>
       );
     case "input-available":
       return (
-        <div className="rounded-xl bg-muted/30 p-3 text-xs text-muted-foreground ring-1 ring-border/50">
-          <p className="font-medium text-foreground/80">{label}</p>
-          <pre className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground/90">
-            {JSON.stringify(part.input, null, 2)}
-          </pre>
-        </div>
+        <ToolCallCard label={label} status="running" input={part.input} />
       );
     case "output-available":
       return (
-        <div className="rounded-xl bg-primary/5 p-3 text-xs text-foreground ring-1 ring-primary/20">
-          <p className="font-medium text-primary">{label} result</p>
-          <div className="mt-2 space-y-2">
-            {renderToolResultBody(part.output)}
-          </div>
-        </div>
+        <ToolCallCard
+          label={label}
+          status="success"
+          input={part.input}
+          output={part.output}
+        />
       );
     case "output-error":
       return (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
-          {label} error: {part.errorText ?? "Unknown error"}
-        </div>
+        <ToolCallCard
+          label={label}
+          status="error"
+          input={part.input}
+          error={part.errorText}
+        />
       );
     case "approval-requested":
       return (
-        <div className="rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-xs text-amber-800">
-          {label}: approval required
+        <div className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5 py-1">
+          <span>{label}: approval required</span>
         </div>
       );
     default:
       return null;
   }
+}
+
+function ToolCallCard({
+  label,
+  status,
+  input,
+  output,
+  error,
+}: {
+  label: string;
+  status: "running" | "success" | "error";
+  input?: Record<string, unknown>;
+  output?: unknown;
+  error?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="my-2 rounded-lg border border-border/60 bg-background/80 text-xs overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-muted/30 transition-colors text-left"
+      >
+        {status === "running" && (
+          <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+        )}
+        {status === "success" && (
+          <div className="size-3.5 rounded-full bg-emerald-500/20 flex items-center justify-center">
+            <div className="size-1.5 rounded-full bg-emerald-500" />
+          </div>
+        )}
+        {status === "error" && (
+          <div className="size-3.5 rounded-full bg-destructive/20 flex items-center justify-center">
+            <div className="size-1.5 rounded-full bg-destructive" />
+          </div>
+        )}
+        <span className="font-medium flex-1 truncate">{label}</span>
+        {expanded ? (
+          <ChevronDown className="size-3.5 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="size-3.5 text-muted-foreground" />
+        )}
+      </button>
+      {expanded && (
+        <div className="px-2.5 pb-2.5 space-y-2 border-t border-border/40 pt-2">
+          {input && Object.keys(input).length > 0 && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+                Input
+              </p>
+              <pre className="text-[11px] bg-muted/40 rounded p-2 overflow-auto max-h-32">
+                {JSON.stringify(input, null, 2)}
+              </pre>
+            </div>
+          )}
+          {status === "error" && error && (
+            <p className="text-destructive">{error}</p>
+          )}
+          {status === "success" && output && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+                Output
+              </p>
+              <div className="bg-muted/40 rounded p-2 overflow-auto max-h-48">
+                {renderToolResultBody(output)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function resolveToolLabel(partType: string) {
@@ -534,9 +598,10 @@ function resolveToolLabel(partType: string) {
 
 function renderToolResultBody(output: unknown) {
   if (!isToolResultOutput(output)) {
-    if (!output) return <p className="text-sm text-muted-foreground">No output.</p>;
+    if (!output)
+      return <p className="text-muted-foreground text-[11px]">No output</p>;
     return (
-      <pre className="overflow-auto rounded bg-muted/30 p-2 text-xs text-muted-foreground">
+      <pre className="text-[11px] overflow-auto">
         {JSON.stringify(output, null, 2)}
       </pre>
     );
@@ -544,23 +609,29 @@ function renderToolResultBody(output: unknown) {
 
   switch (output.type) {
     case "text":
-      return <MemoizedMarkdown id="tool-output-text" content={output.value} />;
+      return (
+        <div className="prose prose-sm max-w-none text-[11px]">
+          <MemoizedMarkdown id="tool-output-text" content={output.value} />
+        </div>
+      );
     case "json":
       return (
-        <pre className="overflow-auto rounded bg-muted/30 p-2 text-xs text-muted-foreground">
+        <pre className="text-[11px] overflow-auto">
           {JSON.stringify(output.value, null, 2)}
         </pre>
       );
     case "error-text":
     case "execution-denied":
       return (
-        <p className="text-sm text-destructive">
-          {output.type === "error-text" ? output.value : output.reason ?? "Execution denied"}
+        <p className="text-destructive text-[11px]">
+          {output.type === "error-text"
+            ? output.value
+            : output.reason ?? "Execution denied"}
         </p>
       );
     case "error-json":
       return (
-        <pre className="overflow-auto rounded bg-destructive/10 p-2 text-xs text-destructive">
+        <pre className="text-destructive text-[11px] overflow-auto">
           {JSON.stringify(output.value, null, 2)}
         </pre>
       );
@@ -574,31 +645,31 @@ function renderToolResultBody(output: unknown) {
       );
     default:
       return (
-        <pre className="overflow-auto rounded bg-muted/30 p-2 text-xs text-muted-foreground">
+        <pre className="text-[11px] overflow-auto">
           {JSON.stringify(output, null, 2)}
         </pre>
       );
   }
 }
 
-type ContentEntry = Extract<ToolResultOutput, { type: "content" }>["value"][number];
+type ContentEntry = Extract<
+  ToolResultOutput,
+  { type: "content" }
+>["value"][number];
 
 function renderContentEntry(entry: ContentEntry, key: number) {
   switch (entry.type) {
     case "text":
       return (
-        <MemoizedMarkdown
-          id={`tool-output-text-${key}`}
-          content={entry.text}
-        />
+        <MemoizedMarkdown id={`tool-output-text-${key}`} content={entry.text} />
       );
     case "image-data": {
       const src = `data:${entry.mediaType};base64,${entry.data}`;
       return (
         <img
           src={src}
-          alt="Tool output image"
-          className="max-h-96 w-auto rounded border border-border/40"
+          alt="Tool output"
+          className="max-h-48 w-auto rounded border border-border/40"
         />
       );
     }
@@ -606,8 +677,8 @@ function renderContentEntry(entry: ContentEntry, key: number) {
       return (
         <img
           src={entry.url}
-          alt="Tool output image"
-          className="max-h-96 w-auto rounded border border-border/40"
+          alt="Tool output"
+          className="max-h-48 w-auto rounded border border-border/40"
         />
       );
     case "file-data": {
@@ -615,10 +686,10 @@ function renderContentEntry(entry: ContentEntry, key: number) {
       return (
         <a
           href={href}
-          download={entry.filename ?? "tool-output"}
-          className="text-sm font-medium text-primary underline"
+          download={entry.filename ?? "download"}
+          className="text-primary underline"
         >
-          Download {entry.filename ?? entry.mediaType}
+          Download {entry.filename ?? "file"}
         </a>
       );
     }
@@ -628,22 +699,18 @@ function renderContentEntry(entry: ContentEntry, key: number) {
           href={entry.url}
           target="_blank"
           rel="noreferrer"
-          className="text-sm font-medium text-primary underline"
+          className="text-primary underline"
         >
           Download file
         </a>
       );
     case "media": {
       const href = `data:${entry.mediaType};base64,${entry.data}`;
-      return (
-        <audio controls src={href} className="w-full">
-          Your browser does not support the audio element.
-        </audio>
-      );
+      return <audio controls src={href} className="w-full h-8" />;
     }
     default:
       return (
-        <pre className="overflow-auto rounded bg-muted/30 p-2 text-xs text-muted-foreground">
+        <pre className="text-[11px] overflow-auto">
           {JSON.stringify(entry, null, 2)}
         </pre>
       );
@@ -703,26 +770,6 @@ function isPlanningToolOutput(
   );
 }
 
-function PlanningToolOutputView({
-  label,
-  payload,
-}: {
-  label: string;
-  payload: PlanningToolLikeOutput;
-}) {
-  const taskCount = payload.taskList.tasks.length;
-  return (
-    <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-xs">
-      <p className="text-sm font-semibold text-primary">
-        {payload.message ?? label}
-      </p>
-      <p className="text-[11px] text-muted-foreground">
-        {taskCount} task{taskCount === 1 ? "" : "s"} tracked.
-      </p>
-    </div>
-  );
-}
-
 function TaskListPanel({
   snapshot,
   open,
@@ -736,93 +783,87 @@ function TaskListPanel({
   const completed = snapshot.tasks.filter(
     (task) => task.status === "completed"
   ).length;
+  const inProgress = snapshot.tasks.find(
+    (task) => task.status === "in_progress"
+  );
   const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
 
   return (
     <Collapsible
       open={open}
       onOpenChange={onOpenChange}
-      className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-xs shadow-sm backdrop-blur-sm"
+      className="rounded-xl border border-border bg-card shadow-sm"
     >
-      <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-        <div>
-          <p className="text-[11px] uppercase tracking-wide text-primary">
-            Agent Task List
-          </p>
-          <p className="text-sm font-semibold text-foreground">
-            {snapshot.title ?? "Project Plan"}
-          </p>
-          <p className="text-[11px] text-muted-foreground">
-            Updated {formatUpdatedTime(snapshot.updatedAt)}
-          </p>
+      <CollapsibleTrigger className="w-full flex items-center gap-3 p-3 text-left hover:bg-muted/30 transition-colors">
+        <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+          <ListTodo className="size-4 text-primary" />
         </div>
-        <div className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
-          <span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">
+            {snapshot.title ?? "Task List"}
+          </p>
+          <p className="text-xs text-muted-foreground">
             {completed}/{total} complete
-          </span>
-          <ChevronDown
-            className={cn(
-              "size-4 transition-transform",
-              open ? "rotate-180" : "rotate-0"
-            )}
-          />
+          </p>
         </div>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-3 pt-3 data-[state=closed]:animate-collapse-up data-[state=open]:animate-collapse-down">
-        <div className="h-1.5 rounded-full bg-primary/10">
-          <div
-            className="h-full rounded-full bg-primary transition-all"
-            style={{ width: `${percent}%` }}
-          />
-        </div>
-        <ul className="space-y-1.5">
-          {snapshot.tasks.length === 0 ? (
-            <li className="text-[11px] text-muted-foreground">
-              No tasks yet. Ask the agent to start planning.
-            </li>
-          ) : (
-            <>
-              {snapshot.tasks.slice(0, 6).map((task) => (
-                <li
-                  key={task.id}
-                  className="flex items-start gap-2 rounded-md border border-border/40 bg-card/80 p-2"
-                >
-                  <span
-                    className={cn(
-                      "inline-flex items-center rounded-full px-2 py-[2px] text-[10px] font-semibold uppercase tracking-wide",
-                      TASK_STATUS_STYLES[task.status] ??
-                        "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {TASK_STATUS_LABELS[task.status] ?? task.status}
-                  </span>
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-foreground">
-                      {task.title}
-                    </p>
-                    {task.description && (
-                      <p className="text-[11px] text-muted-foreground">
-                        {task.description}
-                      </p>
-                    )}
-                  </div>
-                </li>
-              ))}
-              {total > 6 && (
-                <li className="text-[11px] text-muted-foreground">
-                  +{total - 6} more task{total - 6 === 1 ? "" : "s"} tracked
-                </li>
-              )}
-            </>
+        <ChevronDown
+          className={cn(
+            "size-4 text-muted-foreground transition-transform shrink-0",
+            open && "rotate-180"
           )}
-        </ul>
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="px-3 pb-3 space-y-2">
+          {/* Progress bar */}
+          <div className="h-1 rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+
+          {/* Current task highlight */}
+          {inProgress && (
+            <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-2.5 py-1.5">
+              <Loader2 className="size-3.5 animate-spin text-amber-500" />
+              <span className="text-xs font-medium text-amber-600 dark:text-amber-400 truncate">
+                {inProgress.title}
+              </span>
+            </div>
+          )}
+
+          {/* Task list */}
+          <div className="space-y-1 max-h-40 overflow-y-auto">
+            {snapshot.tasks.map((task) => (
+              <div
+                key={task.id}
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-2 py-1 text-xs",
+                  task.status === "completed" && "opacity-60"
+                )}
+              >
+                <span
+                  className={cn(
+                    "size-1.5 rounded-full shrink-0",
+                    task.status === "completed" && "bg-emerald-500",
+                    task.status === "in_progress" && "bg-amber-500",
+                    task.status === "pending" && "bg-muted-foreground/40"
+                  )}
+                />
+                <span
+                  className={cn(
+                    "truncate",
+                    task.status === "completed" && "line-through"
+                  )}
+                >
+                  {task.title}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       </CollapsibleContent>
     </Collapsible>
   );
-}
-
-function formatUpdatedTime(updatedAt: string) {
-  const date = new Date(updatedAt);
-  if (Number.isNaN(date.getTime())) return updatedAt;
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }

@@ -1,7 +1,17 @@
 "use client";
 
 import { useCallback, useMemo, useState, type ChangeEvent } from "react";
-import { Wrench, PlayIcon, History, ListChecks } from "lucide-react";
+import {
+  PlayIcon,
+  ChevronDown,
+  ChevronRight,
+  Check,
+  RotateCcw,
+  Clock,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+} from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { toolRegistry, executeTool } from "@/app/lib/tools/tool-registry";
@@ -11,12 +21,31 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useToolboxStore } from "@/app/lib/store/toolbox-store";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 type ToolFormValues = Record<string, string>;
 
 interface HistoryEntry {
   id: string;
   toolName: string;
+  toolLabel: string;
   startedAt: number;
   durationMs: number;
   status: "success" | "error";
@@ -41,10 +70,14 @@ export function ToolboxPanel() {
   const [selectedTool, setSelectedTool] = useState<ToolDefinition | null>(
     () => tools[0] ?? null
   );
-  const [formState, setFormState] = useState<Record<string, ToolFormValues>>({});
+  const [formState, setFormState] = useState<Record<string, ToolFormValues>>(
+    {}
+  );
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [toolPickerOpen, setToolPickerOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const activeToolForm = selectedTool
     ? formState[selectedTool.name] ?? {}
@@ -76,6 +109,7 @@ export function ToolboxPanel() {
   const handleSelectTool = useCallback((tool: ToolDefinition) => {
     setSelectedTool(tool);
     setLastError(null);
+    setToolPickerOpen(false);
   }, []);
 
   const resetForm = useCallback(() => {
@@ -147,6 +181,7 @@ export function ToolboxPanel() {
       startedAt: Date.now(),
       status: result.status,
       toolName: selectedTool.name,
+      toolLabel: selectedTool.label,
       inputSnapshot: parsedFormInput,
       outputs: result.status === "success" ? result.outputs : undefined,
       error: result.status === "error" ? result.error : undefined,
@@ -156,184 +191,247 @@ export function ToolboxPanel() {
       setLastError(result.error);
     }
     setIsRunning(false);
+    // Auto-expand history on new entry
+    setHistoryOpen(true);
   }, [parsedFormInput, project, selectedTool]);
 
   return (
-    <div className="flex h-full flex-col bg-card">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <div className="flex items-center gap-2">
-          <Wrench className="size-4 text-primary" />
-          <div>
-            <h2 className="text-sm font-semibold">Toolbox</h2>
-            <p className="text-xs text-muted-foreground">
-              {tools.length} tools • {capturedAssets.length} captured assets
-            </p>
-          </div>
-        </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={resetForm}
-          disabled={!selectedTool}
-        >
-          Refresh form
-        </Button>
+    <div className="flex h-full flex-col">
+      {/* Tool Selector */}
+      <div className="border-b border-border p-3 space-y-3">
+        <Popover open={toolPickerOpen} onOpenChange={setToolPickerOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              aria-expanded={toolPickerOpen}
+              className="w-full justify-between font-normal"
+            >
+              {selectedTool ? selectedTool.label : "Select a tool..."}
+              <ChevronDown className="ml-2 size-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+            <Command>
+              <CommandInput placeholder="Search tools..." />
+              <CommandList>
+                <CommandEmpty>No tool found.</CommandEmpty>
+                <CommandGroup>
+                  {tools.map((tool) => (
+                    <CommandItem
+                      key={tool.name}
+                      value={tool.label}
+                      onSelect={() => handleSelectTool(tool)}
+                      className="flex items-center gap-2"
+                    >
+                      <Check
+                        className={cn(
+                          "size-4",
+                          selectedTool?.name === tool.name
+                            ? "opacity-100"
+                            : "opacity-0"
+                        )}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{tool.label}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {tool.description}
+                        </p>
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+
+        {selectedTool && (
+          <p className="text-xs text-muted-foreground">
+            {selectedTool.description}
+          </p>
+        )}
       </div>
 
-      <div className="flex flex-1 min-h-0 divide-x divide-border">
-        <aside className="w-52 overflow-y-auto">
-          <div className="space-y-1 p-2">
-            {tools.map((tool) => (
-              <button
-                key={tool.name}
-                type="button"
-                onClick={() => handleSelectTool(tool)}
-                className={cn(
-                  "w-full rounded-md border border-transparent px-3 py-2 text-left text-sm transition hover:bg-muted/40",
-                  selectedTool?.name === tool.name
-                    ? "border-primary bg-primary/10 text-primary-foreground"
-                    : "text-foreground"
-                )}
-              >
-                <p className="font-medium">{tool.label}</p>
-                <p className="text-xs text-muted-foreground">
-                  {tool.description}
-                </p>
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        <div className="flex flex-1 min-w-0 flex-col">
-          <div className="border-b border-border p-4 space-y-4">
-            {selectedTool ? (
-              <>
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    Configure and run <span className="font-semibold">{selectedTool.label}</span>
-                  </p>
-                </div>
-                {selectedTool.fields.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    This tool does not require any parameters. Hit run when
-                    you&apos;re ready.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {selectedTool.fields.map((field) => {
-                      const value =
-                        activeToolForm[field.name] ??
-                        computeDefaultValue(field.name, field.defaultValue);
-                      const commonProps = {
-                        id: `${selectedTool.name}-${field.name}`,
-                        value,
-                        onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
-                          handleFieldChange(
-                            selectedTool.name,
-                            field.name,
-                            event.target.value
-                          ),
-                      };
-                      return (
-                        <div key={field.name} className="space-y-1.5">
-                          <label
-                            htmlFor={commonProps.id}
-                            className="text-xs font-medium text-muted-foreground"
-                          >
-                            {field.label}
-                          </label>
-                          {renderField(field, commonProps)}
-                          {field.description && (
-                            <p className="text-[11px] text-muted-foreground">
-                              {field.description}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {lastError && (
-                  <p className="text-xs text-destructive">{lastError}</p>
-                )}
-                <Button
-                  type="button"
-                  className="inline-flex items-center"
-                  disabled={isRunning || !selectedTool}
-                  onClick={handleRunTool}
-                >
-                  <PlayIcon className="size-4" />
-                  {isRunning ? "Running..." : "Run tool"}
-                </Button>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Select a tool from the list to begin.
-              </p>
-            )}
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4">
-            <div className="flex items-center gap-2 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <History className="size-3.5" />
-              Execution history
-            </div>
-            {history.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                No tool runs yet. Executions will be logged here with their outputs.
+      {/* Form */}
+      <div className="flex-1 overflow-y-auto p-3">
+        {selectedTool ? (
+          <div className="space-y-4">
+            {selectedTool.fields.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                This tool has no parameters.
               </p>
             ) : (
               <div className="space-y-3">
-                {history.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="rounded-lg border border-border/80 bg-background/80 p-3 text-sm shadow-sm"
-                  >
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1.5 font-medium">
-                        <ListChecks className="size-3.5" />
-                        {entry.toolName}
-                      </div>
-                      <span>
-                        {(entry.durationMs / 1000).toFixed(2)}s •{" "}
-                        {new Date(entry.startedAt).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <div className="mt-2 text-xs">
-                      Status:{" "}
-                      <span
-                        className={
-                          entry.status === "success"
-                            ? "text-emerald-500"
-                            : "text-destructive"
-                        }
+                {selectedTool.fields.map((field) => {
+                  const value =
+                    activeToolForm[field.name] ??
+                    computeDefaultValue(field.name, field.defaultValue);
+                  const commonProps = {
+                    id: `${selectedTool.name}-${field.name}`,
+                    value,
+                    onChange: (
+                      event: ChangeEvent<
+                        HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
                       >
-                        {entry.status}
-                      </span>
+                    ) =>
+                      handleFieldChange(
+                        selectedTool.name,
+                        field.name,
+                        event.target.value
+                      ),
+                  };
+                  return (
+                    <div key={field.name} className="space-y-1.5">
+                      <label
+                        htmlFor={commonProps.id}
+                        className="text-xs font-medium"
+                      >
+                        {field.label}
+                        {field.description && (
+                          <span className="font-normal text-muted-foreground ml-1">
+                            — {field.description}
+                          </span>
+                        )}
+                      </label>
+                      {renderField(field, commonProps)}
                     </div>
-                    {entry.status === "error" && entry.error && (
-                      <p className="mt-1 text-xs text-destructive">
-                        {entry.error}
-                      </p>
-                    )}
-                    {entry.outputs && entry.outputs.length > 0 && (
-                      <div className="mt-3 space-y-2">
-                        {entry.outputs.map((output, index) => (
-                          <ToolOutputView
-                            key={`${entry.id}-${index}`}
-                            output={output}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {lastError && (
+              <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/20 p-2 text-xs text-destructive">
+                <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                <p>{lastError}</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+            Select a tool to get started
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      {selectedTool && (
+        <div className="border-t border-border p-3 flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={resetForm}
+            className="shrink-0"
+          >
+            <RotateCcw className="size-3.5" />
+            Reset
+          </Button>
+          <Button
+            size="sm"
+            className="flex-1"
+            disabled={isRunning}
+            onClick={handleRunTool}
+          >
+            {isRunning ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin" />
+                Running...
+              </>
+            ) : (
+              <>
+                <PlayIcon className="size-3.5" />
+                Run
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+
+      {/* Collapsible History */}
+      <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
+        <CollapsibleTrigger asChild>
+          <button className="w-full flex items-center gap-2 px-3 py-2 border-t border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors">
+            {historyOpen ? (
+              <ChevronDown className="size-3.5" />
+            ) : (
+              <ChevronRight className="size-3.5" />
+            )}
+            <Clock className="size-3.5" />
+            History
+            {history.length > 0 && (
+              <span className="ml-auto bg-muted rounded-full px-1.5 py-0.5 text-[10px]">
+                {history.length}
+              </span>
+            )}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="max-h-64 overflow-y-auto border-t border-border">
+            {history.length === 0 ? (
+              <p className="text-xs text-muted-foreground p-3 text-center">
+                No runs yet
+              </p>
+            ) : (
+              <div className="divide-y divide-border">
+                {history.map((entry) => (
+                  <HistoryEntryRow key={entry.id} entry={entry} />
                 ))}
               </div>
             )}
           </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+}
+
+function HistoryEntryRow({ entry }: { entry: HistoryEntry }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="text-xs">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-colors text-left"
+      >
+        {entry.status === "success" ? (
+          <CheckCircle2 className="size-3.5 text-emerald-500 shrink-0" />
+        ) : (
+          <AlertCircle className="size-3.5 text-destructive shrink-0" />
+        )}
+        <span className="font-medium truncate flex-1">{entry.toolLabel}</span>
+        <span className="text-muted-foreground shrink-0">
+          {(entry.durationMs / 1000).toFixed(1)}s
+        </span>
+        {expanded ? (
+          <ChevronDown className="size-3 shrink-0" />
+        ) : (
+          <ChevronRight className="size-3 shrink-0" />
+        )}
+      </button>
+      {expanded && (
+        <div className="px-3 pb-3 space-y-2">
+          <p className="text-muted-foreground">
+            {new Date(entry.startedAt).toLocaleTimeString()}
+          </p>
+          {entry.error && (
+            <p className="text-destructive bg-destructive/10 rounded p-2">
+              {entry.error}
+            </p>
+          )}
+          {entry.outputs && entry.outputs.length > 0 && (
+            <div className="space-y-2">
+              {entry.outputs.map((output, index) => (
+                <ToolOutputView
+                  key={`${entry.id}-${index}`}
+                  output={output}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -352,18 +450,25 @@ function renderField(
 ) {
   switch (field.type) {
     case "textarea":
-      return <Textarea {...props} rows={3} />;
+      return <Textarea {...props} rows={3} className="text-sm" />;
     case "number":
-      return <Input {...props} type="number" step="0.01" />;
+      return <Input {...props} type="number" step="0.01" className="text-sm" />;
     case "json":
-      return <Textarea {...props} rows={4} spellCheck={false} />;
+      return (
+        <Textarea
+          {...props}
+          rows={4}
+          spellCheck={false}
+          className="font-mono text-xs"
+        />
+      );
     case "datetime":
-      return <Input {...props} type="datetime-local" />;
+      return <Input {...props} type="datetime-local" className="text-sm" />;
     case "select":
       return (
         <select
           {...props}
-          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
         >
           {field.options?.map((option) => (
             <option key={option.value} value={option.value}>
@@ -373,7 +478,7 @@ function renderField(
         </select>
       );
     default:
-      return <Input {...props} type="text" />;
+      return <Input {...props} type="text" className="text-sm" />;
   }
 }
 
@@ -387,13 +492,13 @@ function ToolOutputView({ output }: { output: ToolOutput }) {
       );
     case "json":
       return (
-        <pre className="overflow-auto rounded-md bg-muted/60 p-2 text-[11px] leading-relaxed">
+        <pre className="overflow-auto rounded-md bg-muted/60 p-2 text-[11px] leading-relaxed font-mono">
           {JSON.stringify(output.data, null, 2)}
         </pre>
       );
     case "image":
       return (
-        <div className="rounded-md border border-border/70 bg-background p-2">
+        <div className="rounded-md border border-border/70 bg-background p-1">
           <Image
             src={output.url}
             alt={output.alt ?? "Tool output"}
@@ -411,12 +516,9 @@ function ToolOutputView({ output }: { output: ToolOutput }) {
               {output.title}
             </p>
           )}
-          <ul className="space-y-1 text-xs text-muted-foreground">
+          <ul className="space-y-1">
             {output.items.map((item, index) => (
-              <li
-                key={index}
-                className="rounded bg-muted/40 px-2 py-1 text-[11px]"
-              >
+              <li key={index} className="rounded bg-muted/40 px-2 py-1">
                 <ToolOutputView output={item} />
               </li>
             ))}

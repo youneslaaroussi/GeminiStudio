@@ -316,156 +316,144 @@ export function TimelinePanel({
   return (
     <div className="flex h-full flex-col min-w-0" ref={containerRef}>
       {/* Header */}
-      <div className="relative flex items-center justify-between border-b border-border px-3 py-2 h-12">
-        {/* Left: Time Display */}
-        <div className="flex items-center gap-4 z-10 w-1/3">
-          <div>
-            <p className="text-xs text-muted-foreground font-mono">
-              <span className="text-foreground font-medium">{formatTime(currentTime)}</span>
-              <span className="opacity-50 mx-1">/</span>
-              {formatTime(duration)}
-            </p>
-          </div>
+      <div className="flex items-center gap-2 border-b border-border px-2 py-1.5 h-11 bg-card/50">
+        {/* Time Display */}
+        <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1 font-mono text-xs tabular-nums">
+          <span className="text-foreground font-medium">{formatTime(currentTime)}</span>
+          <span className="text-muted-foreground/60">/</span>
+          <span className="text-muted-foreground">{formatTime(duration)}</span>
         </div>
 
-        {/* Center: Transport Controls */}
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 z-10">
+        {/* Transport Controls */}
+        <div className="flex items-center gap-0.5 rounded-lg bg-muted/50 p-0.5">
           <button
             type="button"
             onClick={() => setCurrentTime(0)}
-            className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+            className="p-1.5 rounded-md hover:bg-background text-muted-foreground hover:text-foreground transition-colors"
             title="Go to Start"
           >
-            <SkipBack className="size-4" />
+            <SkipBack className="size-3.5" />
           </button>
-          
           <button
             type="button"
             onClick={onTogglePlay}
             disabled={!hasPlayer}
-            className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 transition-colors shadow-sm"
+            className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 transition-colors"
             title={playing ? "Pause" : "Play"}
           >
             {playing ? (
-              <Pause className="size-4 fill-current" />
+              <Pause className="size-3.5 fill-current" />
             ) : (
-              <Play className="size-4 fill-current ml-0.5" />
+              <Play className="size-3.5 fill-current ml-0.5" />
             )}
           </button>
-
           <button
             type="button"
             onClick={() => setCurrentTime(duration)}
-            className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+            className="p-1.5 rounded-md hover:bg-background text-muted-foreground hover:text-foreground transition-colors"
             title="Go to End"
           >
-            <SkipForward className="size-4" />
+            <SkipForward className="size-3.5" />
           </button>
         </div>
 
-        {/* Right: Tools & Zoom */}
-        <div className="flex items-center gap-2 z-10 justify-end w-1/3">
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <select
-              value={newLayerType}
-              onChange={(e) => setNewLayerType(e.target.value as ClipType)}
-              className="rounded border border-border bg-background px-2 py-1"
-            >
-              <option value="video">Video</option>
-              <option value="audio">Audio</option>
-              <option value="text">Text</option>
-              <option value="image">Image</option>
-            </select>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-accent"
-              onClick={handleAddLayer}
-              title="Add new layer"
-            >
-              <Plus className="size-3" />
-              Add Layer
-            </button>
-          </div>
-
-          <div className="w-px h-4 bg-border mx-1" />
-
-          {/* Mute toggle */}
+        {/* Playback Options */}
+        <div className="flex items-center gap-0.5 rounded-lg bg-muted/50 p-0.5">
           <button
             type="button"
             onClick={onToggleMute}
-            className="flex size-7 items-center justify-center rounded-md hover:bg-accent text-muted-foreground"
-            title={muted ? "Unmute preview audio" : "Mute preview audio"}
+            className={cn(
+              "p-1.5 rounded-md transition-colors",
+              muted
+                ? "text-destructive bg-destructive/10"
+                : "text-muted-foreground hover:bg-background hover:text-foreground"
+            )}
+            title={muted ? "Unmute" : "Mute"}
           >
             {muted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
           </button>
-
-          <div className="w-px h-4 bg-border mx-1" />
-
-          {/* Loop toggle */}
           <button
             type="button"
             onClick={onToggleLoop}
             className={cn(
-              "flex size-7 items-center justify-center rounded-md border border-transparent hover:bg-accent text-muted-foreground",
-              loop && "text-primary border-primary/40 bg-primary/10"
+              "p-1.5 rounded-md transition-colors",
+              loop
+                ? "text-primary bg-primary/10"
+                : "text-muted-foreground hover:bg-background hover:text-foreground"
             )}
-            title={loop ? "Disable looping" : "Enable looping"}
+            title={loop ? "Disable loop" : "Enable loop"}
           >
             <Repeat className="size-3.5" />
           </button>
+          <select
+            value={speed}
+            onChange={(e) => onSpeedChange(Number(e.target.value))}
+            className="h-7 rounded-md bg-transparent px-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none"
+            title="Playback speed"
+          >
+            {[0.25, 0.5, 0.75, 1, 1.5, 2, 4].map((value) => (
+              <option key={value} value={value}>
+                {value}x
+              </option>
+            ))}
+          </select>
+        </div>
 
-          <div className="w-px h-4 bg-border mx-1" />
+        <div className="flex-1" />
 
-          {/* Speed */}
-          <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
-            Speed
-            <select
-              value={speed}
-              onChange={(e) => onSpeedChange(Number(e.target.value))}
-              className="rounded border border-border bg-background px-2 py-1 text-xs"
-            >
-              {[0.25, 0.5, 0.75, 1, 1.5, 2, 4].map((value) => (
-                <option key={value} value={value}>
-                  {value}x
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="w-px h-4 bg-border mx-1" />
-
-          {/* Split button */}
+        {/* Edit Tools */}
+        <div className="flex items-center gap-0.5 rounded-lg bg-muted/50 p-0.5">
           <button
             type="button"
             onClick={handleSplit}
             disabled={!selectedClipId}
-            className="flex size-7 items-center justify-center rounded-md hover:bg-accent disabled:opacity-30 disabled:pointer-events-none text-muted-foreground hover:text-foreground mr-2 border border-transparent hover:border-border"
+            className="p-1.5 rounded-md text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-30 disabled:pointer-events-none transition-colors"
             title="Split clip at playhead"
           >
             <Scissors className="size-3.5" />
           </button>
+        </div>
 
-          <div className="w-px h-4 bg-border mx-1" />
+        {/* Add Layer */}
+        <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-0.5">
+          <select
+            value={newLayerType}
+            onChange={(e) => setNewLayerType(e.target.value as ClipType)}
+            className="h-7 rounded-md bg-transparent pl-2 pr-1 text-xs text-muted-foreground cursor-pointer focus:outline-none"
+          >
+            <option value="video">Video</option>
+            <option value="audio">Audio</option>
+            <option value="text">Text</option>
+            <option value="image">Image</option>
+          </select>
+          <button
+            type="button"
+            className="flex items-center gap-1 rounded-md bg-background px-2 py-1 text-xs font-medium hover:bg-accent transition-colors"
+            onClick={handleAddLayer}
+            title="Add new layer"
+          >
+            <Plus className="size-3" />
+            <span className="hidden sm:inline">Layer</span>
+          </button>
+        </div>
 
-          {/* Zoom controls */}
+        {/* Zoom Controls */}
+        <div className="flex items-center gap-0.5 rounded-lg bg-muted/50 p-0.5">
           <button
             type="button"
             onClick={() => setZoom(zoom - 10)}
-            className="flex size-7 items-center justify-center rounded-md hover:bg-accent text-muted-foreground"
+            className="p-1.5 rounded-md text-muted-foreground hover:bg-background hover:text-foreground transition-colors"
             title="Zoom out"
           >
             <ZoomOut className="size-3.5" />
           </button>
-          <div className="flex flex-col items-center w-16">
-            {/* Slider could go here, text for now */}
-            <span className="text-[10px] text-muted-foreground font-mono">
-              {zoom}px/s
-            </span>
-          </div>
+          <span className="w-12 text-center text-[10px] text-muted-foreground font-mono tabular-nums">
+            {zoom}px/s
+          </span>
           <button
             type="button"
             onClick={() => setZoom(zoom + 10)}
-            className="flex size-7 items-center justify-center rounded-md hover:bg-accent text-muted-foreground"
+            className="p-1.5 rounded-md text-muted-foreground hover:bg-background hover:text-foreground transition-colors"
             title="Zoom in"
           >
             <ZoomIn className="size-3.5" />

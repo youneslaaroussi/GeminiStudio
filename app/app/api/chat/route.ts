@@ -200,7 +200,7 @@ export async function POST(req: Request) {
         : planningTools;
 
   const result = streamText({
-    model: google("gemini-3-pro-preview"),
+    model: google(process.env.AI_CHAT_GOOGLE_MODEL ?? "gemini-3-pro-preview"),
     providerOptions: {
       google: {
         thinkingConfig: {

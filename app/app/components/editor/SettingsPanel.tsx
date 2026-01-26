@@ -14,6 +14,7 @@ import {
   type ImageClip,
   type TransitionType 
 } from "@/app/types/timeline";
+import { VideoEffectsPanel } from "./VideoEffectsPanel";
 
 export function SettingsPanel() {
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
@@ -582,6 +583,8 @@ export function SettingsPanel() {
                   </div>
                 )}
               </div>
+
+              <VideoEffectsPanel clip={selectedClip as VideoClip} />
             </div>
           </div>
         )}
