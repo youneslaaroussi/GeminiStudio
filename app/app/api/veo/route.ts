@@ -122,6 +122,7 @@ export async function POST(request: NextRequest) {
       referenceImages,
       negativePrompt,
       personGeneration,
+      projectId,
     } = (await request.json()) as {
       prompt?: string;
       durationSeconds?: 4 | 6 | 8;
@@ -135,6 +136,7 @@ export async function POST(request: NextRequest) {
       referenceImages?: ReferenceImageInput[];
       negativePrompt?: string;
       personGeneration?: "allow_all" | "allow_adult" | "dont_allow";
+      projectId?: string;
     };
 
     if (!prompt || !prompt.trim()) {
@@ -266,6 +268,7 @@ export async function POST(request: NextRequest) {
       data: buffer,
       mimeType,
       originalName: `veo-${Date.now()}.mp4`,
+      projectId,
     });
 
     return NextResponse.json({ asset }, { status: 201 });

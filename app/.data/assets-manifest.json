@@ -46,5 +46,14 @@
     "mimeType": "video/mp4",
     "size": 2076058,
     "uploadedAt": "2026-01-25T23:43:20.199Z"
+  },
+  {
+    "id": "65c1ea16-f162-401b-8743-4fb2053dfbe5",
+    "name": "this is a test.mp4",
+    "fileName": "1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "mimeType": "video/mp4",
+    "size": 734839,
+    "uploadedAt": "2026-01-26T22:56:12.045Z",
+    "projectId": "7bff3612-f758-4c4c-82bf-15540ac9bf4e"
   }
 ]

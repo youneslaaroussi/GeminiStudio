@@ -1,0 +1,124 @@
+[
+  {
+    "id": "1d663ba6-6800-4e03-a28f-ff5151cda1b0",
+    "assetId": "65c1ea16-f162-401b-8743-4fb2053dfbe5",
+    "assetName": "this is a test.mp4",
+    "assetUrl": "/uploads/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "fileName": "1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "mimeType": "video/mp4",
+    "gcsUri": "gs://gemini-studio-storage/assets/65c1ea16-f162-401b-8743-4fb2053dfbe5/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "status": "error",
+    "languageCodes": [
+      "en-US"
+    ],
+    "createdAt": "2026-01-26T23:22:11.495Z",
+    "updatedAt": "2026-01-26T23:22:56.429Z",
+    "operationName": "projects/828532255978/locations/us/operations/v2-71ae50d9-0000-2bd1-acd9-d43a2ccbc15f",
+    "error": "Failed to fetch transcription status: {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Expected resource location to be global, but found us in resource name.\",\n    \"status\": \"INVALID_ARGUMENT\"\n  }\n}\n"
+  },
+  {
+    "id": "367635ef-29d8-4bd3-a679-4c626df1bc7a",
+    "assetId": "65c1ea16-f162-401b-8743-4fb2053dfbe5",
+    "assetName": "this is a test.mp4",
+    "assetUrl": "/uploads/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "fileName": "1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "mimeType": "video/mp4",
+    "gcsUri": "gs://gemini-studio-storage/assets/65c1ea16-f162-401b-8743-4fb2053dfbe5/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "status": "error",
+    "languageCodes": [
+      "en-US"
+    ],
+    "createdAt": "2026-01-26T23:23:06.497Z",
+    "updatedAt": "2026-01-26T23:23:07.309Z",
+    "operationName": "projects/828532255978/locations/us/operations/v2-6a02972c-0000-2763-8aa5-fc41166ce379",
+    "error": "Failed to fetch transcription status: {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"Expected resource location to be global, but found us in resource name.\",\n    \"status\": \"INVALID_ARGUMENT\"\n  }\n}\n"
+  },
+  {
+    "id": "5c158a16-bf23-4826-993e-639a01b6e7c2",
+    "assetId": "65c1ea16-f162-401b-8743-4fb2053dfbe5",
+    "assetName": "this is a test.mp4",
+    "assetUrl": "/uploads/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "fileName": "1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "mimeType": "video/mp4",
+    "gcsUri": "gs://gemini-studio-storage/assets/65c1ea16-f162-401b-8743-4fb2053dfbe5/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "status": "completed",
+    "languageCodes": [
+      "en-US"
+    ],
+    "createdAt": "2026-01-26T23:23:38.264Z",
+    "updatedAt": "2026-01-26T23:25:16.764Z",
+    "operationName": "projects/828532255978/locations/us/operations/v2-69912813-0000-2a75-8d07-d43a2ccd9a6f",
+    "transcript": "",
+    "segments": []
+  },
+  {
+    "id": "6b8f45d1-caec-44d3-a8e7-1bfdc10df415",
+    "assetId": "65c1ea16-f162-401b-8743-4fb2053dfbe5",
+    "assetName": "this is a test.mp4",
+    "assetUrl": "/uploads/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "fileName": "1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "mimeType": "video/mp4",
+    "gcsUri": "gs://gemini-studio-storage/assets/65c1ea16-f162-401b-8743-4fb2053dfbe5/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "status": "completed",
+    "languageCodes": [
+      "en-US"
+    ],
+    "createdAt": "2026-01-26T23:27:20.014Z",
+    "updatedAt": "2026-01-26T23:27:25.134Z",
+    "operationName": "projects/828532255978/locations/us/operations/v2-6a04f491-0000-2763-8aa5-fc41166ce379",
+    "transcript": "",
+    "segments": []
+  },
+  {
+    "id": "04dd0453-8209-4a9e-abd7-4524d2f196d3",
+    "assetId": "65c1ea16-f162-401b-8743-4fb2053dfbe5",
+    "assetName": "this is a test.mp4",
+    "assetUrl": "/uploads/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "fileName": "1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "mimeType": "video/mp4",
+    "gcsUri": "gs://gemini-studio-storage/assets/65c1ea16-f162-401b-8743-4fb2053dfbe5/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "status": "completed",
+    "languageCodes": [
+      "en-US"
+    ],
+    "createdAt": "2026-01-26T23:28:17.795Z",
+    "updatedAt": "2026-01-26T23:28:23.059Z",
+    "operationName": "projects/828532255978/locations/us/operations/v2-71dffd2f-0000-2ed0-8566-d43a2cea1337",
+    "transcript": "",
+    "segments": []
+  },
+  {
+    "id": "5f07713f-87cc-4876-b44e-0fff2dfc745d",
+    "assetId": "65c1ea16-f162-401b-8743-4fb2053dfbe5",
+    "assetName": "this is a test.mp4",
+    "assetUrl": "/uploads/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "fileName": "1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "mimeType": "video/mp4",
+    "gcsUri": "gs://gemini-studio-storage/assets/65c1ea16-f162-401b-8743-4fb2053dfbe5/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "status": "error",
+    "languageCodes": [
+      "en-US"
+    ],
+    "createdAt": "2026-01-26T23:29:12.604Z",
+    "updatedAt": "2026-01-26T23:29:17.810Z",
+    "operationName": "projects/828532255978/locations/us/operations/v2-71b1f866-0000-2bd1-acd9-d43a2ccbc15f",
+    "error": "Audio data does not appear to be in a supported encoding. If you believe this to be incorrect, try explicitly specifying the decoding parameters."
+  },
+  {
+    "id": "d50bb60c-f1fe-4652-bc24-aefbbcf89183",
+    "assetId": "65c1ea16-f162-401b-8743-4fb2053dfbe5",
+    "assetName": "this is a test.mp4",
+    "assetUrl": "/uploads/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "fileName": "1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "mimeType": "video/mp4",
+    "gcsUri": "gs://gemini-studio-storage/assets/65c1ea16-f162-401b-8743-4fb2053dfbe5/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+    "status": "error",
+    "languageCodes": [
+      "en-US"
+    ],
+    "createdAt": "2026-01-26T23:29:30.493Z",
+    "updatedAt": "2026-01-26T23:29:35.589Z",
+    "operationName": "projects/828532255978/locations/us/operations/v2-6b699da0-0000-29dc-bdf2-d43a2cfd156f",
+    "error": "Audio data does not appear to be in a supported encoding. If you believe this to be incorrect, try explicitly specifying the decoding parameters."
+  }
+]

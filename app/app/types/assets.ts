@@ -8,6 +8,8 @@ export interface RemoteAsset {
   mimeType: string;
   size: number;
   uploadedAt: string;
+  projectId?: string;
+  thumbnailUrl?: string;
 }
 
 export interface AssetDragPayload {

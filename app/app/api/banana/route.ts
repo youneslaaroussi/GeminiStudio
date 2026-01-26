@@ -34,11 +34,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { prompt, aspectRatio = "1:1", imageSize = "1K", sourceImage } = (await request.json()) as {
+    const { prompt, aspectRatio = "1:1", imageSize = "1K", sourceImage, projectId } = (await request.json()) as {
       prompt?: string;
       aspectRatio?: string;
       imageSize?: "1K" | "2K" | "4K";
       sourceImage?: BananaSourceImage;
+      projectId?: string;
     };
 
     if (!prompt || !prompt.trim()) {
@@ -120,6 +121,7 @@ export async function POST(request: NextRequest) {
       data: buffer,
       mimeType,
       originalName: `banana-${Date.now()}${extension}`,
+      projectId,
     });
 
     return NextResponse.json({ asset }, { status: 201 });

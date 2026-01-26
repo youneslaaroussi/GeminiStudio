@@ -17,6 +17,8 @@ interface VideoEffectsPanelProps {
   clip: VideoClip;
 }
 
+const EMPTY_JOB_IDS: string[] = [];
+
 type FieldValue = string | number | boolean | Record<string, unknown>;
 
 function coerceFieldValue(field: ToolFieldDefinition, rawValue: string): FieldValue {
@@ -87,11 +89,20 @@ export function VideoEffectsPanel({ clip }: VideoEffectsPanelProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const upsertJob = useVideoEffectsStore((state) => state.upsertJob);
   const upsertJobs = useVideoEffectsStore((state) => state.upsertJobs);
-  const jobs = useVideoEffectsStore((state) => {
-    if (!asset?.id) return [];
-    const ids = state.jobsByAsset[asset.id] ?? [];
-    return ids.map((id) => state.jobs[id]).filter(Boolean);
-  });
+  const jobsMap = useVideoEffectsStore((state) => state.jobs);
+  const jobIds = useVideoEffectsStore(
+    useCallback(
+      (state) => {
+        if (!asset?.id) return EMPTY_JOB_IDS;
+        return state.jobsByAsset[asset.id] ?? EMPTY_JOB_IDS;
+      },
+      [asset?.id]
+    )
+  );
+  const jobs = useMemo(
+    () => jobIds.map((id) => jobsMap[id]).filter(Boolean),
+    [jobIds, jobsMap]
+  );
   const pollersRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {

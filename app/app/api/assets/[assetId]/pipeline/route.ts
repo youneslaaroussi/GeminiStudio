@@ -4,16 +4,18 @@ import { runPipelineStepForAsset } from "@/app/lib/server/pipeline/runner";
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { assetId: string } }
+  { params }: { params: Promise<{ assetId: string }> }
 ) {
-  const pipeline = await getPipelineStateForAsset(params.assetId);
+  const { assetId } = await params;
+  const pipeline = await getPipelineStateForAsset(assetId);
   return NextResponse.json({ pipeline });
 }
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { assetId: string } }
+  { params }: { params: Promise<{ assetId: string }> }
 ) {
+  const { assetId } = await params;
   const { stepId, paramOverrides } = (await request.json()) as {
     stepId?: string;
     paramOverrides?: Record<string, unknown>;
@@ -24,7 +26,7 @@ export async function POST(
   }
 
   try {
-    const pipeline = await runPipelineStepForAsset(params.assetId, stepId, {
+    const pipeline = await runPipelineStepForAsset(assetId, stepId, {
       params: paramOverrides,
     });
     return NextResponse.json({ pipeline });

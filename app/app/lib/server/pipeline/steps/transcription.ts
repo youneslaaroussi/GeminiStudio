@@ -16,7 +16,10 @@ async function startBatchRecognize(
   languageCodes: string[]
 ) {
   const recognizerPath = `projects/${env.projectId}/locations/${env.location}/recognizers/${env.recognizerId}`;
-  const url = `https://speech.googleapis.com/v2/${recognizerPath}:batchRecognize`;
+  const endpoint = env.location === "global"
+    ? "speech.googleapis.com"
+    : `${env.location}-speech.googleapis.com`;
+  const url = `https://${endpoint}/v2/${recognizerPath}:batchRecognize`;
 
   const response = await fetch(url, {
     method: "POST",

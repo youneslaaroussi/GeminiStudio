@@ -10,6 +10,7 @@ export interface StoredAsset {
   mimeType: string;
   size: number;
   uploadedAt: string;
+  projectId?: string;
 }
 
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
@@ -57,7 +58,12 @@ export function determineAssetType(mimeType: string, fileName: string): AssetTyp
 
 export function storedAssetToRemote(asset: StoredAsset): RemoteAsset {
   return {
-    ...asset,
+    id: asset.id,
+    name: asset.name,
+    mimeType: asset.mimeType,
+    size: asset.size,
+    uploadedAt: asset.uploadedAt,
+    projectId: asset.projectId,
     url: `/uploads/${asset.fileName}`,
     type: determineAssetType(asset.mimeType, asset.name),
   };
@@ -67,9 +73,10 @@ interface SaveBufferOptions {
   data: Buffer;
   originalName: string;
   mimeType: string;
+  projectId?: string;
 }
 
-export async function saveBufferAsAsset({ data, originalName, mimeType }: SaveBufferOptions) {
+export async function saveBufferAsAsset({ data, originalName, mimeType, projectId }: SaveBufferOptions) {
   await ensureAssetStorage();
   const fileExtension = path.extname(originalName) || "";
   const storedName = `${Date.now()}-${crypto.randomUUID()}${fileExtension}`;
@@ -84,6 +91,7 @@ export async function saveBufferAsAsset({ data, originalName, mimeType }: SaveBu
     mimeType,
     size: data.byteLength,
     uploadedAt: new Date().toISOString(),
+    projectId,
   };
 
   const manifest = await readManifest();
@@ -97,6 +105,43 @@ export async function persistStoredAsset(asset: StoredAsset) {
   const manifest = await readManifest();
   manifest.push(asset);
   await writeManifest(manifest);
+}
+
+export async function readManifestForProject(projectId: string): Promise<StoredAsset[]> {
+  const manifest = await readManifest();
+  return manifest.filter((asset) => asset.projectId === projectId);
+}
+
+export async function deleteAsset(assetId: string): Promise<boolean> {
+  const manifest = await readManifest();
+  const assetIndex = manifest.findIndex((a) => a.id === assetId);
+  if (assetIndex === -1) {
+    return false;
+  }
+
+  const asset = manifest[assetIndex];
+  const filePath = path.join(UPLOAD_DIR, asset.fileName);
+
+  // Remove from manifest
+  manifest.splice(assetIndex, 1);
+  await writeManifest(manifest);
+
+  // Delete file from disk
+  try {
+    await fs.unlink(filePath);
+  } catch (error: unknown) {
+    // File may already be deleted, ignore ENOENT
+    if (!isNodeError(error) || error.code !== "ENOENT") {
+      console.error("Failed to delete asset file", error);
+    }
+  }
+
+  return true;
+}
+
+export async function getAssetById(assetId: string): Promise<StoredAsset | null> {
+  const manifest = await readManifest();
+  return manifest.find((a) => a.id === assetId) ?? null;
 }
 
 export { UPLOAD_DIR };

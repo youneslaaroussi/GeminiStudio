@@ -45,8 +45,8 @@ export function SettingsPanel() {
   );
 
   return (
-    <div className="flex h-full flex-col">
-      <ScrollArea className="flex-1">
+    <div className="flex h-full flex-col overflow-hidden">
+      <ScrollArea className="h-0 flex-1">
         <div className="p-3 space-y-4">
           {/* Scene Settings - Always visible */}
           <SceneSettings />

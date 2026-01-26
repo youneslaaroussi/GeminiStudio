@@ -37,6 +37,7 @@ export function useAssets() {
   const publishAssets = useAssetsStore((state) => state.setAssets);
   const upsertAssetMetadata = useAssetsStore((state) => state.upsertMetadata);
   const metadata = useAssetsStore((state) => state.metadata);
+  const projectId = useProjectStore((s) => s.projectId);
   const transcriptions = useProjectStore(
     (s) => s.project.transcriptions ?? {}
   );
@@ -64,10 +65,13 @@ export function useAssets() {
   }, []);
 
   const fetchAssets = useCallback(async () => {
+    if (!projectId) return;
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/assets");
+      const url = new URL("/api/assets", window.location.origin);
+      url.searchParams.set("projectId", projectId);
+      const response = await fetch(url.toString());
       if (!response.ok) throw new Error("Failed to load assets");
       const data = (await response.json()) as { assets: RemoteAsset[] };
       setAssets(data.assets ?? []);
@@ -78,11 +82,35 @@ export function useAssets() {
     } finally {
       setIsLoading(false);
     }
-  }, [fetchPipelineStates]);
+  }, [fetchPipelineStates, projectId]);
 
   const addAssets = useCallback((newAssets: RemoteAsset[]) => {
     setAssets((prev) => [...newAssets, ...prev]);
   }, []);
+
+  const deleteAsset = useCallback(
+    async (assetId: string): Promise<boolean> => {
+      try {
+        const response = await fetch(`/api/assets/${assetId}`, {
+          method: "DELETE",
+        });
+        if (!response.ok) {
+          const data = (await response.json()) as { error?: string };
+          throw new Error(data.error || "Failed to delete asset");
+        }
+        setAssets((prev) => prev.filter((a) => a.id !== assetId));
+        toast.success("Asset deleted");
+        return true;
+      } catch (err) {
+        console.error("Failed to delete asset", err);
+        toast.error("Failed to delete asset", {
+          description: err instanceof Error ? err.message : "Unknown error",
+        });
+        return false;
+      }
+    },
+    []
+  );
 
   const getPipelineStep = useCallback(
     (assetId: string, stepId: string) =>
@@ -391,8 +419,10 @@ export function useAssets() {
     pipelineStates,
     transcriptions,
     metadata,
+    projectId,
     fetchAssets,
     addAssets,
+    deleteAsset,
     getPipelineStep,
     resolveAssetDuration,
     startTranscription,

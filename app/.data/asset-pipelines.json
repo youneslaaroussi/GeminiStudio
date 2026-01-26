@@ -170,5 +170,156 @@
       }
     ],
     "updatedAt": "2026-01-25T22:52:52.028Z"
+  },
+  {
+    "assetId": "65c1ea16-f162-401b-8743-4fb2053dfbe5",
+    "steps": [
+      {
+        "id": "metadata",
+        "label": "Extract metadata",
+        "status": "succeeded",
+        "updatedAt": "2026-01-26T22:56:12.054Z",
+        "startedAt": "2026-01-26T22:56:12.051Z",
+        "metadata": {
+          "mimeType": "video/mp4",
+          "size": 734839,
+          "uploadedAt": "2026-01-26T22:56:12.045Z",
+          "type": "video",
+          "fileSize": 734839,
+          "lastModified": "2026-01-26T22:56:12.045Z"
+        }
+      },
+      {
+        "id": "cloud-upload",
+        "label": "Upload to Cloud Storage",
+        "status": "succeeded",
+        "updatedAt": "2026-01-26T22:56:12.664Z",
+        "startedAt": "2026-01-26T22:56:12.056Z",
+        "metadata": {
+          "gcsUri": "gs://gemini-studio-storage/assets/65c1ea16-f162-401b-8743-4fb2053dfbe5/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4",
+          "signedUrl": "https://storage.googleapis.com/gemini-studio-storage/assets/65c1ea16-f162-401b-8743-4fb2053dfbe5/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=geministudio%40experiments-484119.iam.gserviceaccount.com%2F20260126%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260126T225612Z&X-Goog-Expires=604800&X-Goog-SignedHeaders=host&X-Goog-Signature=33f6e4594e008c6f8b220ed0be647f3bb329ac6a53c28a881ae823e5345cf0c829c457f4d1d80dceded9cf29b522ae4ab9b0272575628d8e9a679b99705a352dbe9a5e03fad3508853004531adf1eb708d8c4eee37791c4632022cb3a69054442312d78ba738d17527efbc4f939eac9e5e87208ec93bd4cef9ff6ce52787bd60c46926770b4b3de63b66ab85b847b8f26a7bbeeb806b5d847adb54f03e1d34038fc84dac786bc55c0e009bb806d2dac5c9b9fa404d2a69fc2bf970eb769c896e41eff9b1677e7c019c49eb76525d1875b51d4f885595cfbfe2f1ebe44ce37d834fc935d6dfb594fa2a4252e947d66a68205fc8caf4d5eaac823c9c115889ffc0",
+          "bucket": "gemini-studio-storage",
+          "objectName": "assets/65c1ea16-f162-401b-8743-4fb2053dfbe5/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4"
+        }
+      },
+      {
+        "id": "shot-detection",
+        "label": "Detect shot changes",
+        "status": "succeeded",
+        "updatedAt": "2026-01-26T22:56:18.503Z",
+        "startedAt": "2026-01-26T22:56:12.671Z",
+        "metadata": {
+          "shotCount": 2,
+          "shots": [
+            {
+              "index": 0,
+              "start": 0,
+              "end": 2.8,
+              "duration": 2.8
+            },
+            {
+              "index": 1,
+              "start": 2.816666,
+              "end": 4.916666,
+              "duration": 2.1
+            }
+          ],
+          "gcsUri": "gs://gemini-studio-storage/assets/65c1ea16-f162-401b-8743-4fb2053dfbe5/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4"
+        }
+      },
+      {
+        "id": "transcription",
+        "label": "Transcribe audio/video",
+        "status": "failed",
+        "updatedAt": "2026-01-26T23:29:35.590Z",
+        "startedAt": "2026-01-26T23:29:30.367Z",
+        "metadata": {
+          "jobId": "d50bb60c-f1fe-4652-bc24-aefbbcf89183",
+          "createdAt": "2026-01-26T23:29:30.493Z",
+          "languageCodes": [
+            "en-US"
+          ]
+        },
+        "error": "Audio data does not appear to be in a supported encoding. If you believe this to be incorrect, try explicitly specifying the decoding parameters."
+      },
+      {
+        "id": "face-detection",
+        "label": "Detect faces",
+        "status": "succeeded",
+        "updatedAt": "2026-01-26T22:56:31.481Z",
+        "startedAt": "2026-01-26T22:56:18.509Z",
+        "metadata": {
+          "faceCount": 3,
+          "faces": [
+            {
+              "faceIndex": 0,
+              "trackCount": 1,
+              "attributes": [],
+              "segments": [
+                {
+                  "start": {
+                    "low": 2,
+                    "high": 0,
+                    "unsigned": false
+                  },
+                  "end": {
+                    "low": 4,
+                    "high": 0,
+                    "unsigned": false
+                  }
+                }
+              ]
+            },
+            {
+              "faceIndex": 1,
+              "trackCount": 1,
+              "attributes": [],
+              "segments": [
+                {
+                  "start": {
+                    "low": 0,
+                    "high": 0,
+                    "unsigned": false
+                  },
+                  "end": {
+                    "low": 2,
+                    "high": 0,
+                    "unsigned": false
+                  }
+                }
+              ]
+            },
+            {
+              "faceIndex": 2,
+              "trackCount": 1,
+              "attributes": [
+                "glasses",
+                "headwear",
+                "eyes_visible",
+                "mouth_open",
+                "looking_at_camera",
+                "smiling"
+              ],
+              "segments": [
+                {
+                  "start": {
+                    "low": 0,
+                    "high": 0,
+                    "unsigned": false
+                  },
+                  "end": {
+                    "low": 0,
+                    "high": 0,
+                    "unsigned": false
+                  }
+                }
+              ]
+            }
+          ],
+          "gcsUri": "gs://gemini-studio-storage/assets/65c1ea16-f162-401b-8743-4fb2053dfbe5/1769468172043-bef1abc1-40e4-4217-a829-c6e69809e059.mp4"
+        }
+      }
+    ],
+    "updatedAt": "2026-01-26T23:29:35.591Z"
   }
 ]

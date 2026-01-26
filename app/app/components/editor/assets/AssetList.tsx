@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
   FileVideo,
   FileAudio,
@@ -11,12 +11,13 @@ import {
   FileText,
   MoreHorizontal,
   GripVertical,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RemoteAsset, AssetDragPayload } from "@/app/types/assets";
 import { ASSET_DRAG_DATA_MIME } from "@/app/types/assets";
 import type { PipelineStepState } from "@/app/types/pipeline";
-import type { TranscriptionRecord } from "@/app/types/transcription";
+import type { ProjectTranscription } from "@/app/types/transcription";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -39,13 +40,14 @@ interface AssetListProps {
   isLoading: boolean;
   error: string | null;
   metadata: Record<string, { duration?: number; width?: number; height?: number }>;
-  transcriptions: Record<string, TranscriptionRecord>;
+  transcriptions: Record<string, ProjectTranscription>;
   getPipelineStep: (assetId: string, stepId: string) => PipelineStepState | undefined;
   resolveAssetDuration: (asset: RemoteAsset) => number;
   onAddToTimeline: (asset: RemoteAsset) => void;
   onStartTranscription: (asset: RemoteAsset) => void;
   onViewTranscription: (assetId: string) => void;
   onViewDetails: (assetId: string) => void;
+  onDelete: (assetId: string) => Promise<boolean>;
   onRefresh: () => void;
 }
 
@@ -71,8 +73,26 @@ export function AssetList({
   onStartTranscription,
   onViewTranscription,
   onViewDetails,
+  onDelete,
   onRefresh,
 }: AssetListProps) {
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+
+  const handleDelete = useCallback(
+    async (assetId: string) => {
+      setDeletingIds((prev) => new Set(prev).add(assetId));
+      try {
+        await onDelete(assetId);
+      } finally {
+        setDeletingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(assetId);
+          return next;
+        });
+      }
+    },
+    [onDelete]
+  );
   const handleDragStart = useCallback(
     (asset: RemoteAsset, event: React.DragEvent<HTMLDivElement>) => {
       if (!event.dataTransfer) return;
@@ -251,6 +271,19 @@ export function AssetList({
                         <FileIcon className="size-4 mr-2" />
                         View details
                       </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        disabled={deletingIds.has(asset.id)}
+                        onClick={() => handleDelete(asset.id)}
+                      >
+                        {deletingIds.has(asset.id) ? (
+                          <Loader2 className="size-4 mr-2 animate-spin" />
+                        ) : (
+                          <Trash2 className="size-4 mr-2" />
+                        )}
+                        {deletingIds.has(asset.id) ? "Deleting..." : "Delete"}
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -279,6 +312,19 @@ export function AssetList({
               <ContextMenuItem onClick={() => onViewDetails(asset.id)}>
                 <FileIcon className="size-4 mr-2" />
                 View details
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                className="text-destructive focus:text-destructive"
+                disabled={deletingIds.has(asset.id)}
+                onClick={() => handleDelete(asset.id)}
+              >
+                {deletingIds.has(asset.id) ? (
+                  <Loader2 className="size-4 mr-2 animate-spin" />
+                ) : (
+                  <Trash2 className="size-4 mr-2" />
+                )}
+                {deletingIds.has(asset.id) ? "Deleting..." : "Delete"}
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>

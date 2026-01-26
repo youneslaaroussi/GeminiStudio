@@ -19,12 +19,19 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   await ensureAssetStorage();
+  const { searchParams } = new URL(request.url);
+  const projectId = searchParams.get("projectId");
+
   const manifest = await readManifest();
   const existingAssets: RemoteAsset[] = [];
 
   for (const asset of manifest) {
+    // Filter by projectId if provided
+    if (projectId && asset.projectId !== projectId) {
+      continue;
+    }
     const filePath = path.join(UPLOAD_DIR, asset.fileName);
     try {
       await fs.stat(filePath);
@@ -43,9 +50,14 @@ export async function POST(request: NextRequest) {
   await ensureAssetStorage();
   const formData = await request.formData();
   const files = formData.getAll("files").filter((entry): entry is File => entry instanceof File);
+  const projectId = formData.get("projectId");
 
   if (files.length === 0) {
     return NextResponse.json({ error: "No files provided" }, { status: 400 });
+  }
+
+  if (!projectId || typeof projectId !== "string") {
+    return NextResponse.json({ error: "projectId is required" }, { status: 400 });
   }
 
   const manifest = await readManifest();
@@ -68,6 +80,7 @@ export async function POST(request: NextRequest) {
       mimeType: file.type || "application/octet-stream",
       size: file.size,
       uploadedAt: new Date().toISOString(),
+      projectId,
     };
 
     manifest.push(asset);

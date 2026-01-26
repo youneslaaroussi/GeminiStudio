@@ -17,12 +17,14 @@ import { encodeFile, type EncodedFile } from "../utils";
 interface BananaDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  projectId: string | null;
   onGenerated: (asset: RemoteAsset) => void;
 }
 
 export function BananaDialog({
   open,
   onOpenChange,
+  projectId,
   onGenerated,
 }: BananaDialogProps) {
   const [prompt, setPrompt] = useState("");
@@ -49,7 +51,7 @@ export function BananaDialog({
   );
 
   const handleGenerate = useCallback(async () => {
-    if (isGenerating || !prompt.trim()) return;
+    if (isGenerating || !prompt.trim() || !projectId) return;
 
     setIsGenerating(true);
     setError(null);
@@ -58,6 +60,7 @@ export function BananaDialog({
         prompt,
         aspectRatio,
         imageSize,
+        projectId,
       };
 
       if (sourceImage) {
@@ -87,7 +90,7 @@ export function BananaDialog({
     } finally {
       setIsGenerating(false);
     }
-  }, [isGenerating, prompt, aspectRatio, imageSize, sourceImage, onGenerated]);
+  }, [isGenerating, prompt, aspectRatio, imageSize, projectId, sourceImage, onGenerated]);
 
   const handleClose = useCallback(
     (nextOpen: boolean) => {

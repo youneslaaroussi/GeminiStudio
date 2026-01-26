@@ -44,6 +44,21 @@ function offsetToMilliseconds(offset: unknown): number {
   return seconds * 1000 + Math.round(nanos / 1_000_000);
 }
 
+function extractResultError(payload: unknown, gcsUri: string): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const response = (payload as { response?: unknown }).response;
+  if (!response || typeof response !== "object") return null;
+  const resultsField = (response as { results?: unknown }).results;
+  if (!resultsField || typeof resultsField !== "object") return null;
+
+  const record = resultsField as Record<string, unknown>;
+  const fileResult = (record[gcsUri] ?? Object.values(record)[0]) as { error?: { message?: string } } | undefined;
+  if (fileResult?.error?.message) {
+    return fileResult.error.message;
+  }
+  return null;
+}
+
 function extractResults(payload: unknown, gcsUri: string): SpeechRecognitionResult[] {
   if (!payload || typeof payload !== "object") return [];
   const response = (payload as { response?: unknown }).response;
@@ -125,9 +140,10 @@ function extractTranscriptionData(payload: unknown, gcsUri: string) {
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { jobId: string } }
+  { params }: { params: Promise<{ jobId: string }> }
 ) {
-  const job = await findTranscriptionJobById(params.jobId);
+  const { jobId } = await params;
+  const job = await findTranscriptionJobById(jobId);
   if (!job) {
     return NextResponse.json({ error: "Transcription job not found" }, { status: 404 });
   }
@@ -152,7 +168,13 @@ export async function GET(
 
   try {
     const token = await getSpeechAccessToken();
-    const url = `https://speech.googleapis.com/v2/${job.operationName}`;
+    // Extract location from operation name: projects/{project}/locations/{location}/operations/{id}
+    const locationMatch = job.operationName.match(/locations\/([^/]+)/);
+    const location = locationMatch?.[1] ?? "global";
+    const endpoint = location === "global"
+      ? "speech.googleapis.com"
+      : `${location}-speech.googleapis.com`;
+    const url = `https://${endpoint}/v2/${job.operationName}`;
     const response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -167,6 +189,9 @@ export async function GET(
       done?: boolean;
       error?: { message?: string };
     };
+
+    // Debug: log raw response
+    console.log("[transcription] Raw Speech API response:", JSON.stringify(payload, null, 2));
 
     if (!payload.done) {
       return NextResponse.json({ job: serializeJob(job) });
@@ -186,7 +211,25 @@ export async function GET(
       return NextResponse.json({ job: serializeJob(updated ?? job) });
     }
 
+    // Check for per-file error in results (e.g., encoding issues)
+    const resultError = extractResultError(payload, job.gcsUri);
+    if (resultError) {
+      const updated = await updateTranscriptionJob(job.id, {
+        status: "error",
+        error: resultError,
+      });
+      await updatePipelineStep(job.assetId, "transcription", (prev) => ({
+        ...prev,
+        status: "failed",
+        error: resultError,
+        updatedAt: new Date().toISOString(),
+      }));
+      return NextResponse.json({ job: serializeJob(updated ?? job) });
+    }
+
     const { transcript, segments } = extractTranscriptionData(payload, job.gcsUri);
+    console.log("[transcription] Extracted transcript:", transcript);
+    console.log("[transcription] Extracted segments:", segments.length);
     const updated = await updateTranscriptionJob(job.id, {
       status: "completed",
       transcript,

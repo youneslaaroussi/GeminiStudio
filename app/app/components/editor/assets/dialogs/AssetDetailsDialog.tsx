@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import type { RemoteAsset } from "@/app/types/assets";
 import type { PipelineStepState } from "@/app/types/pipeline";
-import type { TranscriptionRecord } from "@/app/types/transcription";
+import type { ProjectTranscription } from "@/app/types/transcription";
 import { toast } from "sonner";
 import { formatBytes, STEP_STATUS_STYLES, STEP_DOT_STYLES } from "../utils";
 import { cn } from "@/lib/utils";
@@ -22,7 +22,7 @@ interface AssetDetailsDialogProps {
   onOpenChange: (open: boolean) => void;
   asset: RemoteAsset | null;
   pipelineSteps: PipelineStepState[];
-  transcription?: TranscriptionRecord;
+  transcription?: ProjectTranscription;
 }
 
 export function AssetDetailsDialog({

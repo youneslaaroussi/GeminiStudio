@@ -35,8 +35,10 @@ export function AssetsPanel() {
     pipelineStates,
     transcriptions,
     metadata,
+    projectId,
     fetchAssets,
     addAssets,
+    deleteAsset,
     getPipelineStep,
     resolveAssetDuration,
     startTranscription,
@@ -172,6 +174,7 @@ export function AssetsPanel() {
               onStartTranscription={startTranscription}
               onViewTranscription={setTranscriptDialogAssetId}
               onViewDetails={setDetailsDialogAssetId}
+              onDelete={deleteAsset}
               onRefresh={fetchAssets}
             />
           </ScrollArea>
@@ -229,18 +232,21 @@ export function AssetsPanel() {
         open={uploadDialogOpen}
         onOpenChange={setUploadDialogOpen}
         initialFiles={uploadInitialFiles}
+        projectId={projectId}
         onUploadComplete={handleUploadComplete}
       />
 
       <VeoDialog
         open={veoDialogOpen}
         onOpenChange={setVeoDialogOpen}
+        projectId={projectId}
         onGenerated={handleGenerated}
       />
 
       <BananaDialog
         open={bananaDialogOpen}
         onOpenChange={setBananaDialogOpen}
+        projectId={projectId}
         onGenerated={handleGenerated}
       />
 

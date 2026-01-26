@@ -24,6 +24,7 @@ interface UploadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialFiles?: File[];
+  projectId: string | null;
   onUploadComplete: (assets: RemoteAsset[]) => void;
 }
 
@@ -31,6 +32,7 @@ export function UploadDialog({
   open,
   onOpenChange,
   initialFiles,
+  projectId,
   onUploadComplete,
 }: UploadDialogProps) {
   const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>(() =>
@@ -69,12 +71,13 @@ export function UploadDialog({
   );
 
   const handleUpload = useCallback(async () => {
-    if (!queuedFiles.length || isUploading) return;
+    if (!queuedFiles.length || isUploading || !projectId) return;
     setIsUploading(true);
     setError(null);
     setProgress(0);
 
     const formData = new FormData();
+    formData.append("projectId", projectId);
     queuedFiles.forEach((item) => formData.append("files", item.file));
 
     try {
@@ -113,7 +116,7 @@ export function UploadDialog({
       setIsUploading(false);
       setProgress(0);
     }
-  }, [queuedFiles, isUploading, onUploadComplete, onOpenChange]);
+  }, [queuedFiles, isUploading, projectId, onUploadComplete, onOpenChange]);
 
   const handleClose = useCallback(
     (nextOpen: boolean) => {

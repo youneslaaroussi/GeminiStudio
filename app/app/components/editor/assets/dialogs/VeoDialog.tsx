@@ -18,10 +18,11 @@ import { encodeFile, type EncodedFile } from "../utils";
 interface VeoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  projectId: string | null;
   onGenerated: (asset: RemoteAsset) => void;
 }
 
-export function VeoDialog({ open, onOpenChange, onGenerated }: VeoDialogProps) {
+export function VeoDialog({ open, onOpenChange, projectId, onGenerated }: VeoDialogProps) {
   const [prompt, setPrompt] = useState("");
   const [promptIdea, setPromptIdea] = useState("");
   const [duration, setDuration] = useState<5 | 8>(8);
@@ -90,7 +91,7 @@ export function VeoDialog({ open, onOpenChange, onGenerated }: VeoDialogProps) {
   }, [promptIdea, prompt, isEnhancing, aspectRatio, duration, generateAudio]);
 
   const handleGenerate = useCallback(async () => {
-    if (isGenerating || !prompt.trim()) return;
+    if (isGenerating || !prompt.trim() || !projectId) return;
 
     setIsGenerating(true);
     setError(null);
@@ -101,6 +102,7 @@ export function VeoDialog({ open, onOpenChange, onGenerated }: VeoDialogProps) {
         aspectRatio,
         resolution,
         generateAudio,
+        projectId,
       };
 
       if (imageInput) {
@@ -139,6 +141,7 @@ export function VeoDialog({ open, onOpenChange, onGenerated }: VeoDialogProps) {
     aspectRatio,
     resolution,
     generateAudio,
+    projectId,
     imageInput,
     negativePrompt,
     onGenerated,
