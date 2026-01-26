@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
@@ -20,12 +20,16 @@ import type {
   TaskListSnapshot,
   TimelineChatMessage,
 } from "@/app/types/chat";
+import type { ToolResultOutput } from "@ai-sdk/provider-utils";
 import { MemoizedMarkdown } from "../MemoizedMarkdown";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { toolRegistry, executeTool } from "@/app/lib/tools/tool-registry";
+import type { ToolDefinition, ToolExecutionResult } from "@/app/lib/tools/types";
+import { useProjectStore } from "@/app/lib/store/project-store";
 
 type ToolPartState =
   | "input-streaming"
@@ -108,6 +112,18 @@ export function ChatPanel() {
     () => deriveTaskListSnapshot(messages),
     [messages]
   );
+  const project = useProjectStore((state) => state.project);
+  const toolboxTools = useMemo(() => toolRegistry.list(), []);
+  const clientToolMap = useMemo(() => {
+    const entries = new Map<string, ToolDefinition>();
+    for (const tool of toolboxTools) {
+      if (tool.runLocation === "client") {
+        entries.set(tool.name, tool);
+      }
+    }
+    return entries;
+  }, [toolboxTools]);
+  const handledToolCalls = useRef<Set<string>>(new Set());
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -141,6 +157,81 @@ export function ChatPanel() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
+  const submitClientToolResult = useCallback(
+    async (payload: { toolCallId: string; result: ToolExecutionResult }) => {
+      await fetch("/api/chat/tool-callback", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+    },
+    []
+  );
+
+  const runClientToolForCall = useCallback(
+    async (options: {
+      toolName: string;
+      toolCallId: string;
+      input: Record<string, unknown>;
+    }) => {
+      try {
+        const result = await executeTool({
+          toolName: options.toolName,
+          input: options.input,
+          context: { project },
+        });
+        await submitClientToolResult({
+          toolCallId: options.toolCallId,
+          result,
+        });
+      } catch (error) {
+        const err =
+          error instanceof Error
+            ? error
+            : new Error("Client tool execution failed.");
+        await submitClientToolResult({
+          toolCallId: options.toolCallId,
+          result: {
+            status: "error",
+            error: err.message,
+          },
+        });
+      }
+    },
+    [project, submitClientToolResult]
+  );
+
+  useEffect(() => {
+    if (!messages || messages.length === 0) return;
+    for (const message of messages) {
+      const parts = Array.isArray(message.parts) ? message.parts : [];
+      for (const rawPart of parts) {
+        const part = rawPart as ToolPart | null;
+        if (
+          !part ||
+          typeof part !== "object" ||
+          typeof part.type !== "string" ||
+          !part.type.startsWith("tool-") ||
+          part.state !== "input-available" ||
+          typeof part.toolCallId !== "string"
+        ) {
+          continue;
+        }
+        const toolName = part.type.replace("tool-", "");
+        if (!clientToolMap.has(toolName)) continue;
+        if (handledToolCalls.current.has(part.toolCallId)) continue;
+        handledToolCalls.current.add(part.toolCallId);
+        void runClientToolForCall({
+          toolName,
+          toolCallId: part.toolCallId,
+          input: (part.input as Record<string, unknown>) ?? {},
+        });
+      }
+    }
+  }, [messages, clientToolMap, runClientToolForCall]);
 
   return (
     <div className="flex h-full flex-col bg-card">
@@ -372,7 +463,7 @@ function renderMessagePart(part: MessagePart, key: string) {
 }
 
 function renderToolPart(part: ToolPart) {
-  const label = part.type.replace(/^tool-/, "").replace(/-/g, " ");
+  const label = resolveToolLabel(part.type);
 
   if (
     part.state === "output-available" &&
@@ -408,9 +499,9 @@ function renderToolPart(part: ToolPart) {
       return (
         <div className="rounded-xl bg-primary/5 p-3 text-xs text-foreground ring-1 ring-primary/20">
           <p className="font-medium text-primary">{label} result</p>
-          <p className="mt-1 text-sm font-semibold text-primary">
-            {formatToolOutput(part.output)}
-          </p>
+          <div className="mt-2 space-y-2">
+            {renderToolResultBody(part.output)}
+          </div>
         </div>
       );
     case "output-error":
@@ -430,10 +521,142 @@ function renderToolPart(part: ToolPart) {
   }
 }
 
-function formatToolOutput(output: unknown) {
-  if (typeof output === "string") return output;
-  if (output == null) return "No output.";
-  return JSON.stringify(output);
+function resolveToolLabel(partType: string) {
+  if (partType.startsWith("tool-")) {
+    const toolName = partType.replace("tool-", "");
+    const definition = toolRegistry.get(toolName);
+    if (definition) {
+      return definition.label;
+    }
+  }
+  return partType.replace(/^tool-/, "").replace(/-/g, " ");
+}
+
+function renderToolResultBody(output: unknown) {
+  if (!isToolResultOutput(output)) {
+    if (!output) return <p className="text-sm text-muted-foreground">No output.</p>;
+    return (
+      <pre className="overflow-auto rounded bg-muted/30 p-2 text-xs text-muted-foreground">
+        {JSON.stringify(output, null, 2)}
+      </pre>
+    );
+  }
+
+  switch (output.type) {
+    case "text":
+      return <MemoizedMarkdown id="tool-output-text" content={output.value} />;
+    case "json":
+      return (
+        <pre className="overflow-auto rounded bg-muted/30 p-2 text-xs text-muted-foreground">
+          {JSON.stringify(output.value, null, 2)}
+        </pre>
+      );
+    case "error-text":
+    case "execution-denied":
+      return (
+        <p className="text-sm text-destructive">
+          {output.type === "error-text" ? output.value : output.reason ?? "Execution denied"}
+        </p>
+      );
+    case "error-json":
+      return (
+        <pre className="overflow-auto rounded bg-destructive/10 p-2 text-xs text-destructive">
+          {JSON.stringify(output.value, null, 2)}
+        </pre>
+      );
+    case "content":
+      return (
+        <div className="space-y-2">
+          {output.value.map((entry, index) => (
+            <div key={index}>{renderContentEntry(entry, index)}</div>
+          ))}
+        </div>
+      );
+    default:
+      return (
+        <pre className="overflow-auto rounded bg-muted/30 p-2 text-xs text-muted-foreground">
+          {JSON.stringify(output, null, 2)}
+        </pre>
+      );
+  }
+}
+
+type ContentEntry = Extract<ToolResultOutput, { type: "content" }>["value"][number];
+
+function renderContentEntry(entry: ContentEntry, key: number) {
+  switch (entry.type) {
+    case "text":
+      return (
+        <MemoizedMarkdown
+          id={`tool-output-text-${key}`}
+          content={entry.text}
+        />
+      );
+    case "image-data": {
+      const src = `data:${entry.mediaType};base64,${entry.data}`;
+      return (
+        <img
+          src={src}
+          alt="Tool output image"
+          className="max-h-96 w-auto rounded border border-border/40"
+        />
+      );
+    }
+    case "image-url":
+      return (
+        <img
+          src={entry.url}
+          alt="Tool output image"
+          className="max-h-96 w-auto rounded border border-border/40"
+        />
+      );
+    case "file-data": {
+      const href = `data:${entry.mediaType};base64,${entry.data}`;
+      return (
+        <a
+          href={href}
+          download={entry.filename ?? "tool-output"}
+          className="text-sm font-medium text-primary underline"
+        >
+          Download {entry.filename ?? entry.mediaType}
+        </a>
+      );
+    }
+    case "file-url":
+      return (
+        <a
+          href={entry.url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-sm font-medium text-primary underline"
+        >
+          Download file
+        </a>
+      );
+    case "media": {
+      const href = `data:${entry.mediaType};base64,${entry.data}`;
+      return (
+        <audio controls src={href} className="w-full">
+          Your browser does not support the audio element.
+        </audio>
+      );
+    }
+    default:
+      return (
+        <pre className="overflow-auto rounded bg-muted/30 p-2 text-xs text-muted-foreground">
+          {JSON.stringify(entry, null, 2)}
+        </pre>
+      );
+  }
+}
+
+function isToolResultOutput(value: unknown): value is ToolResultOutput {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    typeof (value as { type: unknown }).type === "string"
+  );
 }
 
 function deriveTaskListSnapshot(

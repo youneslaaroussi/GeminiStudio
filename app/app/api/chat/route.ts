@@ -16,43 +16,15 @@ import type {
   TaskListSnapshot,
   TimelineChatMessage,
 } from "@/app/types/chat";
+import { toolRegistry, executeTool } from "@/app/lib/tools/tool-registry";
+import { toolResultOutputFromExecution } from "@/app/lib/tools/tool-output-adapter";
+import { logger } from "@/app/lib/server/logger";
+import type { ToolExecutionResult } from "@/app/lib/tools/types";
+import { waitForClientToolResult } from "@/app/lib/server/tools/client-tool-bridge";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
-
-const GENERAL_TOOLS = {
-  getDate: tool({
-    description: "Get the current date in ISO format.",
-    inputSchema: z.object({
-      locale: z
-        .string()
-        .optional()
-        .describe("Optional locale for formatting"),
-    }),
-    async execute({ locale }) {
-      const now = new Date();
-      return locale
-        ? now.toLocaleDateString(locale)
-        : now.toISOString().split("T")[0];
-    },
-  }),
-  getTime: tool({
-    description: "Get the current time in HH:MM:SS format.",
-    inputSchema: z.object({
-      locale: z
-        .string()
-        .optional()
-        .describe("Optional locale or time zone identifier."),
-    }),
-    async execute({ locale }) {
-      const now = new Date();
-      return locale
-        ? now.toLocaleTimeString(locale, { hour12: false })
-        : now.toISOString().split("T")[1].split(".")[0];
-    },
-  }),
-} as const;
 
 const MODE_DESCRIPTIONS: Record<ChatMode, string> = {
   ask: "Ask Mode: answer conversationally without invoking any tools. Provide direct, concise responses.",
@@ -71,6 +43,110 @@ const planningTaskInputSchema = z.object({
   description: z.string().max(500).optional(),
   status: planningTaskStatus.optional(),
 });
+
+function createGeneralTools() {
+  return {
+    getDate: tool({
+      description: "Get the current date in ISO format.",
+      inputSchema: z.object({
+        locale: z
+          .string()
+          .optional()
+          .describe("Optional locale for formatting"),
+      }),
+      async execute({ locale }) {
+        const now = new Date();
+        return locale
+          ? now.toLocaleDateString(locale)
+          : now.toISOString().split("T")[0];
+      },
+    }),
+    getTime: tool({
+      description: "Get the current time in HH:MM:SS format.",
+      inputSchema: z.object({
+        locale: z
+          .string()
+          .optional()
+          .describe("Optional locale or time zone identifier."),
+      }),
+      async execute({ locale }) {
+        const now = new Date();
+        return locale
+          ? now.toLocaleTimeString(locale, { hour12: false })
+          : now.toISOString().split("T")[1].split(".")[0];
+      },
+    }),
+  };
+}
+
+function createToolboxTools() {
+  const toolboxEntries = toolRegistry.list();
+
+  return toolboxEntries.reduce(
+    (acc, definition) => {
+      acc[definition.name] = tool({
+        description: definition.description,
+        inputSchema: definition.inputSchema,
+        async execute(
+          input,
+          options?: {
+            toolCallId?: string;
+          }
+        ) {
+          if (definition.runLocation === "client") {
+            if (!options?.toolCallId) {
+              throw new Error("Client tool requests require a toolCallId.");
+            }
+            const context = {
+              tool: definition.name,
+              runLocation: "client",
+              toolCallId: options.toolCallId,
+              inputKeys: Object.keys(input ?? {}),
+            };
+            logger.info(context, "Waiting for client tool result");
+            const result = await waitForClientToolResult({
+              toolCallId: options.toolCallId,
+              toolName: definition.name,
+            });
+            if (result.status === "error") {
+              logger.error({ ...context, error: result.error }, "Client tool execution failed");
+              throw new Error(result.error ?? "Client tool execution failed.");
+            }
+            logger.info(
+              { ...context, summary: summarizeExecutionResult(result) },
+              "Client tool execution completed"
+            );
+            return toolResultOutputFromExecution(result);
+          }
+
+          const context = {
+            tool: definition.name,
+            runLocation: definition.runLocation ?? "server",
+            inputKeys: Object.keys(input ?? {}),
+          };
+          logger.info(context, "Executing toolbox tool");
+
+          const result = await executeTool({
+            toolName: definition.name,
+            input,
+            context: {},
+          });
+          if (result.status === "error") {
+            logger.error({ ...context, error: result.error }, "Tool execution failed");
+            throw new Error(result.error ?? "Tool execution failed.");
+          }
+          logger.info(
+            { ...context, summary: summarizeExecutionResult(result) },
+            "Tool execution completed"
+          );
+          return toolResultOutputFromExecution(result);
+        },
+      });
+      return acc;
+    },
+    {} as Record<string, ReturnType<typeof tool>>
+  );
+}
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -113,12 +189,14 @@ export async function POST(req: Request) {
     ],
   };
 
+  const generalTools = createGeneralTools();
+  const toolboxTools = createToolboxTools();
   const planningTools = createPlanningTools(chatId);
   const tools =
     activeMode === "ask"
       ? undefined
       : activeMode === "agent"
-        ? { ...GENERAL_TOOLS, ...planningTools }
+        ? { ...generalTools, ...toolboxTools, ...planningTools }
         : planningTools;
 
   const result = streamText({
@@ -168,11 +246,10 @@ function createSystemPrompt(currentMode: ChatMode) {
     `- ${MODE_DESCRIPTIONS.agent}`,
     `- ${MODE_DESCRIPTIONS.plan}`,
     "",
-    `The current mode for this turn is: ${currentMode.toUpperCase()}.`,
+    `The current mode for this turn is: ${currentMode.toUpperCase()}. Treat this as an internal detail—follow its rules but never reveal or explain the mode name to the user.`,
     "When in Ask Mode you must not call any tool and simply answer clearly.",
     "When in Agent Mode you may call any available tool to gather data, reflect, or take action on behalf of the user.",
     "When in Plan Mode you are limited to the planning tools. Use them to create, update, and maintain the shared task list so the user can see progress. Do not execute other tools while planning.",
-    "Always explain how the selected mode influenced your response.",
   ].join("\n");
 }
 
@@ -299,6 +376,50 @@ function createPlanningTools(chatId: string) {
       },
     }),
   };
+}
+
+function summarizeExecutionResult(result: ToolExecutionResult) {
+  if (result.status === "error") {
+    return {
+      status: "error",
+      error: result.error,
+    };
+  }
+  const summary = {
+    status: "success" as const,
+    counts: {
+      text: 0,
+      json: 0,
+      list: 0,
+      image: 0,
+    },
+    inlineImageBytes: 0,
+  };
+  for (const output of result.outputs) {
+    switch (output.type) {
+      case "text":
+        summary.counts.text += 1;
+        break;
+      case "json":
+        summary.counts.json += 1;
+        break;
+      case "list":
+        summary.counts.list += 1;
+        break;
+      case "image":
+        summary.counts.image += 1;
+        if (output.url.startsWith("data:")) {
+          const [, data] = output.url.split(",");
+          if (data) {
+            summary.inlineImageBytes += Math.floor((data.length * 3) / 4);
+          }
+        }
+        break;
+      default:
+        break;
+    }
+  }
+  return summary;
 }
 
 function normalizeTask(task: PlanningToolTaskInput): TaskListItem {

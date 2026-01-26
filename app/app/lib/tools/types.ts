@@ -52,6 +52,7 @@ export interface ToolDefinition<
   description: string;
   inputSchema: TSchema;
   fields: ToolFieldDefinition[];
+  runLocation?: "server" | "client";
   run: (
     input: z.infer<TSchema>,
     context: ToolRuntimeContext<TProject>

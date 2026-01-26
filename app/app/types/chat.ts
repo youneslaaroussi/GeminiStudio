@@ -1,4 +1,5 @@
 import { UIMessage, UIDataTypes } from "ai";
+import type { ToolExecutionResult } from "@/app/lib/tools/types";
 
 export type ChatMode = "ask" | "agent" | "plan";
 
@@ -35,7 +36,7 @@ export interface PlanningToolResponse {
   taskList: TaskListSnapshot;
 }
 
-type ToolMap = {
+type BaseToolMap = {
   "tool-getDate": {
     input: { locale?: string };
     output: string;
@@ -79,6 +80,16 @@ type ToolMap = {
     output: PlanningToolResponse;
   };
 };
+
+type ToolboxToolMap = Record<
+  string,
+  {
+    input: Record<string, unknown>;
+    output: ToolExecutionResult;
+  }
+>;
+
+export type ToolMap = BaseToolMap & ToolboxToolMap;
 
 export type TimelineChatMessage = UIMessage<
   ChatMessageMetadata,
