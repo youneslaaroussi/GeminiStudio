@@ -13,7 +13,6 @@ Node-based rendering microservice that drives the Motion Canvas headless pipelin
 - Segmented rendering with Puppeteer Cluster concurrency
 - Basic timeline audio mix for video/audio layers
 - Job status endpoint (`GET /jobs/:id`)
-- ✅ Job status endpoint (`GET /jobs/:id`)
 
 ## Getting Started
 
