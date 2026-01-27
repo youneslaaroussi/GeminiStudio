@@ -1,5 +1,15 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "@fontsource-variable/inter";
+import "@fontsource/roboto/400.css";
+import "@fontsource/roboto/500.css";
+import "@fontsource/roboto/700.css";
+import "@fontsource/montserrat/400.css";
+import "@fontsource/montserrat/500.css";
+import "@fontsource/montserrat/700.css";
+import "@fontsource/poppins/400.css";
+import "@fontsource/poppins/500.css";
+import "@fontsource/poppins/700.css";
 import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
@@ -9,6 +19,9 @@ export const metadata: Metadata = {
   icons: {
     icon: "/gemini-logo.png",
     apple: "/gemini-logo.png",
+  },
+  other: {
+    "preload:inter": `<link rel="preload" href="/fonts/inter-variable.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />`,
   },
 };
 

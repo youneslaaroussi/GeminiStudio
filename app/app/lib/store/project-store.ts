@@ -47,7 +47,7 @@ interface ProjectStore {
   setPlaybackSpeed: (speed: number) => void;
   splitClipAtTime: (id: string, time: number) => void;
   updateProjectSettings: (
-    settings: Partial<Pick<Project, 'renderScale' | 'background' | 'resolution' | 'fps' | 'name'>>
+    settings: Partial<Pick<Project, 'renderScale' | 'background' | 'resolution' | 'fps' | 'name' | 'captionSettings'>>
   ) => void;
   setProject: (project: Project, options?: { markSaved?: boolean }) => void;
   upsertProjectTranscription: (transcription: ProjectTranscription) => void;
@@ -463,6 +463,10 @@ export const useProjectStore = create<ProjectStore>()(
               settings.fps !== undefined
                 ? Math.max(1, Math.min(240, settings.fps))
                 : state.project.fps,
+            captionSettings:
+              settings.captionSettings !== undefined
+                ? settings.captionSettings
+                : state.project.captionSettings,
           },
         })),
 

@@ -8,6 +8,12 @@ export type TransitionType =
   | 'slide-up'
   | 'slide-down';
 
+export interface CaptionSettings {
+  fontFamily: 'Inter Variable' | 'Roboto' | 'Montserrat' | 'Poppins';
+  fontWeight: 400 | 500 | 700;
+  distanceFromBottom: number;
+}
+
 export interface ClipTransition {
   type: TransitionType;
   duration: number;
@@ -97,4 +103,5 @@ export interface Project {
   background: string;
   transcriptions?: Record<string, ProjectTranscription>;
   transitions?: Record<TransitionKey, ClipTransition>;
+  captionSettings?: CaptionSettings;
 }

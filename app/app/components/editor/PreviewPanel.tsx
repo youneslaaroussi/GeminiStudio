@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Player } from "@motion-canvas/core";
 import { ScenePlayer } from "../ScenePlayer";
-import type { Layer } from "@/app/types/timeline";
+import type { Layer, CaptionSettings } from "@/app/types/timeline";
 import type { ProjectTranscription } from "@/app/types/transcription";
 
 interface PreviewPanelProps {
@@ -15,6 +15,7 @@ interface PreviewPanelProps {
   onTimeUpdate: (time: number) => void;
   transcriptions: Record<string, ProjectTranscription>;
   transitions?: Record<string, any>;
+  captionSettings?: CaptionSettings;
   sceneConfig: {
     resolution: { width: number; height: number };
     renderScale: number;
@@ -31,6 +32,7 @@ export function PreviewPanel({
   onTimeUpdate,
   transcriptions,
   transitions,
+  captionSettings,
   sceneConfig,
 }: PreviewPanelProps) {
   const [showUpdateIndicator, setShowUpdateIndicator] = useState(false);
@@ -89,6 +91,7 @@ export function PreviewPanel({
             onTimeUpdate={onTimeUpdate}
             transcriptions={transcriptions}
             transitions={transitions}
+            captionSettings={captionSettings}
             sceneConfig={sceneConfig}
           />
       </div>

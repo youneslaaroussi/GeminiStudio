@@ -108,6 +108,15 @@ export default makeScene2D(function* (view) {
   const layers = scene.variables.get<Layer[]>('layers', [])();
   scene.variables.get<number>('duration', 10)();
   const transitions = scene.variables.get<Record<string, ClipTransition>>('transitions', {})();
+  const captionSettings = scene.variables.get<{
+    fontFamily: string;
+    fontWeight: number;
+    distanceFromBottom: number;
+  }>('captionSettings', {
+    fontFamily: 'Inter Variable',
+    fontWeight: 400,
+    distanceFromBottom: 140,
+  })();
 
   const audioClips = layers
     .filter((layer) => layer.type === 'audio')
@@ -212,11 +221,13 @@ export default makeScene2D(function* (view) {
         key={`captions-${clip.id}`}
         ref={ref}
         SceneHeight={height}
-        y={height / 2 - 140}
+        y={height / 2 - captionSettings.distanceFromBottom}
         CaptionsSize={1.1}
         CaptionsDuration={3}
         ShowCaptions={false}
         TranscriptionData={() => normalized}
+        CaptionsFontFamily={captionSettings.fontFamily}
+        CaptionsFontWeight={captionSettings.fontWeight}
         zIndex={1000}
       />,
     );

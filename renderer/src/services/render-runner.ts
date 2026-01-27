@@ -116,6 +116,12 @@ const buildVariables = (job: RenderJobData, computedDuration: number) => {
       job.variables?.transcriptions ?? job.project.transcriptions ?? {},
     transitions:
       job.variables?.transitions ?? job.project.transitions ?? {},
+    captionSettings:
+      job.variables?.captionSettings ?? job.project.captionSettings ?? {
+        fontFamily: 'Inter Variable',
+        fontWeight: 400,
+        distanceFromBottom: 140,
+      },
   };
 };
 
@@ -361,10 +367,13 @@ export class RenderRunner {
         res.json({ status: 'ok' });
       });
 
+      // Serve static files (including index.html) from headless dist
+      // Use /headless/ as the mount point so relative paths in HTML resolve correctly
+      httpApp.use('/headless/', express.static(HEADLESS_DIST, { index: 'index.html' }));
+      // Redirect /headless to /headless/ for convenience
       httpApp.get('/headless', (_req, res) => {
-        res.sendFile(HEADLESS_HTML);
+        res.redirect(301, '/headless/');
       });
-      httpApp.use('/headless', express.static(HEADLESS_DIST));
 
       httpApp.get('/jobs/:token', (req, res) => {
         if (req.params.token !== token) {
@@ -514,7 +523,7 @@ export class RenderRunner {
           logger.error({ jobId: job.id, segment: segment.index, url, error: failure?.errorText }, 'Headless request failed');
         });
 
-        const url = new URL(`http://127.0.0.1:${port}/headless`);
+        const url = new URL(`http://127.0.0.1:${port}/headless/`);
         url.searchParams.set('token', token);
         url.searchParams.set('segmentIndex', segment.index.toString());
         url.searchParams.set('segmentTotal', segments.length.toString());

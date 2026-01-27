@@ -98,7 +98,7 @@ export function RenderDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Film className="size-5" />
@@ -244,12 +244,14 @@ export function RenderDialog({
 
         {(isFailed || error) && !isCompleted && (
           <div className="space-y-4 py-4">
-            <div className="flex flex-col items-center gap-2">
-              <AlertCircle className="size-12 text-destructive" />
+            <div className="flex flex-col items-center gap-2 min-w-0">
+              <AlertCircle className="size-12 text-destructive shrink-0" />
               <p className="text-lg font-medium">Render Failed</p>
-              <p className="text-sm text-muted-foreground text-center">
-                {error || jobStatus?.failedReason || "An unknown error occurred"}
-              </p>
+              <div className="max-h-48 overflow-y-auto w-full rounded-md bg-muted/30 p-3 break-all">
+                <p className="text-xs text-muted-foreground text-left whitespace-pre-wrap">
+                  {error || jobStatus?.failedReason || "An unknown error occurred"}
+                </p>
+              </div>
             </div>
             <Button variant="outline" className="w-full" onClick={handleNewRender}>
               Try Again

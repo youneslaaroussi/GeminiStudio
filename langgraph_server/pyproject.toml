@@ -12,10 +12,10 @@ packages = [
 [tool.poetry.dependencies]
 python = ">=3.11,<3.13"
 langgraph = "^0.1.0"
-langgraph-cli = "^0.1.0"
-langchain = "^0.3.0"
+langgraph-cli = { version = "^0.1.0", extras = ["inmem"] }
+langchain = ">=0.2.17,<0.3.0"
 langchain-google-genai = "^1.0.0"
-langchain-core = "^0.3.0"
+langchain-core = ">=0.2.17,<0.3.0"
 langsmith = "^0.1.0"
 fastapi = "^0.114.0"
 uvicorn = { extras = ["standard"], version = "^0.30.0" }

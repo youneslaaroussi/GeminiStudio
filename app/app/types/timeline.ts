@@ -13,6 +13,18 @@ export type TransitionType =
   | 'slide-up'
   | 'slide-down';
 
+export interface CaptionSettings {
+  fontFamily: 'Inter Variable' | 'Roboto' | 'Montserrat' | 'Poppins';
+  fontWeight: 400 | 500 | 700;
+  distanceFromBottom: number; // pixels from bottom
+}
+
+export const DEFAULT_CAPTION_SETTINGS: CaptionSettings = {
+  fontFamily: 'Inter Variable',
+  fontWeight: 400,
+  distanceFromBottom: 140,
+};
+
 export interface ClipTransition {
   type: TransitionType;
   duration: number;
@@ -113,6 +125,7 @@ export interface Project {
   transitions?: Record<TransitionKey, ClipTransition>;
   assistantChats?: AssistantChatSession[];
   activeAssistantChatId?: string | null;
+  captionSettings?: CaptionSettings;
 }
 
 // Test videos for development

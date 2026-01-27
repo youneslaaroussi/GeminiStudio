@@ -1,0 +1,9 @@
+fastapi
+langgraph
+langchain-core>=0.2.17,<0.3.0
+langchain-google-genai
+langgraph-cli[inmem]
+pydantic
+pydantic-settings
+google-cloud-storage
+uvicorn[standard]

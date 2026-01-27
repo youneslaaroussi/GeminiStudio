@@ -20,6 +20,11 @@ interface ScenePlayerProps {
   onTimeUpdate?: (time: number) => void;
   transcriptions?: Record<string, ProjectTranscription>;
   transitions?: Record<string, any>;
+  captionSettings?: {
+    fontFamily: string;
+    fontWeight: number;
+    distanceFromBottom: number;
+  };
   sceneConfig: {
     resolution: { width: number; height: number };
     renderScale: number;
@@ -37,6 +42,7 @@ export function ScenePlayer({
   onTimeUpdate,
   transcriptions = {},
   transitions = {},
+  captionSettings,
   sceneConfig,
 }: ScenePlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -48,6 +54,7 @@ export function ScenePlayer({
   const latestLayersRef = useRef(layers);
   const latestTranscriptionsRef = useRef(transcriptions);
   const latestTransitionsRef = useRef(transitions);
+  const latestCaptionSettingsRef = useRef(captionSettings);
   const onVariablesUpdatedRef = useRef(onVariablesUpdated);
 
   useEffect(() => {
@@ -61,6 +68,10 @@ export function ScenePlayer({
   useEffect(() => {
     latestTransitionsRef.current = transitions;
   }, [transitions]);
+
+  useEffect(() => {
+    latestCaptionSettingsRef.current = captionSettings;
+  }, [captionSettings]);
 
   useEffect(() => {
     onVariablesUpdatedRef.current = onVariablesUpdated;
@@ -286,6 +297,11 @@ export function ScenePlayer({
       duration,
       transcriptions: latestTranscriptionsRef.current,
       transitions: latestTransitionsRef.current,
+      captionSettings: latestCaptionSettingsRef.current ?? {
+        fontFamily: 'Inter Variable',
+        fontWeight: 400,
+        distanceFromBottom: 140,
+      },
     });
     (playerInstance as unknown as { requestRecalculation?: () => void }).requestRecalculation?.();
     playerInstance.requestRender();
@@ -362,13 +378,18 @@ export function ScenePlayer({
       duration,
       transcriptions,
       transitions,
+      captionSettings: captionSettings ?? {
+        fontFamily: 'Inter Variable',
+        fontWeight: 400,
+        distanceFromBottom: 140,
+      },
     });
     (player as unknown as { requestRecalculation?: () => void }).requestRecalculation?.();
     player.requestRender();
 
     // Notify parent that variables were updated
     onVariablesUpdatedRef.current?.();
-  }, [player, layers, duration, transcriptions, transitions]);
+  }, [player, layers, duration, transcriptions, transitions, captionSettings]);
 
   // Sync playhead time from player back to the store during playback
   useEffect(() => {

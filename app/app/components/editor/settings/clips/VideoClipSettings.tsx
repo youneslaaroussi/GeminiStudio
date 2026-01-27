@@ -1,7 +1,9 @@
 "use client";
 
+import { useProjectStore } from "@/app/lib/store/project-store";
 import { EditableInput } from "@/app/components/ui/EditableInput";
 import type { VideoClip } from "@/app/types/timeline";
+import { DEFAULT_CAPTION_SETTINGS } from "@/app/types/timeline";
 import { VideoEffectsPanel } from "../../VideoEffectsPanel";
 import {
   toNumber,
@@ -18,6 +20,14 @@ interface VideoClipSettingsProps {
 }
 
 export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
+  const project = useProjectStore((s) => s.project);
+  const updateProjectSettings = useProjectStore((s) => s.updateProjectSettings);
+
+  const hasTranscriptions = project.transcriptions &&
+    Object.values(project.transcriptions).some(t => t.assetUrl === clip.src);
+
+  const captionSettings = project.captionSettings ?? DEFAULT_CAPTION_SETTINGS;
+
   return (
     <div className="space-y-3">
       <div className={cardClassName}>
@@ -154,6 +164,62 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
 
       {/* Video Effects */}
       <VideoEffectsPanel clip={clip} />
+
+      {/* Caption Settings */}
+      {hasTranscriptions && (
+        <div className={cardClassName}>
+          <h3 className="text-xs font-medium mb-3">Caption Settings</h3>
+
+          <div>
+            <label className={labelClassName}>Font Family</label>
+            <select
+              value={captionSettings.fontFamily}
+              onChange={(e) => updateProjectSettings({
+                captionSettings: { ...captionSettings, fontFamily: e.target.value as any }
+              })}
+              className={inputClassName}
+            >
+              <option value="Inter Variable">Inter</option>
+              <option value="Roboto">Roboto</option>
+              <option value="Montserrat">Montserrat</option>
+              <option value="Poppins">Poppins</option>
+            </select>
+          </div>
+
+          <div className="pt-2">
+            <label className={labelClassName}>Font Weight</label>
+            <select
+              value={captionSettings.fontWeight}
+              onChange={(e) => updateProjectSettings({
+                captionSettings: { ...captionSettings, fontWeight: Number(e.target.value) as any }
+              })}
+              className={inputClassName}
+            >
+              <option value="400">Regular</option>
+              <option value="500">Medium</option>
+              <option value="700">Bold</option>
+            </select>
+          </div>
+
+          <div className="pt-2">
+            <label className={labelClassName}>Distance from Bottom (px)</label>
+            <EditableInput
+              type="number"
+              value={captionSettings.distanceFromBottom}
+              min={0}
+              max={500}
+              className={inputClassName}
+              onValueCommit={(val) => {
+                const next = toNumber(val);
+                if (next === null) return;
+                updateProjectSettings({
+                  captionSettings: { ...captionSettings, distanceFromBottom: Math.max(0, Math.min(500, next)) }
+                });
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

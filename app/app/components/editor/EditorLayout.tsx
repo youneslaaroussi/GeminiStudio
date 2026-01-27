@@ -193,6 +193,7 @@ export function EditorLayout() {
                           onTimeUpdate={handleTimeUpdate}
                           transcriptions={project.transcriptions ?? {}}
                           transitions={project.transitions ?? {}}
+                          captionSettings={project.captionSettings}
                           sceneConfig={{
                             resolution: project.resolution,
                             renderScale: project.renderScale,

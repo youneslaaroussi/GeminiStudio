@@ -26,6 +26,7 @@ export const renderJobSchema = z.object({
       transitions: z.record(z.any()).optional(),
       layers: z.any().optional(),
       transcriptions: z.record(z.any()).optional(),
+      captionSettings: z.any().optional(),
     })
     .optional(),
   assets: z

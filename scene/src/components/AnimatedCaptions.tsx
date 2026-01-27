@@ -23,6 +23,8 @@ export interface AnimatedCaptionsProps extends NodeProps {
   CaptionsDuration: SignalValue<number>;
   TranscriptionData: SignalValue<TranscriptionEntry[]>;
   SceneHeight: SignalValue<number>;
+  CaptionsFontFamily: SignalValue<string>;
+  CaptionsFontWeight: SignalValue<number>;
 }
 
 const GO_UP = 8 / 30;
@@ -48,6 +50,14 @@ export class AnimatedCaptions extends Node {
   @initial(0)
   @signal()
   public declare readonly SceneHeight: SimpleSignal<number, this>;
+
+  @initial('Inter Variable')
+  @signal()
+  public declare readonly CaptionsFontFamily: SimpleSignal<string, this>;
+
+  @initial(400)
+  @signal()
+  public declare readonly CaptionsFontWeight: SimpleSignal<number, this>;
 
   private readonly CaptionText = createSignal('');
   private readonly Opacity = createSignal(0);
@@ -115,8 +125,8 @@ export class AnimatedCaptions extends Node {
                         ? 'rgba(255,255,255,0.5)'
                         : 'rgba(255,255,255,1)'
                     }
-                    fontWeight={400}
-                    fontFamily={'Inter Variable'}
+                    fontWeight={this.CaptionsFontWeight()}
+                    fontFamily={this.CaptionsFontFamily()}
                     text={caption.trim()}
                     paddingRight={
                       index === 0 && secondary ? 5 * this.CaptionsSize() * ScaleFactor() : 0

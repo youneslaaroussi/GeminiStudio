@@ -11796,8 +11796,8 @@ class AnimatedCaptions extends Node {
                     shadowBlur: 20,
                     shadowColor: index === 0 ? "rgba(255,255,255,0.75)" : "rgba(0,0,0,0)",
                     fill: index === 1 ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,1)",
-                    fontWeight: 400,
-                    fontFamily: "Inter Variable",
+                    fontWeight: this.CaptionsFontWeight(),
+                    fontFamily: this.CaptionsFontFamily(),
                     text: caption.trim(),
                     paddingRight: index === 0 && secondary ? 5 * this.CaptionsSize() * ScaleFactor() : 0,
                     fontSize: () => this.CaptionsSize() * ScaleFactor() * 18
@@ -11888,6 +11888,14 @@ __decorateClass([
   initial(0),
   signal()
 ], AnimatedCaptions.prototype, "SceneHeight");
+__decorateClass([
+  initial("Inter Variable"),
+  signal()
+], AnimatedCaptions.prototype, "CaptionsFontFamily");
+__decorateClass([
+  initial(400),
+  signal()
+], AnimatedCaptions.prototype, "CaptionsFontWeight");
 const toVector = (transform) => new Vector2(transform.x, transform.y);
 const description = makeScene2D(function* (view) {
   const scene = useScene();
@@ -11895,6 +11903,11 @@ const description = makeScene2D(function* (view) {
   const layers = scene.variables.get("layers", [])();
   scene.variables.get("duration", 10)();
   const transitions = scene.variables.get("transitions", {})();
+  const captionSettings = scene.variables.get("captionSettings", {
+    fontFamily: "Inter Variable",
+    fontWeight: 400,
+    distanceFromBottom: 140
+  })();
   const audioClips = layers.filter((layer) => layer.type === "audio").flatMap((layer) => layer.clips);
   const videoClips = layers.filter((layer) => layer.type === "video").flatMap((layer) => layer.clips);
   const textClips = layers.filter((layer) => layer.type === "text").flatMap((layer) => layer.clips);
@@ -11967,11 +11980,13 @@ const description = makeScene2D(function* (view) {
         {
           ref,
           SceneHeight: height,
-          y: height / 2 - 140,
+          y: height / 2 - captionSettings.distanceFromBottom,
           CaptionsSize: 1.1,
           CaptionsDuration: 3,
           ShowCaptions: false,
           TranscriptionData: () => normalized,
+          CaptionsFontFamily: captionSettings.fontFamily,
+          CaptionsFontWeight: captionSettings.fontWeight,
           zIndex: 1e3
         },
         `captions-${clip.id}`

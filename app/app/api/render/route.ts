@@ -48,14 +48,19 @@ async function getAssetSignedUrl(assetId: string): Promise<string | null> {
 
 /**
  * Transform clip URLs from local to signed GCS URLs
+ * Returns the transformed clip and optionally the assetId -> signedUrl mapping
  */
-async function transformClipUrls(clip: TimelineClip): Promise<TimelineClip> {
+async function transformClipUrls(
+  clip: TimelineClip,
+  urlMap: Map<string, string>
+): Promise<TimelineClip> {
   if (!("src" in clip) || !clip.assetId) {
     return clip;
   }
 
   const signedUrl = await getAssetSignedUrl(clip.assetId);
   if (signedUrl) {
+    urlMap.set(clip.assetId, signedUrl);
     return { ...clip, src: signedUrl };
   }
 
@@ -64,18 +69,40 @@ async function transformClipUrls(clip: TimelineClip): Promise<TimelineClip> {
 
 /**
  * Transform project to use signed GCS URLs for all assets
+ * Also updates transcription assetUrls to match transformed clip URLs
  */
 async function transformProjectForRenderer(project: Project): Promise<Project> {
+  // Map to track assetId -> signedUrl for transcription updates
+  const assetUrlMap = new Map<string, string>();
+
   const transformedLayers = await Promise.all(
     project.layers.map(async (layer) => ({
       ...layer,
-      clips: await Promise.all(layer.clips.map(transformClipUrls)),
+      clips: await Promise.all(
+        layer.clips.map((clip) => transformClipUrls(clip, assetUrlMap))
+      ),
     }))
   );
+
+  // Transform transcription assetUrls to match the new signed URLs
+  let transformedTranscriptions = project.transcriptions;
+  if (project.transcriptions && assetUrlMap.size > 0) {
+    transformedTranscriptions = { ...project.transcriptions };
+    for (const [key, transcription] of Object.entries(transformedTranscriptions)) {
+      const signedUrl = assetUrlMap.get(transcription.assetId);
+      if (signedUrl) {
+        transformedTranscriptions[key] = {
+          ...transcription,
+          assetUrl: signedUrl,
+        };
+      }
+    }
+  }
 
   return {
     ...project,
     layers: transformedLayers,
+    transcriptions: transformedTranscriptions,
   };
 }
 
