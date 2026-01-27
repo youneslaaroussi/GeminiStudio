@@ -240,5 +240,72 @@
         "speech": "test."
       }
     ]
+  },
+  {
+    "id": "7781f0e2-cfd8-4d87-9bde-d4c3acddecf7",
+    "assetId": "31d04794-a49c-4438-af08-e4fedf9a9e9e",
+    "assetName": "9cd3fc36f2f84406b94196961c23054d.mov",
+    "assetUrl": "/uploads/1769485303183-9f09b5d4-0846-4c85-8323-d94147d84e8b.mov",
+    "fileName": "1769485303183-9f09b5d4-0846-4c85-8323-d94147d84e8b.mov",
+    "mimeType": "application/octet-stream",
+    "gcsUri": "gs://gemini-studio-storage/transcription-audio/31d04794-a49c-4438-af08-e4fedf9a9e9e/1769485421211-7bde7e57-4a7a-4cc8-9651-43c9b464284b.wav",
+    "status": "completed",
+    "languageCodes": [
+      "en-US"
+    ],
+    "createdAt": "2026-01-27T03:43:44.708Z",
+    "updatedAt": "2026-01-27T03:43:50.834Z",
+    "operationName": "projects/828532255978/locations/us/operations/v2-6a3e1591-0000-2763-8aa5-fc41166ce379",
+    "transcript": "It's mocking me. It's writing about me. Oh, Robin is taunting you.",
+    "segments": [
+      {
+        "start": 480,
+        "speech": "It's"
+      },
+      {
+        "start": 720,
+        "speech": "mocking"
+      },
+      {
+        "start": 1240,
+        "speech": "me."
+      },
+      {
+        "start": 1760,
+        "speech": "It's"
+      },
+      {
+        "start": 2000,
+        "speech": "writing"
+      },
+      {
+        "start": 2360,
+        "speech": "about"
+      },
+      {
+        "start": 2640,
+        "speech": "me."
+      },
+      {
+        "start": 5960,
+        "speech": "Oh,"
+      },
+      {
+        "start": 6080,
+        "speech": "Robin"
+      },
+      {
+        "start": 6520,
+        "speech": "is"
+      },
+      {
+        "start": 6880,
+        "speech": "taunting"
+      },
+      {
+        "start": 7320,
+        "speech": "you."
+      }
+    ]
   }
 ]

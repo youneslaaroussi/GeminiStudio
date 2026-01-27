@@ -368,6 +368,21 @@ export function useAssets() {
     });
   }, [pipelineStates, pollTranscriptionJob]);
 
+  // Poll pipeline states when there are running/queued steps
+  useEffect(() => {
+    const hasRunningSteps = Object.values(pipelineStates).some((steps) =>
+      steps.some((step) => step.status === "running" || step.status === "queued")
+    );
+
+    if (!hasRunningSteps) return;
+
+    const interval = setInterval(() => {
+      void fetchPipelineStates();
+    }, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [pipelineStates, fetchPipelineStates]);
+
   // Load asset durations
   useEffect(() => {
     let cancelled = false;
@@ -471,5 +486,6 @@ export function useAssets() {
     getPipelineStep,
     resolveAssetDuration,
     startTranscription,
+    refreshPipelineStates: fetchPipelineStates,
   };
 }

@@ -89,8 +89,13 @@ export async function POST(request: NextRequest) {
   }
 
   await writeManifest(manifest);
+
+  // Run pipeline steps in the background (don't await)
+  // This allows the upload response to return immediately
   for (const asset of newAssets) {
-    await runAutoStepsForAsset(asset.id);
+    runAutoStepsForAsset(asset.id).catch((error) => {
+      console.error(`Pipeline failed for asset ${asset.id}:`, error);
+    });
   }
 
   return NextResponse.json({ assets: uploaded }, { status: 201 });

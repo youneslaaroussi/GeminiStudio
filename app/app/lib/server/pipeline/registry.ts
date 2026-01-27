@@ -4,11 +4,15 @@ import { uploadStep } from "./steps/upload";
 import { transcriptionStep } from "./steps/transcription";
 import { faceDetectionStep } from "./steps/face-detection";
 import { shotDetectionStep } from "./steps/shot-detection";
+import { labelDetectionStep } from "./steps/label-detection";
+import { personDetectionStep } from "./steps/person-detection";
 
 const registry: PipelineStepDefinition[] = [
   metadataStep,
   uploadStep,
   shotDetectionStep,
+  labelDetectionStep,
+  personDetectionStep,
   transcriptionStep,
   faceDetectionStep,
 ];

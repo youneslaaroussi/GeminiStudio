@@ -161,3 +161,120 @@ export async function buildAssetPreview(asset: RemoteAsset, timecode: number) {
   }
   return captureVideoFrame(asset, timecode);
 }
+
+export interface BoundingBox {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+export interface FaceBoxOverlay {
+  faceIndex: number;
+  boundingBox: BoundingBox;
+  label?: string;
+}
+
+/**
+ * Captures a video frame and draws bounding boxes on it.
+ * Bounding box coordinates are normalized (0-1) relative to frame dimensions.
+ */
+export async function captureVideoFrameWithBoxes(
+  asset: RemoteAsset,
+  timecode: number,
+  boxes: FaceBoxOverlay[],
+  options: {
+    boxColor?: string;
+    boxLineWidth?: number;
+    labelColor?: string;
+    labelFont?: string;
+  } = {}
+) {
+  const {
+    boxColor = "#00ff00",
+    boxLineWidth = 3,
+    labelColor = "#00ff00",
+    labelFont = "bold 16px sans-serif",
+  } = options;
+
+  const absoluteUrl = toAbsoluteAssetUrl(asset.url);
+  const input = new Input({
+    formats: ALL_FORMATS,
+    source: new UrlSource(absoluteUrl),
+  });
+
+  try {
+    const videoTrack = await input.getPrimaryVideoTrack();
+    if (!videoTrack) {
+      throw new Error("No video track found in this asset.");
+    }
+    if (!(await videoTrack.canDecode())) {
+      throw new Error("This browser cannot decode the selected video asset.");
+    }
+    const canvasSink = new CanvasSink(videoTrack, { poolSize: 1 });
+    const frame = await canvasSink.getCanvas(timecode);
+    if (!frame) {
+      throw new Error("No frame exists at the requested timestamp.");
+    }
+
+    // Create a new canvas to draw the frame with bounding boxes
+    const canvas = document.createElement("canvas");
+    canvas.width = frame.canvas.width;
+    canvas.height = frame.canvas.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      throw new Error("Failed to get canvas context.");
+    }
+
+    // Draw the original frame
+    ctx.drawImage(frame.canvas, 0, 0);
+
+    // Draw bounding boxes
+    ctx.strokeStyle = boxColor;
+    ctx.lineWidth = boxLineWidth;
+    ctx.fillStyle = labelColor;
+    ctx.font = labelFont;
+
+    for (const overlay of boxes) {
+      const { boundingBox, faceIndex, label } = overlay;
+      const x = boundingBox.left * canvas.width;
+      const y = boundingBox.top * canvas.height;
+      const width = (boundingBox.right - boundingBox.left) * canvas.width;
+      const height = (boundingBox.bottom - boundingBox.top) * canvas.height;
+
+      // Draw rectangle
+      ctx.strokeRect(x, y, width, height);
+
+      // Draw label background and text
+      const labelText = label ?? `Face #${faceIndex + 1}`;
+      const textMetrics = ctx.measureText(labelText);
+      const labelHeight = 20;
+      const labelPadding = 4;
+
+      // Background for label
+      ctx.fillStyle = boxColor;
+      ctx.fillRect(
+        x,
+        y - labelHeight - 2,
+        textMetrics.width + labelPadding * 2,
+        labelHeight
+      );
+
+      // Label text
+      ctx.fillStyle = "#000000";
+      ctx.fillText(labelText, x + labelPadding, y - 6);
+
+      // Reset fill style for next iteration
+      ctx.fillStyle = labelColor;
+    }
+
+    const url = await canvasToPngDataUrl(canvas);
+    return {
+      url,
+      width: canvas.width,
+      height: canvas.height,
+    };
+  } finally {
+    input.dispose();
+  }
+}

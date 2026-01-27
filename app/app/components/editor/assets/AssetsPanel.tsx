@@ -42,6 +42,7 @@ export function AssetsPanel() {
     getPipelineStep,
     resolveAssetDuration,
     startTranscription,
+    refreshPipelineStates,
   } = useAssets();
 
   const addClip = useProjectStore((s) => s.addClip);
@@ -230,7 +231,12 @@ export function AssetsPanel() {
       {/* Dialogs */}
       <UploadDialog
         open={uploadDialogOpen}
-        onOpenChange={setUploadDialogOpen}
+        onOpenChange={(open) => {
+          setUploadDialogOpen(open);
+          if (!open) {
+            setUploadInitialFiles([]); // Clear initial files when dialog closes
+          }
+        }}
         initialFiles={uploadInitialFiles}
         projectId={projectId}
         onUploadComplete={handleUploadComplete}
@@ -262,6 +268,7 @@ export function AssetsPanel() {
         asset={detailsDialogAsset ?? null}
         pipelineSteps={detailsDialogSteps}
         transcription={detailsDialogTranscription}
+        onPipelineRefresh={refreshPipelineStates}
       />
     </>
   );

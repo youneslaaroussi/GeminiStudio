@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Copy, ExternalLink, Loader2, ChevronDown, ChevronRight } from "lucide-react";
+import { Copy, ExternalLink, Loader2, ChevronDown, ChevronRight, Camera, RotateCw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +23,7 @@ interface AssetDetailsDialogProps {
   asset: RemoteAsset | null;
   pipelineSteps: PipelineStepState[];
   transcription?: ProjectTranscription;
+  onPipelineRefresh?: () => void;
 }
 
 export function AssetDetailsDialog({
@@ -31,6 +32,7 @@ export function AssetDetailsDialog({
   asset,
   pipelineSteps,
   transcription,
+  onPipelineRefresh,
 }: AssetDetailsDialogProps) {
   const copyToClipboard = useCallback(async (value: string, label: string) => {
     try {
@@ -146,7 +148,12 @@ export function AssetDetailsDialog({
               <h4 className="text-sm font-semibold">Pipeline</h4>
               <div className="space-y-2">
                 {pipelineSteps.map((step) => (
-                  <PipelineStepCard key={step.id} step={step} />
+                  <PipelineStepCard
+                    key={step.id}
+                    step={step}
+                    asset={asset}
+                    onRerun={onPipelineRefresh}
+                  />
                 ))}
               </div>
             </section>
@@ -259,9 +266,46 @@ function CopyableCard({
   );
 }
 
-function PipelineStepCard({ step }: { step: PipelineStepState }) {
+function PipelineStepCard({
+  step,
+  asset,
+  onRerun,
+}: {
+  step: PipelineStepState;
+  asset: RemoteAsset;
+  onRerun?: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [rerunning, setRerunning] = useState(false);
   const hasDetails = step.metadata && Object.keys(step.metadata).length > 0;
+
+  const canRerun = step.status === "succeeded" || step.status === "failed";
+
+  const handleRerun = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (rerunning) return;
+
+    setRerunning(true);
+    try {
+      const response = await fetch(`/api/assets/${asset.id}/pipeline`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stepId: step.id }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error ?? "Failed to re-run pipeline step");
+      }
+
+      toast.success(`${step.label} completed`);
+      onRerun?.();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to re-run pipeline step");
+    } finally {
+      setRerunning(false);
+    }
+  }, [asset.id, step.id, step.label, rerunning, onRerun]);
 
   const detailsSummary = useMemo(() => {
     if (!step.metadata) return null;
@@ -281,6 +325,14 @@ function PipelineStepCard({ step }: { step: PipelineStepState }) {
       case "face-detection": {
         const faces = step.metadata.faces as unknown[] | undefined;
         return faces?.length ? `${faces.length} face(s) detected` : null;
+      }
+      case "label-detection": {
+        const segmentCount = step.metadata.segmentLabelCount as number | undefined;
+        return segmentCount ? `${segmentCount} labels detected` : null;
+      }
+      case "person-detection": {
+        const personCount = step.metadata.personCount as number | undefined;
+        return personCount ? `${personCount} person(s) detected` : null;
       }
       case "transcription": {
         const segments = step.metadata.segments as unknown[] | undefined;
@@ -325,6 +377,21 @@ function PipelineStepCard({ step }: { step: PipelineStepState }) {
             <p className="text-xs text-muted-foreground">{detailsSummary}</p>
           ) : null}
         </div>
+        {canRerun && (
+          <button
+            type="button"
+            onClick={handleRerun}
+            disabled={rerunning}
+            className="p-1.5 rounded hover:bg-muted transition-colors shrink-0"
+            title={`Re-run ${step.label}`}
+          >
+            {rerunning ? (
+              <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+            ) : (
+              <RotateCw className="size-3.5 text-muted-foreground" />
+            )}
+          </button>
+        )}
         <span
           className={cn(
             "text-xs px-2 py-0.5 rounded-full capitalize",
@@ -339,7 +406,7 @@ function PipelineStepCard({ step }: { step: PipelineStepState }) {
       </button>
       {expanded && step.metadata && (
         <div className="border-t border-border bg-muted/20 p-3 overflow-hidden">
-          <PipelineStepDetails stepId={step.id} metadata={step.metadata} />
+          <PipelineStepDetails stepId={step.id} metadata={step.metadata} asset={asset} />
         </div>
       )}
     </div>
@@ -349,9 +416,11 @@ function PipelineStepCard({ step }: { step: PipelineStepState }) {
 function PipelineStepDetails({
   stepId,
   metadata,
+  asset,
 }: {
   stepId: string;
   metadata: Record<string, unknown>;
+  asset: RemoteAsset;
 }) {
   switch (stepId) {
     case "metadata":
@@ -425,29 +494,172 @@ function PipelineStepDetails({
     }
 
     case "face-detection": {
-      const faces = metadata.faces as Array<{ trackId?: number; thumbnail?: string }> | undefined;
+      const faces = metadata.faces as Array<{
+        faceIndex: number;
+        trackId?: number;
+        thumbnail?: string;
+        firstAppearance?: { time: number; boundingBox: unknown } | null;
+      }> | undefined;
       if (!faces?.length) return <p className="text-xs text-muted-foreground">No faces detected</p>;
       return (
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">{faces.length} face(s) detected</p>
-          <div className="flex gap-2 flex-wrap">
-            {faces.slice(0, 6).map((face, i) => (
-              <div
-                key={i}
-                className="size-10 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground"
-              >
-                {face.thumbnail ? (
-                  <img src={face.thumbnail} alt={`Face ${i + 1}`} className="size-full object-cover rounded" />
-                ) : (
-                  `#${i + 1}`
+        <FaceDetectionDetails faces={faces} asset={asset} />
+      );
+    }
+
+    case "label-detection": {
+      const segmentLabels = metadata.segmentLabels as Array<{
+        entity: { description: string; entityId: string };
+        categories: Array<{ description: string }>;
+        confidence: number;
+        segments: Array<{ start: number; end: number; confidence: number }>;
+      }> | undefined;
+      const shotLabels = metadata.shotLabels as Array<{
+        entity: { description: string };
+        confidence: number;
+        segments: Array<{ start: number; end: number }>;
+      }> | undefined;
+
+      if (!segmentLabels?.length && !shotLabels?.length) {
+        return <p className="text-xs text-muted-foreground">No labels detected</p>;
+      }
+
+      return (
+        <div className="space-y-3">
+          {/* Segment Labels (whole video) */}
+          {segmentLabels && segmentLabels.length > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-2">Video Labels</p>
+              <div className="flex flex-wrap gap-1.5">
+                {segmentLabels.slice(0, 20).map((label, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs"
+                    title={`${(label.confidence * 100).toFixed(0)}% confidence${label.categories.length > 0 ? ` | Category: ${label.categories.map(c => c.description).join(", ")}` : ""}`}
+                  >
+                    {label.entity.description}
+                    <span className="text-[10px] opacity-60">
+                      {(label.confidence * 100).toFixed(0)}%
+                    </span>
+                  </span>
+                ))}
+                {segmentLabels.length > 20 && (
+                  <span className="text-xs text-muted-foreground px-2">
+                    +{segmentLabels.length - 20} more
+                  </span>
                 )}
               </div>
-            ))}
-            {faces.length > 6 && (
-              <div className="size-10 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground">
-                +{faces.length - 6}
+            </div>
+          )}
+
+          {/* Shot Labels */}
+          {shotLabels && shotLabels.length > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-2">Shot Labels</p>
+              <div className="max-h-40 overflow-y-auto space-y-1">
+                {shotLabels.slice(0, 15).map((label, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs bg-muted/30 rounded px-2 py-1">
+                    <span className="font-medium">{label.entity.description}</span>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <span>{(label.confidence * 100).toFixed(0)}%</span>
+                      {label.segments[0] && (
+                        <span>
+                          {label.segments[0].start.toFixed(1)}s - {label.segments[0].end.toFixed(1)}s
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {shotLabels.length > 15 && (
+                  <p className="text-xs text-muted-foreground text-center py-1">
+                    +{shotLabels.length - 15} more labels
+                  </p>
+                )}
               </div>
-            )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    case "person-detection": {
+      const people = metadata.people as Array<{
+        personIndex: number;
+        startTime: number;
+        endTime: number;
+        confidence: number;
+        firstAppearance?: {
+          boundingBox: { left: number; top: number; right: number; bottom: number };
+          attributes: Array<{ name: string; value: string; confidence: number }>;
+          landmarks: Array<{ name: string; x: number; y: number }>;
+        } | null;
+      }> | undefined;
+      const attributeSummary = metadata.attributeSummary as Array<{
+        name: string;
+        values: string[];
+      }> | undefined;
+
+      if (!people?.length) {
+        return <p className="text-xs text-muted-foreground">No people detected</p>;
+      }
+
+      return (
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">{people.length} person(s) detected</p>
+
+          {/* Attribute Summary */}
+          {attributeSummary && attributeSummary.length > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-2">Detected Attributes</p>
+              <div className="flex flex-wrap gap-1.5">
+                {attributeSummary.slice(0, 10).map((attr, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 rounded-full text-xs"
+                    title={`Values: ${attr.values.join(", ")}`}
+                  >
+                    {attr.name}
+                    <span className="text-[10px] opacity-60">
+                      ({attr.values.length})
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Person Tracks */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-2">Person Tracks</p>
+            <div className="max-h-40 overflow-y-auto space-y-1">
+              {people.slice(0, 10).map((person, i) => (
+                <div key={i} className="text-xs bg-muted/30 rounded px-2 py-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">Person #{person.personIndex + 1}</span>
+                    <span className="text-muted-foreground">
+                      {person.startTime.toFixed(1)}s - {person.endTime.toFixed(1)}s
+                    </span>
+                  </div>
+                  {person.firstAppearance?.attributes && person.firstAppearance.attributes.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {person.firstAppearance.attributes.slice(0, 5).map((attr, j) => (
+                        <span
+                          key={j}
+                          className="text-[10px] px-1.5 py-0.5 bg-muted rounded"
+                          title={`${(attr.confidence * 100).toFixed(0)}% confidence`}
+                        >
+                          {attr.name}: {attr.value}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {people.length > 10 && (
+                <p className="text-xs text-muted-foreground text-center py-1">
+                  +{people.length - 10} more people
+                </p>
+              )}
+            </div>
           </div>
         </div>
       );
@@ -495,4 +707,177 @@ function PipelineStepDetails({
         </pre>
       );
   }
+}
+
+function FaceDetectionDetails({
+  faces,
+  asset,
+}: {
+  faces: Array<{
+    faceIndex: number;
+    trackId?: number;
+    thumbnail?: string;
+    firstAppearance?: { time: number; boundingBox: unknown } | null;
+  }>;
+  asset: RemoteAsset;
+}) {
+  const [capturing, setCapturing] = useState<number | "all" | null>(null);
+  const [capturedImages, setCapturedImages] = useState<Map<number, string>>(new Map());
+  const [expandedFace, setExpandedFace] = useState<{ index: number; url: string } | null>(null);
+
+  const handleCaptureFace = useCallback(async (faceIndex?: number) => {
+    const captureKey = faceIndex ?? "all";
+    setCapturing(captureKey);
+
+    try {
+      const { executeTool } = await import("@/app/lib/tools/tool-registry");
+      const result = await executeTool({
+        toolName: "captureFaces",
+        input: {
+          assetId: asset.id,
+          faceIndex: faceIndex,
+        },
+        context: {},
+      });
+
+      if (result.status === "success" && result.outputs) {
+        const newImages = new Map(capturedImages);
+        for (const output of result.outputs) {
+          if (output.type === "image" && output.url) {
+            const match = output.alt?.match(/Face #(\d+)/);
+            if (match) {
+              newImages.set(parseInt(match[1]) - 1, output.url);
+            }
+          }
+        }
+        setCapturedImages(newImages);
+        toast.success(faceIndex !== undefined ? `Face #${faceIndex + 1} captured` : "All faces captured");
+      } else if (result.status === "error") {
+        toast.error(result.error ?? "Failed to capture faces");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to capture faces");
+    } finally {
+      setCapturing(null);
+    }
+  }, [asset.id, capturedImages]);
+
+  const hasBoundingBoxData = faces.some((f) => f.firstAppearance?.boundingBox);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">{faces.length} face(s) detected</p>
+        {hasBoundingBoxData && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 text-xs"
+            onClick={() => handleCaptureFace(undefined)}
+            disabled={capturing !== null}
+          >
+            {capturing === "all" ? (
+              <Loader2 className="size-3 mr-1 animate-spin" />
+            ) : (
+              <Camera className="size-3 mr-1" />
+            )}
+            Capture All
+          </Button>
+        )}
+      </div>
+      <div className="flex gap-2 flex-wrap">
+        {faces.slice(0, 6).map((face, i) => {
+          const capturedUrl = capturedImages.get(face.faceIndex);
+          const hasBoundingBox = !!face.firstAppearance?.boundingBox;
+          const hasImage = capturedUrl || face.thumbnail;
+
+          return (
+            <div key={i} className="relative group">
+              <button
+                type="button"
+                className={cn(
+                  "size-12 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground overflow-hidden",
+                  hasImage && "cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                )}
+                onClick={() => {
+                  const url = capturedUrl || face.thumbnail;
+                  if (url) {
+                    setExpandedFace({ index: face.faceIndex, url });
+                  }
+                }}
+                disabled={!hasImage}
+              >
+                {capturedUrl ? (
+                  <img src={capturedUrl} alt={`Face ${i + 1}`} className="size-full object-cover" />
+                ) : face.thumbnail ? (
+                  <img src={face.thumbnail} alt={`Face ${i + 1}`} className="size-full object-cover" />
+                ) : (
+                  `#${i + 1}`
+                )}
+              </button>
+              {hasBoundingBox && !capturedUrl && (
+                <button
+                  type="button"
+                  className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCaptureFace(face.faceIndex);
+                  }}
+                  disabled={capturing !== null}
+                  title={`Capture Face #${face.faceIndex + 1}`}
+                >
+                  {capturing === face.faceIndex ? (
+                    <Loader2 className="size-4 text-white animate-spin" />
+                  ) : (
+                    <Camera className="size-4 text-white" />
+                  )}
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {faces.length > 6 && (
+          <div className="size-12 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground">
+            +{faces.length - 6}
+          </div>
+        )}
+      </div>
+      {!hasBoundingBoxData && (
+        <p className="text-xs text-muted-foreground italic">
+          Re-run face detection to enable frame capture with bounding boxes.
+        </p>
+      )}
+
+      {/* Expanded Face View */}
+      {expandedFace && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setExpandedFace(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] bg-background rounded-lg overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-3 border-b border-border flex items-center justify-between">
+              <span className="text-sm font-medium">Face #{expandedFace.index + 1}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setExpandedFace(null)}
+              >
+                Close
+              </Button>
+            </div>
+            <div className="p-4">
+              <img
+                src={expandedFace.url}
+                alt={`Face ${expandedFace.index + 1}`}
+                className="max-w-full max-h-[70vh] object-contain rounded"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

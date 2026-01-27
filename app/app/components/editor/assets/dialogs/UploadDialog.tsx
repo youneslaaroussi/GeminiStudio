@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { Upload, Trash2, File as FileIcon, Loader2 } from "lucide-react";
 import {
@@ -35,12 +35,25 @@ export function UploadDialog({
   projectId,
   onUploadComplete,
 }: UploadDialogProps) {
-  const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>(() =>
-    (initialFiles ?? []).map((file) => ({ id: createId(), file }))
-  );
+  const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync initialFiles when dialog opens
+  useEffect(() => {
+    if (open && initialFiles && initialFiles.length > 0) {
+      setQueuedFiles((prev) => {
+        const existing = new Set(
+          prev.map((item) => `${item.file.name}-${item.file.size}`)
+        );
+        const additions = initialFiles
+          .filter((file) => !existing.has(`${file.name}-${file.size}`))
+          .map((file) => ({ id: createId(), file }));
+        return [...prev, ...additions];
+      });
+    }
+  }, [open, initialFiles]);
 
   const handleDrop = useCallback((acceptedFiles: File[]) => {
     if (!acceptedFiles.length) return;

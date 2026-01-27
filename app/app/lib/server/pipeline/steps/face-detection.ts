@@ -20,14 +20,51 @@ export const faceDetectionStep: PipelineStepDefinition = {
         const tracks = annotation.tracks ?? [];
         const sample = tracks[0];
         const attributes = sample?.timestampedObjects?.[0]?.attributes?.map((attr: any) => attr.name) ?? [];
+
+        // Extract all timestamped objects with bounding boxes
+        const allTimestampedObjects: Array<{
+          time: number;
+          boundingBox: { left: number; top: number; right: number; bottom: number };
+        }> = [];
+
+        for (const track of tracks) {
+          const timestampedObjects = track.timestampedObjects ?? [];
+          for (const obj of timestampedObjects) {
+            const box = obj.normalizedBoundingBox;
+            if (box) {
+              const timeOffset = obj.timeOffset;
+              const seconds = Number(timeOffset?.seconds ?? 0);
+              const nanos = Number(timeOffset?.nanos ?? 0);
+              allTimestampedObjects.push({
+                time: seconds + nanos / 1e9,
+                boundingBox: {
+                  left: Number(box.left ?? 0),
+                  top: Number(box.top ?? 0),
+                  right: Number(box.right ?? 0),
+                  bottom: Number(box.bottom ?? 0),
+                },
+              });
+            }
+          }
+        }
+
+        // Get the first bounding box as a representative sample
+        const firstBox = allTimestampedObjects[0];
+
         return {
           faceIndex: index,
           trackCount: tracks.length,
           attributes,
           segments: tracks.map((track: any) => ({
-            start: track.segment?.startTimeOffset?.seconds ?? 0,
-            end: track.segment?.endTimeOffset?.seconds ?? 0,
+            start: Number(track.segment?.startTimeOffset?.seconds ?? 0) + Number(track.segment?.startTimeOffset?.nanos ?? 0) / 1e9,
+            end: Number(track.segment?.endTimeOffset?.seconds ?? 0) + Number(track.segment?.endTimeOffset?.nanos ?? 0) / 1e9,
           })),
+          // Include bounding box data for frame capture
+          timestampedBoxes: allTimestampedObjects,
+          firstAppearance: firstBox ? {
+            time: firstBox.time,
+            boundingBox: firstBox.boundingBox,
+          } : null,
         };
       });
     }
