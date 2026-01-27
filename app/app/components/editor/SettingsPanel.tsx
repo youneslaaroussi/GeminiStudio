@@ -28,7 +28,7 @@ export function SettingsPanel() {
 
   const allClips = layers.flatMap((layer) => layer.clips);
   const selectedClip = allClips.find((clip) => clip.id === selectedClipId);
-  const selectedTransition = selectedTransitionKey ? project.transitions?.[selectedTransitionKey] : null;
+  const selectedTransition = selectedTransitionKey ? project.transitions?.[selectedTransitionKey as `${string}->${string}`] : null;
 
   const toNumber = (raw: string) => {
     const parsed = Number(raw);

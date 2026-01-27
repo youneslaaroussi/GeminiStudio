@@ -3,8 +3,43 @@ import type { ToolExecutionResult } from "@/app/lib/tools/types";
 
 export type ChatMode = "ask" | "agent" | "plan";
 
+/**
+ * Media category for attachments
+ */
+export type AttachmentCategory = "image" | "video" | "audio" | "document" | "unknown";
+
+/**
+ * Attachment metadata stored with chat messages
+ */
+export interface ChatAttachment {
+  /** Unique identifier */
+  id: string;
+  /** Original filename */
+  name: string;
+  /** MIME type */
+  mimeType: string;
+  /** File size in bytes */
+  size: number;
+  /** Media category */
+  category: AttachmentCategory;
+  /** GCS URI if uploaded to cloud storage */
+  gcsUri?: string;
+  /** Local URL for display (e.g., /uploads/...) */
+  localUrl?: string;
+  /** Signed URL for temporary access */
+  signedUrl?: string;
+  /** Base64 data for small inline files (for display) */
+  inlineData?: string;
+  /** Thumbnail URL for preview */
+  thumbnailUrl?: string;
+  /** Upload timestamp */
+  uploadedAt: string;
+}
+
 export interface ChatMessageMetadata {
   mode: ChatMode;
+  /** Attachments included with this message */
+  attachments?: ChatAttachment[];
 }
 
 export type TaskStatus = "pending" | "in_progress" | "completed";

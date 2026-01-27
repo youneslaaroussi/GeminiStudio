@@ -19,12 +19,14 @@ import {
   videoEffectsJobStatusTool,
 } from "./video-effects-run";
 
-type RegistryMap = Map<string, ToolDefinition<z.ZodTypeAny, Project>>;
+type AnyToolDefinition = ToolDefinition<any, Project>;
 
 class ToolRegistry {
-  private tools: RegistryMap = new Map();
+  private tools: Map<string, AnyToolDefinition> = new Map();
 
-  register(tool: ToolDefinition<z.ZodTypeAny, Project>) {
+  register<TSchema extends z.ZodTypeAny>(
+    tool: ToolDefinition<TSchema, Project>
+  ) {
     this.tools.set(tool.name, tool);
   }
 

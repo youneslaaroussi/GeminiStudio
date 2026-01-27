@@ -7,9 +7,18 @@ export const runtime = "nodejs";
 
 const callbackSchema = z.object({
   toolCallId: z.string().min(1, "toolCallId is required"),
-  result: z.object({
-    status: z.enum(["success", "error"]),
-  }).passthrough(),
+  result: z.union([
+    z.object({
+      status: z.literal("success"),
+      outputs: z.array(z.any()),
+      meta: z.record(z.any()).optional(),
+    }),
+    z.object({
+      status: z.literal("error"),
+      error: z.string(),
+      details: z.any().optional(),
+    }),
+  ]),
 });
 
 export async function POST(request: Request) {

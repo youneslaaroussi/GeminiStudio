@@ -29,15 +29,15 @@ export const shotDetectionStep: PipelineStepDefinition = {
 
     const request = {
       inputUri: gcsUri,
-      features: ["SHOT_CHANGE_DETECTION"] as const,
+      features: ["SHOT_CHANGE_DETECTION"] as any[],
     };
 
     const [operation] = await videoClient.annotateVideo(request);
     const [result] = await operation.promise();
     const shots =
       result.annotationResults?.[0]?.shotAnnotations?.map((shot, index) => {
-        const start = timeOffsetToSeconds(shot.startTimeOffset);
-        const end = timeOffsetToSeconds(shot.endTimeOffset);
+        const start = timeOffsetToSeconds(shot.startTimeOffset as any);
+        const end = timeOffsetToSeconds(shot.endTimeOffset as any);
         const duration = Math.max(0, end - start);
         return {
           index,

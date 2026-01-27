@@ -204,7 +204,7 @@ export const videoEffectsJobStatusTool: ToolDefinition<typeof jobStatusSchema, P
   ],
   async run(input) {
     try {
-      let job: VideoEffectJob | undefined;
+      let job: VideoEffectJob | null = null;
       if (typeof window === "undefined") {
         const { pollVideoEffectJob } = await import(
           "@/app/lib/server/video-effects/service"
@@ -239,7 +239,7 @@ export const videoEffectsJobStatusTool: ToolDefinition<typeof jobStatusSchema, P
           };
         }
         const payload = (await response.json()) as { job?: VideoEffectJob };
-        job = payload.job;
+        job = payload.job ?? null;
         if (!job) {
           return {
             status: "error" as const,

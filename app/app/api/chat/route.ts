@@ -5,10 +5,13 @@ import {
   stepCountIs,
   streamText,
   tool,
+  type Tool as AiTool,
   type UIMessage,
 } from "ai";
 import { z } from "zod";
+import type { ToolResultOutput } from "@ai-sdk/provider-utils";
 import type {
+  ChatAttachment,
   ChatMessageMetadata,
   ChatMode,
   PlanningToolTaskInput,
@@ -21,6 +24,7 @@ import { toolResultOutputFromExecution } from "@/app/lib/tools/tool-output-adapt
 import { logger } from "@/app/lib/server/logger";
 import type { ToolExecutionResult } from "@/app/lib/tools/types";
 import { waitForClientToolResult } from "@/app/lib/server/tools/client-tool-bridge";
+import { attachmentToGeminiPart } from "@/app/lib/server/gemini";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,16 +48,26 @@ const planningTaskInputSchema = z.object({
   status: planningTaskStatus.optional(),
 });
 
-function createGeneralTools() {
+type ToolMap = Record<string, AiTool<any, any>>;
+type PlanningToolResponse<Action extends string> = {
+  action: Action;
+  message: string;
+  taskList: TaskListSnapshot;
+};
+
+
+function createGeneralTools(): ToolMap {
+  const localeSchema = z.object({
+    locale: z
+      .string()
+      .optional()
+      .describe("Optional locale for formatting"),
+  });
+
   return {
-    getDate: tool({
+    getDate: tool<z.infer<typeof localeSchema>, string>({
       description: "Get the current date in ISO format.",
-      inputSchema: z.object({
-        locale: z
-          .string()
-          .optional()
-          .describe("Optional locale for formatting"),
-      }),
+      inputSchema: localeSchema,
       async execute({ locale }) {
         const now = new Date();
         return locale
@@ -61,14 +75,9 @@ function createGeneralTools() {
           : now.toISOString().split("T")[0];
       },
     }),
-    getTime: tool({
+    getTime: tool<z.infer<typeof localeSchema>, string>({
       description: "Get the current time in HH:MM:SS format.",
-      inputSchema: z.object({
-        locale: z
-          .string()
-          .optional()
-          .describe("Optional locale or time zone identifier."),
-      }),
+      inputSchema: localeSchema,
       async execute({ locale }) {
         const now = new Date();
         return locale
@@ -76,76 +85,73 @@ function createGeneralTools() {
           : now.toISOString().split("T")[1].split(".")[0];
       },
     }),
-  };
+  } satisfies ToolMap;
 }
 
-function createToolboxTools() {
+function createToolboxTools(): ToolMap {
   const toolboxEntries = toolRegistry.list();
 
-  return toolboxEntries.reduce(
-    (acc, definition) => {
-      acc[definition.name] = tool({
-        description: definition.description,
-        inputSchema: definition.inputSchema,
-        async execute(
-          input,
-          options?: {
-            toolCallId?: string;
+  return toolboxEntries.reduce<ToolMap>((acc, definition) => {
+    acc[definition.name] = tool<any, ToolResultOutput>({
+      description: definition.description,
+      inputSchema: definition.inputSchema,
+      async execute(
+        input,
+        options?: {
+          toolCallId?: string;
+        }
+      ) {
+        if (definition.runLocation === "client") {
+          if (!options?.toolCallId) {
+            throw new Error("Client tool requests require a toolCallId.");
           }
-        ) {
-          if (definition.runLocation === "client") {
-            if (!options?.toolCallId) {
-              throw new Error("Client tool requests require a toolCallId.");
-            }
-            const context = {
-              tool: definition.name,
-              runLocation: "client",
-              toolCallId: options.toolCallId,
-              inputKeys: Object.keys(input ?? {}),
-            };
-            logger.info(context, "Waiting for client tool result");
-            const result = await waitForClientToolResult({
-              toolCallId: options.toolCallId,
-              toolName: definition.name,
-            });
-            if (result.status === "error") {
-              logger.error({ ...context, error: result.error }, "Client tool execution failed");
-              throw new Error(result.error ?? "Client tool execution failed.");
-            }
-            logger.info(
-              { ...context, summary: summarizeExecutionResult(result) },
-              "Client tool execution completed"
-            );
-            return toolResultOutputFromExecution(result);
-          }
-
           const context = {
             tool: definition.name,
-            runLocation: definition.runLocation ?? "server",
+            runLocation: "client",
+            toolCallId: options.toolCallId,
             inputKeys: Object.keys(input ?? {}),
           };
-          logger.info(context, "Executing toolbox tool");
-
-          const result = await executeTool({
+          logger.info(context, "Waiting for client tool result");
+          const result = await waitForClientToolResult({
+            toolCallId: options.toolCallId,
             toolName: definition.name,
-            input,
-            context: {},
           });
           if (result.status === "error") {
-            logger.error({ ...context, error: result.error }, "Tool execution failed");
-            throw new Error(result.error ?? "Tool execution failed.");
+            logger.error({ ...context, error: result.error }, "Client tool execution failed");
+            throw new Error(result.error ?? "Client tool execution failed.");
           }
           logger.info(
             { ...context, summary: summarizeExecutionResult(result) },
-            "Tool execution completed"
+            "Client tool execution completed"
           );
           return toolResultOutputFromExecution(result);
-        },
-      });
-      return acc;
-    },
-    {} as Record<string, ReturnType<typeof tool>>
-  );
+        }
+
+        const context = {
+          tool: definition.name,
+          runLocation: definition.runLocation ?? "server",
+          inputKeys: Object.keys(input ?? {}),
+        };
+        logger.info(context, "Executing toolbox tool");
+
+        const result = await executeTool({
+          toolName: definition.name,
+          input,
+          context: {},
+        });
+        if (result.status === "error") {
+          logger.error({ ...context, error: result.error }, "Tool execution failed");
+          throw new Error(result.error ?? "Tool execution failed.");
+        }
+        logger.info(
+          { ...context, summary: summarizeExecutionResult(result) },
+          "Tool execution completed"
+        );
+        return toolResultOutputFromExecution(result);
+      },
+    });
+    return acc;
+  }, {} as ToolMap);
 }
 
 export async function POST(req: Request) {
@@ -169,6 +175,7 @@ export async function POST(req: Request) {
       mode: isChatMode(existingMetadata?.mode)
         ? existingMetadata.mode
         : fallbackMode,
+      attachments: existingMetadata?.attachments,
     };
     return {
       ...message,
@@ -176,7 +183,10 @@ export async function POST(req: Request) {
     };
   }) as TimelineChatMessage[];
 
-  const activeMode = determineActiveMode(messagesWithMetadata, fallbackMode);
+  // Inject attachment parts into user messages
+  const messagesWithAttachments = injectAttachmentParts(messagesWithMetadata);
+
+  const activeMode = determineActiveMode(messagesWithAttachments, fallbackMode);
 
   const systemMessage: TimelineChatMessage = {
     id: "system-mode-instructions",
@@ -210,7 +220,7 @@ export async function POST(req: Request) {
     },
     messages: await convertToModelMessages([
       systemMessage,
-      ...messagesWithMetadata,
+      ...messagesWithAttachments,
     ]),
     stopWhen: stepCountIs(5),
     toolChoice: activeMode === "ask" ? "none" : undefined,
@@ -236,6 +246,56 @@ export async function POST(req: Request) {
 
 function isChatMode(value: unknown): value is ChatMode {
   return value === "ask" || value === "agent" || value === "plan";
+}
+
+/**
+ * Inject attachment content parts into user messages
+ *
+ * This converts ChatAttachment metadata into actual content parts
+ * that the ai SDK can convert to Gemini API format.
+ */
+function injectAttachmentParts(
+  messages: TimelineChatMessage[]
+): TimelineChatMessage[] {
+  return messages.map((message) => {
+    if (message.role !== "user") return message;
+
+    const metadata = message.metadata as ChatMessageMetadata | undefined;
+    const attachments = metadata?.attachments;
+
+    if (!attachments || attachments.length === 0) return message;
+
+    // Build attachment parts (media should come before text per Gemini best practices)
+    const attachmentParts = attachments.map((attachment) => {
+      const geminiPart = attachmentToGeminiPart(attachment);
+
+      // Convert to ai SDK part format
+      if ("fileData" in geminiPart) {
+        return {
+          type: "file" as const,
+          url: geminiPart.fileData.fileUri,
+          mediaType: geminiPart.fileData.mimeType,
+        };
+      } else if ("inlineData" in geminiPart) {
+        // For inline data, use file type with data URL for all types
+        return {
+          type: "file" as const,
+          url: `data:${geminiPart.inlineData.mimeType};base64,${geminiPart.inlineData.data}`,
+          mediaType: geminiPart.inlineData.mimeType,
+        };
+      }
+      return null;
+    }).filter((part): part is NonNullable<typeof part> => part !== null);
+
+    // Get existing parts
+    const existingParts = Array.isArray(message.parts) ? message.parts : [];
+
+    // Combine: attachments first, then existing parts (per Gemini best practices)
+    return {
+      ...message,
+      parts: [...attachmentParts, ...existingParts],
+    };
+  });
 }
 
 function createSystemPrompt(currentMode: ChatMode) {
@@ -268,15 +328,39 @@ function determineActiveMode(
   return fallback;
 }
 
-function createPlanningTools(chatId: string) {
+function createPlanningTools(chatId: string): ToolMap {
+  const createTaskListSchema = z.object({
+    title: z.string().min(1).max(160).optional(),
+    tasks: z.array(planningTaskInputSchema),
+  });
+
+  const addTaskSchema = z.object({
+    task: planningTaskInputSchema,
+  });
+
+  const updateTaskSchema = z.object({
+    id: z.string().min(1),
+    title: z.string().min(1).max(160).optional(),
+    description: z.string().max(500).optional(),
+    status: planningTaskStatus.optional(),
+  });
+
+  const removeTaskSchema = z.object({
+    id: z.string().min(1),
+  });
+
+  const resetTaskListSchema = z.object({
+    title: z.string().min(1).max(160).optional(),
+  });
+
   return {
-    planCreateTaskList: tool({
+    planCreateTaskList: tool<
+      z.infer<typeof createTaskListSchema>,
+      PlanningToolResponse<"task-list-created">
+    >({
       description:
         "Create or overwrite the current task list with the provided tasks.",
-      inputSchema: z.object({
-        title: z.string().min(1).max(160).optional(),
-        tasks: z.array(planningTaskInputSchema),
-      }),
+      inputSchema: createTaskListSchema,
       async execute({ title, tasks }) {
         const normalized = tasks.map(normalizeTask);
         const snapshot = persistTaskList(chatId, { title, tasks: normalized });
@@ -284,14 +368,15 @@ function createPlanningTools(chatId: string) {
           action: "task-list-created",
           message: `Created ${normalized.length} task(s).`,
           taskList: snapshot,
-        };
+        } satisfies PlanningToolResponse<"task-list-created">;
       },
     }),
-    planAddTask: tool({
+    planAddTask: tool<
+      z.infer<typeof addTaskSchema>,
+      PlanningToolResponse<"task-added">
+    >({
       description: "Add a task to the current plan.",
-      inputSchema: z.object({
-        task: planningTaskInputSchema,
-      }),
+      inputSchema: addTaskSchema,
       async execute({ task }) {
         const current = ensureTaskList(chatId);
         const normalizedTask = normalizeTask(task);
@@ -303,17 +388,15 @@ function createPlanningTools(chatId: string) {
           action: "task-added",
           message: `Added ${normalizedTask.title}.`,
           taskList: snapshot,
-        };
+        } satisfies PlanningToolResponse<"task-added">;
       },
     }),
-    planUpdateTask: tool({
+    planUpdateTask: tool<
+      z.infer<typeof updateTaskSchema>,
+      PlanningToolResponse<"task-updated">
+    >({
       description: "Update a task's title, description, or status.",
-      inputSchema: z.object({
-        id: z.string().min(1),
-        title: z.string().min(1).max(160).optional(),
-        description: z.string().max(500).optional(),
-        status: planningTaskStatus.optional(),
-      }),
+      inputSchema: updateTaskSchema,
       async execute({ id, title, description, status }) {
         const current = ensureTaskList(chatId);
         const tasks = current.tasks.map((task) =>
@@ -337,14 +420,15 @@ function createPlanningTools(chatId: string) {
           action: "task-updated",
           message: `Updated task ${id}.`,
           taskList: snapshot,
-        };
+        } satisfies PlanningToolResponse<"task-updated">;
       },
     }),
-    planRemoveTask: tool({
+    planRemoveTask: tool<
+      z.infer<typeof removeTaskSchema>,
+      PlanningToolResponse<"task-removed">
+    >({
       description: "Remove a task from the current plan.",
-      inputSchema: z.object({
-        id: z.string().min(1),
-      }),
+      inputSchema: removeTaskSchema,
       async execute({ id }) {
         const current = ensureTaskList(chatId);
         const snapshot = persistTaskList(chatId, {
@@ -355,14 +439,15 @@ function createPlanningTools(chatId: string) {
           action: "task-removed",
           message: `Removed task ${id}.`,
           taskList: snapshot,
-        };
+        } satisfies PlanningToolResponse<"task-removed">;
       },
     }),
-    planResetTaskList: tool({
+    planResetTaskList: tool<
+      z.infer<typeof resetTaskListSchema>,
+      PlanningToolResponse<"task-list-reset">
+    >({
       description: "Clear every task to start fresh while keeping the title.",
-      inputSchema: z.object({
-        title: z.string().min(1).max(160).optional(),
-      }),
+      inputSchema: resetTaskListSchema,
       async execute({ title }) {
         const snapshot = persistTaskList(chatId, {
           title: title ?? ensureTaskList(chatId).title,
@@ -372,11 +457,12 @@ function createPlanningTools(chatId: string) {
           action: "task-list-reset",
           message: "Cleared the task list.",
           taskList: snapshot,
-        };
+        } satisfies PlanningToolResponse<"task-list-reset">;
       },
     }),
-  };
+  } satisfies ToolMap;
 }
+
 
 function summarizeExecutionResult(result: ToolExecutionResult) {
   if (result.status === "error") {

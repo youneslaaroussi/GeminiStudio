@@ -16,6 +16,8 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { toolRegistry, executeTool } from "@/app/lib/tools/tool-registry";
 import type { ToolDefinition, ToolOutput } from "@/app/lib/tools/types";
+import type { Project } from "@/app/types/timeline";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -67,7 +69,7 @@ export function ToolboxPanel() {
   const currentTime = useProjectStore((state) => state.currentTime);
   const capturedAssets = useToolboxStore((state) => state.capturedAssets);
 
-  const [selectedTool, setSelectedTool] = useState<ToolDefinition | null>(
+  const [selectedTool, setSelectedTool] = useState<ToolDefinition<z.ZodTypeAny, Project> | null>(
     () => tools[0] ?? null
   );
   const [formState, setFormState] = useState<Record<string, ToolFormValues>>(
@@ -106,7 +108,7 @@ export function ToolboxPanel() {
     [currentTime]
   );
 
-  const handleSelectTool = useCallback((tool: ToolDefinition) => {
+  const handleSelectTool = useCallback((tool: ToolDefinition<z.ZodTypeAny, Project>) => {
     setSelectedTool(tool);
     setLastError(null);
     setToolPickerOpen(false);

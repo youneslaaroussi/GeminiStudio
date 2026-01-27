@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { useToolboxStore } from "@/app/lib/store/toolbox-store";
-import type { ToolDefinition } from "./types";
+import type { ToolDefinition, ToolOutput } from "./types";
 import type { Project } from "@/app/types/timeline";
 import {
   loadAssetsSnapshot,
@@ -72,7 +72,7 @@ export const captureFacesTool: ToolDefinition<typeof captureFacesSchema, Project
         placeholder: "Optional context for the captured frames.",
       },
     ],
-    async run(input) {
+    async run(input, _context) {
       const assets = await loadAssetsSnapshot();
       const matchedAsset = assets.find(
         (asset) => asset.id === input.assetId.trim()
@@ -132,7 +132,7 @@ export const captureFacesTool: ToolDefinition<typeof captureFacesSchema, Project
       }
 
       const store = useToolboxStore.getState();
-      const outputs: Array<{ type: string; url?: string; alt?: string; width?: number; height?: number; text?: string; data?: unknown }> = [];
+      const outputs: ToolOutput[] = [];
 
       // Capture frame for each face at their first appearance
       for (const face of facesToCapture) {

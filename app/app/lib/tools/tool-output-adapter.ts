@@ -124,8 +124,6 @@ function flattenListOutput(items: ToolOutput[], depth = 0): string[] {
       case "list":
         lines.push(...flattenListOutput(item.items, depth + 1));
         break;
-      default:
-        lines.push(`${prefix}[${item.type} output]`);
     }
   });
   return lines;

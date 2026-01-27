@@ -24,9 +24,18 @@ import {
   Sparkles,
   MessageSquare,
   ListTodo,
+  Paperclip,
+  X,
+  Image as ImageIcon,
+  FileVideo,
+  FileAudio,
+  FileText,
+  File as FileIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { z } from "zod";
 import type {
+  ChatAttachment,
   ChatMode,
   TaskListSnapshot,
   TimelineChatMessage,
@@ -43,6 +52,7 @@ import type {
   ToolDefinition,
   ToolExecutionResult,
 } from "@/app/lib/tools/types";
+import type { Project } from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
 
 type ToolPartState =
@@ -91,7 +101,11 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<ChatMode>("agent");
   const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(true);
+  const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const sessionId = useRef(`chat-${Date.now()}`).current;
 
   const chatTransport = useMemo(
     () =>
@@ -111,6 +125,52 @@ export function ChatPanel() {
   const isBusy = status === "submitted" || status === "streaming";
   const hasMessages = messages && messages.length > 0;
 
+  // Handle file selection and upload
+  const handleFileSelect = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = event.target.files;
+      if (!files || files.length === 0) return;
+
+      setIsUploadingAttachments(true);
+      try {
+        const formData = new FormData();
+        formData.append("sessionId", sessionId);
+        for (const file of files) {
+          formData.append("files", file);
+        }
+
+        const response = await fetch("/api/chat/attachments", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          console.error("Failed to upload attachments:", error);
+          return;
+        }
+
+        const { attachments } = (await response.json()) as {
+          attachments: ChatAttachment[];
+        };
+        setPendingAttachments((prev) => [...prev, ...attachments]);
+      } catch (error) {
+        console.error("Failed to upload attachments:", error);
+      } finally {
+        setIsUploadingAttachments(false);
+        // Reset file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+    },
+    [sessionId]
+  );
+
+  const removeAttachment = useCallback((attachmentId: string) => {
+    setPendingAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
+  }, []);
+
   const taskListSnapshot = useMemo(
     () => deriveTaskListSnapshot(messages),
     [messages]
@@ -118,7 +178,7 @@ export function ChatPanel() {
   const project = useProjectStore((state) => state.project);
   const toolboxTools = useMemo(() => toolRegistry.list(), []);
   const clientToolMap = useMemo(() => {
-    const entries = new Map<string, ToolDefinition>();
+    const entries = new Map<string, ToolDefinition<z.ZodTypeAny, Project>>();
     for (const tool of toolboxTools) {
       if (tool.runLocation === "client") {
         entries.set(tool.name, tool);
@@ -136,10 +196,17 @@ export function ChatPanel() {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = input.trim();
-    if (!trimmed) return;
+    if (!trimmed && pendingAttachments.length === 0) return;
 
-    sendMessage({ text: trimmed, metadata: { mode } });
+    sendMessage({
+      text: trimmed || (pendingAttachments.length > 0 ? "Please analyze these files." : ""),
+      metadata: {
+        mode,
+        attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
+      },
+    });
     setInput("");
+    setPendingAttachments([]);
   };
 
   const handleExportChat = () => {
@@ -275,6 +342,8 @@ export function ChatPanel() {
           {messages?.map((message) => {
             const parts = Array.isArray(message.parts) ? message.parts : [];
             const isUser = message.role === "user";
+            const metadata = message.metadata as { attachments?: ChatAttachment[] } | undefined;
+            const attachments = metadata?.attachments;
             return (
               <div
                 key={message.id}
@@ -288,6 +357,10 @@ export function ChatPanel() {
                       : "bg-muted/60"
                   )}
                 >
+                  {/* Show attachments first */}
+                  {attachments && attachments.length > 0 && (
+                    <MessageAttachments attachments={attachments} isUser={isUser} />
+                  )}
                   {parts.map((part, index) => {
                     const content = renderMessagePart(
                       part,
@@ -375,17 +448,57 @@ export function ChatPanel() {
           </button>
         </div>
 
+        {/* Pending Attachments Preview */}
+        {pendingAttachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 pb-2">
+            {pendingAttachments.map((attachment) => (
+              <AttachmentPreview
+                key={attachment.id}
+                attachment={attachment}
+                onRemove={() => removeAttachment(attachment.id)}
+              />
+            ))}
+          </div>
+        )}
+
         {/* Message Input */}
         <form onSubmit={handleSubmit} className="flex gap-2">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,video/*,audio/*,.pdf,.txt"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+
+          {/* Attachment button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isBusy || isUploadingAttachments}
+            className="shrink-0 rounded-lg border border-border bg-background px-2.5 py-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+            title="Attach files"
+          >
+            {isUploadingAttachments ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Paperclip className="size-4" />
+            )}
+          </button>
+
           <input
             value={input}
             onChange={(event) => setInput(event.target.value)}
             placeholder={
-              mode === "ask"
-                ? "Ask a question..."
-                : mode === "plan"
-                  ? "Describe what to plan..."
-                  : "What would you like to do?"
+              pendingAttachments.length > 0
+                ? "Add a message or send files..."
+                : mode === "ask"
+                  ? "Ask a question..."
+                  : mode === "plan"
+                    ? "Describe what to plan..."
+                    : "What would you like to do?"
             }
             className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
             disabled={isBusy}
@@ -401,7 +514,7 @@ export function ChatPanel() {
           ) : (
             <button
               type="submit"
-              disabled={!input.trim()}
+              disabled={!input.trim() && pendingAttachments.length === 0}
               className="shrink-0 rounded-lg bg-primary px-3 py-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
               <Send className="size-4" />
@@ -449,7 +562,7 @@ function renderMessagePart(part: MessagePart, key: string, isUser: boolean) {
   }
 
   if (typeof part.type === "string" && part.type.startsWith("tool-")) {
-    return renderToolPart(part as ToolPart);
+    return renderToolPart(part as unknown as ToolPart);
   }
 
   return null;
@@ -569,7 +682,7 @@ function ToolCallCard({
           {status === "error" && error && (
             <p className="text-destructive">{error}</p>
           )}
-          {status === "success" && output && (
+          {status === "success" && (output as any) && (
             <div>
               <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
                 Output
@@ -744,7 +857,7 @@ function deriveTaskListSnapshot(
         (part as ToolPart).state === "output-available" &&
         isPlanningToolOutput((part as ToolPart).output)
       ) {
-        snapshot = (part as ToolPart).output.taskList;
+        snapshot = ((part as ToolPart).output as any).taskList;
       }
     }
   }
@@ -866,4 +979,162 @@ function TaskListPanel({
       </CollapsibleContent>
     </Collapsible>
   );
+}
+
+// Attachment preview component for pending attachments
+function AttachmentPreview({
+  attachment,
+  onRemove,
+}: {
+  attachment: ChatAttachment;
+  onRemove?: () => void;
+}) {
+  const Icon = getAttachmentIcon(attachment.category);
+
+  return (
+    <div className="relative group flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-2 py-1.5 text-xs">
+      <Icon className="size-4 text-muted-foreground shrink-0" />
+      <span className="truncate max-w-[120px]" title={attachment.name}>
+        {attachment.name}
+      </span>
+      <span className="text-muted-foreground shrink-0">
+        {formatFileSize(attachment.size)}
+      </span>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="ml-1 rounded-full p-0.5 hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
+        >
+          <X className="size-3" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Message attachments display component
+function MessageAttachments({
+  attachments,
+  isUser,
+}: {
+  attachments: ChatAttachment[];
+  isUser: boolean;
+}) {
+  if (!attachments || attachments.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2 mb-2">
+      {attachments.map((attachment) => (
+        <AttachmentDisplay key={attachment.id} attachment={attachment} isUser={isUser} />
+      ))}
+    </div>
+  );
+}
+
+// Individual attachment display in messages
+function AttachmentDisplay({
+  attachment,
+  isUser,
+}: {
+  attachment: ChatAttachment;
+  isUser: boolean;
+}) {
+  const Icon = getAttachmentIcon(attachment.category);
+  const previewUrl = attachment.signedUrl || attachment.localUrl;
+
+  // For images, show thumbnail
+  if (attachment.category === "image" && previewUrl) {
+    return (
+      <div className="rounded-lg overflow-hidden border border-border/50 max-w-[200px]">
+        <img
+          src={previewUrl}
+          alt={attachment.name}
+          className="max-h-32 w-auto object-cover"
+        />
+        <div className={cn(
+          "px-2 py-1 text-[10px] truncate",
+          isUser ? "bg-primary-foreground/10" : "bg-muted/50"
+        )}>
+          {attachment.name}
+        </div>
+      </div>
+    );
+  }
+
+  // For video, show with play icon
+  if (attachment.category === "video" && previewUrl) {
+    return (
+      <div className="rounded-lg overflow-hidden border border-border/50 max-w-[200px]">
+        <video
+          src={previewUrl}
+          className="max-h-32 w-auto"
+          controls
+          preload="metadata"
+        />
+        <div className={cn(
+          "px-2 py-1 text-[10px] truncate",
+          isUser ? "bg-primary-foreground/10" : "bg-muted/50"
+        )}>
+          {attachment.name}
+        </div>
+      </div>
+    );
+  }
+
+  // For audio, show player
+  if (attachment.category === "audio" && previewUrl) {
+    return (
+      <div className={cn(
+        "rounded-lg border border-border/50 p-2 space-y-1",
+        isUser ? "bg-primary-foreground/10" : "bg-muted/50"
+      )}>
+        <div className="flex items-center gap-2 text-xs">
+          <Icon className="size-4 shrink-0" />
+          <span className="truncate max-w-[150px]">{attachment.name}</span>
+        </div>
+        <audio src={previewUrl} controls className="w-full h-8" preload="metadata" />
+      </div>
+    );
+  }
+
+  // Default file display
+  return (
+    <a
+      href={previewUrl}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(
+        "flex items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-xs hover:bg-muted/30 transition-colors",
+        isUser ? "bg-primary-foreground/10" : "bg-muted/50"
+      )}
+    >
+      <Icon className="size-4 shrink-0" />
+      <div className="min-w-0">
+        <p className="truncate max-w-[150px] font-medium">{attachment.name}</p>
+        <p className="text-muted-foreground">{formatFileSize(attachment.size)}</p>
+      </div>
+    </a>
+  );
+}
+
+function getAttachmentIcon(category: ChatAttachment["category"]) {
+  switch (category) {
+    case "image":
+      return ImageIcon;
+    case "video":
+      return FileVideo;
+    case "audio":
+      return FileAudio;
+    case "document":
+      return FileText;
+    default:
+      return FileIcon;
+  }
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

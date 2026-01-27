@@ -10,13 +10,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import type { TranscriptionRecord } from "@/app/types/transcription";
+import type { ProjectTranscription } from "@/app/types/transcription";
 import { toast } from "sonner";
 
 interface TranscriptDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  transcription: TranscriptionRecord | null;
+  transcription: ProjectTranscription | null;
 }
 
 export function TranscriptDialog({

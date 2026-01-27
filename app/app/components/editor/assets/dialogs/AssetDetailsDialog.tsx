@@ -426,19 +426,19 @@ function PipelineStepDetails({
     case "metadata":
       return (
         <div className="grid gap-2 text-xs">
-          {metadata.duration && (
+          {(metadata.duration as number | undefined) && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">Duration</span>
-              <span>{Number(metadata.duration).toFixed(2)}s</span>
+              <span>{Number(metadata.duration as number).toFixed(2)}s</span>
             </div>
           )}
-          {metadata.width && metadata.height && (
+          {(metadata.width as string | undefined) && (metadata.height as string | undefined) && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">Dimensions</span>
-              <span>{metadata.width} × {metadata.height}</span>
+              <span>{metadata.width as string} × {metadata.height as string}</span>
             </div>
           )}
-          {metadata.mimeType && (
+          {(metadata.mimeType as string | undefined) && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">MIME Type</span>
               <span>{String(metadata.mimeType)}</span>
@@ -450,7 +450,7 @@ function PipelineStepDetails({
     case "cloud-upload":
       return (
         <div className="grid gap-2 text-xs min-w-0">
-          {metadata.gcsUri && (
+          {(metadata.gcsUri as string | undefined) && (
             <div className="flex justify-between gap-2 min-w-0">
               <span className="text-muted-foreground shrink-0">GCS URI</span>
               <code className="truncate bg-muted px-1 rounded min-w-0">
@@ -458,13 +458,13 @@ function PipelineStepDetails({
               </code>
             </div>
           )}
-          {metadata.bucket && (
+          {(metadata.bucket as string | undefined) && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">Bucket</span>
               <span className="truncate">{String(metadata.bucket)}</span>
             </div>
           )}
-          {metadata.objectName && (
+          {(metadata.objectName as string | undefined) && (
             <div className="flex justify-between gap-2 min-w-0">
               <span className="text-muted-foreground shrink-0">Object</span>
               <span className="truncate min-w-0">{String(metadata.objectName)}</span>

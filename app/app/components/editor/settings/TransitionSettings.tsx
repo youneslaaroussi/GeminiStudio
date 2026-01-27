@@ -20,7 +20,7 @@ export function TransitionSettings({ transitionKey }: TransitionSettingsProps) {
   const addTransition = useProjectStore((s) => s.addTransition);
   const removeTransition = useProjectStore((s) => s.removeTransition);
 
-  const transition = project.transitions?.[transitionKey];
+  const transition = project.transitions?.[transitionKey as `${string}->${string}`];
 
   return (
     <div className="space-y-3">

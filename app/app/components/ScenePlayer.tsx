@@ -94,7 +94,7 @@ export function ScenePlayer({
         const m: Project | undefined = win?.__SCENE_PROJECT__;
         if (!m || typeof m !== 'object') throw new Error('Invalid project export');
 
-        setProject(m, { markSaved: true });
+        setProject(m);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -259,7 +259,7 @@ export function ScenePlayer({
 
       try {
         const previousScene = playerInstance.playback.previousScene as Scene | null;
-        await stageInstance.render(currentScene, previousScene ?? undefined);
+        await stageInstance.render(currentScene, previousScene ?? null);
       } catch (err) {
         console.error('Render error:', err);
       }

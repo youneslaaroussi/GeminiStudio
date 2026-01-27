@@ -24,7 +24,7 @@ export interface SpeechEnv {
   bucket: string;
 }
 
-function assertSpeechEnv(): asserts PROJECT_ID is string & NonNullable<unknown> {
+function assertSpeechEnv(): void {
   if (!PROJECT_ID) {
     throw new Error("SPEECH_PROJECT_ID (or VEO_PROJECT_ID / GOOGLE_CLOUD_PROJECT) is not configured");
   }

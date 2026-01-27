@@ -24,6 +24,7 @@ import { GenerateSection } from "./GenerateSection";
 import { UploadDialog } from "./dialogs/UploadDialog";
 import { VeoDialog } from "./dialogs/VeoDialog";
 import { BananaDialog } from "./dialogs/BananaDialog";
+import { LyriaDialog } from "./dialogs/LyriaDialog";
 import { TranscriptDialog } from "./dialogs/TranscriptDialog";
 import { AssetDetailsDialog } from "./dialogs/AssetDetailsDialog";
 
@@ -53,6 +54,7 @@ export function AssetsPanel() {
   const [uploadInitialFiles, setUploadInitialFiles] = useState<File[]>([]);
   const [veoDialogOpen, setVeoDialogOpen] = useState(false);
   const [bananaDialogOpen, setBananaDialogOpen] = useState(false);
+  const [lyriaDialogOpen, setLyriaDialogOpen] = useState(false);
   const [transcriptDialogAssetId, setTranscriptDialogAssetId] = useState<string | null>(null);
   const [detailsDialogAssetId, setDetailsDialogAssetId] = useState<string | null>(null);
 
@@ -144,6 +146,7 @@ export function AssetsPanel() {
           <GenerateSection
             onOpenVeo={() => setVeoDialogOpen(true)}
             onOpenBanana={() => setBananaDialogOpen(true)}
+            onOpenLyria={() => setLyriaDialogOpen(true)}
           />
         </div>
 
@@ -252,6 +255,13 @@ export function AssetsPanel() {
       <BananaDialog
         open={bananaDialogOpen}
         onOpenChange={setBananaDialogOpen}
+        projectId={projectId}
+        onGenerated={handleGenerated}
+      />
+
+      <LyriaDialog
+        open={lyriaDialogOpen}
+        onOpenChange={setLyriaDialogOpen}
         projectId={projectId}
         onGenerated={handleGenerated}
       />

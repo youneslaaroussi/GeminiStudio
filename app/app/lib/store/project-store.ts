@@ -11,7 +11,7 @@ import type {
   TimelineClip,
   VideoClip,
 } from '@/app/types/timeline';
-import { getClipEnd } from '@/app/types/timeline';
+import { getClipEnd, parseTransitionKey } from '@/app/types/timeline';
 import type { ProjectTranscription } from '@/app/types/transcription';
 import type {
   AssistantChatSession,
@@ -33,6 +33,7 @@ interface ProjectStore {
 
   addLayer: (layer: Layer) => void;
   addClip: (clip: TimelineClip, layerId?: string) => void;
+  deleteLayer: (layerId: string) => void;
   updateClip: (id: string, updates: Partial<TimelineClip>) => void;
   deleteClip: (id: string) => void;
   moveClipToLayer: (clipId: string, targetLayerId: string) => void;
@@ -211,7 +212,7 @@ const createProjectUpdateHelper = (
 
 export const useProjectStore = create<ProjectStore>()(
   temporal(
-    (set, get) => {
+    (set, get): ProjectStore => {
       const updateProjectState = createProjectUpdateHelper(set);
       return {
       // Initial state
@@ -246,7 +247,54 @@ export const useProjectStore = create<ProjectStore>()(
           },
         })),
 
-      addClip: (clip, layerId) =>
+      deleteLayer: (layerId: string) =>
+        updateProjectState((state) => {
+          const { layers, transitions = {} } = state.project;
+          const layerIndex = layers.findIndex((layer) => layer.id === layerId);
+          if (layerIndex === -1) return null;
+
+          const layer = layers[layerIndex];
+          const clipIds = new Set(layer.clips.map((clip) => clip.id));
+
+          const filteredTransitionsEntries = Object.entries(transitions).filter(
+            ([key]) => {
+              const { fromId, toId } = parseTransitionKey(key);
+              return !clipIds.has(fromId) && !clipIds.has(toId);
+            }
+          );
+
+          const nextTransitions =
+            filteredTransitionsEntries.length === Object.keys(transitions).length
+              ? transitions
+              : Object.fromEntries(filteredTransitionsEntries);
+
+          const nextLayers = layers.filter((existingLayer) => existingLayer.id !== layerId);
+
+          const nextSelectedClipId =
+            state.selectedClipId && clipIds.has(state.selectedClipId)
+              ? null
+              : state.selectedClipId;
+
+          const nextSelectedTransitionKey =
+            state.selectedTransitionKey &&
+            !filteredTransitionsEntries.some(
+              ([key]) => key === state.selectedTransitionKey
+            )
+              ? null
+              : state.selectedTransitionKey;
+
+          return {
+            project: {
+              ...state.project,
+              layers: nextLayers,
+              transitions: nextTransitions,
+            },
+            selectedClipId: nextSelectedClipId,
+            selectedTransitionKey: nextSelectedTransitionKey,
+          };
+        }),
+
+      addClip: (clip: TimelineClip, layerId?: string) =>
         updateProjectState((state) => {
           // Check if project is currently empty (has no clips) to potentially set resolution
           const hasExistingClips = state.project.layers.some((l) => l.clips.length > 0);
@@ -295,7 +343,7 @@ export const useProjectStore = create<ProjectStore>()(
           };
         }),
 
-      updateClip: (id, updates) =>
+      updateClip: (id: string, updates: Partial<TimelineClip>) =>
         updateProjectState((state) => {
           const location = findClipLocation(state.project, id);
           if (!location) return null;
@@ -321,7 +369,7 @@ export const useProjectStore = create<ProjectStore>()(
           };
         }),
 
-      deleteClip: (id) =>
+      deleteClip: (id: string) =>
         updateProjectState((state) => {
           const location = findClipLocation(state.project, id);
           if (!location) return null;
@@ -340,7 +388,7 @@ export const useProjectStore = create<ProjectStore>()(
           };
         }),
 
-      moveClipToLayer: (clipId, targetLayerId) =>
+      moveClipToLayer: (clipId: string, targetLayerId: string) =>
         updateProjectState((state) => {
           const location = findClipLocation(state.project, clipId);
           if (!location) return null;
@@ -374,16 +422,16 @@ export const useProjectStore = create<ProjectStore>()(
           };
         }),
 
-      setCurrentTime: (time) => set({ currentTime: Math.max(0, time) }),
+      setCurrentTime: (time: number) => set({ currentTime: Math.max(0, time) }),
 
-      setSelectedClip: (id) => set({ selectedClipId: id, selectedTransitionKey: null }),
-      setSelectedTransition: (key) => set({ selectedTransitionKey: key, selectedClipId: null }),
+      setSelectedClip: (id: string | null) => set({ selectedClipId: id, selectedTransitionKey: null }),
+      setSelectedTransition: (key: string | null) => set({ selectedTransitionKey: key, selectedClipId: null }),
 
-      setIsPlaying: (playing) => set({ isPlaying: playing }),
+      setIsPlaying: (playing: boolean) => set({ isPlaying: playing }),
 
-      setZoom: (zoom) => set({ zoom: clampZoom(zoom) }),
+      setZoom: (zoom: number) => set({ zoom: clampZoom(zoom) }),
 
-      setMuted: (muted) => set({ isMuted: muted }),
+      setMuted: (muted: boolean) => set({ isMuted: muted }),
 
       setLooping: (looping) => set({ isLooping: looping }),
 
@@ -783,18 +831,17 @@ export const useProjectStore = create<ProjectStore>()(
   )
 );
 
-useProjectStore.subscribe(
-  (state) => state.project,
-  (project) => {
-    const snapshot = JSON.stringify(project);
-    const { lastSavedSnapshot, hasUnsavedChanges } = useProjectStore.getState();
-    const isDirty = snapshot !== lastSavedSnapshot;
-    if (hasUnsavedChanges !== isDirty) {
-      console.debug(
-        "[project-store] hasUnsavedChanges ->",
-        isDirty
-      );
-      useProjectStore.setState({ hasUnsavedChanges: isDirty }, false);
-    }
+useProjectStore.subscribe((state, previousState) => {
+  if (state.project === previousState.project) {
+    return;
   }
-);
+
+  const snapshot = JSON.stringify(state.project);
+  const { lastSavedSnapshot, hasUnsavedChanges } = useProjectStore.getState();
+  const isDirty = snapshot !== lastSavedSnapshot;
+
+  if (hasUnsavedChanges !== isDirty) {
+    console.debug("[project-store] hasUnsavedChanges ->", isDirty);
+    useProjectStore.setState({ hasUnsavedChanges: isDirty });
+  }
+});

@@ -1,10 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ClipType, TimelineClip } from "@/app/types/timeline";
+import type { ClipType, TimelineClip, VideoClip, AudioClip } from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { cn } from "@/lib/utils";
 import { useWaveform } from "@/app/hooks/use-waveform";
+import { Trash2 } from "lucide-react";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 interface ClipProps {
   clip: TimelineClip;
@@ -23,6 +34,7 @@ export function Clip({ clip, layerId }: ClipProps) {
 
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState<"left" | "right" | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const dragStartRef = useRef({ x: 0, start: 0, duration: 0, offset: 0 });
   const activeLayerIdRef = useRef(layerId);
   const clipRef = useRef<HTMLDivElement>(null);
@@ -121,9 +133,9 @@ export function Clip({ clip, layerId }: ClipProps) {
   const width = displayDuration * zoom;
   const waveformWidth = Math.max(width, 4);
   const hasWaveform = clip.type === "audio" || clip.type === "video";
-  const waveformCacheKey = clip.assetId ?? clip.src;
+  const waveformCacheKey = clip.assetId ?? (clip.type !== 'text' ? clip.src : undefined);
   const { path: waveformPath, isLoading: waveformLoading } = useWaveform({
-    src: hasWaveform ? clip.src : undefined,
+    src: hasWaveform ? (clip as VideoClip | AudioClip).src : undefined,
     cacheKey: hasWaveform ? waveformCacheKey : undefined,
     width: waveformWidth,
     height: clipHeight || 1,
@@ -134,6 +146,9 @@ export function Clip({ clip, layerId }: ClipProps) {
   const handleMouseDown = useCallback(
     (e: React.MouseEvent, action: "drag" | "resize-left" | "resize-right") => {
       e.stopPropagation();
+      if (e.button !== 0) {
+        return;
+      }
       setSelectedClip(clip.id);
 
       dragStartRef.current = {
@@ -223,70 +238,120 @@ export function Clip({ clip, layerId }: ClipProps) {
     [clip.id, deleteClip]
   );
 
+  const handleConfirmDelete = useCallback(() => {
+    deleteClip(clip.id);
+    setShowDeleteDialog(false);
+  }, [clip.id, deleteClip]);
+
+  const handleOpenDeleteDialog = useCallback(
+    (event?: Event | React.SyntheticEvent) => {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      setShowDeleteDialog(true);
+    },
+    []
+  );
+
   return (
-    <div
-      ref={clipRef}
-      className={cn(
-        "absolute top-1 bottom-1 rounded border cursor-move select-none overflow-hidden",
-        clip.type === "video"
-          ? "bg-blue-500/80 border-blue-400"
-          : clip.type === "audio"
-          ? "bg-green-500/80 border-green-400"
-          : clip.type === "text"
-          ? "bg-purple-500/80 border-purple-400"
-          : "bg-orange-500/80 border-orange-400",
-        isSelected && "ring-2 ring-white ring-offset-1 ring-offset-background",
-        (isDragging || isResizing) && "opacity-80"
-      )}
-      style={{ left, width: waveformWidth }}
-      onMouseDown={(e) => handleMouseDown(e, "drag")}
-      onKeyDown={handleKeyDown}
-      tabIndex={0}
-      role="button"
-      aria-label={`${clip.type} clip: ${clip.name}`}
-      data-clip-id={clip.id}
-    >
-      {hasWaveform && (
-        <div className="pointer-events-none absolute inset-[2px] rounded-sm bg-black/20">
-          {waveformPath ? (
-            <svg
-              className="h-full w-full"
-              viewBox={`0 0 ${waveformWidth} ${clipHeight || 1}`}
-              preserveAspectRatio="none"
-            >
-              <path
-                d={waveformPath}
-                fill="white"
-                fillOpacity={clip.type === "audio" ? 0.85 : 0.5}
-              />
-            </svg>
-          ) : (
-            waveformLoading && (
-              <div className="h-full w-full animate-pulse bg-white/10" />
-            )
+    <>
+      <div
+        ref={clipRef}
+        className={cn(
+          "absolute top-1 bottom-1 rounded border cursor-move select-none overflow-hidden",
+          clip.type === "video"
+            ? "bg-blue-500/80 border-blue-400"
+            : clip.type === "audio"
+            ? "bg-green-500/80 border-green-400"
+            : clip.type === "text"
+            ? "bg-purple-500/80 border-purple-400"
+            : "bg-orange-500/80 border-orange-400",
+          isSelected && "ring-2 ring-white ring-offset-1 ring-offset-background",
+          (isDragging || isResizing) && "opacity-80"
+        )}
+        style={{ left, width: waveformWidth }}
+        onMouseDown={(e) => handleMouseDown(e, "drag")}
+        onPointerDown={(e) => {
+          if (e.button !== 0) {
+            e.stopPropagation();
+            return;
+          }
+        }}
+        onKeyDown={handleKeyDown}
+        tabIndex={0}
+        role="button"
+        aria-label={`${clip.type} clip: ${clip.name}`}
+        data-clip-id={clip.id}
+      >
+        <button
+          type="button"
+          className="absolute right-1 top-1 z-10 rounded-sm bg-black/30 p-1 text-white transition-colors hover:bg-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={handleOpenDeleteDialog}
+          title="Delete clip"
+        >
+          <Trash2 className="size-3.5" />
+        </button>
+        {hasWaveform && (
+          <div className="pointer-events-none absolute inset-[2px] rounded-sm bg-black/20">
+            {waveformPath ? (
+              <svg
+                className="h-full w-full"
+                viewBox={`0 0 ${waveformWidth} ${clipHeight || 1}`}
+                preserveAspectRatio="none"
+              >
+                <path
+                  d={waveformPath}
+                  fill="white"
+                  fillOpacity={clip.type === "audio" ? 0.85 : 0.5}
+                />
+              </svg>
+            ) : (
+              waveformLoading && (
+                <div className="h-full w-full animate-pulse bg-white/10" />
+              )
+            )}
+          </div>
+        )}
+
+        {/* Left resize handle */}
+        <div
+          className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20"
+          onMouseDown={(e) => handleMouseDown(e, "resize-left")}
+        />
+
+        {/* Clip content */}
+        <div className="px-2 py-1 text-xs text-white truncate pointer-events-none">
+          {clip.name}
+          {clip.speed !== 1 && (
+            <span className="ml-1 opacity-70">{clip.speed}x</span>
           )}
         </div>
-      )}
 
-      {/* Left resize handle */}
-      <div
-        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20"
-        onMouseDown={(e) => handleMouseDown(e, "resize-left")}
-      />
-
-      {/* Clip content */}
-      <div className="px-2 py-1 text-xs text-white truncate pointer-events-none">
-        {clip.name}
-        {clip.speed !== 1 && (
-          <span className="ml-1 opacity-70">{clip.speed}x</span>
-        )}
+        {/* Right resize handle */}
+        <div
+          className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20"
+          onMouseDown={(e) => handleMouseDown(e, "resize-right")}
+        />
       </div>
 
-      {/* Right resize handle */}
-      <div
-        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20"
-        onMouseDown={(e) => handleMouseDown(e, "resize-right")}
-      />
-    </div>
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete clip?</DialogTitle>
+            <DialogDescription>
+              This will remove <strong>{clip.name}</strong> from the timeline.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button variant="destructive" onClick={handleConfirmDelete}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

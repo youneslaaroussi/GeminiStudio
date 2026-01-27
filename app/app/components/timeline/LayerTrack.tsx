@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { Video, Music, Type, Image as ImageIcon } from "lucide-react";
+import React, { useCallback, useRef, useState } from "react";
+import { Video, Music, Type, Image as ImageIcon, Trash2 } from "lucide-react";
 import type { Layer } from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { Clip } from "./Clip";
@@ -16,7 +16,7 @@ interface LayerTrackProps {
   labelWidth: number;
 }
 
-const typeIcon: Record<Layer["type"], JSX.Element> = {
+const typeIcon: Record<Layer["type"], React.JSX.Element> = {
   video: <Video className="size-3.5 text-blue-400" />,
   audio: <Music className="size-3.5 text-green-400" />,
   text: <Type className="size-3.5 text-purple-400" />,
@@ -30,8 +30,26 @@ export function LayerTrack({ layer, width, labelWidth }: LayerTrackProps) {
   const setSelectedTransition = useProjectStore((s) => s.setSelectedTransition);
   const duration = useProjectStore((s) => s.getDuration());
   const addClip = useProjectStore((s) => s.addClip);
+  const deleteLayer = useProjectStore((s) => s.deleteLayer);
   const trackRef = useRef<HTMLDivElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDeleteLayer = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      event.preventDefault();
+      if (
+        layer.clips.length > 0 &&
+        !window.confirm(
+          `Delete "${layer.name}" and remove its ${layer.clips.length} clip${layer.clips.length === 1 ? "" : "s"}?`
+        )
+      ) {
+        return;
+      }
+      deleteLayer(layer.id);
+    },
+    [deleteLayer, layer.clips.length, layer.id, layer.name]
+  );
 
   const handleDragOver = useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
@@ -83,18 +101,28 @@ export function LayerTrack({ layer, width, labelWidth }: LayerTrackProps) {
       data-layer-type={layer.type}
     >
       <div
-        className="flex shrink-0 items-center gap-1.5 border-r border-border bg-muted/30 px-2 py-2"
+        className="flex shrink-0 items-center justify-between gap-1 border-r border-border bg-muted/30 px-2 py-2"
         style={{ width: labelWidth }}
       >
-        {typeIcon[layer.type]}
-        <div className="flex flex-col">
-          <span className="text-xs font-medium text-muted-foreground">
-            {layer.name}
-          </span>
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
-            {layer.type}
-          </span>
+        <div className="flex items-center gap-1.5">
+          {typeIcon[layer.type]}
+          <div className="flex flex-col">
+            <span className="text-xs font-medium text-muted-foreground">
+              {layer.name}
+            </span>
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
+              {layer.type}
+            </span>
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={handleDeleteLayer}
+          className="rounded-sm p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
+          title="Delete layer"
+        >
+          <Trash2 className="size-3" />
+        </button>
       </div>
       <div
         ref={trackRef}

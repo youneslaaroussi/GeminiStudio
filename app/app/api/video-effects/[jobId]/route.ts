@@ -5,10 +5,11 @@ export const runtime = "nodejs";
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { jobId: string } }
+  { params }: { params: Promise<{ jobId: string }> }
 ) {
   try {
-    const job = await pollVideoEffectJob(params.jobId);
+    const { jobId } = await params;
+    const job = await pollVideoEffectJob(jobId);
     if (!job) {
       return NextResponse.json(
         { error: "Video effect job not found" },

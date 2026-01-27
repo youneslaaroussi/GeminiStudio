@@ -23,7 +23,7 @@ async function uploadBufferToBucket(
       "Content-Type": mimeType || "application/octet-stream",
       "Content-Length": buffer.byteLength.toString(),
     },
-    body: buffer,
+    body: buffer as BodyInit,
   });
   if (!response.ok) {
     const text = await response.text();

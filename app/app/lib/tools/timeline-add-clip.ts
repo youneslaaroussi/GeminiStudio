@@ -45,10 +45,29 @@ const baseClipSchema = z.object({
   assetId: z.string().optional(),
 });
 
+const mediaSrcSchema = z
+  .string()
+  .trim()
+  .min(1, "Media source cannot be empty")
+  .refine(
+    (value) => {
+      if (!value) return false;
+      try {
+        // Accept absolute URLs
+        const url = new URL(value);
+        return url.protocol === "http:" || url.protocol === "https:";
+      } catch {
+        // Also allow application-relative paths
+        return value.startsWith("/");
+      }
+    },
+    { message: "Provide a valid media URL or application path" },
+  );
+
 const addClipSchema = z.discriminatedUnion("type", [
   baseClipSchema.extend({
     type: z.literal("video"),
-    src: z.string().url("Provide a valid video URL"),
+    src: mediaSrcSchema,
     width: z.number().positive().optional(),
     height: z.number().positive().optional(),
     focus: focusSchema.optional(),
@@ -56,7 +75,7 @@ const addClipSchema = z.discriminatedUnion("type", [
   }),
   baseClipSchema.extend({
     type: z.literal("audio"),
-    src: z.string().url("Provide a valid audio URL"),
+    src: mediaSrcSchema,
     volume: z
       .number()
       .min(0, "Volume must be between 0 and 1")
@@ -65,7 +84,7 @@ const addClipSchema = z.discriminatedUnion("type", [
   }),
   baseClipSchema.extend({
     type: z.literal("image"),
-    src: z.string().url("Provide a valid image URL"),
+    src: mediaSrcSchema,
     width: z.number().positive().optional(),
     height: z.number().positive().optional(),
   }),

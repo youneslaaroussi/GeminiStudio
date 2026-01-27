@@ -16,6 +16,7 @@ import {
   Clapperboard,
   Wand2,
   FileText,
+  Volume2,
 } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import { useProjectStore } from "@/app/lib/store/project-store";
@@ -45,6 +46,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuLabel, Con
 import { toast } from "sonner";
 import type { TranscriptionSegment } from "@/app/types/transcription";
 import type { PipelineStepState, PipelineStepStatus } from "@/app/types/pipeline";
+import { TtsDialog } from "./assets/dialogs/TtsDialog";
 
 interface PromptSuggestion {
   cinematography: string;
@@ -165,6 +167,7 @@ async function encodeFile(file: File): Promise<EncodedFile> {
 }
 
 export function AssetsPanel() {
+  const projectId = useProjectStore((s) => s.projectId);
   const [assets, setAssets] = useState<RemoteAsset[]>([]);
   const [isFetchingAssets, setIsFetchingAssets] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -202,6 +205,7 @@ export function AssetsPanel() {
   const [bananaError, setBananaError] = useState<string | null>(null);
   const [pipelineStates, setPipelineStates] = useState<Record<string, PipelineStepState[]>>({});
   const [bananaSourceImage, setBananaSourceImage] = useState<EncodedFile | null>(null);
+  const [isTtsModalOpen, setIsTtsModalOpen] = useState(false);
 
   const addClip = useProjectStore((s) => s.addClip);
   const publishAssets = useAssetsStore((state) => state.setAssets);
@@ -1097,6 +1101,15 @@ export function AssetsPanel() {
                 <Wand2 className="size-4 mr-2" />
                 Banana Pro Image
               </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setIsTtsModalOpen(true)}
+              >
+                <Volume2 className="size-4 mr-2" />
+                Chirp 3 TTS
+              </Button>
             </div>
             <p className="text-[11px] text-muted-foreground">
               Generations are saved to your asset library automatically once complete.
@@ -1738,6 +1751,16 @@ export function AssetsPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TtsDialog
+        open={isTtsModalOpen}
+        onOpenChange={setIsTtsModalOpen}
+        projectId={projectId}
+        onGenerated={(asset) => {
+          setAssets((prev) => [asset, ...prev]);
+          void fetchAssets();
+        }}
+      />
 
       <Dialog open={isVeoModalOpen} onOpenChange={handleVeoDialogChange}>
         <DialogContent className="max-w-lg">

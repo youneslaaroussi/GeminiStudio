@@ -78,7 +78,7 @@ export const faceDetectionStep: PipelineStepDefinition = {
 
     const request = {
       inputUri: gcsUri,
-      features: ["FACE_DETECTION"] as const,
+      features: ["FACE_DETECTION"] as any[],
       videoContext: {
         faceDetectionConfig: {
           includeAttributes: true,

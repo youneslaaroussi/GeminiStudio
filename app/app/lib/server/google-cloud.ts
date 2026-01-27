@@ -111,9 +111,6 @@ export async function getGoogleAccessToken(scopes: string[] | string, options?: 
   const auth = new GoogleAuth({
     credentials: parseGoogleServiceAccount(options),
     scopes,
-    clientOptions: {
-      useJWTAccessWithScope: false,
-    },
   });
   const client = await auth.getClient();
   const response = await client.getAccessToken();
