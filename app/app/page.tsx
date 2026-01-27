@@ -54,9 +54,12 @@ export default function ProjectsPage() {
     <div className="min-h-screen bg-[#141417] text-foreground p-8">
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-white mb-2">Gemini Studio</h1>
-            <p className="text-muted-foreground">Manage your video projects</p>
+          <div className="flex items-center gap-3">
+            <img src="/gemini-logo.png" alt="Gemini" className="size-10" />
+            <div>
+              <h1 className="text-2xl font-bold text-white mb-1">Gemini Studio</h1>
+              <p className="text-muted-foreground">Manage your video projects</p>
+            </div>
           </div>
           <div className="flex gap-3">
             <label className="flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-md cursor-pointer transition-colors text-sm font-medium">
@@ -79,10 +82,18 @@ export default function ProjectsPage() {
             <div
               key={project.id}
               onClick={() => router.push(`/editor/${project.id}`)}
-              className="group relative aspect-video bg-card hover:bg-accent/50 border border-border rounded-xl p-4 cursor-pointer transition-all flex flex-col justify-between"
+              className="group relative aspect-video bg-card hover:bg-accent/50 border border-border rounded-xl overflow-hidden cursor-pointer transition-all flex flex-col justify-between"
             >
-              <div className="flex-1 flex items-center justify-center">
-                <FolderOpen className="size-12 text-muted-foreground/20 group-hover:text-primary/50 transition-colors" />
+              <div className="flex-1 flex items-center justify-center overflow-hidden bg-muted/20">
+                {project.thumbnail ? (
+                  <img
+                    src={project.thumbnail}
+                    alt={project.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <FolderOpen className="size-12 text-muted-foreground/20 group-hover:text-primary/50 transition-colors" />
+                )}
               </div>
               
               <div className="mt-4">

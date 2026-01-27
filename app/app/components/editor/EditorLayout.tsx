@@ -30,6 +30,7 @@ import { usePageReloadBlocker } from "@/app/hooks/use-page-reload-blocker";
 
 export function EditorLayout() {
   const [player, setPlayer] = useState<Player | null>(null);
+  const [previewCanvas, setPreviewCanvas] = useState<HTMLCanvasElement | null>(null);
   const [isReloadDialogOpen, setReloadDialogOpen] = useState(false);
   const [pendingReloadAction, setPendingReloadAction] = useState<
     "save" | "discard" | null
@@ -163,7 +164,7 @@ export function EditorLayout() {
   return (
     <>
       <div className="flex h-screen w-full flex-col overflow-hidden bg-background">
-        <TopBar />
+        <TopBar previewCanvas={previewCanvas} />
         <div className="flex-1 min-h-0">
           <ResizablePanelGroup direction="horizontal" className="h-full">
             <ResizablePanel defaultSize={78} minSize={60} className="min-w-0">
@@ -185,6 +186,7 @@ export function EditorLayout() {
                       <div className="h-full bg-card min-w-0">
                         <PreviewPanel
                           onPlayerChange={setPlayer}
+                          onCanvasReady={setPreviewCanvas}
                           layers={layers}
                           duration={getDuration()}
                           currentTime={currentTime}

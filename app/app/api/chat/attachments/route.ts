@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prepareAttachment, type ChatAttachment } from "@/app/lib/server/gemini";
+import { getMediaCategory, type ChatAttachment } from "@/app/lib/server/gemini";
+import { saveBufferAsAsset } from "@/app/lib/server/asset-storage";
+import {
+  runPipelineStepForAsset,
+  runAutoStepsForAsset,
+} from "@/app/lib/server/pipeline/runner";
 
 export const runtime = "nodejs";
 
@@ -14,6 +19,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const sessionId = formData.get("sessionId") as string | null;
     const files = formData.getAll("files") as File[];
+    const projectId = formData.get("projectId");
 
     if (!sessionId) {
       return NextResponse.json(
@@ -33,19 +39,48 @@ export async function POST(request: NextRequest) {
 
     for (const file of files) {
       const buffer = Buffer.from(await file.arrayBuffer());
+      const mimeType = file.type || "application/octet-stream";
 
-      const { attachment } = await prepareAttachment({
+      const asset = await saveBufferAsAsset({
         data: buffer,
-        fileName: file.name,
-        mimeType: file.type || "application/octet-stream",
-        sessionId,
-        config: {
-          uploadToGcs: true,
-          generateSignedUrls: true,
-        },
+        originalName: file.name,
+        mimeType,
+        projectId:
+          typeof projectId === "string" && projectId.trim().length > 0
+            ? projectId
+            : undefined,
       });
 
-      attachments.push(attachment);
+      const pipelineState = await runPipelineStepForAsset(
+        asset.id,
+        "cloud-upload",
+        { params: { sessionId } }
+      );
+
+      void runAutoStepsForAsset(asset.id).catch((error) => {
+        console.error(`Pipeline failed for asset ${asset.id}:`, error);
+      });
+
+      const uploadStep = pipelineState.steps.find(
+        (step) => step.id === "cloud-upload"
+      );
+      const metadata = uploadStep?.metadata ?? {};
+      const gcsUri =
+        typeof metadata?.gcsUri === "string" ? metadata.gcsUri : undefined;
+      const signedUrl =
+        typeof metadata?.signedUrl === "string" ? metadata.signedUrl : undefined;
+
+      attachments.push({
+        id: asset.id,
+        name: asset.name,
+        mimeType: asset.mimeType,
+        size: asset.size,
+        category: getMediaCategory(asset.mimeType),
+        uploadedAt: asset.uploadedAt,
+        localUrl: asset.url,
+        gcsUri,
+        signedUrl,
+      });
     }
 
     return NextResponse.json({ attachments }, { status: 201 });

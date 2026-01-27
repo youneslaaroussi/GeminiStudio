@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Player } from "@motion-canvas/core";
 import { ScenePlayer } from "../ScenePlayer";
 import type { Layer } from "@/app/types/timeline";
@@ -7,6 +8,7 @@ import type { ProjectTranscription } from "@/app/types/transcription";
 
 interface PreviewPanelProps {
   onPlayerChange: (player: Player | null) => void;
+  onCanvasReady?: (canvas: HTMLCanvasElement | null) => void;
   layers: Layer[];
   duration: number;
   currentTime: number;
@@ -22,6 +24,7 @@ interface PreviewPanelProps {
 
 export function PreviewPanel({
   onPlayerChange,
+  onCanvasReady,
   layers,
   duration,
   currentTime,
@@ -30,6 +33,18 @@ export function PreviewPanel({
   transitions,
   sceneConfig,
 }: PreviewPanelProps) {
+  const [showUpdateIndicator, setShowUpdateIndicator] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleVariablesUpdated = useCallback(() => {
+    // Clear any existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    setShowUpdateIndicator(true);
+    timeoutRef.current = setTimeout(() => setShowUpdateIndicator(false), 600);
+  }, []);
+
   const totalClips = layers.reduce((acc, layer) => acc + layer.clips.length, 0);
   const counts = layers.reduce<Record<"video" | "audio" | "text" | "image", number>>(
     (acc, layer) => {
@@ -53,10 +68,21 @@ export function PreviewPanel({
             )}
           </p>
         </div>
+        {/* Update indicator dot */}
+        <div
+          className={`size-2 rounded-full bg-emerald-500 transition-opacity duration-300 ${
+            showUpdateIndicator ? 'opacity-100' : 'opacity-0'
+          }`}
+          style={{
+            boxShadow: showUpdateIndicator ? '0 0 6px rgba(16, 185, 129, 0.8)' : 'none',
+          }}
+        />
       </div>
       <div className="flex-1 overflow-hidden">
           <ScenePlayer
             onPlayerChange={onPlayerChange}
+            onCanvasReady={onCanvasReady}
+            onVariablesUpdated={handleVariablesUpdated}
             layers={layers}
             duration={duration}
             currentTime={currentTime}

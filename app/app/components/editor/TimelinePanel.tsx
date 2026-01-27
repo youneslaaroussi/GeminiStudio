@@ -521,8 +521,11 @@ export function TimelinePanel({
 
           {!hasClips && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="rounded-lg border border-dashed border-border/80 bg-background/90 px-6 py-4 text-center text-sm text-muted-foreground">
-                Timeline is empty. Upload assets or add clips to start building your project.
+              <div className="rounded-lg border border-dashed border-border/80 bg-background/90 px-6 py-5 text-center">
+                <img src="/gemini-logo.png" alt="Gemini" className="size-8 mx-auto mb-3 opacity-60" />
+                <p className="text-sm text-muted-foreground">
+                  Timeline is empty. Upload assets or add clips to start building your project.
+                </p>
               </div>
             </div>
           )}

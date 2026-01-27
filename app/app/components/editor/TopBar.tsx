@@ -3,10 +3,12 @@
 import { useCallback, useMemo, useState } from "react";
 import { Save, Upload, Check, Loader2 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
+import { useProjectsListStore } from "@/app/lib/store/projects-list-store";
 import type { Project } from "@/app/types/timeline";
 import { EditableInput } from "@/app/components/ui/EditableInput";
 import { cn } from "@/lib/utils";
 import { HistoryControls } from "./HistoryControls";
+import { captureThumbnail } from "@/app/lib/utils/thumbnail";
 
 const supportsFileSystemAccess =
   typeof window !== "undefined" && "showSaveFilePicker" in window;
@@ -39,10 +41,16 @@ function sanitizeFilename(name: string) {
   return name.replace(/[<>:"/\\|?*]+/g, "_") || "project";
 }
 
-export function TopBar() {
+interface TopBarProps {
+  previewCanvas?: HTMLCanvasElement | null;
+}
+
+export function TopBar({ previewCanvas }: TopBarProps) {
   const project = useProjectStore((s) => s.project);
   const setProject = useProjectStore((s) => s.setProject);
   const updateProjectSettings = useProjectStore((s) => s.updateProjectSettings);
+  const projectId = useProjectStore((s) => s.projectId);
+  const updateListProject = useProjectsListStore((s) => s.updateProject);
   const [isBusy, setIsBusy] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
@@ -95,13 +103,29 @@ export function TopBar() {
     setSaveStatus('saving');
     // Add a small artificial delay so the user sees the spinner
     await new Promise(resolve => setTimeout(resolve, 500));
-    
+
     try {
+      // Capture thumbnail if canvas is available
+      let thumbnail: string | null = null;
+      if (previewCanvas) {
+        thumbnail = await captureThumbnail(previewCanvas);
+      }
+
+      // Save project
       const save = useProjectStore.getState().saveProject;
       save();
+
+      // Update projects list with thumbnail
+      if (thumbnail && projectId) {
+        updateListProject(projectId, {
+          name: project.name,
+          thumbnail,
+        });
+      }
+
       console.log("Project saved locally");
       setSaveStatus('saved');
-      
+
       // Reset to idle after 2 seconds
       setTimeout(() => {
         setSaveStatus('idle');
@@ -110,7 +134,7 @@ export function TopBar() {
       console.error("Failed to save project:", error);
       setSaveStatus('idle'); // Or error state if we had one
     }
-  }, [saveStatus]);
+  }, [saveStatus, previewCanvas, projectId, project.name, updateListProject]);
 
 
   const parseAndLoadProject = useCallback(
@@ -173,6 +197,7 @@ export function TopBar() {
   return (
     <div className="flex items-center justify-between border-b border-border bg-card/80 px-4 py-2 backdrop-blur">
       <div className="flex items-center gap-2">
+        <img src="/gemini-logo.png" alt="Gemini" className="size-6" />
         <HistoryControls />
         <div className="flex items-baseline gap-2">
           <EditableInput

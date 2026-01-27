@@ -12,6 +12,8 @@ const ZOOM_SPEED = 0.1;
 
 interface ScenePlayerProps {
   onPlayerChange?: (player: Player | null) => void;
+  onCanvasReady?: (canvas: HTMLCanvasElement | null) => void;
+  onVariablesUpdated?: () => void;
   layers?: Layer[];
   duration?: number;
   currentTime?: number;
@@ -27,6 +29,8 @@ interface ScenePlayerProps {
 
 export function ScenePlayer({
   onPlayerChange,
+  onCanvasReady,
+  onVariablesUpdated,
   layers = [],
   duration = 10,
   currentTime = 0,
@@ -44,6 +48,7 @@ export function ScenePlayer({
   const latestLayersRef = useRef(layers);
   const latestTranscriptionsRef = useRef(transcriptions);
   const latestTransitionsRef = useRef(transitions);
+  const onVariablesUpdatedRef = useRef(onVariablesUpdated);
 
   useEffect(() => {
     latestLayersRef.current = layers;
@@ -56,6 +61,10 @@ export function ScenePlayer({
   useEffect(() => {
     latestTransitionsRef.current = transitions;
   }, [transitions]);
+
+  useEffect(() => {
+    onVariablesUpdatedRef.current = onVariablesUpdated;
+  }, [onVariablesUpdated]);
 
   // Viewport State
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -292,6 +301,7 @@ export function ScenePlayer({
     setStage(stageInstance);
     setPlayer(playerInstance);
     onPlayerChange?.(playerInstance);
+    onCanvasReady?.(canvas);
 
     return () => {
       if (animationFrameRef.current) {
@@ -301,10 +311,12 @@ export function ScenePlayer({
       setStage(null);
       setPlayer(null);
       onPlayerChange?.(null);
+      onCanvasReady?.(null);
     };
   }, [
     project,
     onPlayerChange,
+    onCanvasReady,
     duration,
     transcriptions,
     sceneConfig.resolution.width,
@@ -353,6 +365,9 @@ export function ScenePlayer({
     });
     (player as unknown as { requestRecalculation?: () => void }).requestRecalculation?.();
     player.requestRender();
+
+    // Notify parent that variables were updated
+    onVariablesUpdatedRef.current?.();
   }, [player, layers, duration, transcriptions, transitions]);
 
   // Sync playhead time from player back to the store during playback

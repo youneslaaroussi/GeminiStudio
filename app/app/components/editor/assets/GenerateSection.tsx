@@ -1,6 +1,6 @@
 "use client";
 
-import { Video, ImageIcon, Sparkles, Music } from "lucide-react";
+import { Video, ImageIcon, Music } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface GenerateSectionProps {
@@ -13,7 +13,7 @@ export function GenerateSection({ onOpenVeo, onOpenBanana, onOpenLyria }: Genera
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Sparkles className="size-3.5" />
+        <img src="/gemini-logo.png" alt="Gemini" className="size-4" />
         <span>AI Generate</span>
       </div>
       <div className="grid grid-cols-3 gap-2">

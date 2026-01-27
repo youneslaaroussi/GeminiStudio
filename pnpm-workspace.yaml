@@ -1,0 +1,13 @@
+packages:
+  - app
+  - scene
+  - renderer
+  - packages/*
+
+onlyBuiltDependencies:
+  - esbuild
+  - msgpackr-extract
+  - protobufjs
+  - puppeteer
+  - sharp
+  - unrs-resolver

@@ -125,6 +125,9 @@ export function ChatPanel() {
   const isBusy = status === "submitted" || status === "streaming";
   const hasMessages = messages && messages.length > 0;
 
+  const project = useProjectStore((state) => state.project);
+  const projectId = useProjectStore((state) => state.projectId);
+
   // Handle file selection and upload
   const handleFileSelect = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -135,6 +138,9 @@ export function ChatPanel() {
       try {
         const formData = new FormData();
         formData.append("sessionId", sessionId);
+        if (projectId) {
+          formData.append("projectId", projectId);
+        }
         for (const file of files) {
           formData.append("files", file);
         }
@@ -164,7 +170,7 @@ export function ChatPanel() {
         }
       }
     },
-    [sessionId]
+    [sessionId, projectId]
   );
 
   const removeAttachment = useCallback((attachmentId: string) => {
@@ -175,7 +181,6 @@ export function ChatPanel() {
     () => deriveTaskListSnapshot(messages),
     [messages]
   );
-  const project = useProjectStore((state) => state.project);
   const toolboxTools = useMemo(() => toolRegistry.list(), []);
   const clientToolMap = useMemo(() => {
     const entries = new Map<string, ToolDefinition<z.ZodTypeAny, Project>>();
@@ -323,11 +328,11 @@ export function ChatPanel() {
           </div>
         )}
 
-        <div className="px-3 pb-3 space-y-3">
+        <div className="px-3 pt-4 pb-3 space-y-3">
           {!hasMessages && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
-                <Sparkles className="size-6 text-primary" />
+              <div className="size-14 rounded-full bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 flex items-center justify-center mb-3">
+                <img src="/gemini-logo.png" alt="Gemini" className="size-8" />
               </div>
               <p className="text-sm font-medium text-foreground mb-1">
                 How can I help?
@@ -521,6 +526,15 @@ export function ChatPanel() {
             </button>
           )}
         </form>
+
+        {/* Powered by branding */}
+        <div className="flex items-center justify-center gap-1.5 pt-2 pb-1">
+          <span className="text-xs text-muted-foreground">Powered by</span>
+          <div className="flex items-center gap-1">
+            <img src="/gemini-logo.png" alt="Gemini" className="size-3.5" />
+            <span className="text-xs font-medium text-foreground">Gemini 3 Pro</span>
+          </div>
+        </div>
       </div>
     </div>
   );

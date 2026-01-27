@@ -1,0 +1,11 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "chat": "langgraph_server.agent:graph"
+  },
+  "env": ".env",
+  "metadata": {
+    "title": "Gemini Studio LangGraph Server",
+    "description": "Local agent graph for development and LangSmith Studio integration."
+  }
+}

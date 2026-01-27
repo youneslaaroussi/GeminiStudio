@@ -6,6 +6,10 @@ export const metadata: Metadata = {
   title: "Gemini Studio",
   description: "Local-first creative editor for building AI-assisted video timelines",
   applicationName: "Gemini Studio",
+  icons: {
+    icon: "/gemini-logo.png",
+    apple: "/gemini-logo.png",
+  },
 };
 
 export default function RootLayout({

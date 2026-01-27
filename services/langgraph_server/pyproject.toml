@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "langgraph-server"
+version = "0.1.0"
+description = "LangGraph-based agent service configured for Google Cloud Run deployment."
+authors = ["Gemini Studio <dev@geministudio.example>"]
+license = "MIT"
+readme = "README.md"
+packages = [
+  { include = "langgraph_server", from = "src" }
+]
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.13"
+langgraph = "^0.1.0"
+langgraph-cli = "^0.1.0"
+langchain = "^0.3.0"
+langchain-google-genai = "^1.0.0"
+langchain-core = "^0.3.0"
+langsmith = "^0.1.0"
+fastapi = "^0.114.0"
+uvicorn = { extras = ["standard"], version = "^0.30.0" }
+pydantic = "^2.8.0"
+pydantic-settings = "^2.4.0"
+python-dotenv = "^1.0.1"
+google-cloud-storage = "^2.18.0"
+cachetools = "^5.3.3"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.0"
+pytest-asyncio = "^0.23.0"
+httpx = "^0.27.0"
+
+[build-system]
+requires = ["poetry-core>=1.8.0"]
+build-backend = "poetry.core.masonry.api"
