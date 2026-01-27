@@ -15,6 +15,14 @@
     </style>
   </head>
   <body>
-    <script type="module" src="./main.js"></script>
+    <script>
+      window.addEventListener('error', (e) => {
+        console.error('Global error:', e.message, e.filename, e.lineno);
+      });
+      window.addEventListener('unhandledrejection', (e) => {
+        console.error('Unhandled promise rejection:', e.reason);
+      });
+    </script>
+    <script type="module" src="/headless/main.js"></script>
   </body>
 </html>

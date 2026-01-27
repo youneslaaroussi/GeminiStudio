@@ -18,6 +18,7 @@ export const renderJobSchema = z.object({
     range: z.tuple([z.number().min(0), z.number().min(0)]).optional(),
     toClipboard: z.boolean().optional(),
     includeAudio: z.boolean().optional(),
+    uploadUrl: z.string().url().optional(),
   }),
   variables: z
     .object({

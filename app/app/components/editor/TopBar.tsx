@@ -1,13 +1,16 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Save, Upload, Check, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Save, Upload, Check, Loader2, Film } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useProjectsListStore } from "@/app/lib/store/projects-list-store";
 import type { Project } from "@/app/types/timeline";
 import { EditableInput } from "@/app/components/ui/EditableInput";
 import { cn } from "@/lib/utils";
 import { HistoryControls } from "./HistoryControls";
+import { RenderDialog } from "./RenderDialog";
+import { useRender } from "@/app/hooks/useRender";
 import { captureThumbnail } from "@/app/lib/utils/thumbnail";
 
 const supportsFileSystemAccess =
@@ -46,6 +49,7 @@ interface TopBarProps {
 }
 
 export function TopBar({ previewCanvas }: TopBarProps) {
+  const router = useRouter();
   const project = useProjectStore((s) => s.project);
   const setProject = useProjectStore((s) => s.setProject);
   const updateProjectSettings = useProjectStore((s) => s.updateProjectSettings);
@@ -53,6 +57,13 @@ export function TopBar({ previewCanvas }: TopBarProps) {
   const updateListProject = useProjectsListStore((s) => s.updateProject);
   const [isBusy, setIsBusy] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [renderDialogOpen, setRenderDialogOpen] = useState(false);
+
+  const { isRendering, jobStatus } = useRender();
+
+  const handleHome = useCallback(() => {
+    router.push('/');
+  }, [router]);
 
   const payload = useMemo(
     () =>
@@ -195,10 +206,28 @@ export function TopBar({ previewCanvas }: TopBarProps) {
   }, [parseAndLoadProject]);
 
   return (
-    <div className="flex items-center justify-between border-b border-border bg-card/80 px-4 py-2 backdrop-blur">
-      <div className="flex items-center gap-2">
-        <img src="/gemini-logo.png" alt="Gemini" className="size-6" />
-        <HistoryControls />
+    <>
+      {/* Background Render Progress Bar */}
+      {isRendering && (
+        <div className="w-full h-1 bg-slate-800">
+          <div
+            className="h-full bg-blue-500 transition-all duration-300"
+            style={{ width: `${jobStatus?.progress ?? 0}%` }}
+          />
+        </div>
+      )}
+
+      <div className="flex items-center justify-between border-b border-border bg-card/80 px-4 py-2 backdrop-blur">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleHome}
+            className="rounded-md p-1 hover:bg-accent transition-colors"
+            title="Back to projects"
+          >
+            <img src="/gemini-logo.png" alt="Gemini" className="size-6" />
+          </button>
+          <HistoryControls />
         <div className="flex items-baseline gap-2">
           <EditableInput
             value={project.name}
@@ -238,8 +267,8 @@ export function TopBar({ previewCanvas }: TopBarProps) {
           disabled={isBusy || saveStatus === 'saving'}
           className={cn(
             "inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-primary-foreground transition-all duration-200",
-            saveStatus === 'saved' 
-              ? "bg-green-600 hover:bg-green-700" 
+            saveStatus === 'saved'
+              ? "bg-green-600 hover:bg-green-700"
               : "bg-primary hover:bg-primary/90",
             (isBusy || saveStatus === 'saving') && "opacity-50 cursor-not-allowed"
           )}
@@ -253,7 +282,31 @@ export function TopBar({ previewCanvas }: TopBarProps) {
           )}
           {saveStatus === 'saved' ? "Saved" : "Save"}
         </button>
+        <button
+          type="button"
+          onClick={() => setRenderDialogOpen(true)}
+          disabled={isBusy}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+            isRendering
+              ? "bg-blue-600/80 hover:bg-blue-600 text-white cursor-pointer"
+              : "bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+          )}
+        >
+          <Film className="size-4" />
+          {isRendering ? `Rendering... ${jobStatus?.progress ?? 0}%` : "Render"}
+        </button>
       </div>
-    </div>
+      </div>
+
+      {projectId && (
+        <RenderDialog
+          open={renderDialogOpen}
+          onOpenChange={setRenderDialogOpen}
+          project={project}
+          projectId={projectId}
+        />
+      )}
+    </>
   );
 }

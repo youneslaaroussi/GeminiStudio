@@ -1,7 +1,7 @@
 import { createServer as createHttpServer } from 'http';
 import { randomUUID } from 'crypto';
 import { dirname, join, resolve } from 'path';
-import { access, mkdir, rename, copyFile, rm } from 'fs/promises';
+import { access, mkdir, rename, copyFile, rm, readFile } from 'fs/promises';
 import getPort from 'get-port';
 import express from 'express';
 import { Server as IOServer } from 'socket.io';
@@ -20,7 +20,7 @@ import { loadConfig } from '../config.js';
 const config = loadConfig();
 
 const MODULE_DIR = dirname(fileURLToPath(new URL('.', import.meta.url)));
-const HEADLESS_DIST = resolve(MODULE_DIR, '..', 'headless', 'dist');
+const HEADLESS_DIST = resolve(MODULE_DIR, 'headless');
 const HEADLESS_HTML = join(HEADLESS_DIST, 'index.html');
 const HEADLESS_BUNDLE = join(HEADLESS_DIST, 'main.js');
 
@@ -39,6 +39,7 @@ interface SegmentDefinition {
 
 export interface RenderResult {
   outputPath: string;
+  gcsPath?: string;
 }
 
 interface HeadlessJobPayload {
@@ -256,6 +257,47 @@ const cleanupSegments = async (segments: SegmentDefinition[]) => {
   );
 };
 
+/**
+ * Upload rendered file to GCS using a pre-signed PUT URL
+ */
+const uploadToSignedUrl = async (
+  filePath: string,
+  uploadUrl: string,
+  logContext: Record<string, unknown>,
+): Promise<string> => {
+  const fileBuffer = await readFile(filePath);
+
+  // Determine content type from file extension
+  const ext = filePath.split('.').pop()?.toLowerCase();
+  const contentType = ext === 'mp4' ? 'video/mp4'
+    : ext === 'webm' ? 'video/webm'
+    : ext === 'gif' ? 'image/gif'
+    : 'application/octet-stream';
+
+  logger.info({ ...logContext, uploadUrl: uploadUrl.substring(0, 100) + '...', size: fileBuffer.length }, 'Uploading to GCS');
+
+  const response = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': contentType,
+      'Content-Length': fileBuffer.length.toString(),
+    },
+    body: fileBuffer,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to upload to GCS: ${response.status} ${errorText}`);
+  }
+
+  // Extract GCS path from the signed URL
+  const urlObj = new URL(uploadUrl);
+  const gcsPath = `gs:/${urlObj.pathname}`;
+
+  logger.info({ ...logContext, gcsPath }, 'Successfully uploaded to GCS');
+  return gcsPath;
+};
+
 export class RenderRunner {
   public async run(job: Job<RenderJobData>): Promise<RenderResult> {
     const data = job.data;
@@ -356,23 +398,45 @@ export class RenderRunner {
       const port = await getPort();
       await new Promise<void>((resolve) => httpServer.listen(port, resolve));
 
+      const puppeteerArgs = [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--mute-audio',
+        '--disable-audio-output',
+        '--disable-web-security',
+        '--allow-file-access-from-files',
+        '--disable-features=IsolateOrigins,site-per-process',
+      ];
+
+      if (process.platform === 'linux') {
+        puppeteerArgs.push('--disable-gpu', '--disable-dev-shm-usage');
+      }
+
+      if (process.platform === 'darwin') {
+        puppeteerArgs.push('--use-mock-keychain');
+      }
+
+      const puppeteerOptions: Parameters<typeof Cluster.launch>[0]['puppeteerOptions'] = {
+        headless: config.headless,
+        args: puppeteerArgs,
+      };
+
+      if (config.chromeExecutablePath) {
+        puppeteerOptions.executablePath = config.chromeExecutablePath;
+      }
+
       cluster = await Cluster.launch({
         concurrency: Cluster.CONCURRENCY_CONTEXT,
         maxConcurrency: Math.max(1, Math.min(config.headlessConcurrency, segments.length)),
-        puppeteerOptions: {
-          headless: true,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-gpu',
-            '--mute-audio',
-            '--disable-audio-output',
-          ],
-        },
+        puppeteerOptions,
       });
 
+      const failedSegments: { segment: SegmentDefinition; error: Error }[] = [];
+
       cluster.on('taskerror', (err, segment) => {
-        logger.error({ jobId: job.id, segment }, 'Segment task failed');
+        const error = err instanceof Error ? err : new Error(String(err));
+        failedSegments.push({ segment, error });
+        logger.error({ jobId: job.id, segment, err: error }, 'Segment task failed');
       });
 
       const segmentProgressWeight = segments.length > 0 ? 70 / segments.length : 70;
@@ -401,9 +465,31 @@ export class RenderRunner {
             .catch((err) => rejectRender(err));
         });
 
-        page.on('console', (message) => {
-          const text = message.text();
-          if (message.type() === 'error') {
+        const consoleMessages: string[] = [];
+        let lastError: string | null = null;
+
+        page.on('console', async (message) => {
+          const msgType = message.type();
+          // Serialize JSHandle arguments to get actual values
+          let text: string;
+          try {
+            const args = await Promise.all(
+              message.args().map(async (arg) => {
+                try {
+                  const val = await arg.jsonValue();
+                  return typeof val === 'object' ? JSON.stringify(val) : String(val);
+                } catch {
+                  return arg.toString();
+                }
+              }),
+            );
+            text = args.join(' ');
+          } catch {
+            text = message.text();
+          }
+          consoleMessages.push(`[${msgType}] ${text}`);
+          if (msgType === 'error') {
+            lastError = text;
             logger.error({ jobId: job.id, segment: segment.index, text }, 'Headless console error');
           } else {
             logger.debug({ jobId: job.id, segment: segment.index, text }, 'Headless console');
@@ -411,7 +497,21 @@ export class RenderRunner {
         });
 
         page.on('pageerror', (error) => {
-          logger.error({ jobId: job.id, segment: segment.index, error }, 'Headless page error');
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          lastError = errorMsg;
+          consoleMessages.push(`[pageerror] ${errorMsg}`);
+          logger.error({ jobId: job.id, segment: segment.index, error: errorMsg }, 'Headless page error');
+        });
+
+        page.on('requestfailed', (request) => {
+          const failure = request.failure();
+          const url = request.url();
+          // Ignore favicon failures
+          if (url.includes('favicon')) return;
+          const errorText = `Request failed: ${url} - ${failure?.errorText ?? 'unknown'}`;
+          lastError = errorText;
+          consoleMessages.push(`[requestfailed] ${errorText}`);
+          logger.error({ jobId: job.id, segment: segment.index, url, error: failure?.errorText }, 'Headless request failed');
         });
 
         const url = new URL(`http://127.0.0.1:${port}/headless`);
@@ -426,7 +526,10 @@ export class RenderRunner {
 
         const status = await renderPromise;
         if (status !== 'success') {
-          throw new Error(`Segment ${segment.index} failed with status ${status}`);
+          const recentLogs = consoleMessages.slice(-10).join('\n');
+          throw new Error(
+            `Segment ${segment.index} failed with status ${status}. Last error: ${lastError ?? 'unknown'}. Recent console:\n${recentLogs}`,
+          );
         }
 
         await job
@@ -439,6 +542,14 @@ export class RenderRunner {
       }
 
       await cluster.idle();
+
+      if (failedSegments.length > 0) {
+        const firstError = failedSegments[0];
+        throw new Error(
+          `${failedSegments.length} segment(s) failed to render. First error (segment ${firstError.segment.index}): ${firstError.error.message}`,
+          { cause: firstError.error },
+        );
+      }
 
       await Promise.all(
         bridges
@@ -460,10 +571,24 @@ export class RenderRunner {
         logContext: { jobId: job.id },
       });
 
+      await job.updateProgress(95).catch(() => undefined);
+
+      // Upload to GCS if uploadUrl is provided
+      let gcsPath: string | undefined;
+      if (data.output.uploadUrl) {
+        gcsPath = await uploadToSignedUrl(
+          data.output.destination,
+          data.output.uploadUrl,
+          { jobId: job.id },
+        );
+        // Clean up local file after successful upload
+        await rm(data.output.destination, { force: true }).catch(() => undefined);
+      }
+
       await job.updateProgress(100).catch(() => undefined);
 
-      logger.info({ jobId: job.id, output: data.output.destination }, 'Render job completed');
-      return { outputPath: data.output.destination };
+      logger.info({ jobId: job.id, output: data.output.destination, gcsPath }, 'Render job completed');
+      return { outputPath: data.output.destination, gcsPath };
     } catch (err) {
       logger.error({ jobId: job.id, err }, 'Render job failed');
       throw err;

@@ -183,8 +183,8 @@ importers:
         specifier: ^22.15.0
         version: 22.15.0(typescript@5.9.3)
       puppeteer-cluster:
-        specifier: ^0.23.0
-        version: 0.23.0(puppeteer@22.15.0(typescript@5.9.3))
+        specifier: ^0.24.0
+        version: 0.24.0(puppeteer@22.15.0(typescript@5.9.3))
       socket.io:
         specifier: ^4.7.5
         version: 4.8.3
@@ -4238,10 +4238,10 @@ packages:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
 
-  puppeteer-cluster@0.23.0:
-    resolution: {integrity: sha512-108terIWDzPrQopmoYSPd5yDoy3FGJ2dNnoGMkGYPs6xtkdhgaECwpfZkzaRToMQPZibUOz0/dSSGgPEdXEhkQ==}
+  puppeteer-cluster@0.24.0:
+    resolution: {integrity: sha512-zHPoNsrwkFLKFtgJJv2aC13EbMASQsE048uZd7CyikEXcl+sc1Nf6PMFb9kMoZI7/zMYxvuP658o2mw079ZZyQ==}
     peerDependencies:
-      puppeteer: '>=1.5.0'
+      puppeteer: '>=22.0.0'
 
   puppeteer-core@22.15.0:
     resolution: {integrity: sha512-cHArnywCiAAVXa3t4GGL2vttNxh7GqXtIYGym99egkNJ3oG//wL9LkvO4WE8W1TJe95t1F1ocu9X4xWaGsOKOA==}
@@ -9506,7 +9506,7 @@ snapshots:
 
   punycode@2.3.1: {}
 
-  puppeteer-cluster@0.23.0(puppeteer@22.15.0(typescript@5.9.3)):
+  puppeteer-cluster@0.24.0(puppeteer@22.15.0(typescript@5.9.3)):
     dependencies:
       debug: 4.4.3
       puppeteer: 22.15.0(typescript@5.9.3)

@@ -8,6 +8,8 @@ export interface RendererConfig {
   concurrency: number;
   headlessConcurrency: number;
   tmpDir: string;
+  chromeExecutablePath?: string;
+  headless: boolean;
 }
 
 export const loadConfig = (): RendererConfig => {
@@ -17,6 +19,8 @@ export const loadConfig = (): RendererConfig => {
     RENDERER_CONCURRENCY,
     RENDERER_HEADLESS_CONCURRENCY,
     RENDERER_TMP_DIR,
+    PUPPETEER_EXECUTABLE_PATH,
+    RENDERER_HEADLESS,
   } = process.env;
 
   return {
@@ -25,5 +29,7 @@ export const loadConfig = (): RendererConfig => {
     concurrency: Number(RENDERER_CONCURRENCY ?? 2),
     headlessConcurrency: Number(RENDERER_HEADLESS_CONCURRENCY ?? 2),
     tmpDir: RENDERER_TMP_DIR ?? '/tmp/gemini-renderer',
+    chromeExecutablePath: PUPPETEER_EXECUTABLE_PATH,
+    headless: RENDERER_HEADLESS ? RENDERER_HEADLESS.toLowerCase() === 'true' : true,
   };
 };

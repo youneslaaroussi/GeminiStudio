@@ -44,7 +44,7 @@ export const createServer = (): Express => {
         progress: job.progress,
         attemptsMade: job.attemptsMade,
         failedReason: job.failedReason,
-        returnvalue: job.returnvalue,
+        returnValue: job.returnvalue,
         stacktrace: job.stacktrace,
         timestamp: job.timestamp,
         processedOn: job.processedOn,

@@ -1,2 +1,3 @@
 app/secrets/
 node_modules/
+.env

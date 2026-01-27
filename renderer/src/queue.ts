@@ -7,14 +7,20 @@ import { loadConfig } from './config.js';
 
 const cfg = loadConfig();
 
-export const RENDER_QUEUE_NAME = 'gemini:render';
+export const RENDER_QUEUE_NAME = 'gemini-render';
 
-const createRedisConnection = () => new Redis(cfg.redisUrl);
+const createRedisConnection = () =>
+  new Redis(cfg.redisUrl, {
+    maxRetriesPerRequest: null,
+  });
 
 export const renderQueue = new Queue<RenderJobData>(RENDER_QUEUE_NAME, {
   connection: createRedisConnection(),
   defaultJobOptions: {
-    removeOnComplete: true,
+    removeOnComplete: {
+      age: 300, // Keep completed jobs for 5 minutes
+      count: 100, // Keep at most 100 completed jobs
+    },
     removeOnFail: false,
     attempts: 1,
   },

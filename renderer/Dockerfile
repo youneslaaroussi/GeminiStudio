@@ -4,23 +4,22 @@ FROM ghcr.io/puppeteer/puppeteer:22.15.0 AS base
 
 WORKDIR /app
 
+USER root
+
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
-RUN corepack enable
+RUN npm install -g pnpm@9
 
-COPY pnpm-workspace.yaml package.json tsconfig.base.json ./
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
 COPY app/package.json app/pnpm-workspace.yaml ./app/
 COPY scene/package.json ./scene/
 COPY renderer/package.json renderer/tsconfig.json renderer/tsconfig.build.json ./renderer/
-COPY packages/types/package.json ./packages/types/
-
-RUN pnpm install --filter @gemini-studio/renderer... --filter @gemini-studio/types... --prefer-offline
+RUN pnpm install --filter @gemini-studio/renderer... --filter @gemini-studio/scene... --prefer-offline
 
 COPY . .
 
-RUN pnpm --filter @gemini-studio/types build \
-  && pnpm --filter @gemini-studio/scene build \
+RUN pnpm --filter @gemini-studio/scene build \
   && pnpm --filter @gemini-studio/renderer build
 
 FROM base AS production
