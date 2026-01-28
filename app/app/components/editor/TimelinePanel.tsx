@@ -61,6 +61,40 @@ export function TimelinePanel({
   const layers = useProjectStore((s) => s.project.layers);
   const addLayer = useProjectStore((s) => s.addLayer);
   const addClip = useProjectStore((s) => s.addClip);
+  const reorderLayers = useProjectStore((s) => s.reorderLayers);
+
+  const [draggedLayerIndex, setDraggedLayerIndex] = useState<number | null>(null);
+  const [dragTargetIndex, setDragTargetIndex] = useState<number | null>(null);
+  const [dropPosition, setDropPosition] = useState<"above" | "below">("below");
+
+  const handleLayerDragStart = useCallback((index: number) => {
+    setDraggedLayerIndex(index);
+  }, []);
+
+  const handleLayerDragOver = useCallback((index: number, position: "above" | "below") => {
+    setDragTargetIndex(index);
+    setDropPosition(position);
+  }, []);
+
+  const handleLayerDrop = useCallback((targetIndex: number, position: "above" | "below") => {
+    if (draggedLayerIndex === null) return;
+
+    let insertIndex = position === "above" ? targetIndex : targetIndex + 1;
+    // Adjust if dragging from above the target
+    if (draggedLayerIndex < insertIndex) {
+      insertIndex -= 1;
+    }
+    if (draggedLayerIndex !== insertIndex) {
+      reorderLayers(draggedLayerIndex, insertIndex);
+    }
+    setDraggedLayerIndex(null);
+    setDragTargetIndex(null);
+  }, [draggedLayerIndex, reorderLayers]);
+
+  const handleLayerDragEnd = useCallback(() => {
+    setDraggedLayerIndex(null);
+    setDragTargetIndex(null);
+  }, []);
 
   const timelineAreaRef = useRef<HTMLDivElement>(null);
   const [newLayerType, setNewLayerType] = useState<ClipType>("video");
@@ -250,7 +284,12 @@ export function TimelinePanel({
   const handleTimelinePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest("[data-clip-id]") || target?.closest("[data-transition-handle]")) {
+      if (
+        target?.closest("[data-clip-id]") ||
+        target?.closest("[data-transition-handle]") ||
+        target?.closest("button") ||
+        target?.closest("[draggable]")
+      ) {
         return;
       }
       handleScrubPointerDown(event);
@@ -506,12 +545,19 @@ export function TimelinePanel({
 
           <div className="relative overflow-auto">
             {/* Tracks */}
-            {layers.map((layer) => (
+            {layers.map((layer, index) => (
               <LayerTrack
                 key={layer.id}
                 layer={layer}
+                layerIndex={index}
                 width={Math.max(containerWidth, duration * zoom + TRACK_LABEL_WIDTH)}
                 labelWidth={TRACK_LABEL_WIDTH}
+                onDragStart={handleLayerDragStart}
+                onDragOver={handleLayerDragOver}
+                onDrop={handleLayerDrop}
+                onDragEnd={handleLayerDragEnd}
+                isDragTarget={dragTargetIndex === index && draggedLayerIndex !== index}
+                dropPosition={dragTargetIndex === index ? dropPosition : null}
               />
             ))}
 

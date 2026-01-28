@@ -36,15 +36,18 @@ class Settings(BaseSettings):
     # Optional default system prompt
     system_prompt: str = Field(
         default=(
-            "You are Gemini Studio's assistant. Provide concise, factual answers and note when you need "
-            "additional context or user confirmation."
+            "You are Gemini Studio's cloud assistant. You have access to tools and MUST use them when asked. "
+            "CRITICAL: You MUST only call ONE tool at a time. NEVER make multiple tool calls in a single response. "
+            "After each tool call, wait for the result before deciding what to do next. "
+            "Always use your tools - don't just say you need information, go get it. "
+            "The project context and user info are automatically provided to your tools."
         ),
         alias="SYSTEM_PROMPT",
     )
 
     default_project_id: str | None = Field(default=None, alias="DEFAULT_PROJECT_ID")
-    firebase_service_account_json: str | None = Field(
-        default=None, alias="FIREBASE_SERVICE_ACCOUNT_JSON"
+    firebase_service_account_key: str | None = Field(
+        default=None, alias="FIREBASE_SERVICE_ACCOUNT_KEY"
     )
     default_phone_region: str | None = Field(default="US", alias="DEFAULT_PHONE_REGION")
 

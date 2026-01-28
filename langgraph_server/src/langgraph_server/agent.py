@@ -9,6 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import ToolMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
 
+from .checkpoint import create_checkpointer
 from .config import Settings, get_settings
 from .tools import get_registered_tools, get_tools_by_name
 
@@ -31,12 +32,12 @@ def create_graph(settings: Settings | None = None):
     model_with_tools = model.bind_tools(tools)
     system_message = SystemMessage(content=resolved_settings.system_prompt)
 
-    def call_model(state: MessagesState, config: RunnableConfig | None = None):
+    def call_model(state: MessagesState, config: RunnableConfig):
         messages = [system_message] + list(state["messages"])
         response = model_with_tools.invoke(messages, config=config)
         return {"messages": [response]}
 
-    def call_tool(state: MessagesState, config: RunnableConfig | None = None):
+    def call_tool(state: MessagesState, config: RunnableConfig):
         tool_outputs = []
         last_message = state["messages"][-1]
         for tool_call in last_message.tool_calls:
@@ -46,10 +47,13 @@ def create_graph(settings: Settings | None = None):
             else:
                 try:
                     args = dict(tool_call.get("args") or {})
-                    configurable = (config or {}).get("configurable", {})
+                    configurable = config.get("configurable", {})
                     project_id = configurable.get("project_id")
+                    user_id = configurable.get("user_id")
                     if project_id and "project_id" not in args:
                         args["project_id"] = project_id
+                    if user_id and "user_id" not in args:
+                        args["user_id"] = user_id
                     result = tool.invoke(args, config=config)
                     observation = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
                 except Exception as exc:  # pragma: no cover - surface tool exceptions
@@ -70,7 +74,10 @@ def create_graph(settings: Settings | None = None):
     workflow.add_conditional_edges("model", should_continue, ["tool_node", END])
     workflow.add_edge("tool_node", "model")
 
-    compiled = workflow.compile()
+    # Connect checkpointer for conversation persistence
+    checkpointer = create_checkpointer(resolved_settings)
+    compiled = workflow.compile(checkpointer=checkpointer)
+
     if resolved_settings.default_project_id:
         compiled = compiled.with_config(
             configurable={

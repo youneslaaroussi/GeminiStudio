@@ -1,20 +1,94 @@
 from __future__ import annotations
 
-from functools import lru_cache
+import base64
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import firebase_admin
-from firebase_admin import auth, credentials
-from firebase_admin._apps import DEFAULT_APP_NAME  # type: ignore[attr-defined]
+from firebase_admin import auth, credentials, firestore
 
 from .config import Settings
 
 
-@lru_cache(maxsize=1)
+def decode_automerge_state(base64_state: str) -> Optional[dict[str, Any]]:
+    """
+    Decode an Automerge state from base64 string to Python dict.
+    """
+    import json
+    import logging
+    logger = logging.getLogger(__name__)
+
+    try:
+        from automerge.core import Document, ROOT
+    except ImportError:
+        logger.warning("automerge package not installed, cannot decode project state")
+        return None
+
+    try:
+        # Decode base64 to bytes
+        binary = base64.b64decode(base64_state)
+
+        # Load Automerge document from bytes
+        doc = Document.load(binary)
+
+        # Convert to Python dict by traversing the document
+        result = automerge_doc_to_dict(doc, ROOT)
+
+        # The project data is stored as JSON string in 'projectJSON' field
+        if isinstance(result, dict) and 'projectJSON' in result:
+            project_json_str = result['projectJSON']
+            if isinstance(project_json_str, str):
+                return json.loads(project_json_str)
+
+        return result
+    except Exception as e:
+        logger.error(f"Failed to decode Automerge state: {e}")
+        return None
+
+
+def automerge_doc_to_dict(doc, obj_id) -> Any:
+    """
+    Recursively convert Automerge document to Python dict/list.
+    """
+    from automerge.core import ObjType
+
+    obj_type = doc.object_type(obj_id)
+
+    if obj_type == ObjType.Map:
+        result = {}
+        for key in doc.keys(obj_id):
+            value = doc.get(obj_id, key)
+            if value is not None:
+                val_type, val = value
+                if val_type in (ObjType.Map, ObjType.List, ObjType.Text):
+                    # It's a nested object, recurse
+                    result[key] = automerge_doc_to_dict(doc, val)
+                else:
+                    result[key] = val
+        return result
+    elif obj_type == ObjType.List:
+        result = []
+        length = doc.length(obj_id)
+        for i in range(length):
+            value = doc.get(obj_id, i)
+            if value is not None:
+                val_type, val = value
+                if val_type in (ObjType.Map, ObjType.List, ObjType.Text):
+                    result.append(automerge_doc_to_dict(doc, val))
+                else:
+                    result.append(val)
+        return result
+    elif obj_type == ObjType.Text:
+        return doc.text(obj_id)
+    else:
+        return None
+
+
+
+
 def _service_account_path(settings: Settings) -> Optional[Path]:
-    if settings.firebase_service_account_json:
-        path = Path(settings.firebase_service_account_json).expanduser()
+    if settings.firebase_service_account_key:
+        path = Path(settings.firebase_service_account_key).expanduser()
         if not path.exists():
             raise FileNotFoundError(f"Firebase service account file not found: {path}")
         return path
@@ -28,10 +102,12 @@ def initialize_firebase(settings: Settings) -> firebase_admin.App:
     svc_path = _service_account_path(settings)
     if svc_path:
         cred = credentials.Certificate(str(svc_path))
-        return firebase_admin.initialize_app(cred, {"projectId": settings.google_project_id})
+        # Project ID is read from the service account JSON
+        return firebase_admin.initialize_app(cred)
 
+    # Fallback to application default credentials
     cred = credentials.ApplicationDefault()
-    return firebase_admin.initialize_app(cred, {"projectId": settings.google_project_id})
+    return firebase_admin.initialize_app(cred)
 
 
 def lookup_email_by_phone(phone_number: str, settings: Settings) -> Optional[str]:
@@ -41,3 +117,163 @@ def lookup_email_by_phone(phone_number: str, settings: Settings) -> Optional[str
     except auth.UserNotFoundError:
         return None
     return user_record.email
+
+
+def get_firestore_client(settings: Settings):
+    """Get Firestore client, initializing Firebase if needed."""
+    initialize_firebase(settings)
+    return firestore.client()
+
+
+def fetch_chat_session(chat_id: str, settings: Settings) -> Optional[dict[str, Any]]:
+    """
+    Fetch a chat session from Firestore by chat_id.
+
+    Chat sessions are stored at: users/{userId}/chatSessions/{chatId}
+    Uses collection group query to find across all users.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    db = get_firestore_client(settings)
+
+    logger.info(f"Firestore project: {db.project}")
+    logger.info(f"Searching for chat_id: {chat_id}")
+
+    # Use collection group query to search all chatSessions subcollections
+    from google.cloud.firestore_v1.base_query import FieldFilter
+    sessions_query = db.collection_group("chatSessions").where(filter=FieldFilter("id", "==", chat_id))
+    results = list(sessions_query.stream())
+
+    logger.info(f"Collection group query returned {len(results)} results")
+
+    if results:
+        session_doc = results[0]
+        data = session_doc.to_dict()
+        # Extract userId from the document path: users/{userId}/chatSessions/{chatId}
+        path_parts = session_doc.reference.path.split("/")
+        user_id = path_parts[1] if len(path_parts) >= 2 else None
+
+        logger.info(f"Found session: {data.get('name')} for user: {user_id}")
+        return {
+            "id": data.get("id"),
+            "name": data.get("name"),
+            "userId": data.get("userId") or user_id,
+            "currentMode": data.get("currentMode"),
+            "messages": data.get("messages", []),
+            "createdAt": data.get("createdAt"),
+            "updatedAt": data.get("updatedAt"),
+        }
+
+    logger.warning(f"Session not found: {chat_id}")
+    return None
+
+
+def update_chat_session_messages(
+    user_id: str,
+    chat_id: str,
+    messages: list[dict[str, Any]],
+    settings: Settings
+) -> bool:
+    """
+    Update a chat session's messages in Firestore.
+
+    This is used by the agent to write responses back to the chat session
+    for real-time UI updates.
+    """
+    import logging
+    from datetime import datetime
+    logger = logging.getLogger(__name__)
+
+    db = get_firestore_client(settings)
+
+    try:
+        session_ref = db.collection("users").document(user_id).collection("chatSessions").document(chat_id)
+        session_ref.update({
+            "messages": messages,
+            "updatedAt": datetime.utcnow().isoformat() + "Z",
+        })
+        logger.info(f"Updated chat session {chat_id} with {len(messages)} messages")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to update chat session {chat_id}: {e}")
+        return False
+
+
+def fetch_project(project_id: str, settings: Settings) -> Optional[dict[str, Any]]:
+    """
+    Fetch a project from Firestore by project_id.
+
+    Projects are stored at: projects/{projectId}
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    db = get_firestore_client(settings)
+
+    logger.info(f"Fetching project: {project_id}")
+
+    project_ref = db.collection("projects").document(project_id)
+    project_doc = project_ref.get()
+
+    if project_doc.exists:
+        data = project_doc.to_dict()
+        logger.info(f"Found project: {data.get('name', 'Untitled')}")
+        return data
+
+    logger.warning(f"Project not found: {project_id}")
+    return None
+
+
+def fetch_user_projects(user_id: str, settings: Settings) -> list[dict[str, Any]]:
+    """
+    Fetch all projects for a user.
+
+    Projects metadata are stored at: users/{userId}/projects
+    Project data (Automerge) is stored at: users/{userId}/projects/{projectId}/branches/{branchId}
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    db = get_firestore_client(settings)
+
+    logger.info(f"Fetching projects for user: {user_id}")
+
+    # Projects are stored under users/{userId}/projects
+    projects_ref = db.collection("users").document(user_id).collection("projects")
+    results = list(projects_ref.stream())
+
+    projects = []
+    for doc in results:
+        data = doc.to_dict()
+        data["id"] = doc.id
+
+        # Try to fetch the main branch data (Automerge state)
+        branch_id = data.get("currentBranch", "main")
+        branch_ref = db.collection("users").document(user_id).collection("projects").document(doc.id).collection("branches").document(branch_id)
+        branch_doc = branch_ref.get()
+
+        if branch_doc.exists:
+            branch_data = branch_doc.to_dict()
+            data["_branch"] = {
+                "branchId": branch_id,
+                "commitId": branch_data.get("commitId"),
+                "timestamp": branch_data.get("timestamp"),
+                "author": branch_data.get("author"),
+                "hasAutomergeState": "automergeState" in branch_data,
+                "automergeStateSize": len(branch_data.get("automergeState", "")) if branch_data.get("automergeState") else 0,
+            }
+
+            # Decode Automerge state if present
+            if branch_data.get("automergeState"):
+                try:
+                    project_data = decode_automerge_state(branch_data["automergeState"])
+                    if project_data:
+                        data["_projectData"] = project_data
+                except Exception as e:
+                    logger.warning(f"Failed to decode Automerge state: {e}")
+
+        projects.append(data)
+
+    logger.info(f"Found {len(projects)} projects for user")
+    return projects

@@ -2,28 +2,69 @@ from __future__ import annotations
 
 from langchain_core.tools import tool
 
-from ..asset_store import format_asset_summary, list_remote_assets
-from ..tool_manifest import get_tool_metadata
+from ..config import get_settings
+from ..firebase import fetch_user_projects
 
 
-def _description() -> str:
-    metadata = get_tool_metadata("listAssets")
-    if not metadata:
-        return "Return the uploaded assets currently available in the project."
-    return metadata.get("description", "Return the uploaded assets currently available in the project.")
+@tool
+def listAssets(project_id: str | None = None, user_id: str | None = None) -> dict:
+    """Return the media assets currently in the user's project timeline."""
 
+    if not user_id:
+        # Gracefully handle - agent should use project context instead
+        return {
+            "status": "success",
+            "outputs": [{"type": "text", "text": "Asset information is available in the project context above. Please refer to the Media Assets section."}],
+        }
 
-@tool(name="listAssets", description=_description())
-def list_assets_tool(project_id: str | None = None) -> dict:
-    """Return the uploaded assets for the active project."""
+    settings = get_settings()
+    projects = fetch_user_projects(user_id, settings)
 
-    assets = list_remote_assets(project_id=project_id)
+    # Find the matching project or use the first one
+    target_project = None
+    for proj in projects:
+        if project_id and proj.get("id") == project_id:
+            target_project = proj
+            break
+    if not target_project and projects:
+        target_project = projects[0]
+
+    if not target_project:
+        return {
+            "status": "success",
+            "outputs": [{"type": "text", "text": "No projects found for user."}],
+        }
+
+    # Extract assets from project data
+    project_data = target_project.get("_projectData", {})
+    if not project_data:
+        return {
+            "status": "success",
+            "outputs": [{"type": "text", "text": "Project data not available."}],
+        }
+
+    # Collect assets from all layers/clips
+    assets = []
+    layers = project_data.get("layers", [])
+    for layer in layers:
+        for clip in layer.get("clips", []):
+            assets.append({
+                "id": clip.get("assetId", clip.get("id", "")),
+                "name": clip.get("name", "Untitled"),
+                "type": clip.get("type", "unknown"),
+                "duration": clip.get("duration", 0),
+                "src": clip.get("src", ""),
+                "layer": layer.get("name", "Unknown Layer"),
+            })
 
     if assets:
-        items = [{"type": "text", "text": format_asset_summary(asset)} for asset in assets]
+        items = [
+            {"type": "text", "text": f"{a['name']} ({a['type']}, {a['duration']}s) on {a['layer']}"}
+            for a in assets
+        ]
         title = f"{len(assets)} asset{'s' if len(assets) != 1 else ''}"
     else:
-        items = [{"type": "text", "text": "No uploaded assets found."}]
+        items = [{"type": "text", "text": "No media assets on the timeline."}]
         title = "0 assets"
 
     return {

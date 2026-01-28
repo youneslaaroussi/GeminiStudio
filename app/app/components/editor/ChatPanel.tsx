@@ -68,6 +68,8 @@ import {
   generateSessionName,
   type ChatSessionSummary,
 } from "@/app/lib/services/chat-sessions";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "@/app/lib/server/firebase";
 
 type ToolPartState =
   | "input-streaming"
@@ -127,6 +129,10 @@ export function ChatPanel() {
     type: "success" | "error";
     message: string;
   } | null>(null);
+  const [isCloudMode, setIsCloudMode] = useState(false);
+  const [isCloudProcessing, setIsCloudProcessing] = useState(false);
+  const [isListeningToCloud, setIsListeningToCloud] = useState(false);
+  const cloudUnsubscribeRef = useRef<(() => void) | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sessionIdRef = useRef(`chat-${Date.now()}`);
@@ -149,7 +155,7 @@ export function ChatPanel() {
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     });
 
-  const isBusy = status === "submitted" || status === "streaming";
+  const isBusy = status === "submitted" || status === "streaming" || isCloudProcessing;
   const hasMessages = messages && messages.length > 0;
 
   const project = useProjectStore((state) => state.project);
@@ -230,13 +236,19 @@ export function ChatPanel() {
     const trimmed = input.trim();
     if (!trimmed && pendingAttachments.length === 0) return;
 
-    sendMessage({
-      text: trimmed || (pendingAttachments.length > 0 ? "Please analyze these files." : ""),
-      metadata: {
-        mode,
-        attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
-      },
-    });
+    if (isCloudMode) {
+      // Save and teleport to cloud
+      startCloudSession(trimmed || "Please analyze these files.");
+    } else {
+      // Send to local API
+      sendMessage({
+        text: trimmed || (pendingAttachments.length > 0 ? "Please analyze these files." : ""),
+        metadata: {
+          mode,
+          attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
+        },
+      });
+    }
     setInput("");
     setPendingAttachments([]);
   };
@@ -394,6 +406,136 @@ export function ChatPanel() {
     }
   }, [user, messages, handleSaveSession]);
 
+  // Start listening to Firebase for real-time cloud agent updates
+  const startCloudListener = useCallback(
+    (userId: string, chatId: string, currentMessageCount: number) => {
+      // Clean up any existing listener
+      if (cloudUnsubscribeRef.current) {
+        cloudUnsubscribeRef.current();
+      }
+
+      const sessionRef = doc(db, "users", userId, "chatSessions", chatId);
+      setIsListeningToCloud(true);
+
+      const unsubscribe = onSnapshot(
+        sessionRef,
+        (snapshot) => {
+          if (!snapshot.exists()) return;
+
+          const data = snapshot.data();
+          const firebaseMessages = data?.messages || [];
+
+          // Only update if there are new messages from the cloud
+          if (firebaseMessages.length > currentMessageCount) {
+            console.log(
+              `[Cloud] Received ${firebaseMessages.length - currentMessageCount} new message(s)`
+            );
+
+            // Convert Firebase messages to our format
+            const newMessages = firebaseMessages.map(
+              (msg: any) => ({
+                id: msg.id,
+                role: msg.role as "user" | "assistant",
+                parts: msg.parts,
+              })
+            );
+
+            setMessages(newMessages);
+          }
+        },
+        (error) => {
+          console.error("[Cloud] Listener error:", error);
+          setIsListeningToCloud(false);
+        }
+      );
+
+      cloudUnsubscribeRef.current = unsubscribe;
+    },
+    [setMessages]
+  );
+
+  // Stop listening to cloud updates
+  const stopCloudListener = useCallback(() => {
+    if (cloudUnsubscribeRef.current) {
+      cloudUnsubscribeRef.current();
+      cloudUnsubscribeRef.current = null;
+    }
+    setIsListeningToCloud(false);
+  }, []);
+
+  // Cleanup cloud listener on unmount
+  useEffect(() => {
+    return () => {
+      if (cloudUnsubscribeRef.current) {
+        cloudUnsubscribeRef.current();
+      }
+    };
+  }, []);
+
+  // Start a cloud session - add message, save, teleport
+  const startCloudSession = useCallback(
+    async (text: string) => {
+      if (!text.trim() || !user) return;
+
+      setIsCloudProcessing(true);
+
+      // Add user message to local state
+      const userMessage = {
+        id: `msg-${Date.now()}`,
+        role: "user" as const,
+        parts: [{ type: "text" as const, text }],
+      };
+      setMessages((prev) => [...prev, userMessage]);
+
+      try {
+        // Save session with the new message
+        const name = text.length > 50 ? text.substring(0, 47) + "..." : text;
+        const updatedMessages = [...(messages || []), userMessage];
+        const session = await saveChatSession(user.uid, sessionId, name, mode, updatedMessages);
+
+        // Teleport to cloud
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_LANGGRAPH_URL || "http://localhost:8000"}/teleport`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: session.id }),
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`Teleport failed: ${response.status}`);
+        }
+
+        // Add "processing" message
+        const processingMessage = {
+          id: `msg-${Date.now()}-processing`,
+          role: "assistant" as const,
+          parts: [{ type: "text" as const, text: "Cloud agent is processing your request..." }],
+        };
+        setMessages((prev) => [...prev, processingMessage]);
+
+        // Start listening for real-time updates from the cloud agent
+        // Pass the count of messages in Firebase (before agent responds)
+        startCloudListener(user.uid, session.id, updatedMessages.length);
+
+        // Switch back to local mode but keep listening
+        setIsCloudMode(false);
+      } catch (error) {
+        console.error("Cloud session failed:", error);
+        const errorMessage = {
+          id: `msg-${Date.now()}-error`,
+          role: "assistant" as const,
+          parts: [{ type: "text" as const, text: `Failed to create cloud session: ${error instanceof Error ? error.message : "Unknown error"}` }],
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      } finally {
+        setIsCloudProcessing(false);
+      }
+    },
+    [user, sessionId, mode, messages, setMessages, startCloudListener]
+  );
+
   const submitClientToolResult = useCallback(
     async (payload: { toolCallId: string; result: ToolExecutionResult }) => {
       await fetch("/api/chat/tool-callback", {
@@ -548,10 +690,13 @@ export function ChatPanel() {
 
           {isBusy && (
             <div className="flex justify-start">
-              <div className="bg-muted/60 rounded-2xl px-3 py-2">
+              <div className={cn(
+                "rounded-2xl px-3 py-2",
+                isCloudProcessing ? "bg-blue-500/10" : "bg-muted/60"
+              )}>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
-                  <span>Thinking...</span>
+                  <span>{isCloudProcessing ? "Cloud processing..." : "Thinking..."}</span>
                 </div>
               </div>
             </div>
@@ -581,23 +726,51 @@ export function ChatPanel() {
       <div className="border-t border-border p-3 space-y-2">
         {/* Mode Selector + Actions */}
         <div className="flex items-center justify-between gap-2">
-          <div className="flex rounded-lg bg-muted/50 p-0.5">
-            {MODE_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setMode(option.value)}
-                className={cn(
-                  "px-3 py-1 text-xs font-medium rounded-md transition-colors",
-                  mode === option.value
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-                title={option.description}
-              >
-                {option.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg bg-muted/50 p-0.5">
+              {MODE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setMode(option.value)}
+                  disabled={isCloudMode}
+                  className={cn(
+                    "px-3 py-1 text-xs font-medium rounded-md transition-colors",
+                    mode === option.value
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                    isCloudMode && "opacity-50 cursor-not-allowed"
+                  )}
+                  title={option.description}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {/* Cloud Mode Toggle */}
+            <button
+              type="button"
+              onClick={() => setIsCloudMode(!isCloudMode)}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors",
+                isCloudMode
+                  ? "bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30"
+                  : "bg-muted/50 text-muted-foreground hover:text-foreground"
+              )}
+              title={isCloudMode ? "Using Cloud Agent" : "Click to use Cloud Agent"}
+            >
+              <Cloud className="size-3.5" />
+              {isCloudMode ? "Cloud" : "Local"}
+            </button>
+            {isListeningToCloud && (
+              <span className="flex items-center gap-1 text-xs text-blue-500">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                </span>
+                Listening
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1">
             {/* Sessions Dropdown */}

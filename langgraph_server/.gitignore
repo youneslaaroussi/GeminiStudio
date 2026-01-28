@@ -24,3 +24,5 @@ pip-log.txt
 # IDE metadata
 .vscode/
 .idea/
+
+secrets/

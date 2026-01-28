@@ -11,7 +11,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN apt-get update && apt-get install --no-install-recommends -y \
     build-essential \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Rust (required for automerge package)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 WORKDIR /app
 

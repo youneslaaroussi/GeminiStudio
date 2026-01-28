@@ -42,6 +42,7 @@ interface ProjectStore {
   addLayer: (layer: Layer) => void;
   addClip: (clip: TimelineClip, layerId?: string) => void;
   deleteLayer: (layerId: string) => void;
+  reorderLayers: (fromIndex: number, toIndex: number) => void;
   updateClip: (id: string, updates: Partial<TimelineClip>) => void;
   deleteClip: (id: string) => void;
   moveClipToLayer: (clipId: string, targetLayerId: string) => void;
@@ -422,6 +423,32 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
             },
             selectedClipId: nextSelectedClipId,
             selectedTransitionKey: nextSelectedTransitionKey,
+          };
+        });
+      },
+
+      reorderLayers: (fromIndex: number, toIndex: number) => {
+        applySyncedChange((state) => {
+          const { layers } = state.project;
+          if (
+            fromIndex < 0 ||
+            fromIndex >= layers.length ||
+            toIndex < 0 ||
+            toIndex >= layers.length ||
+            fromIndex === toIndex
+          ) {
+            return null;
+          }
+
+          const nextLayers = [...layers];
+          const [movedLayer] = nextLayers.splice(fromIndex, 1);
+          nextLayers.splice(toIndex, 0, movedLayer);
+
+          return {
+            project: {
+              ...state.project,
+              layers: nextLayers,
+            },
           };
         });
       },
