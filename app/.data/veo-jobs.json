@@ -43,5 +43,37 @@
     "operationName": "projects/experiments-484119/locations/us-central1/publishers/google/models/veo-3.0-generate-001/operations/6a8c33de-a159-4206-b319-a7333eec0633",
     "createdAt": "2026-01-28T15:18:38.077Z",
     "updatedAt": "2026-01-28T15:18:53.289Z"
+  },
+  {
+    "id": "90e0ede2-c35b-4f64-a745-28ef852413fe",
+    "status": "running",
+    "params": {
+      "prompt": "test",
+      "durationSeconds": 4,
+      "aspectRatio": "16:9",
+      "resolution": "720p",
+      "generateAudio": false,
+      "projectId": "55ecf14d-99a6-4ca1-819c-dd8a928bf4af"
+    },
+    "operationName": "projects/experiments-484119/locations/us-central1/publishers/google/models/veo-3.0-generate-001/operations/00ddc270-eaf4-40f9-ab1e-c82339a03bd1",
+    "createdAt": "2026-01-28T16:04:08.757Z",
+    "updatedAt": "2026-01-28T16:04:56.962Z"
+  },
+  {
+    "id": "f1f2a20d-5922-461e-90e7-81d108e152b6",
+    "status": "completed",
+    "params": {
+      "prompt": "test",
+      "durationSeconds": 4,
+      "aspectRatio": "16:9",
+      "resolution": "720p",
+      "generateAudio": false,
+      "projectId": "55ecf14d-99a6-4ca1-819c-dd8a928bf4af"
+    },
+    "operationName": "projects/experiments-484119/locations/us-central1/publishers/google/models/veo-3.0-generate-001/operations/552e3c39-d986-4ea0-a268-31c17c42ef73",
+    "createdAt": "2026-01-28T16:08:50.400Z",
+    "updatedAt": "2026-01-28T16:09:32.571Z",
+    "resultAssetId": "cecaa529-d1a8-455c-8741-69b38b859c3a",
+    "resultAssetUrl": "/uploads/1769616572569-b6eae71e-88bb-4f58-bd4a-2bdebeb297ea.mp4"
   }
 ]

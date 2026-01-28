@@ -42,6 +42,8 @@ class Settings(BaseSettings):
         alias="SYSTEM_PROMPT",
     )
 
+    default_project_id: str | None = Field(default=None, alias="DEFAULT_PROJECT_ID")
+
 
 @lru_cache
 def get_settings() -> Settings:

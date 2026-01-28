@@ -76,6 +76,19 @@ function mapVeoStatus(done: boolean, error?: boolean): VeoJobStatus {
   return "running";
 }
 
+function computeVeoDimensions(
+  resolution: "720p" | "1080p" | "4k",
+  aspectRatio: "16:9" | "9:16"
+): { width: number; height: number } {
+  const resolutionMap = {
+    "720p": { landscape: { width: 1280, height: 720 }, portrait: { width: 720, height: 1280 } },
+    "1080p": { landscape: { width: 1920, height: 1080 }, portrait: { width: 1080, height: 1920 } },
+    "4k": { landscape: { width: 3840, height: 2160 }, portrait: { width: 2160, height: 3840 } },
+  };
+  const orientation = aspectRatio === "16:9" ? "landscape" : "portrait";
+  return resolutionMap[resolution][orientation];
+}
+
 export async function startVeoJob(params: VeoJobParams): Promise<VeoJob> {
   assertEnv();
   const token = await getAccessToken();
@@ -234,11 +247,18 @@ export async function pollVeoJob(jobId: string): Promise<VeoJob | null> {
     try {
       const buffer = Buffer.from(firstVideo.bytesBase64Encoded, "base64");
       const mimeType = firstVideo.mimeType || "video/mp4";
+      const dimensions = computeVeoDimensions(
+        job.params.resolution || "720p",
+        job.params.aspectRatio || "16:9"
+      );
       const asset = await saveBufferAsAsset({
         data: buffer,
         mimeType,
         originalName: `veo-${Date.now()}.mp4`,
         projectId: job.params.projectId,
+        width: dimensions.width,
+        height: dimensions.height,
+        duration: job.params.durationSeconds,
       });
 
       // Trigger asset pipeline in background (GCS upload, face detection, etc.)

@@ -10,6 +10,9 @@ export interface RemoteAsset {
   uploadedAt: string;
   projectId?: string;
   thumbnailUrl?: string;
+  width?: number;
+  height?: number;
+  duration?: number;
 }
 
 export interface AssetDragPayload {

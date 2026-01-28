@@ -26,6 +26,38 @@ function getImageExtension(mimeType: string) {
   return ".png";
 }
 
+function computeBananaDimensions(
+  aspectRatio: string,
+  imageSize: "1K" | "2K" | "4K"
+): { width: number; height: number } {
+  // Base size for the longer edge
+  const baseSizes: Record<string, number> = {
+    "1K": 1024,
+    "2K": 2048,
+    "4K": 4096,
+  };
+  const base = baseSizes[imageSize] || 1024;
+
+  // Parse aspect ratio (e.g., "16:9", "1:1", "9:16")
+  const [wRatio, hRatio] = aspectRatio.split(":").map(Number);
+  if (!wRatio || !hRatio) {
+    return { width: base, height: base }; // fallback to square
+  }
+
+  // Calculate dimensions based on aspect ratio
+  if (wRatio >= hRatio) {
+    // Landscape or square: width is the base
+    const width = base;
+    const height = Math.round((base * hRatio) / wRatio);
+    return { width, height };
+  } else {
+    // Portrait: height is the base
+    const height = base;
+    const width = Math.round((base * wRatio) / hRatio);
+    return { width, height };
+  }
+}
+
 export async function POST(request: NextRequest) {
   if (!API_KEY) {
     return NextResponse.json(
@@ -118,11 +150,14 @@ export async function POST(request: NextRequest) {
     const mimeType = inlineData.inlineData.mimeType || "image/png";
     const buffer = Buffer.from(inlineData.inlineData.data, "base64");
     const extension = getImageExtension(mimeType);
+    const dimensions = computeBananaDimensions(aspectRatio, imageSize);
     const asset = await saveBufferAsAsset({
       data: buffer,
       mimeType,
       originalName: `banana-${Date.now()}${extension}`,
       projectId,
+      width: dimensions.width,
+      height: dimensions.height,
     });
 
     // Trigger asset pipeline in background (GCS upload, etc.)

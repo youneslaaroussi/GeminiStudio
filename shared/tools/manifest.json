@@ -1,0 +1,1138 @@
+{
+  "generatedAt": "2026-01-28T15:41:05.520Z",
+  "tools": {
+    "captureAsset": {
+      "name": "captureAsset",
+      "label": "Capture Asset",
+      "description": "Bookmark a timeline moment for an uploaded asset using its asset ID and capture an exact still.",
+      "runLocation": "client",
+      "fields": [
+        {
+          "name": "assetId",
+          "label": "Asset ID",
+          "type": "text",
+          "placeholder": "e.g. asset_123",
+          "required": true
+        },
+        {
+          "name": "timecode",
+          "label": "Time (seconds)",
+          "type": "number",
+          "placeholder": "12.4",
+          "description": "Exact timeline position in seconds.",
+          "required": true
+        },
+        {
+          "name": "notes",
+          "label": "Notes",
+          "type": "textarea",
+          "placeholder": "Optional context for the captured asset."
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/captureAssetInput",
+        "definitions": {
+          "captureAssetInput": {
+            "type": "object",
+            "properties": {
+              "assetId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "timecode": {
+                "type": "number",
+                "minimum": 0
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "assetId",
+              "timecode"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "captureFaces": {
+      "name": "captureFaces",
+      "label": "Capture Faces",
+      "description": "Capture frames from a video at face detection timestamps with bounding boxes drawn around detected faces.",
+      "runLocation": "client",
+      "fields": [
+        {
+          "name": "assetId",
+          "label": "Asset ID",
+          "type": "text",
+          "placeholder": "e.g. asset_123",
+          "required": true
+        },
+        {
+          "name": "faceIndex",
+          "label": "Face Index (optional)",
+          "type": "number",
+          "placeholder": "Leave empty for all faces",
+          "description": "Capture a specific face by index (0-based). Leave empty to capture all faces."
+        },
+        {
+          "name": "notes",
+          "label": "Notes",
+          "type": "textarea",
+          "placeholder": "Optional context for the captured frames."
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/captureFacesInput",
+        "definitions": {
+          "captureFacesInput": {
+            "type": "object",
+            "properties": {
+              "assetId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "faceIndex": {
+                "type": "number",
+                "minimum": 0
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "assetId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "listAssets": {
+      "name": "listAssets",
+      "label": "List Assets",
+      "description": "Return the uploaded assets currently available in the Assets panel.",
+      "runLocation": "server",
+      "fields": [],
+      "inputSchema": {
+        "$ref": "#/definitions/listAssetsInput",
+        "definitions": {
+          "listAssetsInput": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "projectHistory": {
+      "name": "projectHistory",
+      "label": "Project History",
+      "description": "Inspect the undo/redo history of the current project or trigger undo and redo operations.",
+      "runLocation": "client",
+      "fields": [
+        {
+          "name": "action",
+          "label": "Action",
+          "type": "select",
+          "description": "Choose whether to view history, undo, or redo.",
+          "options": [
+            {
+              "value": "status",
+              "label": "Show History Status"
+            },
+            {
+              "value": "undo",
+              "label": "Undo"
+            },
+            {
+              "value": "redo",
+              "label": "Redo"
+            }
+          ],
+          "required": true,
+          "defaultValue": "status"
+        },
+        {
+          "name": "steps",
+          "label": "Steps",
+          "type": "number",
+          "placeholder": "1",
+          "description": "How many steps to undo or redo (defaults to 1). Ignored when showing status."
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/projectHistoryInput",
+        "definitions": {
+          "projectHistoryInput": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "status",
+                  "undo",
+                  "redo"
+                ],
+                "default": "status"
+              },
+              "steps": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "timelineAddLayer": {
+      "name": "timelineAddLayer",
+      "label": "Add Timeline Layer",
+      "description": "Create a new timeline layer using the existing project store helpers.",
+      "runLocation": "client",
+      "fields": [
+        {
+          "name": "type",
+          "label": "Layer Type",
+          "type": "select",
+          "description": "Choose the media type this layer will hold.",
+          "options": [
+            {
+              "value": "video",
+              "label": "Video"
+            },
+            {
+              "value": "audio",
+              "label": "Audio"
+            },
+            {
+              "value": "text",
+              "label": "Text"
+            },
+            {
+              "value": "image",
+              "label": "Image"
+            }
+          ],
+          "required": true
+        },
+        {
+          "name": "name",
+          "label": "Layer Name",
+          "type": "text",
+          "placeholder": "Optional custom name"
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/timelineAddLayerInput",
+        "definitions": {
+          "timelineAddLayerInput": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "video",
+                  "audio",
+                  "text",
+                  "image"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "timelineAddClip": {
+      "name": "timelineAddClip",
+      "label": "Add Timeline Clip",
+      "description": "Insert a new clip on the timeline using the project store's existing helpers.",
+      "runLocation": "client",
+      "fields": [
+        {
+          "name": "type",
+          "label": "Clip Type",
+          "type": "select",
+          "options": [
+            {
+              "value": "video",
+              "label": "Video"
+            },
+            {
+              "value": "audio",
+              "label": "Audio"
+            },
+            {
+              "value": "image",
+              "label": "Image"
+            },
+            {
+              "value": "text",
+              "label": "Text"
+            }
+          ],
+          "required": true
+        },
+        {
+          "name": "layerId",
+          "label": "Layer ID",
+          "type": "text",
+          "placeholder": "Optional layer ID (defaults to matching layer type)"
+        },
+        {
+          "name": "name",
+          "label": "Clip Name",
+          "type": "text",
+          "placeholder": "Friendly clip name"
+        },
+        {
+          "name": "start",
+          "label": "Start (seconds)",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "duration",
+          "label": "Duration (seconds)",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "src",
+          "label": "Source URL",
+          "type": "text",
+          "placeholder": "Video, audio, or image URL",
+          "description": "Required for media clips (video, audio, image)."
+        },
+        {
+          "name": "text",
+          "label": "Text Content",
+          "type": "textarea",
+          "description": "Required for text clips."
+        },
+        {
+          "name": "assetId",
+          "label": "Asset ID",
+          "type": "text",
+          "placeholder": "Optional asset metadata reference"
+        },
+        {
+          "name": "offset",
+          "label": "Source Offset",
+          "type": "number",
+          "description": "Trim the beginning of the source by this many seconds."
+        },
+        {
+          "name": "speed",
+          "label": "Playback Speed",
+          "type": "number",
+          "description": "Playback speed multiplier (defaults to 1)."
+        },
+        {
+          "name": "position",
+          "label": "Position",
+          "type": "json",
+          "placeholder": "{\"x\":0,\"y\":0}",
+          "description": "Scene position as { x, y } in pixels."
+        },
+        {
+          "name": "scale",
+          "label": "Scale",
+          "type": "json",
+          "placeholder": "{\"x\":1,\"y\":1}",
+          "description": "Scale multiplier as { x, y }."
+        },
+        {
+          "name": "width",
+          "label": "Width",
+          "type": "number",
+          "description": "Optional intrinsic media width (video/image)."
+        },
+        {
+          "name": "height",
+          "label": "Height",
+          "type": "number",
+          "description": "Optional intrinsic media height (video/image)."
+        },
+        {
+          "name": "objectFit",
+          "label": "Object Fit",
+          "type": "select",
+          "description": "Video object-fit behavior.",
+          "options": [
+            {
+              "value": "contain",
+              "label": "Contain"
+            },
+            {
+              "value": "cover",
+              "label": "Cover"
+            },
+            {
+              "value": "fill",
+              "label": "Fill"
+            }
+          ]
+        },
+        {
+          "name": "focus",
+          "label": "Focus Area",
+          "type": "json",
+          "placeholder": "{\"x\":0,\"y\":0,\"width\":1,\"height\":1,\"padding\":0}",
+          "description": "Optional video focus region."
+        },
+        {
+          "name": "volume",
+          "label": "Volume",
+          "type": "number",
+          "description": "Audio volume (0-1)."
+        },
+        {
+          "name": "fontSize",
+          "label": "Font Size",
+          "type": "number",
+          "description": "Text clip font size in pixels."
+        },
+        {
+          "name": "fill",
+          "label": "Fill Color",
+          "type": "text",
+          "placeholder": "#ffffff"
+        },
+        {
+          "name": "opacity",
+          "label": "Opacity",
+          "type": "number",
+          "description": "Text opacity (0-1)."
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/timelineAddClipInput",
+        "definitions": {
+          "timelineAddClipInput": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "layerId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 180
+                  },
+                  "start": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "duration": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "offset": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "speed": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 8
+                  },
+                  "position": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "scale": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/position"
+                  },
+                  "assetId": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "video"
+                  },
+                  "src": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "width": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "height": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "focus": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      },
+                      "width": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "height": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "padding": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y",
+                      "width",
+                      "height",
+                      "padding"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "objectFit": {
+                    "type": "string",
+                    "enum": [
+                      "contain",
+                      "cover",
+                      "fill"
+                    ]
+                  }
+                },
+                "required": [
+                  "start",
+                  "duration",
+                  "type",
+                  "src"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "layerId": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/layerId"
+                  },
+                  "name": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/name"
+                  },
+                  "start": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/start"
+                  },
+                  "duration": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/duration"
+                  },
+                  "offset": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/offset"
+                  },
+                  "speed": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/speed"
+                  },
+                  "position": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/position"
+                  },
+                  "scale": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/scale"
+                  },
+                  "assetId": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/assetId"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "audio"
+                  },
+                  "src": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/src"
+                  },
+                  "volume": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "start",
+                  "duration",
+                  "type",
+                  "src"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "layerId": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/layerId"
+                  },
+                  "name": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/name"
+                  },
+                  "start": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/start"
+                  },
+                  "duration": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/duration"
+                  },
+                  "offset": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/offset"
+                  },
+                  "speed": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/speed"
+                  },
+                  "position": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/position"
+                  },
+                  "scale": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/scale"
+                  },
+                  "assetId": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/assetId"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "image"
+                  },
+                  "src": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/src"
+                  },
+                  "width": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "height": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "duration",
+                  "type",
+                  "src"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "layerId": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/layerId"
+                  },
+                  "name": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/name"
+                  },
+                  "start": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/start"
+                  },
+                  "duration": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/duration"
+                  },
+                  "offset": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/offset"
+                  },
+                  "speed": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/speed"
+                  },
+                  "position": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/position"
+                  },
+                  "scale": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/scale"
+                  },
+                  "assetId": {
+                    "$ref": "#/definitions/timelineAddClipInput/anyOf/0/properties/assetId"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "text"
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "fontSize": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "fill": {
+                    "type": "string"
+                  },
+                  "opacity": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "start",
+                  "duration",
+                  "type",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "timelineSplitClip": {
+      "name": "timelineSplitClip",
+      "label": "Split Timeline Clip",
+      "description": "Split an existing clip using the project store's split action to preserve history.",
+      "runLocation": "client",
+      "fields": [
+        {
+          "name": "clipId",
+          "label": "Clip ID",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "time",
+          "label": "Split Time (seconds)",
+          "type": "number",
+          "required": true
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/timelineSplitClipInput",
+        "definitions": {
+          "timelineSplitClipInput": {
+            "type": "object",
+            "properties": {
+              "clipId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "time": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Timeline timestamp in seconds"
+              }
+            },
+            "required": [
+              "clipId",
+              "time"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "timelineUpdateClip": {
+      "name": "timelineUpdateClip",
+      "label": "Update Timeline Clip",
+      "description": "Adjust clip timing and type-specific settings while reusing the existing project store update action.",
+      "runLocation": "client",
+      "fields": [
+        {
+          "name": "clipId",
+          "label": "Clip ID",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "name",
+          "label": "Clip Name",
+          "type": "text",
+          "placeholder": "Optional new name"
+        },
+        {
+          "name": "start",
+          "label": "Start (seconds)",
+          "type": "number"
+        },
+        {
+          "name": "duration",
+          "label": "Duration (seconds)",
+          "type": "number"
+        },
+        {
+          "name": "offset",
+          "label": "Source Offset",
+          "type": "number"
+        },
+        {
+          "name": "speed",
+          "label": "Playback Speed",
+          "type": "number"
+        },
+        {
+          "name": "position",
+          "label": "Position",
+          "type": "json",
+          "placeholder": "{\"x\":0,\"y\":0}"
+        },
+        {
+          "name": "scale",
+          "label": "Scale",
+          "type": "json",
+          "placeholder": "{\"x\":1,\"y\":1}"
+        },
+        {
+          "name": "videoSettings",
+          "label": "Video Settings",
+          "type": "json",
+          "placeholder": "{\"src\":\"\",\"width\":1920,\"height\":1080,\"objectFit\":\"contain\",\"focus\":{...}}"
+        },
+        {
+          "name": "audioSettings",
+          "label": "Audio Settings",
+          "type": "json",
+          "placeholder": "{\"src\":\"\",\"volume\":1}"
+        },
+        {
+          "name": "imageSettings",
+          "label": "Image Settings",
+          "type": "json",
+          "placeholder": "{\"src\":\"\",\"width\":1920,\"height\":1080}"
+        },
+        {
+          "name": "textSettings",
+          "label": "Text Settings",
+          "type": "json",
+          "placeholder": "{\"text\":\"\",\"fontSize\":48,\"fill\":\"#ffffff\",\"opacity\":1}"
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/timelineUpdateClipInput",
+        "definitions": {
+          "timelineUpdateClipInput": {
+            "type": "object",
+            "properties": {
+              "clipId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 180
+              },
+              "start": {
+                "type": "number",
+                "minimum": 0
+              },
+              "duration": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "offset": {
+                "type": "number",
+                "minimum": 0
+              },
+              "speed": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 8
+              },
+              "position": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "additionalProperties": false
+              },
+              "scale": {
+                "$ref": "#/definitions/timelineUpdateClipInput/properties/position"
+              },
+              "assetId": {
+                "type": "string"
+              },
+              "videoSettings": {
+                "type": "object",
+                "properties": {
+                  "src": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "width": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "height": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "objectFit": {
+                    "type": "string",
+                    "enum": [
+                      "contain",
+                      "cover",
+                      "fill"
+                    ]
+                  },
+                  "focus": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      },
+                      "width": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "height": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "padding": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y",
+                      "width",
+                      "height",
+                      "padding"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "audioSettings": {
+                "type": "object",
+                "properties": {
+                  "src": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "volume": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "additionalProperties": false
+              },
+              "imageSettings": {
+                "type": "object",
+                "properties": {
+                  "src": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "width": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "height": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "additionalProperties": false
+              },
+              "textSettings": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "fontSize": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "fill": {
+                    "type": "string"
+                  },
+                  "opacity": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "clipId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "videoEffectsList": {
+      "name": "videoEffectsList",
+      "label": "List Video Effects",
+      "description": "Show the available video effect providers and their default parameters.",
+      "runLocation": "server",
+      "fields": [],
+      "inputSchema": {
+        "$ref": "#/definitions/videoEffectsListInput",
+        "definitions": {
+          "videoEffectsListInput": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "videoEffectsRun": {
+      "name": "videoEffectsRun",
+      "label": "Start Video Effect",
+      "description": "Kick off a video effect job (for example Replicate SAM-2) for a given asset, using the configured provider.",
+      "runLocation": "server",
+      "fields": [
+        {
+          "name": "assetId",
+          "label": "Asset ID",
+          "type": "text",
+          "placeholder": "asset_123",
+          "required": true
+        },
+        {
+          "name": "effectId",
+          "label": "Effect",
+          "type": "select",
+          "options": [
+            {
+              "value": "replicate.meta.sam2-video",
+              "label": "Segment Anything v2 (Video)"
+            }
+          ],
+          "required": true,
+          "defaultValue": "replicate.meta.sam2-video",
+          "description": "Choose which video effect to apply."
+        },
+        {
+          "name": "params",
+          "label": "Effect Parameters",
+          "type": "json",
+          "placeholder": "{\"videoFps\": 25}",
+          "description": "Optional JSON payload to override effect defaults. Leave empty to use defaults."
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/videoEffectsRunInput",
+        "definitions": {
+          "videoEffectsRunInput": {
+            "type": "object",
+            "properties": {
+              "assetId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "effectId": {
+                "type": "string",
+                "enum": [
+                  "replicate.meta.sam2-video"
+                ]
+              },
+              "params": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                ]
+              }
+            },
+            "required": [
+              "assetId",
+              "effectId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "videoEffectsJobStatus": {
+      "name": "videoEffectsJobStatus",
+      "label": "Check Video Effect Job",
+      "description": "Retrieve the latest status for a video effect job.",
+      "runLocation": "server",
+      "fields": [
+        {
+          "name": "jobId",
+          "label": "Job ID",
+          "type": "text",
+          "placeholder": "job_123",
+          "required": true
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/videoEffectsJobStatusInput",
+        "definitions": {
+          "videoEffectsJobStatusInput": {
+            "type": "object",
+            "properties": {
+              "jobId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "jobId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    }
+  }
+}

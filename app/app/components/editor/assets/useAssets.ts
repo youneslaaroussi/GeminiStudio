@@ -383,39 +383,89 @@ export function useAssets() {
     return () => clearInterval(interval);
   }, [pipelineStates, fetchPipelineStates]);
 
-  // Load asset durations
+  // Persist metadata to server
+  const persistMetadataToServer = useCallback(
+    async (assetId: string, update: { width?: number; height?: number; duration?: number }) => {
+      try {
+        await fetch(`/api/assets/${assetId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(update),
+        });
+      } catch (err) {
+        console.error("Failed to persist asset metadata", err);
+      }
+    },
+    []
+  );
+
+  // Load asset durations and dimensions
   useEffect(() => {
     let cancelled = false;
     const mediaElements: Array<HTMLMediaElement | HTMLImageElement> = [];
 
-    const missingDurations = assets.filter(
-      (asset) => assetDurations[asset.id] == null
-    );
+    // Filter to assets that need metadata extraction
+    const assetsMissingMetadata = assets.filter((asset) => {
+      // Skip if we already have local duration cached
+      if (assetDurations[asset.id] != null) return false;
+      // If asset already has duration from server, just cache it locally
+      if (asset.duration != null) {
+        setAssetDurations((prev) => ({ ...prev, [asset.id]: asset.duration! }));
+        if (asset.width && asset.height) {
+          upsertAssetMetadata(asset.id, {
+            duration: asset.duration,
+            width: asset.width,
+            height: asset.height,
+          });
+        }
+        return false;
+      }
+      return true;
+    });
 
-    missingDurations.forEach((asset) => {
+    assetsMissingMetadata.forEach((asset) => {
       const defaultDuration =
         DEFAULT_ASSET_DURATIONS[asset.type] ?? DEFAULT_ASSET_DURATIONS.other;
+
+      // Check if server already has dimensions (just missing duration/local cache)
+      const hasServerDimensions = asset.width != null && asset.height != null;
+
       if (asset.type === "image") {
         setAssetDurations((prev) => {
           if (prev[asset.id] != null) return prev;
           return { ...prev, [asset.id]: defaultDuration };
         });
         upsertAssetMetadata(asset.id, { duration: defaultDuration });
+
+        // If server already has dimensions, skip client extraction
+        if (hasServerDimensions) {
+          upsertAssetMetadata(asset.id, {
+            width: asset.width,
+            height: asset.height,
+          });
+          return;
+        }
+
         const img = new Image();
         img.src = asset.url;
         img.onload = () => {
           if (cancelled) return;
+          const width = img.naturalWidth;
+          const height = img.naturalHeight;
           upsertAssetMetadata(asset.id, {
             duration: defaultDuration,
-            width: img.naturalWidth,
-            height: img.naturalHeight,
+            width,
+            height,
           });
+          // Persist to server
+          void persistMetadataToServer(asset.id, { width, height, duration: defaultDuration });
           img.remove();
         };
         img.onerror = () => img.remove();
         mediaElements.push(img);
         return;
       }
+
       const media =
         asset.type === "audio"
           ? document.createElement("audio")
@@ -432,17 +482,23 @@ export function useAssets() {
           if (prev[asset.id] && prev[asset.id] === duration) return prev;
           return { ...prev, [asset.id]: duration };
         });
-        upsertAssetMetadata(asset.id, {
-          duration,
-          width:
-            asset.type === "video" && media instanceof HTMLVideoElement
-              ? media.videoWidth || undefined
-              : undefined,
-          height:
-            asset.type === "video" && media instanceof HTMLVideoElement
-              ? media.videoHeight || undefined
-              : undefined,
-        });
+
+        const width =
+          asset.type === "video" && media instanceof HTMLVideoElement
+            ? media.videoWidth || undefined
+            : undefined;
+        const height =
+          asset.type === "video" && media instanceof HTMLVideoElement
+            ? media.videoHeight || undefined
+            : undefined;
+
+        upsertAssetMetadata(asset.id, { duration, width, height });
+
+        // Persist to server if we extracted new dimensions
+        if (!hasServerDimensions && (width || height || duration !== defaultDuration)) {
+          void persistMetadataToServer(asset.id, { width, height, duration });
+        }
+
         media.remove();
       };
       media.onerror = () => {
@@ -470,7 +526,7 @@ export function useAssets() {
         media.remove();
       });
     };
-  }, [assets, assetDurations, upsertAssetMetadata]);
+  }, [assets, assetDurations, upsertAssetMetadata, persistMetadataToServer]);
 
   return {
     assets,

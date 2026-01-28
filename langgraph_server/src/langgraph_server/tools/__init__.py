@@ -8,6 +8,7 @@ from typing import Dict
 from langchain_core.tools import BaseTool
 
 from .docs_tool import search_product_docs
+from .list_assets_tool import list_assets_tool
 from .time_tool import get_current_time_utc
 from .weather_tool import lookup_weather_snapshot
 
@@ -17,6 +18,7 @@ def get_registered_tools() -> Sequence[BaseTool]:
 
     return (
         get_current_time_utc,
+        list_assets_tool,
         search_product_docs,
         lookup_weather_snapshot,
     )

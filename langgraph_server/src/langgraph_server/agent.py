@@ -45,7 +45,12 @@ def create_graph(settings: Settings | None = None):
                 observation: str = f"Requested tool '{tool_call['name']}' is not available."
             else:
                 try:
-                    result = tool.invoke(tool_call["args"])
+                    args = dict(tool_call.get("args") or {})
+                    configurable = (config or {}).get("configurable", {})
+                    project_id = configurable.get("project_id")
+                    if project_id and "project_id" not in args:
+                        args["project_id"] = project_id
+                    result = tool.invoke(args, config=config)
                     observation = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
                 except Exception as exc:  # pragma: no cover - surface tool exceptions
                     observation = f"Tool '{tool_call['name']}' failed: {exc}"
@@ -65,7 +70,15 @@ def create_graph(settings: Settings | None = None):
     workflow.add_conditional_edges("model", should_continue, ["tool_node", END])
     workflow.add_edge("tool_node", "model")
 
-    return workflow.compile()
+    compiled = workflow.compile()
+    if resolved_settings.default_project_id:
+        compiled = compiled.with_config(
+            configurable={
+                "project_id": resolved_settings.default_project_id,
+            }
+        )
+
+    return compiled
 
 
 settings = get_settings()

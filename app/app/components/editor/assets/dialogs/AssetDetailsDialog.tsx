@@ -90,6 +90,18 @@ export function AssetDetailsDialog({
                 value={new Date(asset.uploadedAt).toLocaleString()}
               />
               <InfoCard label="Size" value={formatBytes(asset.size)} />
+              {asset.duration !== undefined && (
+                <InfoCard
+                  label="Duration"
+                  value={`${Number(asset.duration).toFixed(2)}s`}
+                />
+              )}
+              {(asset.width || asset.height) && (
+                <InfoCard
+                  label="Dimensions"
+                  value={`${asset.width ?? "?"}×${asset.height ?? "?"}`}
+                />
+              )}
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               <CopyableCard

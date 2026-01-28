@@ -65,9 +65,13 @@ def healthcheck() -> HealthResponse:
 @router.post("/invoke", response_model=InvokeResponse)
 def invoke(
     payload: InvokeRequest,
-    _settings: Settings = Depends(get_settings),
+    settings: Settings = Depends(get_settings),
 ):
-    config: RunnableConfig = {"configurable": {"thread_id": payload.thread_id}}
+    configurable: dict[str, str] = {"thread_id": payload.thread_id}
+    if settings.default_project_id:
+        configurable.setdefault("project_id", settings.default_project_id)
+
+    config: RunnableConfig = {"configurable": configurable}
 
     inputs = {"messages": _as_langchain_messages(payload.messages)}
     try:

@@ -11,6 +11,9 @@ export interface StoredAsset {
   size: number;
   uploadedAt: string;
   projectId?: string;
+  width?: number;
+  height?: number;
+  duration?: number;
 }
 
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
@@ -66,6 +69,9 @@ export function storedAssetToRemote(asset: StoredAsset): RemoteAsset {
     projectId: asset.projectId,
     url: `/uploads/${asset.fileName}`,
     type: determineAssetType(asset.mimeType, asset.name),
+    width: asset.width,
+    height: asset.height,
+    duration: asset.duration,
   };
 }
 
@@ -74,9 +80,12 @@ interface SaveBufferOptions {
   originalName: string;
   mimeType: string;
   projectId?: string;
+  width?: number;
+  height?: number;
+  duration?: number;
 }
 
-export async function saveBufferAsAsset({ data, originalName, mimeType, projectId }: SaveBufferOptions) {
+export async function saveBufferAsAsset({ data, originalName, mimeType, projectId, width, height, duration }: SaveBufferOptions) {
   await ensureAssetStorage();
   const fileExtension = path.extname(originalName) || "";
   const storedName = `${Date.now()}-${crypto.randomUUID()}${fileExtension}`;
@@ -92,6 +101,9 @@ export async function saveBufferAsAsset({ data, originalName, mimeType, projectI
     size: data.byteLength,
     uploadedAt: new Date().toISOString(),
     projectId,
+    width,
+    height,
+    duration,
   };
 
   const manifest = await readManifest();
@@ -142,6 +154,30 @@ export async function deleteAsset(assetId: string): Promise<boolean> {
 export async function getAssetById(assetId: string): Promise<StoredAsset | null> {
   const manifest = await readManifest();
   return manifest.find((a) => a.id === assetId) ?? null;
+}
+
+export interface AssetMetadataUpdate {
+  width?: number;
+  height?: number;
+  duration?: number;
+}
+
+export async function updateAssetMetadata(assetId: string, update: AssetMetadataUpdate): Promise<StoredAsset | null> {
+  const manifest = await readManifest();
+  const assetIndex = manifest.findIndex((a) => a.id === assetId);
+  if (assetIndex === -1) {
+    return null;
+  }
+
+  const asset = manifest[assetIndex];
+  if (update.width !== undefined) asset.width = update.width;
+  if (update.height !== undefined) asset.height = update.height;
+  if (update.duration !== undefined) asset.duration = update.duration;
+
+  manifest[assetIndex] = asset;
+  await writeManifest(manifest);
+
+  return asset;
 }
 
 export { UPLOAD_DIR };

@@ -162,6 +162,42 @@
     "mimeType": "video/mp4",
     "size": 2213166,
     "uploadedAt": "2026-01-28T15:13:03.711Z",
-    "projectId": "55ecf14d-99a6-4ca1-819c-dd8a928bf4af"
+    "projectId": "55ecf14d-99a6-4ca1-819c-dd8a928bf4af",
+    "width": 720,
+    "height": 1280,
+    "duration": 4
+  },
+  {
+    "id": "cecaa529-d1a8-455c-8741-69b38b859c3a",
+    "name": "veo-1769616572569.mp4",
+    "fileName": "1769616572569-b6eae71e-88bb-4f58-bd4a-2bdebeb297ea.mp4",
+    "mimeType": "video/mp4",
+    "size": 849075,
+    "uploadedAt": "2026-01-28T16:09:32.570Z",
+    "projectId": "55ecf14d-99a6-4ca1-819c-dd8a928bf4af",
+    "width": 1280,
+    "height": 720,
+    "duration": 4
+  },
+  {
+    "id": "6597fdc6-5313-4cc0-8330-181d4066d263",
+    "name": "banana-1769616947992.jpg",
+    "fileName": "1769616947993-bdbf29bf-3643-4363-acfe-222454f53ebf.jpg",
+    "mimeType": "image/jpeg",
+    "size": 707463,
+    "uploadedAt": "2026-01-28T16:15:47.993Z",
+    "projectId": "55ecf14d-99a6-4ca1-819c-dd8a928bf4af",
+    "width": 1024,
+    "height": 1024
+  },
+  {
+    "id": "482d31cb-0c7a-4422-a774-59e9a5c7d182",
+    "name": "tts-audio.mp3",
+    "fileName": "1769616987939-63999c02-5c5a-4ce4-94e5-9645890c8883.mp3",
+    "mimeType": "audio/mpeg",
+    "size": 2304,
+    "uploadedAt": "2026-01-28T16:16:27.940Z",
+    "projectId": "55ecf14d-99a6-4ca1-819c-dd8a928bf4af",
+    "duration": 0.576
   }
 ]

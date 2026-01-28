@@ -510,8 +510,14 @@ export function AssetsPanel() {
       const duration = resolveAssetDuration(asset);
       const name = asset.name || "Uploaded Asset";
       const start = getDuration();
+      const assetMetadata = metadata[asset.id];
 
-      const clipOptions = { assetId: asset.id };
+      // Prefer dimensions from asset (server), fallback to local metadata
+      const clipOptions = {
+        assetId: asset.id,
+        width: asset.width ?? assetMetadata?.width,
+        height: asset.height ?? assetMetadata?.height,
+      };
       if (asset.type === "video" || asset.type === "other") {
         const clip = createVideoClip(asset.url, name, start, duration, clipOptions);
         addClip(clip);
@@ -523,7 +529,7 @@ export function AssetsPanel() {
         addClip(clip);
       }
     },
-    [addClip, getDuration, resolveAssetDuration]
+    [addClip, getDuration, resolveAssetDuration, metadata]
   );
 
   const handleStartTranscription = useCallback(
@@ -953,14 +959,15 @@ export function AssetsPanel() {
     (asset: RemoteAsset, event: React.DragEvent<HTMLDivElement>) => {
       if (!event.dataTransfer) return;
       const assetMetadata = metadata[asset.id];
+      // Prefer dimensions from asset (server), fallback to local metadata
       const payload: AssetDragPayload = {
         id: asset.id,
         name: asset.name,
         url: asset.url,
         type: asset.type,
         duration: resolveAssetDuration(asset),
-        width: assetMetadata?.width,
-        height: assetMetadata?.height,
+        width: asset.width ?? assetMetadata?.width,
+        height: asset.height ?? assetMetadata?.height,
       };
       event.dataTransfer.setData(ASSET_DRAG_DATA_MIME, JSON.stringify(payload));
       event.dataTransfer.effectAllowed = "copy";
