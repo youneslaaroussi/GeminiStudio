@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleAuth } from "google-auth-library";
-import { saveBufferAsAsset } from "@/app/lib/server/asset-storage";
 import { parseGoogleServiceAccount, assertGoogleCredentials } from "@/app/lib/server/google-cloud";
-import { runAutoStepsForAsset } from "@/app/lib/server/pipeline/runner";
+import { initAdmin } from "@/app/lib/server/firebase-admin";
+import { getAuth } from "firebase-admin/auth";
+import { uploadToAssetService, isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
 
 export const runtime = "nodejs";
 
@@ -11,13 +12,24 @@ const LOCATION = process.env.LYRIA_LOCATION || "us-central1";
 const MODEL_ID = "lyria-002";
 
 const BASE_URL = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}`;
-const PREDICT_URL = `${BASE_URL}:predictLongRunning`;
-const FETCH_URL = `${BASE_URL}:fetchPredictOperation`;
-
-const POLL_INTERVAL_MS = 3000;
-const MAX_POLLS = 40; // ~2 minutes max wait
+const PREDICT_URL = `${BASE_URL}:predict`;
 
 const LYRIA_SERVICE_ACCOUNT_ENV = ["LYRIA_SERVICE_ACCOUNT_KEY", "VEO_SERVICE_ACCOUNT_KEY"] as const;
+
+async function verifyToken(request: NextRequest): Promise<string | null> {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+  const token = authHeader.slice(7);
+  try {
+    await initAdmin();
+    const decoded = await getAuth().verifyIdToken(token);
+    return decoded.uid;
+  } catch {
+    return null;
+  }
+}
 
 function assertEnv() {
   if (!PROJECT_ID) {
@@ -43,46 +55,17 @@ async function getAccessToken() {
   return token;
 }
 
-async function pollOperation(token: string, operationName: string) {
-  for (let attempt = 0; attempt < MAX_POLLS; attempt += 1) {
-    const response = await fetch(FETCH_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ operationName }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Failed to fetch Lyria operation status: ${text}`);
-    }
-
-    const payload = (await response.json()) as {
-      done?: boolean;
-      response?: {
-        audioSamples?: Array<{ bytesBase64Encoded?: string; mimeType?: string }>;
-      };
-      error?: { message?: string };
-    };
-
-    if (payload.error) {
-      throw new Error(payload.error.message || "Lyria returned an error");
-    }
-
-    if (payload.done) {
-      return payload.response;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-  }
-
-  throw new Error("Timed out waiting for Lyria music generation");
-}
-
 export async function POST(request: NextRequest) {
   try {
+    if (!isAssetServiceEnabled()) {
+      return NextResponse.json({ error: "Asset service not configured" }, { status: 503 });
+    }
+
+    const userId = await verifyToken(request);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const {
       prompt,
       negativePrompt,
@@ -101,6 +84,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     }
 
+    if (!projectId) {
+      return NextResponse.json({ error: "projectId is required" }, { status: 400 });
+    }
+
     // Cannot use both seed and sampleCount
     if (seed !== undefined && sampleCount !== undefined && sampleCount > 1) {
       return NextResponse.json(
@@ -112,22 +99,25 @@ export async function POST(request: NextRequest) {
     assertEnv();
     const token = await getAccessToken();
 
+    // Build instance object per Lyria API spec
     const instance: Record<string, unknown> = {
       prompt: prompt.trim(),
     };
 
+    // Use snake_case as per API spec
     if (negativePrompt?.trim()) {
-      instance.negativePrompt = negativePrompt.trim();
+      instance.negative_prompt = negativePrompt.trim();
     }
 
-    const parameters: Record<string, unknown> = {};
-
-    if (sampleCount !== undefined) {
-      parameters.sampleCount = Math.min(Math.max(1, sampleCount), 4);
-    }
-
+    // seed goes in instance, not parameters
     if (seed !== undefined) {
-      parameters.seed = seed;
+      instance.seed = seed;
+    }
+
+    // sample_count goes in parameters (snake_case)
+    const parameters: Record<string, unknown> = {};
+    if (sampleCount !== undefined && seed === undefined) {
+      parameters.sample_count = Math.min(Math.max(1, sampleCount), 4);
     }
 
     console.log("[LYRIA] Request:", { prompt: prompt.slice(0, 100), negativePrompt, sampleCount, seed });
@@ -153,41 +143,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const predictPayload = (await predictResponse.json()) as { name?: string };
-    if (!predictPayload.name) {
-      return NextResponse.json({ error: "Lyria did not return an operation name" }, { status: 500 });
-    }
+    const predictPayload = (await predictResponse.json()) as {
+      predictions?: Array<{ bytesBase64Encoded?: string; mimeType?: string }>;
+    };
 
-    console.log("[LYRIA] Operation started:", predictPayload.name);
+    const predictions = predictPayload.predictions ?? [];
 
-    const finalResponse = await pollOperation(token, predictPayload.name);
-    const audioSamples = finalResponse?.audioSamples ?? [];
-
-    if (audioSamples.length === 0 || !audioSamples[0]?.bytesBase64Encoded) {
+    if (predictions.length === 0 || !predictions[0]?.bytesBase64Encoded) {
       return NextResponse.json({ error: "Lyria response did not contain audio data" }, { status: 500 });
     }
 
-    // Save the first audio sample as an asset
-    const firstAudio = audioSamples[0];
+    // Save the first audio sample as an asset via asset service
+    const firstAudio = predictions[0];
+    console.log("[LYRIA] Generation complete, mimeType:", firstAudio.mimeType);
+
     const buffer = Buffer.from(firstAudio.bytesBase64Encoded!, "base64");
-    const mimeType = firstAudio.mimeType || "audio/wav";
-    const extension = mimeType === "audio/wav" ? ".wav" : ".mp3";
+    console.log("[LYRIA] Audio buffer size:", buffer.length, "bytes");
 
-    const asset = await saveBufferAsAsset({
-      data: buffer,
-      mimeType,
-      originalName: `lyria-${Date.now()}${extension}`,
-      projectId,
+    // Lyria outputs WAV at 48kHz
+    const mimeType = "audio/wav";
+    const fileName = `lyria-${Date.now()}.wav`;
+
+    const file = new File([buffer], fileName, { type: mimeType });
+    const result = await uploadToAssetService(userId, projectId, file, {
+      source: "lyria",
+      runPipeline: true,
     });
 
-    console.log("[LYRIA] Generated audio asset:", asset.id);
+    console.log("[LYRIA] Generated audio asset:", result.asset.id);
 
-    // Trigger asset pipeline in background (GCS upload, etc.)
-    runAutoStepsForAsset(asset.id).catch((error) => {
-      console.error(`[LYRIA] Pipeline failed for asset ${asset.id}:`, error);
-    });
-
-    return NextResponse.json({ asset }, { status: 201 });
+    return NextResponse.json({ asset: result.asset }, { status: 201 });
   } catch (error) {
     console.error("Lyria generation failed", error);
     const message = error instanceof Error ? error.message : "Unknown error";

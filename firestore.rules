@@ -19,6 +19,30 @@ service cloud.firestore {
       return isOwner(userId) || isCollaborator(userId, projectId);
     }
 
+    // User settings (integrations, preferences)
+    match /users/{userId}/settings/{settingId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId);
+    }
+
+    // Chat sessions
+    match /users/{userId}/chatSessions/{sessionId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId);
+    }
+
+    // Telegram link codes - users can create/read/delete codes for themselves
+    match /telegramLinkCodes/{code} {
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+    }
+
+    // Telegram integrations reverse lookup - users can delete their own entry
+    match /telegramIntegrations/{chatId} {
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
     // User-specific project documents
     match /users/{userId}/projects/{projectId} {
       // Owner and collaborators can read

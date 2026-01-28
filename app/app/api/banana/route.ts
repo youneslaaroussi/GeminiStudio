@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { saveBufferAsAsset } from "@/app/lib/server/asset-storage";
-import { runAutoStepsForAsset } from "@/app/lib/server/pipeline/runner";
+import { initAdmin } from "@/app/lib/server/firebase-admin";
+import { getAuth } from "firebase-admin/auth";
+import { uploadToAssetService, isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,21 @@ const BANANA_MODEL = process.env.BANANA_MODEL_ID || "gemini-3-pro-image-preview"
 interface BananaSourceImage {
   data?: string;
   mimeType?: string;
+}
+
+async function verifyToken(request: NextRequest): Promise<string | null> {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+  const token = authHeader.slice(7);
+  try {
+    await initAdmin();
+    const decoded = await getAuth().verifyIdToken(token);
+    return decoded.uid;
+  } catch {
+    return null;
+  }
 }
 
 function normalizeBase64(value?: string) {
@@ -26,44 +42,21 @@ function getImageExtension(mimeType: string) {
   return ".png";
 }
 
-function computeBananaDimensions(
-  aspectRatio: string,
-  imageSize: "1K" | "2K" | "4K"
-): { width: number; height: number } {
-  // Base size for the longer edge
-  const baseSizes: Record<string, number> = {
-    "1K": 1024,
-    "2K": 2048,
-    "4K": 4096,
-  };
-  const base = baseSizes[imageSize] || 1024;
-
-  // Parse aspect ratio (e.g., "16:9", "1:1", "9:16")
-  const [wRatio, hRatio] = aspectRatio.split(":").map(Number);
-  if (!wRatio || !hRatio) {
-    return { width: base, height: base }; // fallback to square
-  }
-
-  // Calculate dimensions based on aspect ratio
-  if (wRatio >= hRatio) {
-    // Landscape or square: width is the base
-    const width = base;
-    const height = Math.round((base * hRatio) / wRatio);
-    return { width, height };
-  } else {
-    // Portrait: height is the base
-    const height = base;
-    const width = Math.round((base * wRatio) / hRatio);
-    return { width, height };
-  }
-}
-
 export async function POST(request: NextRequest) {
   if (!API_KEY) {
     return NextResponse.json(
       { error: "GOOGLE_GENERATIVE_AI_API_KEY is not configured" },
       { status: 500 }
     );
+  }
+
+  if (!isAssetServiceEnabled()) {
+    return NextResponse.json({ error: "Asset service not configured" }, { status: 503 });
+  }
+
+  const userId = await verifyToken(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
@@ -77,6 +70,10 @@ export async function POST(request: NextRequest) {
 
     if (!prompt || !prompt.trim()) {
       return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
+    }
+
+    if (!projectId) {
+      return NextResponse.json({ error: "projectId is required" }, { status: 400 });
     }
 
     const normalizedSource = sourceImage?.mimeType
@@ -150,22 +147,17 @@ export async function POST(request: NextRequest) {
     const mimeType = inlineData.inlineData.mimeType || "image/png";
     const buffer = Buffer.from(inlineData.inlineData.data, "base64");
     const extension = getImageExtension(mimeType);
-    const dimensions = computeBananaDimensions(aspectRatio, imageSize);
-    const asset = await saveBufferAsAsset({
-      data: buffer,
-      mimeType,
-      originalName: `banana-${Date.now()}${extension}`,
-      projectId,
-      width: dimensions.width,
-      height: dimensions.height,
+    const fileName = `banana-${Date.now()}${extension}`;
+
+    const file = new File([buffer], fileName, { type: mimeType });
+    const result = await uploadToAssetService(userId, projectId, file, {
+      source: "banana",
+      runPipeline: true,
     });
 
-    // Trigger asset pipeline in background (GCS upload, etc.)
-    runAutoStepsForAsset(asset.id).catch((error) => {
-      console.error(`[Banana] Pipeline failed for asset ${asset.id}:`, error);
-    });
+    console.log("[Banana] Generated image asset:", result.asset.id);
 
-    return NextResponse.json({ asset }, { status: 201 });
+    return NextResponse.json({ asset: result.asset }, { status: 201 });
   } catch (error) {
     console.error("Banana Pro generation failed", error);
     const message = error instanceof Error ? error.message : "Unknown error";

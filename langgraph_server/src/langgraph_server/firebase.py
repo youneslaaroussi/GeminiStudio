@@ -225,6 +225,231 @@ def fetch_project(project_id: str, settings: Settings) -> Optional[dict[str, Any
     return None
 
 
+def verify_telegram_link_code(code: str, telegram_chat_id: str, telegram_username: str | None, settings: Settings) -> dict[str, Any] | None:
+    """
+    Verify a Telegram link code and create the integration.
+
+    1. Look up the code in telegramLinkCodes collection
+    2. Check if it's not expired
+    3. Create the integration in users/{userId}/settings/integrations
+    4. Create reverse lookup in telegramIntegrations/{telegramChatId}
+    5. Delete the used code
+
+    Returns the user info if successful, None otherwise.
+    """
+    import logging
+    from datetime import datetime
+    logger = logging.getLogger(__name__)
+
+    db = get_firestore_client(settings)
+
+    # Look up the code
+    code_ref = db.collection("telegramLinkCodes").document(code.upper())
+    code_doc = code_ref.get()
+
+    if not code_doc.exists:
+        logger.warning(f"Link code not found: {code}")
+        return None
+
+    code_data = code_doc.to_dict()
+
+    # Check expiry
+    expires_at = code_data.get("expiresAt")
+    if expires_at:
+        if hasattr(expires_at, "timestamp"):
+            expiry_timestamp = expires_at.timestamp()
+        else:
+            expiry_timestamp = expires_at
+        import time
+        if expiry_timestamp < time.time():
+            logger.warning(f"Link code expired: {code}")
+            code_ref.delete()
+            return None
+
+    user_id = code_data.get("userId")
+    user_email = code_data.get("userEmail")
+
+    if not user_id:
+        logger.error(f"Link code has no userId: {code}")
+        return None
+
+    # Create the integration record
+    now = datetime.utcnow().isoformat() + "Z"
+    integration_data = {
+        "telegram": {
+            "telegramChatId": telegram_chat_id,
+            "telegramUsername": telegram_username,
+            "linkedAt": now,
+        }
+    }
+
+    # Save to user's settings
+    user_integrations_ref = db.collection("users").document(user_id).collection("settings").document("integrations")
+    user_integrations_ref.set(integration_data, merge=True)
+
+    # Create reverse lookup for quick telegram -> user mapping
+    reverse_lookup_ref = db.collection("telegramIntegrations").document(telegram_chat_id)
+    reverse_lookup_ref.set({
+        "userId": user_id,
+        "userEmail": user_email,
+        "telegramUsername": telegram_username,
+        "linkedAt": now,
+    })
+
+    # Delete the used code
+    code_ref.delete()
+
+    logger.info(f"Successfully linked Telegram {telegram_chat_id} to user {user_id}")
+
+    return {
+        "userId": user_id,
+        "userEmail": user_email,
+    }
+
+
+def get_user_by_telegram_chat_id(telegram_chat_id: str, settings: Settings) -> dict[str, Any] | None:
+    """
+    Look up a Firebase user by their Telegram chat ID.
+
+    Returns user info if found, None otherwise.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    db = get_firestore_client(settings)
+
+    # Look up in reverse mapping
+    lookup_ref = db.collection("telegramIntegrations").document(telegram_chat_id)
+    lookup_doc = lookup_ref.get()
+
+    if not lookup_doc.exists:
+        logger.info(f"No user found for Telegram chat ID: {telegram_chat_id}")
+        return None
+
+    data = lookup_doc.to_dict()
+    return {
+        "userId": data.get("userId"),
+        "userEmail": data.get("userEmail"),
+        "telegramUsername": data.get("telegramUsername"),
+    }
+
+
+def get_or_create_telegram_chat_session(user_id: str, telegram_chat_id: str, settings: Settings) -> dict[str, Any]:
+    """
+    Get or create a chat session for Telegram conversations.
+    Uses telegram_chat_id as the session ID for consistency.
+    """
+    import logging
+    from datetime import datetime
+    logger = logging.getLogger(__name__)
+
+    db = get_firestore_client(settings)
+
+    session_id = f"telegram-{telegram_chat_id}"
+    session_ref = db.collection("users").document(user_id).collection("chatSessions").document(session_id)
+    session_doc = session_ref.get()
+
+    if session_doc.exists:
+        data = session_doc.to_dict()
+        data["id"] = session_id
+        return data
+
+    # Create new session
+    now = datetime.utcnow().isoformat() + "Z"
+    new_session = {
+        "id": session_id,
+        "name": "Telegram Chat",
+        "currentMode": "agent",
+        "messages": [],
+        "createdAt": now,
+        "updatedAt": now,
+        "source": "telegram",
+        "telegramChatId": telegram_chat_id,
+    }
+    session_ref.set(new_session)
+    logger.info(f"Created new Telegram chat session: {session_id}")
+    return new_session
+
+
+def get_telegram_chat_id_for_user(user_id: str, settings: Settings) -> str | None:
+    """Get the Telegram chat ID for a user if they have linked Telegram."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    db = get_firestore_client(settings)
+
+    integrations_ref = db.collection("users").document(user_id).collection("settings").document("integrations")
+    integrations_doc = integrations_ref.get()
+
+    if not integrations_doc.exists:
+        return None
+
+    data = integrations_doc.to_dict()
+    telegram = data.get("telegram")
+    if telegram:
+        return telegram.get("telegramChatId")
+    return None
+
+
+def create_project(user_id: str, name: str, settings: Settings) -> dict[str, Any]:
+    """Create a new project for a user."""
+    import logging
+    import uuid
+    import time
+    logger = logging.getLogger(__name__)
+
+    db = get_firestore_client(settings)
+
+    project_id = str(uuid.uuid4())
+    now = int(time.time() * 1000)
+
+    project_data = {
+        "name": name,
+        "currentBranch": "main",
+        "lastModified": now,
+        "owner": user_id,
+        "collaborators": [],
+        "isPublic": False,
+    }
+
+    project_ref = db.collection("users").document(user_id).collection("projects").document(project_id)
+    project_ref.set(project_data)
+
+    logger.info(f"Created project {project_id} for user {user_id}")
+
+    return {
+        "id": project_id,
+        "name": name,
+        "lastModified": now,
+    }
+
+
+async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> bool:
+    """Send a message to a Telegram chat."""
+    import httpx
+    import logging
+    logger = logging.getLogger(__name__)
+
+    if not settings.telegram_bot_token:
+        logger.warning("Telegram bot token not configured")
+        return False
+
+    api_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            api_url,
+            json={"chat_id": chat_id, "text": text},
+            timeout=10.0
+        )
+        if response.status_code == 200:
+            logger.info(f"Sent Telegram message to {chat_id}")
+            return True
+        else:
+            logger.error(f"Failed to send Telegram message: {response.text}")
+            return False
+
+
 def fetch_user_projects(user_id: str, settings: Settings) -> list[dict[str, Any]]:
     """
     Fetch all projects for a user.

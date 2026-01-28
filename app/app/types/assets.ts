@@ -13,6 +13,8 @@ export interface RemoteAsset {
   width?: number;
   height?: number;
   duration?: number;
+  gcsUri?: string;
+  signedUrl?: string;
 }
 
 export interface AssetDragPayload {

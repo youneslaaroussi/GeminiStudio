@@ -11,7 +11,7 @@ export const listAssetsTool: ToolDefinition<typeof listAssetsSchema, Project> = 
   label: "List Assets",
   description:
     "Return the uploaded assets currently available in the Assets panel.",
-  runLocation: "server",
+  runLocation: "client",
   inputSchema: listAssetsSchema,
   fields: [],
   async run() {

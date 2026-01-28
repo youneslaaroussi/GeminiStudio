@@ -5,12 +5,10 @@ import type { RemoteAsset } from "@/app/types/assets";
 
 export async function loadAssetsSnapshot(): Promise<RemoteAsset[]> {
   if (typeof window === "undefined") {
-    const { ensureAssetStorage, readManifest, storedAssetToRemote } = await import(
-      "@/app/lib/server/asset-storage"
-    );
-    await ensureAssetStorage();
-    const manifest = await readManifest();
-    return manifest.map((asset) => storedAssetToRemote(asset));
+    // Server-side: cannot load assets without user context
+    // Asset service requires userId and projectId which aren't available here
+    console.warn("[asset-utils] loadAssetsSnapshot called on server - returning empty array");
+    return [];
   }
   const assetsStore = useAssetsStore.getState();
   if (assetsStore.assets.length > 0) {

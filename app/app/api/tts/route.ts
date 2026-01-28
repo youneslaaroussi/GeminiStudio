@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { synthesizeSpeech, type SupportedTtsEncoding } from "@/app/lib/services/tts";
-import { saveBufferAsAsset } from "@/app/lib/server/asset-storage";
-import { runAutoStepsForAsset } from "@/app/lib/server/pipeline/runner";
+import { initAdmin } from "@/app/lib/server/firebase-admin";
+import { getAuth } from "firebase-admin/auth";
+import { uploadToAssetService, isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
 
 export const runtime = "nodejs";
 
@@ -28,6 +29,21 @@ const ENCODING_METADATA: Record<SupportedTtsEncoding, { extension: string; mimeT
   linear16: { extension: ".wav", mimeType: "audio/wav" },
 };
 
+async function verifyToken(request: NextRequest): Promise<string | null> {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+  const token = authHeader.slice(7);
+  try {
+    await initAdmin();
+    const decoded = await getAuth().verifyIdToken(token);
+    return decoded.uid;
+  } catch {
+    return null;
+  }
+}
+
 function buildFileName(baseName: string, encoding: SupportedTtsEncoding) {
   const { extension } = ENCODING_METADATA[encoding];
   const trimmed = baseName.replace(/[\\/:*?"<>|]+/g, "").slice(0, 120).trim();
@@ -37,6 +53,15 @@ function buildFileName(baseName: string, encoding: SupportedTtsEncoding) {
 }
 
 export async function POST(request: NextRequest) {
+  if (!isAssetServiceEnabled()) {
+    return NextResponse.json({ error: "Asset service not configured" }, { status: 503 });
+  }
+
+  const userId = await verifyToken(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const payload = requestSchema.parse(await request.json());
     const encoding: SupportedTtsEncoding = payload.audioEncoding ?? "mp3";
@@ -52,19 +77,17 @@ export async function POST(request: NextRequest) {
 
     const { mimeType } = ENCODING_METADATA[encoding];
     const fileName = buildFileName(payload.fileName ?? "tts-audio", encoding);
-    const asset = await saveBufferAsAsset({
-      data: audioBuffer,
-      originalName: fileName,
-      mimeType,
-      projectId: payload.projectId,
+
+    // Create File from Buffer - use Uint8Array view to handle the conversion
+    const file = new File([new Uint8Array(audioBuffer)], fileName, { type: mimeType });
+    const result = await uploadToAssetService(userId, payload.projectId, file, {
+      source: "tts",
+      runPipeline: true,
     });
 
-    // Trigger asset pipeline in background (GCS upload, etc.)
-    runAutoStepsForAsset(asset.id).catch((error) => {
-      console.error(`[TTS] Pipeline failed for asset ${asset.id}:`, error);
-    });
+    console.log("[TTS] Generated audio asset:", result.asset.id);
 
-    return NextResponse.json({ asset }, { status: 201 });
+    return NextResponse.json({ asset: result.asset }, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

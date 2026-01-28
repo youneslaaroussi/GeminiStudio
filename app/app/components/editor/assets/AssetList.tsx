@@ -16,7 +16,6 @@ import {
 import { cn } from "@/lib/utils";
 import type { RemoteAsset, AssetDragPayload } from "@/app/types/assets";
 import { ASSET_DRAG_DATA_MIME } from "@/app/types/assets";
-import type { PipelineStepState } from "@/app/types/pipeline";
 import type { ProjectTranscription } from "@/app/types/transcription";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,7 +40,6 @@ interface AssetListProps {
   error: string | null;
   metadata: Record<string, { duration?: number; width?: number; height?: number }>;
   transcriptions: Record<string, ProjectTranscription>;
-  getPipelineStep: (assetId: string, stepId: string) => PipelineStepState | undefined;
   resolveAssetDuration: (asset: RemoteAsset) => number;
   onAddToTimeline: (asset: RemoteAsset) => void;
   onStartTranscription: (asset: RemoteAsset) => void;
@@ -67,7 +65,6 @@ export function AssetList({
   error,
   metadata,
   transcriptions,
-  getPipelineStep,
   resolveAssetDuration,
   onAddToTimeline,
   onStartTranscription,
@@ -145,12 +142,9 @@ export function AssetList({
   return (
     <div className="divide-y divide-border">
       {assets.map((asset) => {
-        const transcriptionStep = getPipelineStep(asset.id, "transcription");
         const transcription = transcriptions[asset.id];
         const canTranscribe = asset.type === "audio" || asset.type === "video";
-        const isTranscribing =
-          transcriptionStep?.status === "waiting" ||
-          transcriptionStep?.status === "running";
+        const isTranscribing = transcription?.status === "processing" || transcription?.status === "pending";
         const hasTranscript = transcription?.status === "completed";
         const duration = resolveAssetDuration(asset);
 
@@ -166,11 +160,22 @@ export function AssetList({
 
                 {/* Thumbnail / Icon */}
                 <div className="size-10 rounded-md bg-muted flex items-center justify-center shrink-0 overflow-hidden">
-                  {asset.type === "image" || asset.type === "video" ? (
+                  {asset.type === "image" ? (
                     <img
                       src={asset.thumbnailUrl || asset.url}
                       alt=""
                       className="size-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        e.currentTarget.nextElementSibling?.classList.remove("hidden");
+                      }}
+                    />
+                  ) : asset.type === "video" ? (
+                    <video
+                      src={asset.url}
+                      className="size-full object-cover"
+                      muted
+                      preload="metadata"
                       onError={(e) => {
                         e.currentTarget.style.display = "none";
                         e.currentTarget.nextElementSibling?.classList.remove("hidden");

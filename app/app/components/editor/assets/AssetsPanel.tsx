@@ -40,6 +40,8 @@ import { UploadZone } from "./UploadZone";
 import { UploadDialog } from "./dialogs/UploadDialog";
 import { TranscriptDialog } from "./dialogs/TranscriptDialog";
 import { AssetDetailsDialog } from "./dialogs/AssetDetailsDialog";
+import { usePipelinePolling } from "@/app/lib/hooks/usePipelinePolling";
+import { usePipelineStates } from "@/app/lib/hooks/usePipelineStates";
 
 import {
   VideoPanel,
@@ -72,18 +74,18 @@ export function AssetsPanel() {
     assets,
     isLoading,
     error,
-    pipelineStates,
     transcriptions,
     metadata,
     projectId,
     fetchAssets,
     addAssets,
     deleteAsset,
-    getPipelineStep,
     resolveAssetDuration,
     startTranscription,
-    refreshPipelineStates,
   } = useAssets();
+
+  // Pipeline states for all assets (for Jobs tab)
+  const { states: pipelineStates, refresh: refreshPipelineStates } = usePipelineStates(projectId);
 
   const addClip = useProjectStore((s) => s.addClip);
   const getDuration = useProjectStore((s) => s.getDuration);
@@ -171,14 +173,9 @@ export function AssetsPanel() {
   const [textContent, setTextContent] = useState("");
   const [textSectionOpen, setTextSectionOpen] = useState(false);
 
-  // Count running jobs for badge (pipeline + veo)
-  const runningPipelineCount = Object.values(pipelineStates).reduce((count, steps) => {
-    return count + steps.filter((s) =>
-      s.status === "running" || s.status === "queued" || s.status === "waiting"
-    ).length;
-  }, 0);
+  // Count running jobs for badge
   const runningVeoCount = veoJobs.filter((j) => j.status === "pending" || j.status === "running").length;
-  const runningJobsCount = runningPipelineCount + runningVeoCount;
+  const runningJobsCount = runningVeoCount;
 
   // Handle files from dropzone
   const handleFilesSelected = useCallback((files: File[]) => {
@@ -249,9 +246,13 @@ export function AssetsPanel() {
     ? assets.find((a) => a.id === detailsDialogAssetId)
     : null;
 
-  const detailsDialogSteps = detailsDialogAssetId
-    ? pipelineStates[detailsDialogAssetId] ?? []
-    : [];
+  // Fetch pipeline state for the asset details dialog
+  const { state: pipelineState } = usePipelinePolling(
+    detailsDialogAssetId,
+    projectId,
+    { enabled: !!detailsDialogAssetId }
+  );
+  const detailsDialogSteps = pipelineState?.steps ?? [];
 
   const detailsDialogTranscription = detailsDialogAssetId
     ? transcriptions[detailsDialogAssetId]
@@ -338,7 +339,6 @@ export function AssetsPanel() {
                   error={error}
                   metadata={metadata}
                   transcriptions={transcriptions}
-                  getPipelineStep={getPipelineStep}
                   resolveAssetDuration={resolveAssetDuration}
                   onAddToTimeline={handleAddToTimeline}
                   onStartTranscription={startTranscription}
@@ -448,7 +448,7 @@ export function AssetsPanel() {
               assets={assets}
               pipelineStates={pipelineStates}
               veoJobs={veoJobs}
-              onRefresh={refreshPipelineStates}
+              onRefresh={() => { fetchAssets(); refreshPipelineStates(); }}
               isLoading={isLoading}
             />
           </div>
@@ -481,7 +481,7 @@ export function AssetsPanel() {
         asset={detailsDialogAsset ?? null}
         pipelineSteps={detailsDialogSteps}
         transcription={detailsDialogTranscription}
-        onPipelineRefresh={refreshPipelineStates}
+        onPipelineRefresh={fetchAssets}
       />
     </>
   );

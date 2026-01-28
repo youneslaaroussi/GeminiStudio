@@ -243,9 +243,15 @@ export function TopBar({ previewCanvas }: TopBarProps) {
         <div className="flex items-baseline gap-2">
           <EditableInput
             value={project.name}
-            onValueCommit={(val) =>
-              updateProjectSettings({ name: val || "Untitled Project" })
-            }
+            onValueCommit={(val) => {
+              const newName = val || "Untitled Project";
+              updateProjectSettings({ name: newName });
+              // Also update projects list metadata to keep in sync
+              if (projectId) {
+                const userId = useProjectsListStore.getState().userId;
+                updateListProject(projectId, { name: newName }, userId ?? undefined);
+              }
+            }}
             className="text-sm font-semibold text-foreground bg-transparent border border-transparent focus:border-border rounded px-1 py-0.5 min-w-[120px]"
           />
           <span className="text-xs text-muted-foreground">

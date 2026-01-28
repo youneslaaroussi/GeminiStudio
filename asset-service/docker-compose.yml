@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  asset-service:
+    build: .
+    ports:
+      - "8081:8081"
+    environment:
+      - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
+      - GOOGLE_SERVICE_ACCOUNT_KEY=${GOOGLE_SERVICE_ACCOUNT_KEY}
+      - ASSET_GCS_BUCKET=${ASSET_GCS_BUCKET}
+      - FIREBASE_SERVICE_ACCOUNT_KEY=${FIREBASE_SERVICE_ACCOUNT_KEY}
+      - SPEECH_PROJECT_ID=${SPEECH_PROJECT_ID}
+      - SPEECH_LOCATION=${SPEECH_LOCATION:-global}
+      - SPEECH_RECOGNIZER_ID=${SPEECH_RECOGNIZER_ID:-_}
+      - SPEECH_MODEL=${SPEECH_MODEL:-chirp_3}
+      - SPEECH_LANGUAGE_CODES=${SPEECH_LANGUAGE_CODES:-en-US}
+      - SPEECH_GCS_BUCKET=${SPEECH_GCS_BUCKET}
+      - REDIS_URL=redis://redis:6379/0
+      - DEBUG=${DEBUG:-false}
+    volumes:
+      # Mount service account key if using file path
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-/dev/null}:/app/credentials.json:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  redis-data:

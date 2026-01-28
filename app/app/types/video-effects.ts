@@ -13,6 +13,8 @@ export interface VideoEffectJob {
   assetId: string;
   assetName: string;
   assetUrl: string;
+  userId?: string;
+  projectId?: string;
   status: VideoEffectStatus;
   params: Record<string, unknown>;
   resultAssetId?: string;

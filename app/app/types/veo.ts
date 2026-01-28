@@ -10,6 +10,7 @@ export interface VeoJobParams {
   negativePrompt?: string;
   personGeneration?: "allow_all" | "allow_adult" | "dont_allow";
   projectId?: string;
+  userId?: string;
   // Base64 encoded media inputs
   image?: { data?: string; mimeType?: string };
   lastFrame?: { data?: string; mimeType?: string };

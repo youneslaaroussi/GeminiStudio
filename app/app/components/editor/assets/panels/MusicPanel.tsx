@@ -2,10 +2,12 @@
 
 import { useState, useCallback } from "react";
 import { Loader2, Music, Sparkles } from "lucide-react";
+import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import type { RemoteAsset } from "@/app/types/assets";
 
 interface MusicPanelProps {
@@ -49,9 +51,10 @@ export function MusicPanel({ projectId, onGenerated }: MusicPanelProps) {
         payload.seed = seed;
       }
 
+      const authHeaders = await getAuthHeaders();
       const response = await fetch("/api/lyria", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify(payload),
       });
       const data = (await response.json()) as {
@@ -117,20 +120,18 @@ export function MusicPanel({ projectId, onGenerated }: MusicPanelProps) {
 
         {/* Seed Option */}
         <div className="space-y-2">
-          <label className="flex items-center justify-between cursor-pointer">
+          <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-xs font-medium text-foreground">Use seed</span>
               <p className="text-[11px] text-muted-foreground">
                 Reproducible results
               </p>
             </div>
-            <input
-              type="checkbox"
+            <Switch
               checked={useSeed}
-              onChange={(e) => setUseSeed(e.target.checked)}
-              className="h-4 w-4 rounded border-border"
+              onCheckedChange={setUseSeed}
             />
-          </label>
+          </div>
           {useSeed && (
             <Input
               type="number"

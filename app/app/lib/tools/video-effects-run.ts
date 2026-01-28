@@ -80,41 +80,39 @@ export const videoEffectsRunTool: ToolDefinition<typeof runEffectSchema, Project
       }
 
       let job: VideoEffectJob;
+      // Server-side direct calls are not supported - the service requires userId/projectId
+      // which must come from authenticated API requests
       if (typeof window === "undefined") {
-        const { startVideoEffectJob } = await import(
-          "@/app/lib/server/video-effects/service"
-        );
-        job = await startVideoEffectJob({
+        return {
+          status: "error" as const,
+          error: "Video effects must be run from the client side (requires authentication context).",
+        };
+      }
+
+      const response = await fetch("/api/video-effects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           effectId: input.effectId,
           assetId: input.assetId.trim(),
           params,
-        });
-      } else {
-        const response = await fetch("/api/video-effects", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            effectId: input.effectId,
-            assetId: input.assetId.trim(),
-            params,
-          }),
-        });
-        if (!response.ok) {
-          const errorPayload = (await response.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          const message =
-            errorPayload?.error ??
-            `Failed to start video effect (status ${response.status})`;
-          return {
-            status: "error" as const,
-            error: message,
-          };
-        }
-
-        const payload = (await response.json()) as { job: VideoEffectJob };
-        job = payload.job;
+        }),
+      });
+      if (!response.ok) {
+        const errorPayload = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        const message =
+          errorPayload?.error ??
+          `Failed to start video effect (status ${response.status})`;
+        return {
+          status: "error" as const,
+          error: message,
+        };
       }
+
+      const payload = (await response.json()) as { job: VideoEffectJob };
+      job = payload.job;
 
       return {
         status: "success" as const,

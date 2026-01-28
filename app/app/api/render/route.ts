@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Project, TimelineClip } from "@/app/types/timeline";
-import { getPipelineStateForAsset } from "@/app/lib/server/pipeline/store";
+import { initAdmin } from "@/app/lib/server/firebase-admin";
+import { getAuth } from "firebase-admin/auth";
+import { getPipelineStateFromService, isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
 import { createV4SignedUrl } from "@/app/lib/server/gcs-signed-url";
 
 const RENDERER_API_URL = process.env.RENDERER_API_URL || "http://localhost:4000";
@@ -23,14 +25,38 @@ interface RendererJobResponse {
   jobId: string;
 }
 
+async function verifyToken(request: NextRequest): Promise<string | null> {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+  const token = authHeader.slice(7);
+  try {
+    await initAdmin();
+    const decoded = await getAuth().verifyIdToken(token);
+    return decoded.uid;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Collect all asset IDs from project clips
+ * Collect asset IDs from clips that need to wait for upload.
+ * Skips clips that already have a valid src URL (not blob:).
  */
-function collectAssetIds(project: Project): string[] {
+function collectPendingAssetIds(project: Project): string[] {
   const assetIds: string[] = [];
   for (const layer of project.layers) {
     for (const clip of layer.clips) {
-      if ("assetId" in clip && clip.assetId) {
+      if ("assetId" in clip && clip.assetId && "src" in clip) {
+        const src = clip.src || "";
+        // Skip if already has a valid URL (http/https or local api proxy)
+        if (src.startsWith("http") || src.startsWith("/api/")) {
+          console.log(`[Render] Clip ${clip.assetId} already has valid src, skipping upload wait`);
+          continue;
+        }
+        // Need to wait for blob: URLs or empty src
+        console.log(`[Render] Clip ${clip.assetId} needs upload wait, src: ${src.substring(0, 50)}`);
         assetIds.push(clip.assetId);
       }
     }
@@ -39,28 +65,59 @@ function collectAssetIds(project: Project): string[] {
 }
 
 /**
- * Check if an asset's cloud-upload step is complete
+ * Check if an asset's upload step is complete.
+ * Returns: { uploaded: boolean, hasPipeline: boolean }
+ * - uploaded=true means the asset is ready in GCS
+ * - hasPipeline=false means no pipeline exists (asset not being processed, skip waiting)
  */
-async function isAssetUploaded(assetId: string): Promise<boolean> {
+async function checkAssetUploadStatus(userId: string, projectId: string, assetId: string): Promise<{ uploaded: boolean; hasPipeline: boolean }> {
   try {
-    const pipelineState = await getPipelineStateForAsset(assetId);
-    const uploadStep = pipelineState.steps.find((s) => s.id === "cloud-upload");
-    return uploadStep?.status === "succeeded";
-  } catch {
-    return false;
+    const pipelineState = await getPipelineStateFromService(userId, projectId, assetId);
+    const uploadStep = pipelineState.steps.find((s) => s.id === "upload" || s.id === "cloud-upload");
+    console.log(`[Render] Asset ${assetId} pipeline state:`, JSON.stringify({
+      steps: pipelineState.steps.map(s => ({ id: s.id, status: s.status })),
+      uploadStep: uploadStep ? { status: uploadStep.status, metadata: uploadStep.metadata } : null,
+    }));
+    return {
+      uploaded: uploadStep?.status === "succeeded",
+      hasPipeline: true,
+    };
+  } catch (err) {
+    // No pipeline state - asset isn't being uploaded via the pipeline
+    console.log(`[Render] Asset ${assetId} no pipeline:`, err);
+    return { uploaded: false, hasPipeline: false };
   }
 }
 
 /**
- * Wait for all assets to be uploaded to GCS
- * Throws if timeout is reached
+ * Wait for assets with active pipelines to be uploaded to GCS.
+ * Assets without a pipeline (not being uploaded) are skipped - they'll use local URLs.
  */
-async function waitForAssetUploads(assetIds: string[]): Promise<void> {
+async function waitForAssetUploads(userId: string, projectId: string, assetIds: string[]): Promise<void> {
   if (assetIds.length === 0) return;
 
   const startTime = Date.now();
   const pending = new Set(assetIds);
+  const skipped = new Set<string>();
 
+  // First pass: identify which assets have active pipelines
+  for (const assetId of assetIds) {
+    const status = await checkAssetUploadStatus(userId, projectId, assetId);
+    if (!status.hasPipeline) {
+      // No pipeline - skip this asset (will use local/blob URL)
+      pending.delete(assetId);
+      skipped.add(assetId);
+    } else if (status.uploaded) {
+      // Already uploaded
+      pending.delete(assetId);
+    }
+  }
+
+  if (skipped.size > 0) {
+    console.log(`[Render] Skipping ${skipped.size} asset(s) without active pipeline`);
+  }
+
+  // Wait for remaining assets with active pipelines
   while (pending.size > 0) {
     if (Date.now() - startTime > UPLOAD_TIMEOUT_MS) {
       throw new Error(
@@ -69,7 +126,8 @@ async function waitForAssetUploads(assetIds: string[]): Promise<void> {
     }
 
     for (const assetId of pending) {
-      if (await isAssetUploaded(assetId)) {
+      const status = await checkAssetUploadStatus(userId, projectId, assetId);
+      if (status.uploaded || !status.hasPipeline) {
         pending.delete(assetId);
       }
     }
@@ -83,10 +141,10 @@ async function waitForAssetUploads(assetIds: string[]): Promise<void> {
 /**
  * Get a signed GCS URL for an asset, either from pipeline state or generate fresh
  */
-async function getAssetSignedUrl(assetId: string): Promise<string | null> {
+async function getAssetSignedUrl(userId: string, projectId: string, assetId: string): Promise<string | null> {
   try {
-    const pipelineState = await getPipelineStateForAsset(assetId);
-    const uploadStep = pipelineState.steps.find((s) => s.id === "cloud-upload");
+    const pipelineState = await getPipelineStateFromService(userId, projectId, assetId);
+    const uploadStep = pipelineState.steps.find((s) => s.id === "upload" || s.id === "cloud-upload");
 
     if (uploadStep?.status === "succeeded" && uploadStep.metadata) {
       const { bucket, objectName } = uploadStep.metadata as { bucket?: string; objectName?: string };
@@ -111,13 +169,15 @@ async function getAssetSignedUrl(assetId: string): Promise<string | null> {
  */
 async function transformClipUrls(
   clip: TimelineClip,
-  urlMap: Map<string, string>
+  urlMap: Map<string, string>,
+  userId: string,
+  projectId: string
 ): Promise<TimelineClip> {
   if (!("src" in clip) || !clip.assetId) {
     return clip;
   }
 
-  const signedUrl = await getAssetSignedUrl(clip.assetId);
+  const signedUrl = await getAssetSignedUrl(userId, projectId, clip.assetId);
   if (signedUrl) {
     urlMap.set(clip.assetId, signedUrl);
     return { ...clip, src: signedUrl };
@@ -130,7 +190,7 @@ async function transformClipUrls(
  * Transform project to use signed GCS URLs for all assets
  * Also updates transcription assetUrls to match transformed clip URLs
  */
-async function transformProjectForRenderer(project: Project): Promise<Project> {
+async function transformProjectForRenderer(project: Project, userId: string, projectId: string): Promise<Project> {
   // Map to track assetId -> signedUrl for transcription updates
   const assetUrlMap = new Map<string, string>();
 
@@ -138,7 +198,7 @@ async function transformProjectForRenderer(project: Project): Promise<Project> {
     project.layers.map(async (layer) => ({
       ...layer,
       clips: await Promise.all(
-        layer.clips.map((clip) => transformClipUrls(clip, assetUrlMap))
+        layer.clips.map((clip) => transformClipUrls(clip, assetUrlMap, userId, projectId))
       ),
     }))
   );
@@ -182,6 +242,15 @@ function calculateTimelineDuration(project: Project): number {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!isAssetServiceEnabled()) {
+      return NextResponse.json({ error: "Asset service not configured" }, { status: 503 });
+    }
+
+    const userId = await verifyToken(request);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = (await request.json()) as RenderRequest;
     const { project, projectId, output } = body;
 
@@ -199,16 +268,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Wait for all assets to be uploaded to GCS before proceeding
-    const assetIds = collectAssetIds(project);
-    if (assetIds.length > 0) {
-      console.log(`[Render] Waiting for ${assetIds.length} asset(s) to upload...`);
-      await waitForAssetUploads(assetIds);
-      console.log("[Render] All assets uploaded to GCS");
+    // Wait for assets that are still uploading (blob: URLs)
+    const pendingAssetIds = collectPendingAssetIds(project);
+    if (pendingAssetIds.length > 0) {
+      console.log(`[Render] Waiting for ${pendingAssetIds.length} asset(s) to upload...`);
+      await waitForAssetUploads(userId, projectId, pendingAssetIds);
+      console.log("[Render] All pending assets uploaded to GCS");
     }
 
     // Transform project to use signed GCS URLs
-    const transformedProject = await transformProjectForRenderer(project);
+    const transformedProject = await transformProjectForRenderer(project, userId, projectId);
 
     // Generate output path and signed upload URL
     const timestamp = Date.now();

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Upload, Trash2, FolderOpen, FileJson, LogOut } from "lucide-react";
+import { Plus, Upload, Trash2, FolderOpen, FileJson, LogOut, Settings } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -115,6 +115,13 @@ export default function ProjectsPage() {
             >
               <Plus className="size-4 inline mr-2" />
               New Project
+            </button>
+            <button
+              onClick={() => router.push("/settings")}
+              className="flex items-center gap-2 px-3 py-2 bg-slate-800 text-slate-100 rounded text-xs font-medium border border-slate-700 hover:bg-slate-700 transition-colors"
+            >
+              <Settings className="size-4" />
+              Settings
             </button>
             <button
               onClick={handleLogout}

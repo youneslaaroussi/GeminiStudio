@@ -12,6 +12,7 @@ import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { useVideoEffectsStore } from "@/app/lib/store/video-effects-store";
 import type { ToolFieldDefinition } from "@/app/lib/tools/types";
 import type { VideoEffectJob } from "@/app/types/video-effects";
+import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 
 interface VideoEffectsPanelProps {
   clip: VideoClip;
@@ -121,7 +122,8 @@ export function VideoEffectsPanel({ clip }: VideoEffectsPanelProps) {
   const pollJob = useCallback(
     async (jobId: string) => {
       try {
-        const response = await fetch(`/api/video-effects/${jobId}`);
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch(`/api/video-effects/${jobId}`, { headers: authHeaders });
         if (!response.ok) {
           if (response.status === 404) {
             stopPolling(jobId);
@@ -187,9 +189,10 @@ export function VideoEffectsPanel({ clip }: VideoEffectsPanelProps) {
     const controller = new AbortController();
     (async () => {
       try {
+        const authHeaders = await getAuthHeaders();
         const response = await fetch(
           `/api/video-effects?assetId=${asset.id}`,
-          { signal: controller.signal }
+          { signal: controller.signal, headers: authHeaders }
         );
         if (!response.ok) return;
         const payload = (await response.json()) as { jobs?: VideoEffectJob[] };
@@ -223,10 +226,12 @@ export function VideoEffectsPanel({ clip }: VideoEffectsPanelProps) {
     if (!asset || !selectedEffect || isSubmitting) return;
     try {
       setIsSubmitting(true);
+      const authHeaders = await getAuthHeaders();
       const response = await fetch("/api/video-effects", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...authHeaders,
         },
         body: JSON.stringify({
           assetId: asset.id,

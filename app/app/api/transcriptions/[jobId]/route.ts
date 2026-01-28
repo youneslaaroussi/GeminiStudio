@@ -6,7 +6,6 @@ import {
   serializeJob,
 } from "@/app/lib/server/transcriptions-store";
 import type { TranscriptionSegment } from "@/app/types/transcription";
-import { updatePipelineStep } from "@/app/lib/server/pipeline/store";
 
 export const runtime = "nodejs";
 
@@ -166,12 +165,6 @@ export async function GET(
       status: "error",
       error: "Missing operation reference",
     });
-    await updatePipelineStep(job.assetId, "transcription", (prev) => ({
-      ...prev,
-      status: "failed",
-      error: "Missing operation reference",
-      updatedAt: new Date().toISOString(),
-    }));
     return NextResponse.json({ job: serializeJob(updated ?? job) });
   }
 
@@ -211,12 +204,6 @@ export async function GET(
         status: "error",
         error: payload.error.message || "Speech-to-Text returned an error",
       });
-      await updatePipelineStep(job.assetId, "transcription", (prev) => ({
-        ...prev,
-        status: "failed",
-        error: payload.error?.message || prev.error,
-        updatedAt: new Date().toISOString(),
-      }));
       return NextResponse.json({ job: serializeJob(updated ?? job) });
     }
 
@@ -227,12 +214,6 @@ export async function GET(
         status: "error",
         error: resultError,
       });
-      await updatePipelineStep(job.assetId, "transcription", (prev) => ({
-        ...prev,
-        status: "failed",
-        error: resultError,
-        updatedAt: new Date().toISOString(),
-      }));
       return NextResponse.json({ job: serializeJob(updated ?? job) });
     }
 
@@ -244,17 +225,6 @@ export async function GET(
       transcript,
       segments,
     });
-    await updatePipelineStep(job.assetId, "transcription", (prev) => ({
-      ...prev,
-      status: "succeeded",
-      metadata: {
-        ...(prev.metadata ?? {}),
-        transcript,
-        segments,
-        jobId: job.id,
-      },
-      updatedAt: new Date().toISOString(),
-    }));
 
     return NextResponse.json({ job: serializeJob(updated ?? job) });
   } catch (error) {
@@ -263,12 +233,6 @@ export async function GET(
       status: "error",
       error: error instanceof Error ? error.message : "Unknown error",
     });
-    await updatePipelineStep(job.assetId, "transcription", (prev) => ({
-      ...prev,
-      status: "failed",
-      error: error instanceof Error ? error.message : "Unknown error",
-      updatedAt: new Date().toISOString(),
-    }));
     return NextResponse.json({ job: serializeJob(updated ?? job) }, { status: 500 });
   }
 }

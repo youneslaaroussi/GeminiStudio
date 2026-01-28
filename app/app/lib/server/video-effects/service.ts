@@ -1,5 +1,9 @@
 import crypto from "crypto";
-import { readManifest, saveBufferAsAsset, storedAssetToRemote } from "@/app/lib/server/asset-storage";
+import {
+  getAssetFromService,
+  uploadToAssetService,
+  isAssetServiceEnabled,
+} from "@/app/lib/server/asset-service-client";
 import {
   findVideoEffectJobById,
   findVideoEffectJobsByAsset,
@@ -31,11 +35,6 @@ function ensureAbsoluteUrl(relativeUrl: string, origin: string) {
     ? origin.slice(0, -1)
     : origin;
   return `${sanitizedOrigin}${relativeUrl.startsWith("/") ? "" : "/"}${relativeUrl}`;
-}
-
-async function findStoredAsset(assetId: string) {
-  const manifest = await readManifest();
-  return manifest.find((asset) => asset.id === assetId) ?? null;
 }
 
 async function downloadRemoteFile(url: string) {
@@ -78,26 +77,33 @@ export async function listVideoEffectJobsForAsset(assetId: string) {
 export async function startVideoEffectJob(options: {
   effectId: string;
   assetId: string;
+  userId: string;
+  projectId: string;
   origin?: string;
   params: Record<string, unknown>;
 }) {
+  if (!isAssetServiceEnabled()) {
+    throw new Error("Asset service not configured");
+  }
+
   const definition = getVideoEffectDefinition(options.effectId);
   if (!definition) {
     throw new Error(`Unknown video effect: ${options.effectId}`);
   }
 
-  const storedAsset = await findStoredAsset(options.assetId);
-  if (!storedAsset) {
-    throw new Error(`Asset ${options.assetId} does not exist`);
-  }
+  // Get asset from asset service
+  const asset = await getAssetFromService(options.userId, options.projectId, options.assetId);
 
-  const remoteAsset = storedAssetToRemote(storedAsset);
   const origin =
     options.origin ??
     process.env.APP_ORIGIN ??
     process.env.NEXT_PUBLIC_APP_URL ??
     "http://localhost:3000";
-  const assetUrl = ensureAbsoluteUrl(remoteAsset.url, origin);
+
+  // Use signed URL if available, otherwise construct local URL
+  const assetUrl = asset.signedUrl
+    ? asset.signedUrl
+    : ensureAbsoluteUrl(`/uploads/${asset.fileName}`, origin);
 
   let validatedParams: Record<string, unknown>;
   try {
@@ -117,7 +123,7 @@ export async function startVideoEffectJob(options: {
 
   const providerInput = definition.buildProviderInput({
     assetUrl,
-    assetName: remoteAsset.name,
+    assetName: asset.name,
     params: validatedParams,
   });
 
@@ -131,9 +137,11 @@ export async function startVideoEffectJob(options: {
     id: jobId,
     effectId: definition.id,
     provider: definition.provider,
-    assetId: storedAsset.id,
-    assetName: remoteAsset.name,
-    assetUrl: remoteAsset.url,
+    assetId: asset.id,
+    assetName: asset.name,
+    assetUrl: assetUrl,
+    userId: options.userId,
+    projectId: options.projectId,
     status: mapProviderStatusToJobStatus(prediction.status),
     params: validatedParams,
     createdAt: new Date().toISOString(),
@@ -180,17 +188,27 @@ async function handlePredictionCompletion(options: {
     });
   }
 
+  // Check if we have userId and projectId for saving the result
+  if (!job.userId || !job.projectId) {
+    return updateVideoEffectJob(job.id, {
+      status: "error",
+      error: "Cannot save result: missing userId or projectId",
+    });
+  }
+
   const download = await downloadRemoteFile(extraction.resultUrl);
-  const stored = await saveBufferAsAsset({
-    data: download.buffer,
-    mimeType: download.mimeType,
-    originalName: `${definition.label ?? definition.id}-${Date.now()}.mp4`,
+  const fileName = `${definition.label ?? definition.id}-${Date.now()}.mp4`;
+  const file = new File([download.buffer], fileName, { type: download.mimeType });
+
+  const result = await uploadToAssetService(job.userId, job.projectId, file, {
+    source: "video-effect",
+    runPipeline: true,
   });
 
   return updateVideoEffectJob(job.id, {
     status: "completed",
-    resultAssetId: stored.id,
-    resultAssetUrl: stored.url,
+    resultAssetId: result.asset.id,
+    resultAssetUrl: result.asset.signedUrl,
     metadata: {
       ...(extraction.metadata ?? {}),
       providerMetrics: prediction.metrics,

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { create } from "zustand";
 import { toast } from "sonner";
 import type { Project } from "@/app/types/timeline";
+import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 
 export type RenderFormat = "mp4" | "webm" | "gif";
 export type RenderQuality = "low" | "web" | "social" | "studio";
@@ -142,9 +143,10 @@ const useRenderStore = create<RenderStore>((set, get) => ({
 
 async function fetchDownloadUrl(gcsPath: string): Promise<string | null> {
   try {
+    const authHeaders = await getAuthHeaders();
     const response = await fetch("/api/render/download-url", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders },
       body: JSON.stringify({ gcsPath }),
     });
     if (response.ok) {
@@ -163,7 +165,8 @@ async function downloadInBackground(url: string, filename: string): Promise<void
   try {
     // Use proxy to avoid CORS issues with GCS
     const proxyUrl = `/api/render/download?url=${encodeURIComponent(url)}`;
-    const response = await fetch(proxyUrl);
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(proxyUrl, { headers: authHeaders });
 
     if (!response.ok) {
       throw new Error(`Download failed: ${response.status}`);
@@ -204,7 +207,8 @@ async function pollJobStatus(jobId: string) {
   const store = useRenderStore.getState();
 
   try {
-    const response = await fetch(`/api/render/${jobId}`);
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(`/api/render/${jobId}`, { headers: authHeaders });
 
     if (response.status === 404) {
       if (store.currentOutputPath) {
@@ -342,9 +346,10 @@ export function useRender(): UseRenderReturn {
     cancelPolling();
 
     try {
+      const authHeaders = await getAuthHeaders();
       const response = await fetch("/api/render", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ project, projectId, output: options }),
       });
 

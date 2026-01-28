@@ -11,7 +11,7 @@ from langchain_core.runnables import RunnableConfig
 from .agent import graph
 from .chat import build_dispatcher
 from .config import Settings, get_settings
-from .firebase import fetch_chat_session, fetch_user_projects, update_chat_session_messages
+from .firebase import fetch_chat_session, fetch_user_projects, update_chat_session_messages, get_telegram_chat_id_for_user, send_telegram_message
 from .schemas import HealthResponse, InvokeRequest, InvokeResponse, MessageEnvelope, TeleportRequest, TeleportResponse
 
 router = APIRouter()
@@ -383,6 +383,17 @@ Media Assets in Project ({len(assets_info)}):
                 return "\n".join(text_parts)
             return ""
 
+        # Check if user has Telegram linked (only send if session is NOT from Telegram)
+        is_telegram_session = session.get("source") == "telegram" or payload.chat_id.startswith("telegram-")
+        telegram_chat_id = None
+        if not is_telegram_session:
+            telegram_chat_id = get_telegram_chat_id_for_user(session.get("userId"), settings)
+
+        async def send_to_telegram_async(text: str):
+            """Send message to Telegram if linked."""
+            if telegram_chat_id:
+                await send_telegram_message(telegram_chat_id, text, settings)
+
         def write_message_to_firebase(text: str):
             """Write an intermediate message to Firebase for real-time updates."""
             if not text or not session.get("userId"):
@@ -402,6 +413,15 @@ Media Assets in Project ({len(assets_info)}):
                 settings=settings
             )
             console.print(f"[dim]Wrote to Firebase: {text[:50]}...[/dim]")
+
+            # Also send to Telegram if user has it linked
+            if telegram_chat_id:
+                import asyncio
+                try:
+                    asyncio.get_event_loop().run_until_complete(send_to_telegram_async(text))
+                    console.print(f"[dim]Sent to Telegram: {telegram_chat_id}[/dim]")
+                except Exception as e:
+                    console.print(f"[yellow]Failed to send to Telegram: {e}[/yellow]")
 
         # Stream the graph to get intermediate responses
         last_response = None

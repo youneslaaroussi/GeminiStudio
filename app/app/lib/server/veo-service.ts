@@ -1,7 +1,6 @@
 import crypto from "crypto";
 import { GoogleAuth } from "google-auth-library";
-import { saveBufferAsAsset } from "@/app/lib/server/asset-storage";
-import { runAutoStepsForAsset } from "@/app/lib/server/pipeline/runner";
+import { uploadToAssetService, isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
 import {
   findVeoJobById,
   saveVeoJob,
@@ -247,31 +246,33 @@ export async function pollVeoJob(jobId: string): Promise<VeoJob | null> {
     try {
       const buffer = Buffer.from(firstVideo.bytesBase64Encoded, "base64");
       const mimeType = firstVideo.mimeType || "video/mp4";
-      const dimensions = computeVeoDimensions(
-        job.params.resolution || "720p",
-        job.params.aspectRatio || "16:9"
-      );
-      const asset = await saveBufferAsAsset({
-        data: buffer,
-        mimeType,
-        originalName: `veo-${Date.now()}.mp4`,
-        projectId: job.params.projectId,
-        width: dimensions.width,
-        height: dimensions.height,
-        duration: job.params.durationSeconds,
+      const fileName = `veo-${Date.now()}.mp4`;
+
+      // Check if we have userId and projectId for asset service
+      const userId = job.params.userId;
+      const projectId = job.params.projectId;
+
+      if (!userId || !projectId || !isAssetServiceEnabled()) {
+        // Cannot save to asset service without userId/projectId
+        const updated = await updateVeoJob(job.id, {
+          status: "error",
+          error: "Cannot save video: missing userId, projectId, or asset service not configured",
+        });
+        return serializeVeoJob(updated ?? job);
+      }
+
+      const file = new File([buffer], fileName, { type: mimeType });
+      const result = await uploadToAssetService(userId, projectId, file, {
+        source: "veo",
+        runPipeline: true,
       });
 
-      // Trigger asset pipeline in background (GCS upload, face detection, etc.)
-      runAutoStepsForAsset(asset.id).catch((error) => {
-        console.error(`[VEO] Pipeline failed for asset ${asset.id}:`, error);
-      });
-
-      console.log("[VEO] Job completed, asset created:", asset.id);
+      console.log("[VEO] Job completed, asset created:", result.asset.id);
 
       const updated = await updateVeoJob(job.id, {
         status: "completed",
-        resultAssetId: asset.id,
-        resultAssetUrl: asset.url,
+        resultAssetId: result.asset.id,
+        resultAssetUrl: result.asset.signedUrl,
       });
       return serializeVeoJob(updated ?? job);
     } catch (error) {

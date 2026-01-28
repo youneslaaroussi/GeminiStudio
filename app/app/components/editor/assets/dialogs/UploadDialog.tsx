@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import type { RemoteAsset } from "@/app/types/assets";
 import { createId, formatBytes } from "../utils";
+import { getAuthToken } from "@/app/lib/hooks/useAuthFetch";
 
 interface QueuedFile {
   id: string;
@@ -94,10 +95,19 @@ export function UploadDialog({
     queuedFiles.forEach((item) => formData.append("files", item.file));
 
     try {
+      // Get auth token
+      const token = await getAuthToken();
+
       const result = await new Promise<{ assets: RemoteAsset[] }>(
         (resolve, reject) => {
           const xhr = new XMLHttpRequest();
           xhr.open("POST", "/api/assets");
+
+          // Set auth header if we have a token
+          if (token) {
+            xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+          }
+
           xhr.upload.onprogress = (event) => {
             if (event.lengthComputable) {
               setProgress(Math.round((event.loaded / event.total) * 100));
@@ -111,6 +121,10 @@ export function UploadDialog({
               } catch {
                 reject(new Error("Invalid response"));
               }
+            } else if (xhr.status === 401) {
+              reject(new Error("Unauthorized. Please log in again."));
+            } else if (xhr.status === 503) {
+              reject(new Error("Asset service not available. Check ASSET_SERVICE_URL."));
             } else {
               reject(new Error("Upload failed"));
             }
@@ -124,7 +138,7 @@ export function UploadDialog({
       onOpenChange(false);
     } catch (err) {
       console.error(err);
-      setError("Upload failed. Please try again.");
+      setError(err instanceof Error ? err.message : "Upload failed. Please try again.");
     } finally {
       setIsUploading(false);
       setProgress(0);

@@ -59,23 +59,34 @@ function ResizablePanel({
 function ResizableHandle({
   withHandle,
   className,
+  handleClassName,
+  handleIconClassName,
   ...props
 }: React.ComponentProps<typeof Separator> & {
   withHandle?: boolean;
+  handleClassName?: string;
+  handleIconClassName?: string;
 }) {
   return (
     <Separator
       data-slot="resizable-handle"
       className={cn(
-        "bg-border focus-visible:ring-ring relative flex w-px items-center justify-center after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2 focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:outline-hidden data-[orientation=vertical]:h-px data-[orientation=vertical]:w-full data-[orientation=vertical]:after:left-0 data-[orientation=vertical]:after:h-1 data-[orientation=vertical]:after:w-full data-[orientation=vertical]:after:translate-x-0 data-[orientation=vertical]:after:-translate-y-1/2 [&[data-orientation=vertical]>div]:rotate-90",
+        "bg-border relative flex shrink-0 items-center justify-center focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 after:pointer-events-none after:absolute after:bg-border after:content-[''] data-[orientation=horizontal]:h-full data-[orientation=horizontal]:w-px data-[orientation=horizontal]:after:inset-y-0 data-[orientation=horizontal]:after:left-1/2 data-[orientation=horizontal]:after:w-1 data-[orientation=horizontal]:after:-translate-x-1/2 data-[orientation=vertical]:w-full data-[orientation=vertical]:py-1.5 data-[orientation=vertical]:after:left-0 data-[orientation=vertical]:after:top-1/2 data-[orientation=vertical]:after:h-px data-[orientation=vertical]:after:w-full data-[orientation=vertical]:after:-translate-y-1/2",
         className
       )}
       {...props}
     >
       {withHandle && (
-        <div className="bg-border z-10 flex h-4 w-3 items-center justify-center rounded-xs border">
-          <GripVerticalIcon className="size-2.5" />
-        </div>
+        <span
+          className={cn(
+            "pointer-events-none absolute left-1/2 top-1/2 z-10 flex h-4 w-3 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-xs border bg-border",
+            handleClassName
+          )}
+        >
+          <GripVerticalIcon
+            className={cn("size-2.5", handleIconClassName)}
+          />
+        </span>
       )}
     </Separator>
   );

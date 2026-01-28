@@ -1,12 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMediaCategory, type ChatAttachment } from "@/app/lib/server/gemini";
-import { saveBufferAsAsset } from "@/app/lib/server/asset-storage";
+import { initAdmin } from "@/app/lib/server/firebase-admin";
+import { getAuth } from "firebase-admin/auth";
 import {
-  runPipelineStepForAsset,
-  runAutoStepsForAsset,
-} from "@/app/lib/server/pipeline/runner";
+  uploadToAssetService,
+  isAssetServiceEnabled,
+} from "@/app/lib/server/asset-service-client";
 
 export const runtime = "nodejs";
+
+async function verifyToken(request: NextRequest): Promise<string | null> {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+  const token = authHeader.slice(7);
+  try {
+    await initAdmin();
+    const decoded = await getAuth().verifyIdToken(token);
+    return decoded.uid;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * POST /api/chat/attachments
@@ -15,15 +31,34 @@ export const runtime = "nodejs";
  * Files are uploaded to GCS and metadata is returned for inclusion in messages.
  */
 export async function POST(request: NextRequest) {
+  if (!isAssetServiceEnabled()) {
+    return NextResponse.json(
+      { error: "Asset service not configured" },
+      { status: 503 }
+    );
+  }
+
+  const userId = await verifyToken(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const formData = await request.formData();
     const sessionId = formData.get("sessionId") as string | null;
     const files = formData.getAll("files") as File[];
-    const projectId = formData.get("projectId");
+    const projectId = formData.get("projectId") as string | null;
 
     if (!sessionId) {
       return NextResponse.json(
         { error: "sessionId is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!projectId) {
+      return NextResponse.json(
+        { error: "projectId is required" },
         { status: 400 }
       );
     }
@@ -38,37 +73,12 @@ export async function POST(request: NextRequest) {
     const attachments: ChatAttachment[] = [];
 
     for (const file of files) {
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const mimeType = file.type || "application/octet-stream";
-
-      const asset = await saveBufferAsAsset({
-        data: buffer,
-        originalName: file.name,
-        mimeType,
-        projectId:
-          typeof projectId === "string" && projectId.trim().length > 0
-            ? projectId
-            : undefined,
+      const result = await uploadToAssetService(userId, projectId, file, {
+        source: "chat",
+        runPipeline: true,
       });
 
-      const pipelineState = await runPipelineStepForAsset(
-        asset.id,
-        "cloud-upload",
-        { params: { sessionId } }
-      );
-
-      void runAutoStepsForAsset(asset.id).catch((error) => {
-        console.error(`Pipeline failed for asset ${asset.id}:`, error);
-      });
-
-      const uploadStep = pipelineState.steps.find(
-        (step) => step.id === "cloud-upload"
-      );
-      const metadata = uploadStep?.metadata ?? {};
-      const gcsUri =
-        typeof metadata?.gcsUri === "string" ? metadata.gcsUri : undefined;
-      const signedUrl =
-        typeof metadata?.signedUrl === "string" ? metadata.signedUrl : undefined;
+      const asset = result.asset;
 
       attachments.push({
         id: asset.id,
@@ -77,9 +87,9 @@ export async function POST(request: NextRequest) {
         size: asset.size,
         category: getMediaCategory(asset.mimeType),
         uploadedAt: asset.uploadedAt,
-        localUrl: asset.url,
-        gcsUri,
-        signedUrl,
+        localUrl: asset.signedUrl || "",
+        gcsUri: asset.gcsUri,
+        signedUrl: asset.signedUrl,
       });
     }
 

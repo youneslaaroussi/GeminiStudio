@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { initAdmin } from "@/app/lib/server/firebase-admin";
+import { getAuth } from "firebase-admin/auth";
+import { isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
 import {
   listVideoEffectJobsForAsset,
   startVideoEffectJob,
@@ -10,10 +13,35 @@ export const runtime = "nodejs";
 const startJobSchema = z.object({
   assetId: z.string().min(1, "Asset ID is required"),
   effectId: z.string().min(1, "Effect ID is required"),
+  projectId: z.string().min(1, "Project ID is required"),
   params: z.record(z.any()).optional(),
 });
 
+async function verifyToken(request: NextRequest): Promise<string | null> {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+  const token = authHeader.slice(7);
+  try {
+    await initAdmin();
+    const decoded = await getAuth().verifyIdToken(token);
+    return decoded.uid;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(request: NextRequest) {
+  if (!isAssetServiceEnabled()) {
+    return NextResponse.json({ error: "Asset service not configured" }, { status: 503 });
+  }
+
+  const userId = await verifyToken(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const assetId = request.nextUrl.searchParams.get("assetId");
   if (!assetId) {
     return NextResponse.json(
@@ -33,12 +61,23 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  if (!isAssetServiceEnabled()) {
+    return NextResponse.json({ error: "Asset service not configured" }, { status: 503 });
+  }
+
+  const userId = await verifyToken(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const json = await request.json();
     const payload = startJobSchema.parse(json);
     const job = await startVideoEffectJob({
       effectId: payload.effectId,
       assetId: payload.assetId,
+      userId,
+      projectId: payload.projectId,
       origin: request.nextUrl.origin,
       params: payload.params ?? {},
     });

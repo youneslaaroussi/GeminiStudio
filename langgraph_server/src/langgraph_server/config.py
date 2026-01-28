@@ -59,6 +59,11 @@ class Settings(BaseSettings):
         default=None, alias="TELEGRAM_API_BASE_URL"
     )
 
+    # Asset service
+    asset_service_url: str | None = Field(
+        default="http://localhost:8081", alias="ASSET_SERVICE_URL"
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

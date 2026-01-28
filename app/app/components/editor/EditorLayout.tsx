@@ -214,7 +214,11 @@ export function EditorLayout() {
                   </ResizablePanelGroup>
                 </ResizablePanel>
 
-                <ResizableHandle withHandle />
+                <ResizableHandle
+                  withHandle
+                  handleClassName="h-3 w-4"
+                  handleIconClassName="-rotate-90"
+                />
 
                 {/* Bottom: Timeline */}
                 <ResizablePanel defaultSize={40} minSize={20} className="min-w-0">

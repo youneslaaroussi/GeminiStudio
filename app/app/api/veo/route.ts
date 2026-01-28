@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { initAdmin } from "@/app/lib/server/firebase-admin";
+import { getAuth } from "firebase-admin/auth";
 import { startVeoJob, listVeoJobsForProject } from "@/app/lib/server/veo-service";
+import { isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
 import type { VeoJobParams } from "@/app/types/veo";
 
 export const runtime = "nodejs";
@@ -20,7 +23,31 @@ interface VeoRequest {
   projectId?: string;
 }
 
+async function verifyToken(request: NextRequest): Promise<string | null> {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+  const token = authHeader.slice(7);
+  try {
+    await initAdmin();
+    const decoded = await getAuth().verifyIdToken(token);
+    return decoded.uid;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(request: NextRequest) {
+  if (!isAssetServiceEnabled()) {
+    return NextResponse.json({ error: "Asset service not configured" }, { status: 503 });
+  }
+
+  const userId = await verifyToken(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const projectId = request.nextUrl.searchParams.get("projectId");
   if (!projectId) {
     return NextResponse.json(
@@ -40,6 +67,15 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  if (!isAssetServiceEnabled()) {
+    return NextResponse.json({ error: "Asset service not configured" }, { status: 503 });
+  }
+
+  const userId = await verifyToken(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = (await request.json()) as VeoRequest;
     const {
@@ -60,6 +96,10 @@ export async function POST(request: NextRequest) {
 
     if (!prompt || !prompt.trim()) {
       return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
+    }
+
+    if (!projectId) {
+      return NextResponse.json({ error: "projectId is required" }, { status: 400 });
     }
 
     const requiresEightSeconds =
@@ -106,6 +146,7 @@ export async function POST(request: NextRequest) {
       negativePrompt,
       personGeneration,
       projectId,
+      userId,
     };
 
     const job = await startVeoJob(params);

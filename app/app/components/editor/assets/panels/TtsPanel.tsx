@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { Loader2, Volume2 } from "lucide-react";
+import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -61,9 +62,10 @@ export function TtsPanel({ projectId, onGenerated }: TtsPanelProps) {
     setIsGenerating(true);
     setError(null);
     try {
+      const authHeaders = await getAuthHeaders();
       const response = await fetch("/api/tts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({
           text: text.trim(),
           voiceName,

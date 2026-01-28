@@ -2,6 +2,7 @@
 
 import { useState, useCallback, type ChangeEvent } from "react";
 import { Loader2, ImageIcon, X } from "lucide-react";
+import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -57,9 +58,10 @@ export function ImagePanel({ projectId, onGenerated }: ImagePanelProps) {
         };
       }
 
+      const authHeaders = await getAuthHeaders();
       const response = await fetch("/api/banana", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify(payload),
       });
       const data = (await response.json()) as {
