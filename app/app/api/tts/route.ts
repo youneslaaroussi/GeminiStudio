@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { synthesizeSpeech, type SupportedTtsEncoding } from "@/app/lib/services/tts";
 import { saveBufferAsAsset } from "@/app/lib/server/asset-storage";
+import { runAutoStepsForAsset } from "@/app/lib/server/pipeline/runner";
 
 export const runtime = "nodejs";
 
@@ -56,6 +57,11 @@ export async function POST(request: NextRequest) {
       originalName: fileName,
       mimeType,
       projectId: payload.projectId,
+    });
+
+    // Trigger asset pipeline in background (GCS upload, etc.)
+    runAutoStepsForAsset(asset.id).catch((error) => {
+      console.error(`[TTS] Pipeline failed for asset ${asset.id}:`, error);
     });
 
     return NextResponse.json({ asset }, { status: 201 });

@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Project, TimelineClip } from "@/app/types/timeline";
-import { readManifest } from "@/app/lib/server/asset-storage";
 import { getPipelineStateForAsset } from "@/app/lib/server/pipeline/store";
 import { createV4SignedUrl } from "@/app/lib/server/gcs-signed-url";
 
 const RENDERER_API_URL = process.env.RENDERER_API_URL || "http://localhost:4000";
 const GCS_BUCKET = process.env.ASSET_GCS_BUCKET;
+
+const UPLOAD_POLL_INTERVAL_MS = 500;
+const UPLOAD_TIMEOUT_MS = 60000; // 60 seconds max wait
 
 interface RenderRequest {
   project: Project;
@@ -19,6 +21,63 @@ interface RenderRequest {
 
 interface RendererJobResponse {
   jobId: string;
+}
+
+/**
+ * Collect all asset IDs from project clips
+ */
+function collectAssetIds(project: Project): string[] {
+  const assetIds: string[] = [];
+  for (const layer of project.layers) {
+    for (const clip of layer.clips) {
+      if ("assetId" in clip && clip.assetId) {
+        assetIds.push(clip.assetId);
+      }
+    }
+  }
+  return [...new Set(assetIds)]; // dedupe
+}
+
+/**
+ * Check if an asset's cloud-upload step is complete
+ */
+async function isAssetUploaded(assetId: string): Promise<boolean> {
+  try {
+    const pipelineState = await getPipelineStateForAsset(assetId);
+    const uploadStep = pipelineState.steps.find((s) => s.id === "cloud-upload");
+    return uploadStep?.status === "succeeded";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Wait for all assets to be uploaded to GCS
+ * Throws if timeout is reached
+ */
+async function waitForAssetUploads(assetIds: string[]): Promise<void> {
+  if (assetIds.length === 0) return;
+
+  const startTime = Date.now();
+  const pending = new Set(assetIds);
+
+  while (pending.size > 0) {
+    if (Date.now() - startTime > UPLOAD_TIMEOUT_MS) {
+      throw new Error(
+        `Timeout waiting for asset uploads. Still pending: ${[...pending].join(", ")}`
+      );
+    }
+
+    for (const assetId of pending) {
+      if (await isAssetUploaded(assetId)) {
+        pending.delete(assetId);
+      }
+    }
+
+    if (pending.size > 0) {
+      await new Promise((resolve) => setTimeout(resolve, UPLOAD_POLL_INTERVAL_MS));
+    }
+  }
 }
 
 /**
@@ -138,6 +197,14 @@ export async function POST(request: NextRequest) {
         { error: "GCS bucket not configured (ASSET_GCS_BUCKET)" },
         { status: 500 }
       );
+    }
+
+    // Wait for all assets to be uploaded to GCS before proceeding
+    const assetIds = collectAssetIds(project);
+    if (assetIds.length > 0) {
+      console.log(`[Render] Waiting for ${assetIds.length} asset(s) to upload...`);
+      await waitForAssetUploads(assetIds);
+      console.log("[Render] All assets uploaded to GCS");
     }
 
     // Transform project to use signed GCS URLs

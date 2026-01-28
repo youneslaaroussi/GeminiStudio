@@ -100142,5 +100142,707 @@
       }
     ],
     "updatedAt": "2026-01-28T14:18:50.651Z"
+  },
+  {
+    "assetId": "6de48401-9c0a-4b03-b241-43e8f91994ca",
+    "steps": [
+      {
+        "id": "metadata",
+        "label": "Extract metadata",
+        "status": "idle",
+        "updatedAt": "2026-01-28T14:54:52.870Z"
+      },
+      {
+        "id": "cloud-upload",
+        "label": "Upload to Cloud Storage",
+        "status": "idle",
+        "updatedAt": "2026-01-28T14:54:52.870Z"
+      },
+      {
+        "id": "shot-detection",
+        "label": "Detect shot changes",
+        "status": "idle",
+        "updatedAt": "2026-01-28T14:54:52.870Z"
+      },
+      {
+        "id": "label-detection",
+        "label": "Detect labels",
+        "status": "idle",
+        "updatedAt": "2026-01-28T14:54:52.870Z"
+      },
+      {
+        "id": "person-detection",
+        "label": "Detect people",
+        "status": "idle",
+        "updatedAt": "2026-01-28T14:54:52.870Z"
+      },
+      {
+        "id": "transcription",
+        "label": "Transcribe audio/video",
+        "status": "idle",
+        "updatedAt": "2026-01-28T14:54:52.870Z"
+      },
+      {
+        "id": "face-detection",
+        "label": "Detect faces",
+        "status": "idle",
+        "updatedAt": "2026-01-28T14:54:52.870Z"
+      }
+    ],
+    "updatedAt": "2026-01-28T14:54:52.870Z"
+  },
+  {
+    "assetId": "f18798ff-55e4-4bd5-8615-b2b4eb2da0ae",
+    "steps": [
+      {
+        "id": "metadata",
+        "label": "Extract metadata",
+        "status": "succeeded",
+        "updatedAt": "2026-01-28T15:13:03.885Z",
+        "startedAt": "2026-01-28T15:13:03.861Z",
+        "metadata": {
+          "mimeType": "video/mp4",
+          "size": 2213166,
+          "uploadedAt": "2026-01-28T15:13:03.711Z",
+          "type": "video",
+          "fileSize": 2213166,
+          "lastModified": "2026-01-28T15:13:03.711Z"
+        }
+      },
+      {
+        "id": "cloud-upload",
+        "label": "Upload to Cloud Storage",
+        "status": "succeeded",
+        "updatedAt": "2026-01-28T15:13:04.694Z",
+        "startedAt": "2026-01-28T15:13:03.926Z",
+        "metadata": {
+          "gcsUri": "gs://gemini-studio-storage/assets/f18798ff-55e4-4bd5-8615-b2b4eb2da0ae/1769613183707-b7b043e6-3eef-4d3b-8f64-351b33afcbdd.mp4",
+          "signedUrl": "https://storage.googleapis.com/gemini-studio-storage/assets/f18798ff-55e4-4bd5-8615-b2b4eb2da0ae/1769613183707-b7b043e6-3eef-4d3b-8f64-351b33afcbdd.mp4?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=geministudio%40experiments-484119.iam.gserviceaccount.com%2F20260128%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260128T151304Z&X-Goog-Expires=604800&X-Goog-SignedHeaders=host&X-Goog-Signature=90267c3face1ec18ae6c62c245caecdf390900c910122f391d6d41edd93a1c927d45ad0dc7b61150608b1ff4c7264f2561ec2533892c881fe14d259a4403f88e6f4c12d6131fb985f50296dace2e6882c49223fb97f83a2031feb6a559ee9494340680423e9b54066db7493eb90f695be47eb786195b90253227fa8aa726a2f7cd1a4bb663476f472079b4cc50705f92a1d9fc5a7a6df84732df66091d4698d0166019f14eb15966e168a76c9e3b3c14193aa893c143eca2fb826361bddd92e69a78cbbf66de547116341de98e3dc2b90ed683ca747e854f271be0c30c7ca54a6a2735d01ff0920649b506dfaf63e8784b0635528bf80a2f411df21251fb845b",
+          "bucket": "gemini-studio-storage",
+          "objectName": "assets/f18798ff-55e4-4bd5-8615-b2b4eb2da0ae/1769613183707-b7b043e6-3eef-4d3b-8f64-351b33afcbdd.mp4"
+        }
+      },
+      {
+        "id": "shot-detection",
+        "label": "Detect shot changes",
+        "status": "succeeded",
+        "updatedAt": "2026-01-28T15:13:09.831Z",
+        "startedAt": "2026-01-28T15:13:04.723Z",
+        "metadata": {
+          "shotCount": 1,
+          "shots": [
+            {
+              "index": 0,
+              "start": 0,
+              "end": 3.958333,
+              "duration": 3.958333
+            }
+          ],
+          "gcsUri": "gs://gemini-studio-storage/assets/f18798ff-55e4-4bd5-8615-b2b4eb2da0ae/1769613183707-b7b043e6-3eef-4d3b-8f64-351b33afcbdd.mp4"
+        }
+      },
+      {
+        "id": "label-detection",
+        "label": "Detect labels",
+        "status": "succeeded",
+        "updatedAt": "2026-01-28T15:13:22.518Z",
+        "startedAt": "2026-01-28T15:13:09.871Z",
+        "metadata": {
+          "segmentLabelCount": 5,
+          "shotLabelCount": 5,
+          "frameLabelCount": 15,
+          "segmentLabels": [
+            {
+              "entity": {
+                "entityId": "/m/01yrx",
+                "description": "cat",
+                "languageCode": "en-US"
+              },
+              "categories": [
+                {
+                  "entityId": "/m/068hy",
+                  "description": "pet",
+                  "languageCode": "en-US"
+                }
+              ],
+              "segments": [
+                {
+                  "start": 0,
+                  "end": 3.958333,
+                  "confidence": 0.9914914965629578
+                }
+              ],
+              "confidence": 0.9914914965629578
+            },
+            {
+              "entity": {
+                "entityId": "/m/0jbk",
+                "description": "animal",
+                "languageCode": "en-US"
+              },
+              "categories": [],
+              "segments": [
+                {
+                  "start": 0,
+                  "end": 3.958333,
+                  "confidence": 0.8967183828353882
+                }
+              ],
+              "confidence": 0.8967183828353882
+            },
+            {
+              "entity": {
+                "entityId": "/m/0hjzp",
+                "description": "kitten",
+                "languageCode": "en-US"
+              },
+              "categories": [
+                {
+                  "entityId": "/m/01yrx",
+                  "description": "cat",
+                  "languageCode": "en-US"
+                }
+              ],
+              "segments": [
+                {
+                  "start": 0,
+                  "end": 3.958333,
+                  "confidence": 0.6359639167785645
+                }
+              ],
+              "confidence": 0.6359639167785645
+            },
+            {
+              "entity": {
+                "entityId": "/m/068hy",
+                "description": "pet",
+                "languageCode": "en-US"
+              },
+              "categories": [
+                {
+                  "entityId": "/m/0jbk",
+                  "description": "animal",
+                  "languageCode": "en-US"
+                }
+              ],
+              "segments": [
+                {
+                  "start": 0,
+                  "end": 3.958333,
+                  "confidence": 0.6224578619003296
+                }
+              ],
+              "confidence": 0.6224578619003296
+            },
+            {
+              "entity": {
+                "entityId": "/m/01l7qd",
+                "description": "whiskers",
+                "languageCode": "en-US"
+              },
+              "categories": [],
+              "segments": [
+                {
+                  "start": 0,
+                  "end": 3.958333,
+                  "confidence": 0.6046667098999023
+                }
+              ],
+              "confidence": 0.6046667098999023
+            }
+          ],
+          "shotLabels": [
+            {
+              "entity": {
+                "entityId": "/m/01yrx",
+                "description": "cat",
+                "languageCode": "en-US"
+              },
+              "categories": [
+                {
+                  "entityId": "/m/068hy",
+                  "description": "pet",
+                  "languageCode": "en-US"
+                }
+              ],
+              "segments": [
+                {
+                  "start": 0,
+                  "end": 3.958333,
+                  "confidence": 0.9914914965629578
+                }
+              ],
+              "confidence": 0.9914914965629578
+            },
+            {
+              "entity": {
+                "entityId": "/m/0jbk",
+                "description": "animal",
+                "languageCode": "en-US"
+              },
+              "categories": [],
+              "segments": [
+                {
+                  "start": 0,
+                  "end": 3.958333,
+                  "confidence": 0.9256876111030579
+                }
+              ],
+              "confidence": 0.9256876111030579
+            },
+            {
+              "entity": {
+                "entityId": "/m/01l7qd",
+                "description": "whiskers",
+                "languageCode": "en-US"
+              },
+              "categories": [],
+              "segments": [
+                {
+                  "start": 0,
+                  "end": 3.958333,
+                  "confidence": 0.7497121691703796
+                }
+              ],
+              "confidence": 0.7497121691703796
+            },
+            {
+              "entity": {
+                "entityId": "/m/0hjzp",
+                "description": "kitten",
+                "languageCode": "en-US"
+              },
+              "categories": [
+                {
+                  "entityId": "/m/01yrx",
+                  "description": "cat",
+                  "languageCode": "en-US"
+                }
+              ],
+              "segments": [
+                {
+                  "start": 0,
+                  "end": 3.958333,
+                  "confidence": 0.6226165294647217
+                }
+              ],
+              "confidence": 0.6226165294647217
+            },
+            {
+              "entity": {
+                "entityId": "/m/068hy",
+                "description": "pet",
+                "languageCode": "en-US"
+              },
+              "categories": [
+                {
+                  "entityId": "/m/0jbk",
+                  "description": "animal",
+                  "languageCode": "en-US"
+                }
+              ],
+              "segments": [
+                {
+                  "start": 0,
+                  "end": 3.958333,
+                  "confidence": 0.5533574223518372
+                }
+              ],
+              "confidence": 0.5533574223518372
+            }
+          ],
+          "frameLabels": [
+            {
+              "entity": {
+                "entityId": "/m/01f415",
+                "description": "flame",
+                "languageCode": "en-US"
+              },
+              "frames": [
+                {
+                  "time": 2,
+                  "confidence": 0.5337109565734863
+                }
+              ]
+            },
+            {
+              "entity": {
+                "entityId": "/m/019sc6",
+                "description": "lighting",
+                "languageCode": "en-US"
+              },
+              "frames": [
+                {
+                  "time": 0,
+                  "confidence": 0.779556155204773
+                },
+                {
+                  "time": 1,
+                  "confidence": 0.7892477512359619
+                },
+                {
+                  "time": 2,
+                  "confidence": 0.7881326675415039
+                },
+                {
+                  "time": 3,
+                  "confidence": 0.7755402326583862
+                },
+                {
+                  "time": 4,
+                  "confidence": 0.7743253111839294
+                }
+              ]
+            },
+            {
+              "entity": {
+                "entityId": "/m/04rky",
+                "description": "mammal",
+                "languageCode": "en-US"
+              },
+              "frames": [
+                {
+                  "time": 0,
+                  "confidence": 0.9256452918052673
+                },
+                {
+                  "time": 1,
+                  "confidence": 0.9250228404998779
+                },
+                {
+                  "time": 3,
+                  "confidence": 0.9253891110420227
+                },
+                {
+                  "time": 4,
+                  "confidence": 0.9252974390983582
+                }
+              ]
+            },
+            {
+              "entity": {
+                "entityId": "/m/09686",
+                "description": "vertebrate",
+                "languageCode": "en-US"
+              },
+              "frames": [
+                {
+                  "time": 0,
+                  "confidence": 0.9037036895751953
+                },
+                {
+                  "time": 1,
+                  "confidence": 0.9037036895751953
+                },
+                {
+                  "time": 3,
+                  "confidence": 0.9037036895751953
+                },
+                {
+                  "time": 4,
+                  "confidence": 0.9037036895751953
+                }
+              ]
+            },
+            {
+              "entity": {
+                "entityId": "/m/0307l",
+                "description": "cat like mammal",
+                "languageCode": "en-US"
+              },
+              "frames": [
+                {
+                  "time": 0,
+                  "confidence": 0.7829388380050659
+                },
+                {
+                  "time": 1,
+                  "confidence": 0.7536234259605408
+                },
+                {
+                  "time": 3,
+                  "confidence": 0.7477551102638245
+                },
+                {
+                  "time": 4,
+                  "confidence": 0.7389667630195618
+                }
+              ]
+            },
+            {
+              "entity": {
+                "entityId": "/m/0jbk",
+                "description": "animal",
+                "languageCode": "en-US"
+              },
+              "frames": [
+                {
+                  "time": 0,
+                  "confidence": 0.8376412391662598
+                },
+                {
+                  "time": 1,
+                  "confidence": 0.82675701379776
+                },
+                {
+                  "time": 3,
+                  "confidence": 0.8241623640060425
+                },
+                {
+                  "time": 4,
+                  "confidence": 0.815613865852356
+                }
+              ]
+            },
+            {
+              "entity": {
+                "entityId": "/m/05mqq3",
+                "description": "snout",
+                "languageCode": "en-US"
+              },
+              "frames": [
+                {
+                  "time": 0,
+                  "confidence": 0.6710734963417053
+                },
+                {
+                  "time": 1,
+                  "confidence": 0.6579583287239075
+                },
+                {
+                  "time": 3,
+                  "confidence": 0.6597880721092224
+                },
+                {
+                  "time": 4,
+                  "confidence": 0.6618141531944275
+                }
+              ]
+            },
+            {
+              "entity": {
+                "entityId": "/m/03rbf6",
+                "description": "macro photography",
+                "languageCode": "en-US"
+              },
+              "frames": [
+                {
+                  "time": 1,
+                  "confidence": 0.5244476199150085
+                }
+              ]
+            },
+            {
+              "entity": {
+                "entityId": "/m/068hy",
+                "description": "pet",
+                "languageCode": "en-US"
+              },
+              "frames": [
+                {
+                  "time": 0,
+                  "confidence": 0.8630114793777466
+                },
+                {
+                  "time": 1,
+                  "confidence": 0.8458608388900757
+                },
+                {
+                  "time": 3,
+                  "confidence": 0.8587326407432556
+                },
+                {
+                  "time": 4,
+                  "confidence": 0.8608843088150024
+                }
+              ]
+            },
+            {
+              "entity": {
+                "entityId": "/m/01lrl",
+                "description": "carnivoran",
+                "languageCode": "en-US"
+              },
+              "frames": [
+                {
+                  "time": 0,
+                  "confidence": 0.5296329855918884
+                },
+                {
+                  "time": 1,
+                  "confidence": 0.500495433807373
+                },
+                {
+                  "time": 3,
+                  "confidence": 0.5019994378089905
+                }
+              ]
+            },
+            {
+              "entity": {
+                "entityId": "/m/0hjzp",
+                "description": "kitten",
+                "languageCode": "en-US"
+              },
+              "frames": [
+                {
+                  "time": 0,
+                  "confidence": 0.5429753661155701
+                },
+                {
+                  "time": 1,
+                  "confidence": 0.5850048661231995
+                },
+                {
+                  "time": 3,
+                  "confidence": 0.5374075174331665
+                },
+                {
+                  "time": 4,
+                  "confidence": 0.5328653454780579
+                }
+              ]
+            },
+            {
+              "entity": {
+                "entityId": "/m/01l7qd",
+                "description": "whiskers",
+                "languageCode": "en-US"
+              },
+              "frames": [
+                {
+                  "time": 0,
+                  "confidence": 0.9143052101135254
+                },
+                {
+                  "time": 1,
+                  "confidence": 0.8978524208068848
+                },
+                {
+                  "time": 2,
+                  "confidence": 0.5312253832817078
+                },
+                {
+                  "time": 3,
+                  "confidence": 0.9103348255157471
+                },
+                {
+                  "time": 4,
+                  "confidence": 0.9017190933227539
+                }
+              ]
+            },
+            {
+              "entity": {
+                "entityId": "/m/01yrx",
+                "description": "cat",
+                "languageCode": "en-US"
+              },
+              "frames": [
+                {
+                  "time": 0,
+                  "confidence": 0.9782710075378418
+                },
+                {
+                  "time": 1,
+                  "confidence": 0.9772548675537109
+                },
+                {
+                  "time": 3,
+                  "confidence": 0.9754325151443481
+                },
+                {
+                  "time": 4,
+                  "confidence": 0.9736212491989136
+                }
+              ]
+            },
+            {
+              "entity": {
+                "entityId": "/m/07k6w8",
+                "description": "small to medium sized cats",
+                "languageCode": "en-US"
+              },
+              "frames": [
+                {
+                  "time": 0,
+                  "confidence": 0.9111419320106506
+                },
+                {
+                  "time": 1,
+                  "confidence": 0.9078176021575928
+                },
+                {
+                  "time": 3,
+                  "confidence": 0.9029859304428101
+                },
+                {
+                  "time": 4,
+                  "confidence": 0.9021257162094116
+                }
+              ]
+            },
+            {
+              "entity": {
+                "entityId": "/m/03w43x",
+                "description": "computer wallpaper",
+                "languageCode": "en-US"
+              },
+              "frames": [
+                {
+                  "time": 0,
+                  "confidence": 0.5362714529037476
+                },
+                {
+                  "time": 1,
+                  "confidence": 0.5216645002365112
+                },
+                {
+                  "time": 2,
+                  "confidence": 0.5006993412971497
+                },
+                {
+                  "time": 4,
+                  "confidence": 0.5054892897605896
+                }
+              ]
+            }
+          ],
+          "gcsUri": "gs://gemini-studio-storage/assets/f18798ff-55e4-4bd5-8615-b2b4eb2da0ae/1769613183707-b7b043e6-3eef-4d3b-8f64-351b33afcbdd.mp4"
+        }
+      },
+      {
+        "id": "person-detection",
+        "label": "Detect people",
+        "status": "succeeded",
+        "updatedAt": "2026-01-28T15:16:29.490Z",
+        "startedAt": "2026-01-28T15:13:22.546Z",
+        "metadata": {
+          "personCount": 0,
+          "people": [],
+          "attributeSummary": [],
+          "gcsUri": "gs://gemini-studio-storage/assets/f18798ff-55e4-4bd5-8615-b2b4eb2da0ae/1769613183707-b7b043e6-3eef-4d3b-8f64-351b33afcbdd.mp4"
+        }
+      },
+      {
+        "id": "transcription",
+        "label": "Transcribe audio/video",
+        "status": "idle",
+        "updatedAt": "2026-01-28T15:13:03.735Z"
+      },
+      {
+        "id": "face-detection",
+        "label": "Detect faces",
+        "status": "succeeded",
+        "updatedAt": "2026-01-28T15:16:40.091Z",
+        "startedAt": "2026-01-28T15:16:29.520Z",
+        "metadata": {
+          "faceCount": 0,
+          "faces": [],
+          "gcsUri": "gs://gemini-studio-storage/assets/f18798ff-55e4-4bd5-8615-b2b4eb2da0ae/1769613183707-b7b043e6-3eef-4d3b-8f64-351b33afcbdd.mp4"
+        }
+      }
+    ],
+    "updatedAt": "2026-01-28T15:16:40.096Z"
   }
 ]

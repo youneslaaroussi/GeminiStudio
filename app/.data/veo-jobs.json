@@ -1,0 +1,47 @@
+[
+  {
+    "id": "f958e4a2-6da9-4ba4-af64-d293e4535c47",
+    "status": "running",
+    "params": {
+      "prompt": "A close-up cinematic shot with a slow dolly-in using a 50mm lens captures a fluffy ginger tabby cat gracefully playing a polished mahogany grand piano. The cat rhythmically presses the ivory keys with its paws, its eyes focused and tail twitching to the melody. The scene is set in an elegant, sunlit Victorian drawing room with golden hour light and dancing dust motes, creating a whimsical and peaceful atmosphere. Veo should generate immersive audio including melodic piano notes, soft purring, and ambient room sounds. Duration: 8s. Aspect Ratio: 16:9.",
+      "durationSeconds": 8,
+      "aspectRatio": "9:16",
+      "resolution": "720p",
+      "generateAudio": false,
+      "projectId": "55ecf14d-99a6-4ca1-819c-dd8a928bf4af"
+    },
+    "operationName": "projects/experiments-484119/locations/us-central1/publishers/google/models/veo-3.0-generate-001/operations/1f25e1b0-5a27-481b-a4e8-3c112f4b393a",
+    "createdAt": "2026-01-28T15:16:10.524Z",
+    "updatedAt": "2026-01-28T15:16:10.524Z"
+  },
+  {
+    "id": "2bffa65a-265c-4a5a-86e9-74f346e28d1f",
+    "status": "running",
+    "params": {
+      "prompt": "A close-up cinematic shot with a slow dolly-in using a 50mm lens captures a fluffy ginger tabby cat gracefully playing a polished mahogany grand piano. The cat rhythmically presses the ivory keys with its paws, its eyes focused and tail twitching to the melody. The scene is set in an elegant, sunlit Victorian drawing room with golden hour light and dancing dust motes, creating a whimsical and peaceful atmosphere. Veo should generate immersive audio including melodic piano notes, soft purring, and ambient room sounds. Duration: 8s. Aspect Ratio: 16:9.",
+      "durationSeconds": 8,
+      "aspectRatio": "9:16",
+      "resolution": "720p",
+      "generateAudio": false,
+      "projectId": "55ecf14d-99a6-4ca1-819c-dd8a928bf4af"
+    },
+    "operationName": "projects/experiments-484119/locations/us-central1/publishers/google/models/veo-3.0-generate-001/operations/284c3e2b-6dff-4444-8500-b95ed0428177",
+    "createdAt": "2026-01-28T15:16:14.192Z",
+    "updatedAt": "2026-01-28T15:16:14.192Z"
+  },
+  {
+    "id": "3f41fffa-45c5-44ab-b4de-8cb8b2276eeb",
+    "status": "running",
+    "params": {
+      "prompt": "cat playing a piano",
+      "durationSeconds": 8,
+      "aspectRatio": "16:9",
+      "resolution": "720p",
+      "generateAudio": true,
+      "projectId": "55ecf14d-99a6-4ca1-819c-dd8a928bf4af"
+    },
+    "operationName": "projects/experiments-484119/locations/us-central1/publishers/google/models/veo-3.0-generate-001/operations/6a8c33de-a159-4206-b319-a7333eec0633",
+    "createdAt": "2026-01-28T15:18:38.077Z",
+    "updatedAt": "2026-01-28T15:18:53.289Z"
+  }
+]

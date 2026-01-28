@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoogleAuth } from "google-auth-library";
 import { saveBufferAsAsset } from "@/app/lib/server/asset-storage";
 import { parseGoogleServiceAccount, assertGoogleCredentials } from "@/app/lib/server/google-cloud";
+import { runAutoStepsForAsset } from "@/app/lib/server/pipeline/runner";
 
 export const runtime = "nodejs";
 
@@ -180,6 +181,11 @@ export async function POST(request: NextRequest) {
     });
 
     console.log("[LYRIA] Generated audio asset:", asset.id);
+
+    // Trigger asset pipeline in background (GCS upload, etc.)
+    runAutoStepsForAsset(asset.id).catch((error) => {
+      console.error(`[LYRIA] Pipeline failed for asset ${asset.id}:`, error);
+    });
 
     return NextResponse.json({ asset }, { status: 201 });
   } catch (error) {

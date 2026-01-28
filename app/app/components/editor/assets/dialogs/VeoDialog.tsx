@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback, useEffect, type ChangeEvent } from "react";
+import { useState, useCallback, useEffect, useRef, type ChangeEvent } from "react";
 import { Loader2, Sparkles, X, ImageIcon, Video } from "lucide-react";
+import type { VeoJob } from "@/app/types/veo";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +35,17 @@ export function VeoDialog({ open, onOpenChange, projectId, onGenerated }: VeoDia
   const [isGenerating, setIsGenerating] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [generationStatus, setGenerationStatus] = useState<string | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
 
   // Lock duration to 8s for higher resolutions
   useEffect(() => {
@@ -90,11 +102,60 @@ export function VeoDialog({ open, onOpenChange, projectId, onGenerated }: VeoDia
     }
   }, [promptIdea, prompt, isEnhancing, aspectRatio, duration, generateAudio]);
 
+  const pollJobStatus = useCallback(
+    async (jobId: string): Promise<VeoJob> => {
+      return new Promise((resolve, reject) => {
+        const poll = async () => {
+          try {
+            const response = await fetch(`/api/veo/${jobId}`);
+            const data = (await response.json()) as { job?: VeoJob; error?: string };
+
+            if (!response.ok || !data.job) {
+              throw new Error(data.error || "Failed to check job status");
+            }
+
+            const job = data.job;
+
+            if (job.status === "completed") {
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+                pollIntervalRef.current = null;
+              }
+              resolve(job);
+            } else if (job.status === "error") {
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+                pollIntervalRef.current = null;
+              }
+              reject(new Error(job.error || "Video generation failed"));
+            } else {
+              setGenerationStatus("Generating video with Veo...");
+            }
+          } catch (err) {
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+            reject(err);
+          }
+        };
+
+        // Initial poll
+        poll();
+        // Continue polling every 3 seconds
+        pollIntervalRef.current = setInterval(poll, 3000);
+      });
+    },
+    []
+  );
+
   const handleGenerate = useCallback(async () => {
     if (isGenerating || !prompt.trim() || !projectId) return;
 
     setIsGenerating(true);
     setError(null);
+    setGenerationStatus("Starting video generation...");
+
     try {
       const payload: Record<string, unknown> = {
         prompt,
@@ -114,25 +175,53 @@ export function VeoDialog({ open, onOpenChange, projectId, onGenerated }: VeoDia
         payload.negativePrompt = negativePrompt.trim();
       }
 
+      // Start the job
       const response = await fetch("/api/veo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const data = (await response.json()) as {
-        asset?: RemoteAsset;
+        job?: VeoJob;
         error?: string;
       };
-      if (!response.ok || !data.asset) {
-        throw new Error(data.error || "Failed to generate video");
+
+      if (!response.ok || !data.job) {
+        throw new Error(data.error || "Failed to start video generation");
       }
 
-      onGenerated(data.asset);
+      setGenerationStatus("Generating video with Veo...");
+
+      // Poll for completion
+      const completedJob = await pollJobStatus(data.job.id);
+
+      if (!completedJob.resultAssetId || !completedJob.resultAssetUrl) {
+        throw new Error("Video generation completed but no asset was created");
+      }
+
+      // Construct RemoteAsset from completed job
+      const asset: RemoteAsset = {
+        id: completedJob.resultAssetId,
+        name: `veo-${Date.now()}.mp4`,
+        mimeType: "video/mp4",
+        size: 0,
+        uploadedAt: completedJob.updatedAt,
+        url: completedJob.resultAssetUrl,
+        type: "video",
+        projectId: projectId ?? undefined,
+      };
+
+      onGenerated(asset);
       handleClose(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generation failed");
     } finally {
       setIsGenerating(false);
+      setGenerationStatus(null);
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
     }
   }, [
     isGenerating,
@@ -145,6 +234,7 @@ export function VeoDialog({ open, onOpenChange, projectId, onGenerated }: VeoDia
     imageInput,
     negativePrompt,
     onGenerated,
+    pollJobStatus,
   ]);
 
   const handleClose = useCallback(
@@ -156,6 +246,11 @@ export function VeoDialog({ open, onOpenChange, projectId, onGenerated }: VeoDia
         setNegativePrompt("");
         setImageInput(null);
         setError(null);
+        setGenerationStatus(null);
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
       }
       onOpenChange(nextOpen);
     },
@@ -321,6 +416,13 @@ export function VeoDialog({ open, onOpenChange, projectId, onGenerated }: VeoDia
               onChange={(e) => setNegativePrompt(e.target.value)}
             />
           </div>
+
+          {generationStatus && (
+            <p className="text-sm text-primary bg-primary/10 rounded-md p-2 flex items-center gap-2">
+              <Loader2 className="size-4 animate-spin" />
+              {generationStatus}
+            </p>
+          )}
 
           {error && (
             <p className="text-sm text-destructive bg-destructive/10 rounded-md p-2">
