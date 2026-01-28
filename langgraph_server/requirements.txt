@@ -1,9 +1,10 @@
-fastapi
-langgraph
-langchain-core>=0.2.17,<0.3.0
-langchain-google-genai
-langgraph-cli[inmem]
+fastapi>=0.115.0,<1.0.0
+langgraph>=1.0.7,<2.0.0
+langchain-core>=1.2.0,<2.0.0
+langchain-google-genai>=4.2.0,<5.0.0
+langgraph-cli>=0.4.10,<0.5.0
+langgraph-api>=0.7.0,<0.8.0
 pydantic
 pydantic-settings
 google-cloud-storage
-uvicorn[standard]
+uvicorn[standard]>=0.30.0,<1.0.0

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     google_project_id: str = Field(..., alias="GOOGLE_PROJECT_ID")
     google_api_key: str = Field(..., alias="GOOGLE_API_KEY")
-    gemini_model: str = Field(default="models/gemini-1.5-flash", alias="GEMINI_MODEL")
+    gemini_model: str = Field(default="gemini-2.5-pro", alias="GEMINI_MODEL")
 
     langsmith_api_key: str | None = Field(default=None, alias="LANGSMITH_API_KEY")
     langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", alias="LANGSMITH_ENDPOINT")

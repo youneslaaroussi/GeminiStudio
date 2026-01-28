@@ -7,10 +7,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import ToolMessage
-from langgraph.graph import MessagesState, StateGraph
-from langgraph.graph.constants import END, START
+from langgraph.graph import END, START, MessagesState, StateGraph
 
-from .checkpoint import create_checkpointer
 from .config import Settings, get_settings
 from .tools import get_registered_tools, get_tools_by_name
 
@@ -22,7 +20,6 @@ def build_model(settings: Settings) -> ChatGoogleGenerativeAI:
         model=settings.gemini_model,
         api_key=settings.google_api_key,
         convert_system_message_to_human=True,
-        safety_settings={"HARASSMENT": "BLOCK_NONE", "HATE": "BLOCK_NONE"},
     )
 
 
@@ -33,7 +30,6 @@ def create_graph(settings: Settings | None = None):
     tools_by_name = get_tools_by_name()
     model_with_tools = model.bind_tools(tools)
     system_message = SystemMessage(content=resolved_settings.system_prompt)
-    checkpointer = create_checkpointer(resolved_settings)
 
     def call_model(state: MessagesState, config: RunnableConfig | None = None):
         messages = [system_message] + list(state["messages"])
@@ -69,7 +65,7 @@ def create_graph(settings: Settings | None = None):
     workflow.add_conditional_edges("model", should_continue, ["tool_node", END])
     workflow.add_edge("tool_node", "model")
 
-    return workflow.compile(checkpointer=checkpointer)
+    return workflow.compile()
 
 
 settings = get_settings()

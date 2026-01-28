@@ -2,9 +2,10 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Save, Upload, Check, Loader2, Film } from "lucide-react";
+import { Save, Upload, Check, Loader2, Film, LogOut } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useProjectsListStore } from "@/app/lib/store/projects-list-store";
+import { useAuth } from "@/app/lib/hooks/useAuth";
 import type { Project } from "@/app/types/timeline";
 import { EditableInput } from "@/app/components/ui/EditableInput";
 import { cn } from "@/lib/utils";
@@ -50,6 +51,7 @@ interface TopBarProps {
 
 export function TopBar({ previewCanvas }: TopBarProps) {
   const router = useRouter();
+  const { logout } = useAuth();
   const project = useProjectStore((s) => s.project);
   const setProject = useProjectStore((s) => s.setProject);
   const updateProjectSettings = useProjectStore((s) => s.updateProjectSettings);
@@ -64,6 +66,15 @@ export function TopBar({ previewCanvas }: TopBarProps) {
   const handleHome = useCallback(() => {
     router.push('/');
   }, [router]);
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await logout();
+      router.push('/auth/login');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  }, [logout, router]);
 
   const payload = useMemo(
     () =>
@@ -126,12 +137,13 @@ export function TopBar({ previewCanvas }: TopBarProps) {
       const save = useProjectStore.getState().saveProject;
       save();
 
-      // Update projects list with thumbnail
-      if (thumbnail && projectId) {
-        updateListProject(projectId, {
+      // Update projects list with thumbnail and name
+      if (projectId) {
+        const userId = useProjectsListStore.getState().userId;
+        await updateListProject(projectId, {
           name: project.name,
-          thumbnail,
-        });
+          ...(thumbnail && { thumbnail }),
+        }, userId ?? undefined);
       }
 
       console.log("Project saved locally");
@@ -295,6 +307,15 @@ export function TopBar({ previewCanvas }: TopBarProps) {
         >
           <Film className="size-4" />
           {isRendering ? `Rendering... ${jobStatus?.progress ?? 0}%` : "Render"}
+        </button>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-accent hover:text-red-400"
+          title="Logout"
+        >
+          <LogOut className="size-4" />
+          Logout
         </button>
       </div>
       </div>

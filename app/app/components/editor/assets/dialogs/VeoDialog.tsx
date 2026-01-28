@@ -25,7 +25,7 @@ interface VeoDialogProps {
 export function VeoDialog({ open, onOpenChange, projectId, onGenerated }: VeoDialogProps) {
   const [prompt, setPrompt] = useState("");
   const [promptIdea, setPromptIdea] = useState("");
-  const [duration, setDuration] = useState<5 | 8>(8);
+  const [duration, setDuration] = useState<4 | 6 | 8>(8);
   const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16">("16:9");
   const [resolution, setResolution] = useState<"720p" | "1080p" | "4k">("720p");
   const [generateAudio, setGenerateAudio] = useState(true);
@@ -216,11 +216,12 @@ export function VeoDialog({ open, onOpenChange, projectId, onGenerated }: VeoDia
               </label>
               <select
                 value={duration}
-                onChange={(e) => setDuration(Number(e.target.value) as 5 | 8)}
+                onChange={(e) => setDuration(Number(e.target.value) as 4 | 6 | 8)}
                 disabled={resolution !== "720p"}
                 className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
               >
-                <option value={5}>5 seconds</option>
+                <option value={4}>4 seconds</option>
+                <option value={6}>6 seconds</option>
                 <option value={8}>8 seconds</option>
               </select>
             </div>

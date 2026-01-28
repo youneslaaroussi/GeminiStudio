@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Player } from "@motion-canvas/core";
 import { ScenePlayer } from "../ScenePlayer";
+import { useProjectStore, setOnFirebaseSync } from "@/app/lib/store/project-store";
 import type { Layer, CaptionSettings } from "@/app/types/timeline";
 import type { ProjectTranscription } from "@/app/types/transcription";
 
@@ -36,7 +37,9 @@ export function PreviewPanel({
   sceneConfig,
 }: PreviewPanelProps) {
   const [showUpdateIndicator, setShowUpdateIndicator] = useState(false);
+  const [showFirebaseIndicator, setShowFirebaseIndicator] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const firebaseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleVariablesUpdated = useCallback(() => {
     // Clear any existing timeout
@@ -46,6 +49,21 @@ export function PreviewPanel({
     setShowUpdateIndicator(true);
     timeoutRef.current = setTimeout(() => setShowUpdateIndicator(false), 600);
   }, []);
+
+  const handleFirebaseSync = useCallback(() => {
+    if (firebaseTimeoutRef.current) {
+      clearTimeout(firebaseTimeoutRef.current);
+    }
+    setShowFirebaseIndicator(true);
+    firebaseTimeoutRef.current = setTimeout(() => setShowFirebaseIndicator(false), 600);
+  }, []);
+
+  useEffect(() => {
+    setOnFirebaseSync(handleFirebaseSync);
+    return () => {
+      setOnFirebaseSync(null);
+    };
+  }, [handleFirebaseSync]);
 
   const totalClips = layers.reduce((acc, layer) => acc + layer.clips.length, 0);
   const counts = layers.reduce<Record<"video" | "audio" | "text" | "image", number>>(
@@ -70,15 +88,29 @@ export function PreviewPanel({
             )}
           </p>
         </div>
-        {/* Update indicator dot */}
-        <div
-          className={`size-2 rounded-full bg-emerald-500 transition-opacity duration-300 ${
-            showUpdateIndicator ? 'opacity-100' : 'opacity-0'
-          }`}
-          style={{
-            boxShadow: showUpdateIndicator ? '0 0 6px rgba(16, 185, 129, 0.8)' : 'none',
-          }}
-        />
+        {/* Update indicator dots */}
+        <div className="flex gap-2">
+          {/* Motion Canvas update dot */}
+          <div
+            className={`size-2 rounded-full bg-emerald-500 transition-opacity duration-300 ${
+              showUpdateIndicator ? 'opacity-100' : 'opacity-0'
+            }`}
+            style={{
+              boxShadow: showUpdateIndicator ? '0 0 6px rgba(16, 185, 129, 0.8)' : 'none',
+            }}
+            title="Motion Canvas variables updated"
+          />
+          {/* Firebase sync dot */}
+          <div
+            className={`size-2 rounded-full bg-blue-500 transition-opacity duration-300 ${
+              showFirebaseIndicator ? 'opacity-100' : 'opacity-0'
+            }`}
+            style={{
+              boxShadow: showFirebaseIndicator ? '0 0 6px rgba(59, 130, 246, 0.8)' : 'none',
+            }}
+            title="Firebase state synced"
+          />
+        </div>
       </div>
       <div className="flex-1 overflow-hidden">
           <ScenePlayer

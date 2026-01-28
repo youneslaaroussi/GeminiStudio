@@ -5,29 +5,24 @@ import { useEffect, useState } from "react";
 export function HistoryControls() {
   const undo = useProjectStore((s) => s.undo);
   const redo = useProjectStore((s) => s.redo);
-  
-  // We need to subscribe to the temporal store to get canUndo/canRedo states
-  // Since useProjectStore.temporal might not be available immediately during SSR or hydration, 
-  // we handle it carefully.
-  const [canUndo, setCanUndo] = useState(false);
-  const [canRedo, setCanRedo] = useState(false);
+  const syncManager = useProjectStore((s) => s.syncManager);
+  const project = useProjectStore((s) => s.project);
 
-  useEffect(() => {
-    const temporalStore = useProjectStore.temporal;
-    if (!temporalStore) return;
+  const canUndo = syncManager?.canUndo() ?? false;
+  const canRedo = syncManager?.canRedo() ?? false;
 
-    const unsubscribe = temporalStore.subscribe((state) => {
-      setCanUndo(state.pastStates.length > 0);
-      setCanRedo(state.futureStates.length > 0);
-    });
+  const handleUndo = async () => {
+    await undo();
+  };
 
-    return unsubscribe;
-  }, []);
+  const handleRedo = async () => {
+    await redo();
+  };
 
   return (
     <div className="flex items-center gap-1 border-r border-border pr-2 mr-2">
       <button
-        onClick={undo}
+        onClick={handleUndo}
         disabled={!canUndo}
         className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors disabled:opacity-30"
         title="Undo (Ctrl+Z)"
@@ -35,7 +30,7 @@ export function HistoryControls() {
         <Undo2 className="size-4" />
       </button>
       <button
-        onClick={redo}
+        onClick={handleRedo}
         disabled={!canRedo}
         className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors disabled:opacity-30"
         title="Redo (Ctrl+Y)"

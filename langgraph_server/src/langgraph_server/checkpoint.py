@@ -1,19 +1,23 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence, cast
 
 from google.cloud import storage
 from google.cloud.exceptions import NotFound
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
+    CheckpointMetadata,
     CheckpointTuple,
     PendingWrite,
 )
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.checkpoint.postgres import PostgresSaver
+
+try:  # Postgres saver is optional; requires langgraph-checkpoint extras.
+    from langgraph.checkpoint.postgres import PostgresSaver  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    PostgresSaver = None  # type: ignore[assignment]
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-from langgraph.checkpoint.types import ConfigWithMetadata
 from langchain_core.runnables import RunnableConfig
 from datetime import datetime, timezone
 
@@ -123,8 +127,7 @@ class GCSCheckpointSaver(BaseCheckpointSaver):
             return None
 
         checkpoint_value: Checkpoint = record["checkpoint"]
-        metadata = record.get("metadata")
-        config_with_metadata: ConfigWithMetadata = {"config": config, "metadata": metadata}
+        metadata = cast(CheckpointMetadata, record.get("metadata") or {})
 
         try:
             writes_blob = self.bucket.blob(self._writes_path(config, checkpoint_id))
@@ -134,7 +137,8 @@ class GCSCheckpointSaver(BaseCheckpointSaver):
         except NotFound:
             writes = ()
 
-        return CheckpointTuple(config=config_with_metadata, checkpoint=checkpoint_value, pending_writes=writes)
+        pending = list(writes) if writes else None
+        return CheckpointTuple(config=config, checkpoint=checkpoint_value, metadata=metadata, pending_writes=pending)
 
     async def aget_tuple(
         self,
@@ -166,8 +170,7 @@ class GCSCheckpointSaver(BaseCheckpointSaver):
             payload = blob.download_as_bytes()
             record = self.serializer.loads(payload)
             checkpoint_value: Checkpoint = record["checkpoint"]
-            metadata = record.get("metadata")
-            config_with_metadata: ConfigWithMetadata = {"config": config, "metadata": metadata}
+            metadata = cast(CheckpointMetadata, record.get("metadata") or {})
             writes_blob = self.bucket.blob(self._writes_path(config, checkpoint_id))
             try:
                 writes_payload = writes_blob.download_as_bytes()
@@ -175,7 +178,15 @@ class GCSCheckpointSaver(BaseCheckpointSaver):
                 writes = tuple(writes_record.get("writes", ()))
             except NotFound:
                 writes = ()
-            results.append(CheckpointTuple(config=config_with_metadata, checkpoint=checkpoint_value, pending_writes=writes))
+            pending = list(writes) if writes else None
+            results.append(
+                CheckpointTuple(
+                    config=config,
+                    checkpoint=checkpoint_value,
+                    metadata=metadata,
+                    pending_writes=pending,
+                )
+            )
             if limit and len(results) >= limit:
                 break
         return results
@@ -199,6 +210,11 @@ def create_checkpointer(settings: Settings) -> BaseCheckpointSaver:
         return InMemorySaver()
 
     if backend == "postgres":
+        if PostgresSaver is None:
+            raise RuntimeError(
+                "Postgres checkpointer requested but 'langgraph.checkpoint.postgres' is unavailable. "
+                "Install the langgraph checkpoint Postgres extra, e.g. `pip install \"langgraph-checkpoint[postgres]\"`."
+            )
         if not settings.database_url:
             raise ValueError("DATABASE_URL must be set when CHECKPOINTER_BACKEND=postgres")
         saver = PostgresSaver.from_conn_string(settings.database_url)

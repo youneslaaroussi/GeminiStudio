@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && userId == request.auth.uid;
+    }
+
+    function isCollaborator(userId, projectId) {
+      let project = get(/databases/$(database)/documents/users/$(userId)/projects/$(projectId));
+      return project.data.collaborators != null && request.auth.uid in project.data.collaborators;
+    }
+
+    function canAccessProject(userId, projectId) {
+      return isOwner(userId) || isCollaborator(userId, projectId);
+    }
+
+    // User-specific project documents
+    match /users/{userId}/projects/{projectId} {
+      // Owner and collaborators can read
+      allow read: if canAccessProject(userId, projectId);
+
+      // Only owner can create/update/delete project metadata
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+
+      // Branch documents (sub-collection)
+      match /branches/{branchId} {
+        allow read: if canAccessProject(userId, projectId);
+        allow write: if canAccessProject(userId, projectId);
+
+        // Prevent deletion of main branch
+        allow delete: if canAccessProject(userId, projectId) && branchId != 'main';
+
+        // Branch head (latest state)
+        match /head {
+          allow read: if canAccessProject(userId, projectId);
+          allow write: if canAccessProject(userId, projectId);
+        }
+
+        // Commit history
+        match /commits/{commitId} {
+          allow read: if canAccessProject(userId, projectId);
+          allow create: if canAccessProject(userId, projectId);
+          allow update: if false; // Commits are immutable
+          allow delete: if false;
+        }
+      }
+
+      // Recursively allow access to all nested documents
+      match /{document=**} {
+        allow read: if canAccessProject(userId, projectId);
+        allow write: if canAccessProject(userId, projectId);
+        allow delete: if canAccessProject(userId, projectId) && !(document.endsWith('main'));
+      }
+    }
+
+    // Prevent access to other users' data
+    match /users/{userId}/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,12 +1,6 @@
 import { z } from "zod";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import type { ToolDefinition, ToolOutput } from "./types";
-import type { Project } from "@/app/types/timeline";
-
-type ProjectStoreSnapshot = {
-  project?: Project;
-  hasUnsavedChanges?: boolean;
-};
 
 const historyActionSchema = z.object({
   action: z.enum(["status", "undo", "redo"]).default("status"),
@@ -18,38 +12,13 @@ const historyActionSchema = z.object({
     .optional(),
 });
 
-function summarizeProject(state: ProjectStoreSnapshot | undefined) {
-  const project = state?.project;
-  if (!project) {
-    return "No project snapshot available.";
-  }
-  const layerCount = Array.isArray(project.layers) ? project.layers.length : 0;
-  const clipCount = Array.isArray(project.layers)
-    ? project.layers.reduce(
-        (total, layer) =>
-          total + (Array.isArray(layer.clips) ? layer.clips.length : 0),
-        0
-      )
-    : 0;
-
-  const unsaved =
-    state?.hasUnsavedChanges !== undefined
-      ? state.hasUnsavedChanges
-        ? "unsaved changes"
-        : "saved"
-      : "unknown save status";
-
-  return `${project.name ?? "Untitled"} • layers: ${layerCount} • clips: ${clipCount} • ${unsaved}`;
-}
-
 export const projectHistoryTool: ToolDefinition<
-  typeof historyActionSchema,
-  Project
+  typeof historyActionSchema
 > = {
   name: "projectHistory",
   label: "Project History",
   description:
-    "Inspect the undo/redo history of the current project or trigger undo and redo operations using the existing Zustand temporal store.",
+    "Inspect the undo/redo history of the current project or trigger undo and redo operations.",
   runLocation: "client",
   inputSchema: historyActionSchema,
   fields: [
@@ -83,67 +52,38 @@ export const projectHistoryTool: ToolDefinition<
       };
     }
 
-    const temporalStore = useProjectStore.temporal;
-    if (!temporalStore) {
+    const { syncManager, undo, redo } = useProjectStore.getState();
+    if (!syncManager) {
       return {
         status: "error",
-        error: "Project history store is not available yet. Try again shortly.",
+        error: "Sync manager not initialized. Open a project to use history.",
       };
     }
 
     const stepsRequested = input.steps ?? 1;
-    const initialTemporalState = temporalStore.getState();
     let message: string | null = null;
 
     if (input.action === "undo") {
-      const available = initialTemporalState.pastStates.length;
-      if (available === 0) {
+      if (!syncManager.canUndo()) {
         message = "Nothing to undo.";
       } else {
-        temporalStore.getState().undo(stepsRequested);
-        const afterUndo = temporalStore.getState();
-        const applied = Math.max(
-          0,
-          available - afterUndo.pastStates.length
-        );
-        message = `Undid ${applied} ${applied === 1 ? "step" : "steps"}.`;
+        for (let i = 0; i < stepsRequested; i++) {
+          undo();
+        }
+        message = `Undid ${stepsRequested} ${stepsRequested === 1 ? "step" : "steps"}.`;
       }
     } else if (input.action === "redo") {
-      const available = initialTemporalState.futureStates.length;
-      if (available === 0) {
+      if (!syncManager.canRedo()) {
         message = "Nothing to redo.";
       } else {
-        temporalStore.getState().redo(stepsRequested);
-        const afterRedo = temporalStore.getState();
-        const applied = Math.max(
-          0,
-          available - afterRedo.futureStates.length
-        );
-        message = `Redid ${applied} ${applied === 1 ? "step" : "steps"}.`;
+        for (let i = 0; i < stepsRequested; i++) {
+          redo();
+        }
+        message = `Redid ${stepsRequested} ${stepsRequested === 1 ? "step" : "steps"}.`;
       }
+    } else {
+      message = "History status retrieved.";
     }
-
-    const latestTemporalState = temporalStore.getState();
-    const projectState = useProjectStore.getState();
-
-    const pastStates = latestTemporalState.pastStates;
-    const recentPast = pastStates.slice(-5);
-    const pastStartIndex = pastStates.length - recentPast.length;
-    const pastSummaries = recentPast.map((state, index) => ({
-      type: "text" as const,
-      text: `Past ${pastStartIndex + index + 1}: ${summarizeProject(
-        state as ProjectStoreSnapshot
-      )}`,
-    }));
-
-    const futureSummaries = latestTemporalState.futureStates
-      .slice(0, 5)
-      .map((state, index) => ({
-        type: "text" as const,
-        text: `Future ${index + 1}: ${summarizeProject(
-          state as ProjectStoreSnapshot
-        )}`,
-      }));
 
     const outputs: ToolOutput[] = [
       {
@@ -158,54 +98,23 @@ export const projectHistoryTool: ToolDefinition<
         items: [
           {
             type: "text",
-            text: `Past states: ${latestTemporalState.pastStates.length}`,
+            text: `Can undo: ${syncManager.canUndo() ? "yes" : "no"}`,
           },
           {
             type: "text",
-            text: `Future states: ${latestTemporalState.futureStates.length}`,
+            text: `Can redo: ${syncManager.canRedo() ? "yes" : "no"}`,
           },
           {
             type: "text",
-            text: `Tracking: ${
-              latestTemporalState.isTracking ? "enabled" : "paused"
-            }`,
+            text: `Action: ${input.action}`,
           },
           {
             type: "text",
-            text: `Current project: ${summarizeProject(
-              projectState as ProjectStoreSnapshot
-            )}`,
+            text: `Steps requested: ${stepsRequested}`,
           },
         ],
       },
     ];
-
-    if (pastSummaries.length > 0) {
-      outputs.push({
-        type: "list",
-        title: "Recent Undo Stack (latest last)",
-        items: pastSummaries,
-      });
-    }
-
-    if (futureSummaries.length > 0) {
-      outputs.push({
-        type: "list",
-        title: "Upcoming Redo Stack (next first)",
-        items: futureSummaries,
-      });
-    }
-
-    outputs.push({
-      type: "json",
-      data: {
-        pastStates: latestTemporalState.pastStates.length,
-        futureStates: latestTemporalState.futureStates.length,
-        isTracking: latestTemporalState.isTracking,
-        action: input.action,
-        stepsRequested,
-      },
-    });
 
     return {
       status: "success",

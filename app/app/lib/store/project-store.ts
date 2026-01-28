@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { temporal } from 'zundo';
+import * as Automerge from '@automerge/automerge';
 import type {
   AudioClip,
   ClipTransition,
@@ -18,10 +18,13 @@ import type {
   ChatMode,
   TimelineChatMessage,
 } from '@/app/types/chat';
+import { ProjectSyncManager } from '@/app/lib/automerge/sync-manager';
+import { automergeToProject, projectToAutomerge } from '@/app/lib/automerge/adapter';
+import type { AutomergeProject } from '@/app/lib/automerge/types';
 
 interface ProjectStore {
   project: Project;
-  projectId: string | null; // Added
+  projectId: string | null;
   currentTime: number;
   selectedClipId: string | null;
   selectedTransitionKey: string | null;
@@ -30,6 +33,11 @@ interface ProjectStore {
   isMuted: boolean;
   isLooping: boolean;
   playbackSpeed: number;
+
+  // Sync manager for Automerge/Firestore integration
+  syncManager: ProjectSyncManager | null;
+  currentBranch: string;
+  isOnline: boolean;
 
   addLayer: (layer: Layer) => void;
   addClip: (clip: TimelineClip, layerId?: string) => void;
@@ -53,7 +61,7 @@ interface ProjectStore {
   upsertProjectTranscription: (transcription: ProjectTranscription) => void;
   mergeProjectTranscription: (assetId: string, updates: Partial<ProjectTranscription>) => void;
   removeProjectTranscription: (assetId: string) => void;
-  
+
   // Transition actions
   addTransition: (fromId: string, toId: string, transition: ClipTransition) => void;
   removeTransition: (fromId: string, toId: string) => void;
@@ -72,14 +80,16 @@ interface ProjectStore {
   getActiveTextClips: (time: number) => TextClip[];
   getActiveImageClips: (time: number) => ImageClip[];
   getClipById: (id: string) => TimelineClip | undefined;
-  
-  // History
+
+  // History - now using Automerge instead of Zundo
   undo: () => void;
   redo: () => void;
-  
+
   // Persistence
+  initializeSync: (userId: string, projectId: string, branchId?: string, onFirebaseSync?: () => void) => Promise<void>;
   loadProject: (id: string) => void;
   saveProject: () => void;
+  forceSyncToFirestore: () => Promise<void>;
   exportProject: () => void;
   hasUnsavedChanges: boolean;
   lastSavedSnapshot: string;
@@ -210,45 +220,166 @@ const createProjectUpdateHelper = (
   };
 };
 
-export const useProjectStore = create<ProjectStore>()(
-  temporal(
-    (set, get): ProjectStore => {
-      const updateProjectState = createProjectUpdateHelper(set);
-      return {
-      // Initial state
-      project: defaultProject,
-      projectId: null,
-      currentTime: 0,
-      selectedClipId: null,
-      selectedTransitionKey: null,
-      isPlaying: false,
-      zoom: 50,
-      isMuted: false,
-      isLooping: true,
-      playbackSpeed: 1,
-      hasUnsavedChanges: false,
-      lastSavedSnapshot: JSON.stringify(defaultProject),
+let onFirebaseSyncCallback: (() => void) | null = null;
 
-      // Placeholder for temporal actions (injected by middleware)
-      undo: () => {
-        const { undo } = useProjectStore.temporal.getState();
-        undo();
-      },
-      redo: () => {
-        const { redo } = useProjectStore.temporal.getState();
-        redo();
-      },
+export const setOnFirebaseSync = (callback: (() => void) | null) => {
+  onFirebaseSyncCallback = callback;
+  // If sync manager already exists, update it
+  const store = useProjectStore.getState();
+  if (store.syncManager) {
+    // Re-initialize with new callback
+    const state = store.syncManager.getDocument();
+    if (state) {
+      console.log('[FIREBASE-SYNC] Updated Firebase sync callback');
+    }
+  }
+};
 
-      addLayer: (layer) =>
-        updateProjectState((state) => ({
+export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore => {
+  let syncManager: ProjectSyncManager | null = null;
+
+  const updateProjectState = createProjectUpdateHelper(set);
+
+  // Helper to apply changes through sync manager
+  const applySyncedChange = async (
+    changeFn: (state: ProjectStore) => { project: Project; [key: string]: unknown } | null | undefined
+  ) => {
+    // 1. Apply change to store immediately
+    const result = changeFn(get());
+    if (result) {
+      const { project, ...rest } = result;
+      set({ project, ...rest });
+
+      // 2. Sync to Automerge async
+      const currentSyncManager = get().syncManager;
+      if (currentSyncManager) {
+        try {
+          console.log('[SYNC] Syncing to Automerge');
+          await currentSyncManager.applyChange((automergeDoc) => {
+            automergeDoc.projectJSON = JSON.stringify(project);
+          });
+        } catch (error) {
+          console.error('[SYNC] Failed to sync to Automerge:', error);
+        }
+      }
+    }
+  };
+
+  return {
+    // Initial state
+    project: defaultProject,
+    projectId: null,
+    currentTime: 0,
+    selectedClipId: null,
+    selectedTransitionKey: null,
+    isPlaying: false,
+    zoom: 50,
+    isMuted: false,
+    isLooping: true,
+    playbackSpeed: 1,
+    syncManager: null,
+    currentBranch: 'main',
+    isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+    hasUnsavedChanges: false,
+    lastSavedSnapshot: JSON.stringify(defaultProject),
+
+    // Initialize sync manager (must be called when loading a project)
+    initializeSync: async (userId: string, projectId: string, branchId: string = 'main', onFirebaseSync?: () => void) => {
+      console.log('[SYNC] initializeSync called', { userId, projectId, branchId });
+      if (syncManager) {
+        syncManager.destroy();
+      }
+
+      syncManager = new ProjectSyncManager(
+        userId,
+        projectId,
+        branchId,
+        (doc: any) => {
+          console.log('[SYNC] Sync manager onUpdate callback triggered');
+          // When sync manager updates, update the store
+          let project: Project;
+          if (doc.projectJSON) {
+            try {
+              project = JSON.parse(doc.projectJSON);
+            } catch (e) {
+              console.error('Failed to parse projectJSON:', e);
+              return;
+            }
+          } else {
+            project = automergeToProject(doc);
+          }
+          set({ project, currentBranch: branchId, isOnline: syncManager?.getIsOnline() ?? true });
+        },
+        () => {
+          onFirebaseSync?.();
+          onFirebaseSyncCallback?.();
+        }
+      );
+
+      console.log('[SYNC] Initializing sync manager');
+      await syncManager.initialize();
+
+      // Load project state from Firebase (source of truth)
+      const doc = syncManager.getDocument();
+      console.log('[SYNC] Firebase document:', doc ? Object.keys(doc) : 'null');
+      if (doc && doc.projectJSON) {
+        console.log('[SYNC] Loading project from Firebase', doc.projectJSON.length, 'chars');
+        try {
+          const project = JSON.parse(doc.projectJSON);
+          console.log('[SYNC] Loaded project from Firebase:', project.name, 'with', project.layers.length, 'layers');
+          set({ project, syncManager, currentBranch: branchId, projectId });
+        } catch (e) {
+          console.error('Failed to parse project from Firebase:', e);
+          set({ syncManager, currentBranch: branchId, projectId });
+        }
+      } else if (doc && Object.keys(doc).length === 0) {
+        // Empty document - initialize with current store project
+        const currentProject = get().project;
+        console.log('[SYNC] Initializing empty document with current project:', currentProject.name);
+        await syncManager.applyChange((automergeDoc) => {
+          automergeDoc.projectJSON = JSON.stringify(currentProject);
+        });
+        set({ syncManager, currentBranch: branchId, projectId });
+      } else {
+        console.log('[SYNC] No project data in Firebase or Automerge doc is null');
+        set({ syncManager, currentBranch: branchId, projectId });
+      }
+    },
+
+    // History using Automerge
+    undo: async () => {
+      try {
+        const currentSyncManager = get().syncManager;
+        if (currentSyncManager) {
+          await currentSyncManager.undo();
+        }
+      } catch (error) {
+        console.error('Undo failed:', error);
+      }
+    },
+
+    redo: async () => {
+      try {
+        const currentSyncManager = get().syncManager;
+        if (currentSyncManager) {
+          await currentSyncManager.redo();
+        }
+      } catch (error) {
+        console.error('Redo failed:', error);
+      }
+    },
+
+      addLayer: (layer) => {
+        applySyncedChange((state) => ({
           project: {
             ...state.project,
             layers: [...state.project.layers, layer],
           },
-        })),
+        }));
+      },
 
-      deleteLayer: (layerId: string) =>
-        updateProjectState((state) => {
+      deleteLayer: (layerId: string) => {
+        applySyncedChange((state) => {
           const { layers, transitions = {} } = state.project;
           const layerIndex = layers.findIndex((layer) => layer.id === layerId);
           if (layerIndex === -1) return null;
@@ -292,10 +423,11 @@ export const useProjectStore = create<ProjectStore>()(
             selectedClipId: nextSelectedClipId,
             selectedTransitionKey: nextSelectedTransitionKey,
           };
-        }),
+        });
+      },
 
-      addClip: (clip: TimelineClip, layerId?: string) =>
-        updateProjectState((state) => {
+      addClip: (clip: TimelineClip, layerId?: string) => {
+        applySyncedChange((state) => {
           // Check if project is currently empty (has no clips) to potentially set resolution
           const hasExistingClips = state.project.layers.some((l) => l.clips.length > 0);
           let resolutionUpdate = {};
@@ -341,10 +473,11 @@ export const useProjectStore = create<ProjectStore>()(
               layers,
             },
           };
-        }),
+        });
+      },
 
-      updateClip: (id: string, updates: Partial<TimelineClip>) =>
-        updateProjectState((state) => {
+      updateClip: (id: string, updates: Partial<TimelineClip>) => {
+        applySyncedChange((state) => {
           const location = findClipLocation(state.project, id);
           if (!location) return null;
 
@@ -367,10 +500,11 @@ export const useProjectStore = create<ProjectStore>()(
               layers,
             },
           };
-        }),
+        });
+      },
 
-      deleteClip: (id: string) =>
-        updateProjectState((state) => {
+      deleteClip: (id: string) => {
+        applySyncedChange((state) => {
           const location = findClipLocation(state.project, id);
           if (!location) return null;
 
@@ -386,10 +520,11 @@ export const useProjectStore = create<ProjectStore>()(
             },
             selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,
           };
-        }),
+        });
+      },
 
-      moveClipToLayer: (clipId: string, targetLayerId: string) =>
-        updateProjectState((state) => {
+      moveClipToLayer: (clipId: string, targetLayerId: string) => {
+        applySyncedChange((state) => {
           const location = findClipLocation(state.project, clipId);
           if (!location) return null;
 
@@ -420,7 +555,8 @@ export const useProjectStore = create<ProjectStore>()(
               layers,
             },
           };
-        }),
+        });
+      },
 
       setCurrentTime: (time: number) => set({ currentTime: Math.max(0, time) }),
 
@@ -437,8 +573,8 @@ export const useProjectStore = create<ProjectStore>()(
 
       setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
 
-      updateProjectSettings: (settings) =>
-        updateProjectState((state) => ({
+      updateProjectSettings: (settings) => {
+        applySyncedChange((state) => ({
           project: {
             ...state.project,
             renderScale:
@@ -468,7 +604,8 @@ export const useProjectStore = create<ProjectStore>()(
                 ? settings.captionSettings
                 : state.project.captionSettings,
           },
-        })),
+        }));
+      },
 
       setProject: (project, options) =>
         set(() => {
@@ -488,8 +625,8 @@ export const useProjectStore = create<ProjectStore>()(
           };
         }),
 
-      upsertProjectTranscription: (transcription) =>
-        updateProjectState((state) => {
+      upsertProjectTranscription: (transcription) => {
+        applySyncedChange((state) => {
           const existing = state.project.transcriptions ?? {};
           const current = existing[transcription.assetId];
           const createdAt = current?.createdAt ?? transcription.createdAt ?? new Date().toISOString();
@@ -508,10 +645,11 @@ export const useProjectStore = create<ProjectStore>()(
               },
             },
           };
-        }),
+        });
+      },
 
-      mergeProjectTranscription: (assetId, updates) =>
-        updateProjectState((state) => {
+      mergeProjectTranscription: (assetId, updates) => {
+        applySyncedChange((state) => {
           const existing = state.project.transcriptions ?? {};
           const current = existing[assetId];
           if (!current) return null;
@@ -528,10 +666,11 @@ export const useProjectStore = create<ProjectStore>()(
               },
             },
           };
-        }),
+        });
+      },
 
-      removeProjectTranscription: (assetId) =>
-        updateProjectState((state) => {
+      removeProjectTranscription: (assetId) => {
+        applySyncedChange((state) => {
           const existing = state.project.transcriptions ?? {};
           if (!(assetId in existing)) return null;
           const rest = { ...existing };
@@ -542,10 +681,11 @@ export const useProjectStore = create<ProjectStore>()(
               transcriptions: rest,
             },
           };
-        }),
+        });
+      },
 
-      addTransition: (fromId, toId, transition) =>
-        updateProjectState((state) => {
+      addTransition: (fromId, toId, transition) => {
+        applySyncedChange((state) => {
           const key = `${fromId}->${toId}` as const;
           return {
             project: {
@@ -556,10 +696,11 @@ export const useProjectStore = create<ProjectStore>()(
               },
             },
           };
-        }),
+        });
+      },
 
-      removeTransition: (fromId, toId) =>
-        updateProjectState((state) => {
+      removeTransition: (fromId, toId) => {
+        applySyncedChange((state) => {
           const key = `${fromId}->${toId}` as const;
           const transitions = { ...state.project.transitions };
           delete transitions[key];
@@ -569,10 +710,11 @@ export const useProjectStore = create<ProjectStore>()(
               transitions,
             },
           };
-        }),
+        });
+      },
 
-      createAssistantChat: (name) =>
-        updateProjectState((state) => {
+      createAssistantChat: (name) => {
+        applySyncedChange((state) => {
           const chats = state.project.assistantChats ?? [];
           const label = name?.trim() || `Chat ${chats.length + 1}`;
           const newChat = createAssistantChatSession(label);
@@ -583,10 +725,11 @@ export const useProjectStore = create<ProjectStore>()(
               activeAssistantChatId: newChat.id,
             },
           };
-        }),
+        });
+      },
 
-      setActiveAssistantChat: (chatId) =>
-        updateProjectState((state) => {
+      setActiveAssistantChat: (chatId) => {
+        applySyncedChange((state) => {
           const chats = state.project.assistantChats ?? [];
           if (!chats.some((chat) => chat.id === chatId)) return null;
           return {
@@ -595,10 +738,11 @@ export const useProjectStore = create<ProjectStore>()(
               activeAssistantChatId: chatId,
             },
           };
-        }),
+        });
+      },
 
-      renameAssistantChat: (chatId, name) =>
-        updateProjectState((state) => {
+      renameAssistantChat: (chatId, name) => {
+        applySyncedChange((state) => {
           const trimmed = name?.trim();
           if (!trimmed) return null;
           const chats = state.project.assistantChats ?? [];
@@ -613,10 +757,11 @@ export const useProjectStore = create<ProjectStore>()(
               assistantChats: updated,
             },
           };
-        }),
+        });
+      },
 
-      deleteAssistantChat: (chatId) =>
-        updateProjectState((state) => {
+      deleteAssistantChat: (chatId) => {
+        applySyncedChange((state) => {
           const chats = state.project.assistantChats ?? [];
           if (chats.length <= 1) return null;
           const filtered = chats.filter((chat) => chat.id !== chatId);
@@ -632,10 +777,11 @@ export const useProjectStore = create<ProjectStore>()(
               activeAssistantChatId: nextActive,
             },
           };
-        }),
+        });
+      },
 
-      setAssistantChatMode: (chatId, mode) =>
-        updateProjectState((state) => {
+      setAssistantChatMode: (chatId, mode) => {
+        applySyncedChange((state) => {
           const chats = state.project.assistantChats ?? [];
           const updated = chats.map((chat) =>
             chat.id === chatId
@@ -648,10 +794,11 @@ export const useProjectStore = create<ProjectStore>()(
               assistantChats: updated,
             },
           };
-        }),
+        });
+      },
 
-      updateAssistantChatMessages: (chatId, messages) =>
-        updateProjectState((state) => {
+      updateAssistantChatMessages: (chatId, messages) => {
+        applySyncedChange((state) => {
           const chats = state.project.assistantChats ?? [];
           const updated = chats.map((chat) =>
             chat.id === chatId
@@ -664,10 +811,11 @@ export const useProjectStore = create<ProjectStore>()(
               assistantChats: updated,
             },
           };
-        }),
+        });
+      },
 
       splitClipAtTime: (id, time) => {
-        updateProjectState((state) => {
+        applySyncedChange((state) => {
           const location = findClipLocation(state.project, id);
           if (!location) return null;
 
@@ -818,21 +966,20 @@ export const useProjectStore = create<ProjectStore>()(
           hasUnsavedChanges: false,
           lastSavedSnapshot: JSON.stringify(state.project),
         })),
-    };
-    },
-    {
-      limit: 50,
-      partialize: (state) => ({
-        project: state.project,
-      }),
-      equality: (past, present) => JSON.stringify(past) === JSON.stringify(present),
-      handleSet: (handleSet) => {
-        return (state) => {
-          handleSet(state);
-        };
+
+      forceSyncToFirestore: async () => {
+        if (!syncManager) {
+          throw new Error('Sync not initialized');
+        }
+        try {
+          await syncManager.forceSyncToFirestore();
+        } catch (error) {
+          console.error('Failed to force sync to Firestore:', error);
+          throw error;
+        }
       },
-    }
-  )
+    };
+  }
 );
 
 useProjectStore.subscribe((state, previousState) => {
