@@ -12,6 +12,58 @@ This package provides a LangGraph-powered agent service that can run locally via
 - Dockerfile optimized for Cloud Run deployment
 - Modular LangChain tools (time, docs search, weather) with easy extension points
 
+## Chat providers
+
+The server ships with a pluggable chat-provider bridge so external channels can hand updates to the agent. Incoming payloads are normalized, the graph runs with the correct `project_id`, and responses are sent back through the originating provider.
+
+### Telegram bot (Elegegram) quick start
+
+1. **Create a bot**
+   - Talk to [@BotFather](https://t.me/BotFather), run `/newbot`, and copy the `TELEGRAM_BOT_TOKEN`.
+   - Optionally generate a random secret string (used to verify webhook calls).
+
+2. **Configure Firebase Admin**
+   - Download a service-account JSON that can read Firebase Auth (Project → Service accounts → Generate new private key).
+   - Store it on disk and set `FIREBASE_SERVICE_ACCOUNT_JSON=/path/to/service-account.json`.
+   - Make sure phone numbers in Auth are stored in E.164 format (e.g. `+15551234567`).
+
+3. **Set environment variables**
+   ```
+   TELEGRAM_BOT_TOKEN=123456789:abc...
+   TELEGRAM_WEBHOOK_SECRET=your-random-secret   # optional but recommended
+   FIREBASE_SERVICE_ACCOUNT_JSON=/workspace/secrets/firebase-admin.json
+   DEFAULT_PHONE_REGION=US                      # fallback region for parsing
+   DEFAULT_PROJECT_ID=your-project-id           # reused by LangGraph tools
+   ```
+
+4. **Deploy & expose the webhook**
+   - Deploy the FastAPI app (locally via `uvicorn` or to Cloud Run).
+   - Point Telegram at the webhook:
+     ```bash
+     curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+       -H 'Content-Type: application/json' \
+       -d '{
+             "url": "https://your-domain/providers/telegram/webhook",
+             "secret_token": "your-random-secret"
+           }'
+     ```
+   - Telegram will now POST chat updates to `/providers/telegram/webhook`. Each message should contain a phone number; the server looks up the Firebase user by phone and replies with the associated email.
+
+5. **Test**
+   - DM your bot with a phone number (`+15551234567`).
+   - The bot will respond with `The email address linked to +15551234567 is user@example.com.` or an error message if no match is found.
+
+### Adding a new provider
+
+1. Create a subclass of `ChatProvider` in `src/langgraph_server/chat/` that implements:
+   - `parse_update`: convert the raw webhook payload into `IncomingMessage` objects.
+   - `dispatch_responses`: send `OutgoingMessage` objects back to the provider.
+   - Optional helper methods (e.g., message templating or validation).
+2. Register it in `chat/__init__.py::build_dispatcher`, wiring in any required config from `Settings`.
+3. Add environment variables to `config.py` so the provider can be configured without code changes.
+4. Expose a FastAPI route that calls `dispatcher.handle_update("<provider>", payload)` (see the Telegram webhook for reference).
+5. Document the setup steps (secrets, webhooks, testing) in this README.
+
 ## Built-in tools
 
 The agent binds three starter tools located in `src/langgraph_server/tools/`, each defined in its own module for clarity:

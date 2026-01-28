@@ -238,11 +238,6 @@ export function Clip({ clip, layerId }: ClipProps) {
     [clip.id, deleteClip]
   );
 
-  const handleConfirmDelete = useCallback(() => {
-    deleteClip(clip.id);
-    setShowDeleteDialog(false);
-  }, [clip.id, deleteClip]);
-
   const handleOpenDeleteDialog = useCallback(
     (event?: Event | React.SyntheticEvent) => {
       event?.preventDefault?.();
@@ -335,7 +330,7 @@ export function Clip({ clip, layerId }: ClipProps) {
       </div>
 
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent>
+        <DialogContent onPointerDownCapture={(e) => e.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>Delete clip?</DialogTitle>
             <DialogDescription>
@@ -346,7 +341,14 @@ export function Clip({ clip, layerId }: ClipProps) {
             <DialogClose asChild>
               <Button variant="outline">Cancel</Button>
             </DialogClose>
-            <Button variant="destructive" onClick={handleConfirmDelete}>
+            <Button
+              variant="destructive"
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                deleteClip(clip.id);
+                setShowDeleteDialog(false);
+              }}
+            >
               Delete
             </Button>
           </DialogFooter>

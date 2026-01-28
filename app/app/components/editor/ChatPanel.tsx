@@ -31,6 +31,12 @@ import {
   FileAudio,
   FileText,
   File as FileIcon,
+  Cloud,
+  CloudUpload,
+  History,
+  Save,
+  Check,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
@@ -54,6 +60,14 @@ import type {
 } from "@/app/lib/tools/types";
 import type { Project } from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
+import { useAuth } from "@/app/lib/hooks/useAuth";
+import {
+  saveChatSession,
+  loadChatSession,
+  listChatSessions,
+  generateSessionName,
+  type ChatSessionSummary,
+} from "@/app/lib/services/chat-sessions";
 
 type ToolPartState =
   | "input-streaming"
@@ -103,9 +117,22 @@ export function ChatPanel() {
   const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(true);
   const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
+  const [savedSessions, setSavedSessions] = useState<ChatSessionSummary[]>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [isSessionDropdownOpen, setIsSessionDropdownOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"success" | "error" | null>(null);
+  const [isTeleporting, setIsTeleporting] = useState(false);
+  const [teleportStatus, setTeleportStatus] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const sessionId = useRef(`chat-${Date.now()}`).current;
+  const sessionIdRef = useRef(`chat-${Date.now()}`);
+  const sessionId = sessionIdRef.current;
+
+  const { user } = useAuth();
 
   const chatTransport = useMemo(
     () =>
@@ -116,7 +143,7 @@ export function ChatPanel() {
     [mode]
   );
 
-  const { messages, sendMessage, status, error, clearError, stop } =
+  const { messages, sendMessage, setMessages, status, error, clearError, stop } =
     useChat<TimelineChatMessage>({
       transport: chatTransport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
@@ -237,6 +264,135 @@ export function ChatPanel() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
+  // Load saved sessions list
+  const loadSavedSessions = useCallback(async () => {
+    if (!user) return;
+    setIsLoadingSessions(true);
+    try {
+      const sessions = await listChatSessions(user.uid);
+      setSavedSessions(sessions);
+    } catch (error) {
+      console.error("Failed to load chat sessions:", error);
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  }, [user]);
+
+  // Load sessions when dropdown is opened
+  useEffect(() => {
+    if (isSessionDropdownOpen && user) {
+      loadSavedSessions();
+    }
+  }, [isSessionDropdownOpen, user, loadSavedSessions]);
+
+  // Save current session to Firebase
+  const handleSaveSession = useCallback(async () => {
+    if (!user || !messages || messages.length === 0) return null;
+    setIsSaving(true);
+    setSaveStatus(null);
+    try {
+      const name = generateSessionName(messages);
+      const session = await saveChatSession(
+        user.uid,
+        sessionId,
+        name,
+        mode,
+        messages
+      );
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus(null), 2000);
+      return session;
+    } catch (error) {
+      console.error("Failed to save chat session:", error);
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus(null), 2000);
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [user, sessionId, mode, messages]);
+
+  // Load a specific session
+  const handleLoadSession = useCallback(
+    async (loadSessionId: string) => {
+      if (!user) return;
+      setIsSessionDropdownOpen(false);
+      try {
+        const session = await loadChatSession(user.uid, loadSessionId);
+        if (session) {
+          // Update the session ID reference to the loaded session
+          sessionIdRef.current = session.id;
+          setMode(session.currentMode);
+          // Load the messages into the chat
+          setMessages(session.messages);
+        }
+      } catch (error) {
+        console.error("Failed to load chat session:", error);
+      }
+    },
+    [user, setMessages]
+  );
+
+  // Teleport: Save session and send to cloud
+  const handleTeleport = useCallback(async () => {
+    if (!user || !messages || messages.length === 0) {
+      setTeleportStatus({
+        type: "error",
+        message: "No messages to teleport",
+      });
+      return;
+    }
+
+    setIsTeleporting(true);
+    setTeleportStatus(null);
+
+    try {
+      // First save the session
+      const savedSession = await handleSaveSession();
+      if (!savedSession) {
+        throw new Error("Failed to save session before teleport");
+      }
+
+      // Then call the teleport endpoint
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_LANGGRAPH_URL || "http://localhost:8000"}/teleport`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ chat_id: savedSession.id }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Teleport failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        setTeleportStatus({
+          type: "success",
+          message: "Session sent to cloud successfully!",
+        });
+      } else {
+        throw new Error(result.message || "Teleport failed");
+      }
+    } catch (error) {
+      console.error("Teleport failed:", error);
+      setTeleportStatus({
+        type: "error",
+        message: error instanceof Error ? error.message : "Teleport failed",
+      });
+    } finally {
+      setIsTeleporting(false);
+      // Clear status after 3 seconds
+      setTimeout(() => setTeleportStatus(null), 3000);
+    }
+  }, [user, messages, handleSaveSession]);
 
   const submitClientToolResult = useCallback(
     async (payload: { toolCallId: string; result: ToolExecutionResult }) => {
@@ -423,7 +579,7 @@ export function ChatPanel() {
 
       {/* Input Area */}
       <div className="border-t border-border p-3 space-y-2">
-        {/* Mode Selector + Export */}
+        {/* Mode Selector + Actions */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex rounded-lg bg-muted/50 p-0.5">
             {MODE_OPTIONS.map((option) => (
@@ -443,15 +599,131 @@ export function ChatPanel() {
               </button>
             ))}
           </div>
-          <button
-            onClick={handleExportChat}
-            disabled={!hasMessages}
-            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors disabled:opacity-50"
-            title="Export chat"
-          >
-            <Download className="size-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Sessions Dropdown */}
+            {user && (
+              <div className="relative">
+                <button
+                  onClick={() => setIsSessionDropdownOpen(!isSessionDropdownOpen)}
+                  className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
+                  title="Load saved chat"
+                >
+                  <History className="size-4" />
+                </button>
+                {isSessionDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-64 rounded-lg border border-border bg-card shadow-lg z-50">
+                    <div className="p-2 border-b border-border">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Saved Sessions
+                      </p>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      {isLoadingSessions ? (
+                        <div className="p-3 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                          <Loader2 className="size-3 animate-spin" />
+                          Loading...
+                        </div>
+                      ) : savedSessions.length === 0 ? (
+                        <div className="p-3 text-center text-xs text-muted-foreground">
+                          No saved sessions
+                        </div>
+                      ) : (
+                        savedSessions.map((session) => (
+                          <button
+                            key={session.id}
+                            onClick={() => handleLoadSession(session.id)}
+                            className="w-full px-3 py-2 text-left text-xs hover:bg-muted transition-colors"
+                          >
+                            <p className="font-medium truncate">{session.name}</p>
+                            <p className="text-muted-foreground">
+                              {session.messageCount} messages
+                            </p>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Save Button */}
+            {user && (
+              <button
+                onClick={handleSaveSession}
+                disabled={!hasMessages || isSaving}
+                className={cn(
+                  "p-1.5 rounded-md transition-colors disabled:opacity-50",
+                  saveStatus === "success"
+                    ? "text-emerald-500 bg-emerald-500/10"
+                    : saveStatus === "error"
+                      ? "text-destructive bg-destructive/10"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+                title="Save chat session"
+              >
+                {isSaving ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : saveStatus === "success" ? (
+                  <Check className="size-4" />
+                ) : saveStatus === "error" ? (
+                  <X className="size-4" />
+                ) : (
+                  <Save className="size-4" />
+                )}
+              </button>
+            )}
+            {/* Teleport Button */}
+            {user && (
+              <button
+                onClick={handleTeleport}
+                disabled={!hasMessages || isTeleporting}
+                className={cn(
+                  "p-1.5 rounded-md transition-colors",
+                  teleportStatus?.type === "success"
+                    ? "text-emerald-500 bg-emerald-500/10"
+                    : teleportStatus?.type === "error"
+                      ? "text-destructive bg-destructive/10"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                  "disabled:opacity-50"
+                )}
+                title="Teleport: Send this chat session to the cloud to continue on another device"
+              >
+                {isTeleporting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : teleportStatus?.type === "success" ? (
+                  <Check className="size-4" />
+                ) : teleportStatus?.type === "error" ? (
+                  <AlertCircle className="size-4" />
+                ) : (
+                  <CloudUpload className="size-4" />
+                )}
+              </button>
+            )}
+            {/* Export Button */}
+            <button
+              onClick={handleExportChat}
+              disabled={!hasMessages}
+              className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors disabled:opacity-50"
+              title="Export chat"
+            >
+              <Download className="size-4" />
+            </button>
+          </div>
         </div>
+
+        {/* Teleport Status Message */}
+        {teleportStatus && (
+          <div
+            className={cn(
+              "text-xs px-2 py-1 rounded",
+              teleportStatus.type === "success"
+                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                : "bg-destructive/10 text-destructive"
+            )}
+          >
+            {teleportStatus.message}
+          </div>
+        )}
 
         {/* Pending Attachments Preview */}
         {pendingAttachments.length > 0 && (

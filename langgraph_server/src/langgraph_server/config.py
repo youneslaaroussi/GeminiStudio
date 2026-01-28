@@ -43,6 +43,18 @@ class Settings(BaseSettings):
     )
 
     default_project_id: str | None = Field(default=None, alias="DEFAULT_PROJECT_ID")
+    firebase_service_account_json: str | None = Field(
+        default=None, alias="FIREBASE_SERVICE_ACCOUNT_JSON"
+    )
+    default_phone_region: str | None = Field(default="US", alias="DEFAULT_PHONE_REGION")
+
+    telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
+    telegram_webhook_secret: str | None = Field(
+        default=None, alias="TELEGRAM_WEBHOOK_SECRET"
+    )
+    telegram_api_base_url: str | None = Field(
+        default=None, alias="TELEGRAM_API_BASE_URL"
+    )
 
 
 @lru_cache

@@ -25,3 +25,17 @@ class InvokeResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str = "ok"
+
+
+class TeleportRequest(BaseModel):
+    """Request to teleport/continue a chat session from the cloud."""
+
+    chat_id: str = Field(..., description="The ID of the saved chat session to continue")
+
+
+class TeleportResponse(BaseModel):
+    """Response from teleport endpoint."""
+
+    success: bool
+    chat_id: str
+    message: str | None = None

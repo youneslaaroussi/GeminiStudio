@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Iterable
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 
 from .agent import graph
+from .chat import build_dispatcher
 from .config import Settings, get_settings
-from .schemas import HealthResponse, InvokeRequest, InvokeResponse, MessageEnvelope
+from .schemas import HealthResponse, InvokeRequest, InvokeResponse, MessageEnvelope, TeleportRequest, TeleportResponse
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 def _coerce_content(value) -> str:
@@ -82,3 +86,51 @@ def invoke(
         ) from exc
 
     return InvokeResponse(thread_id=payload.thread_id, messages=_as_envelopes(result["messages"]))
+
+
+@router.post("/teleport", response_model=TeleportResponse)
+def teleport(payload: TeleportRequest):
+    """
+    Teleport endpoint to continue a chat session from the cloud.
+
+    For now, this just logs the chat_id and returns success.
+    In the future, this will load the chat session and initialize
+    the LangGraph agent with the conversation history.
+    """
+    logger.info(f"Teleport requested for chat_id: {payload.chat_id}")
+
+    # TODO: In the future, implement actual teleport logic:
+    # 1. Fetch the chat session from Firebase using chat_id
+    # 2. Convert messages to LangChain format
+    # 3. Initialize the agent with the conversation history
+    # 4. Return thread_id for continuing the conversation
+
+    return TeleportResponse(
+        success=True,
+        chat_id=payload.chat_id,
+        message="Teleport successful (stub implementation)"
+    )
+
+
+@router.post("/providers/telegram/webhook")
+async def telegram_webhook(request: Request, settings: Settings = Depends(get_settings)):
+    if not settings.telegram_bot_token:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Telegram provider is not configured.")
+
+    secret_header = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+    if settings.telegram_webhook_secret and secret_header != settings.telegram_webhook_secret:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook secret.")
+
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON payload.") from exc
+
+    dispatcher = build_dispatcher(settings)
+    try:
+        await dispatcher.handle_update("telegram", payload)
+    except Exception as exc:
+        logger.exception("Telegram handler failed")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+    return {"ok": True}
