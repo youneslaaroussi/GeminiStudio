@@ -8,6 +8,7 @@ from typing import Dict
 from langchain_core.tools import BaseTool
 
 from .add_clip_tool import addClipToTimeline
+from .delete_clip_tool import deleteClipFromTimeline
 from .docs_tool import search_product_docs
 from .get_project_summary_tool import getProjectSummary
 from .list_assets_tool import listAssets
@@ -22,6 +23,7 @@ def get_registered_tools() -> Sequence[BaseTool]:
 
     return (
         addClipToTimeline,
+        deleteClipFromTimeline,
         get_current_time_utc,
         getProjectSummary,
         listAssets,

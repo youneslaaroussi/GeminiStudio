@@ -1,85 +1,16 @@
 {
-  "generatedAt": "2026-01-28T15:41:05.520Z",
+  "generatedAt": "2026-01-29T19:44:39.866Z",
   "tools": {
-    "addClipToTimeline": {
-      "name": "addClipToTimeline",
-      "label": "Add Clip to Timeline",
-      "description": "Add a new video, audio, image, or text clip to the project timeline. Modifies the session's branch.",
-      "runLocation": "server",
-      "fields": [
-        {
-          "name": "clip_type",
-          "label": "Clip Type",
-          "type": "select",
-          "options": [
-            { "value": "video", "label": "Video" },
-            { "value": "audio", "label": "Audio" },
-            { "value": "image", "label": "Image" },
-            { "value": "text", "label": "Text" }
-          ],
-          "required": true
-        },
-        {
-          "name": "start",
-          "label": "Start (seconds)",
-          "type": "number",
-          "required": true
-        },
-        {
-          "name": "duration",
-          "label": "Duration (seconds)",
-          "type": "number",
-          "required": true
-        },
-        {
-          "name": "src",
-          "label": "Source URL",
-          "type": "text",
-          "description": "Required for video, audio, image clips"
-        },
-        {
-          "name": "text",
-          "label": "Text Content",
-          "type": "textarea",
-          "description": "Required for text clips"
-        },
-        {
-          "name": "name",
-          "label": "Clip Name",
-          "type": "text"
-        },
-        {
-          "name": "asset_id",
-          "label": "Asset ID",
-          "type": "text"
-        }
-      ],
-      "inputSchema": {
-        "$ref": "#/definitions/addClipToTimelineInput",
-        "definitions": {
-          "addClipToTimelineInput": {
-            "type": "object",
-            "properties": {
-              "clip_type": { "type": "string", "enum": ["video", "audio", "image", "text"] },
-              "start": { "type": "number", "minimum": 0 },
-              "duration": { "type": "number", "exclusiveMinimum": 0 },
-              "src": { "type": "string" },
-              "text": { "type": "string" },
-              "name": { "type": "string" },
-              "asset_id": { "type": "string" }
-            },
-            "required": ["clip_type", "start", "duration"],
-            "additionalProperties": false
-          }
-        },
-        "$schema": "http://json-schema.org/draft-07/schema#"
-      }
-    },
     "captureAsset": {
       "name": "captureAsset",
       "label": "Capture Asset",
       "description": "Bookmark a timeline moment for an uploaded asset using its asset ID and capture an exact still.",
       "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": false,
+        "notes": "Requires browser APIs (canvas, video elements)"
+      },
       "fields": [
         {
           "name": "assetId",
@@ -136,6 +67,11 @@
       "label": "Capture Faces",
       "description": "Capture frames from a video at face detection timestamps with bounding boxes drawn around detected faces.",
       "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": false,
+        "notes": "Requires browser APIs (canvas, video elements)"
+      },
       "fields": [
         {
           "name": "assetId",
@@ -185,29 +121,16 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
     },
-    "getProjectSummary": {
-      "name": "getProjectSummary",
-      "label": "Get Project Summary",
-      "description": "Return a summary of the current project including name, resolution, fps, layers, and clips. Uses the session's branch.",
-      "runLocation": "server",
-      "fields": [],
-      "inputSchema": {
-        "$ref": "#/definitions/getProjectSummaryInput",
-        "definitions": {
-          "getProjectSummaryInput": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": false
-          }
-        },
-        "$schema": "http://json-schema.org/draft-07/schema#"
-      }
-    },
     "listAssets": {
       "name": "listAssets",
       "label": "List Assets",
       "description": "Return the uploaded assets currently available in the Assets panel.",
-      "runLocation": "server",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": true,
+        "langgraphName": "listAssets"
+      },
       "fields": [],
       "inputSchema": {
         "$ref": "#/definitions/listAssetsInput",
@@ -221,29 +144,16 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
     },
-    "listProjectAssets": {
-      "name": "listProjectAssets",
-      "label": "List Project Assets",
-      "description": "Return the uploaded assets in the project's media library (not the timeline). Branch does not apply.",
-      "runLocation": "server",
-      "fields": [],
-      "inputSchema": {
-        "$ref": "#/definitions/listProjectAssetsInput",
-        "definitions": {
-          "listProjectAssetsInput": {
-            "type": "object",
-            "properties": {},
-            "additionalProperties": false
-          }
-        },
-        "$schema": "http://json-schema.org/draft-07/schema#"
-      }
-    },
     "projectHistory": {
       "name": "projectHistory",
       "label": "Project History",
       "description": "Inspect the undo/redo history of the current project or trigger undo and redo operations.",
       "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": false,
+        "notes": "Requires browser APIs (canvas, video elements)"
+      },
       "fields": [
         {
           "name": "action",
@@ -307,6 +217,10 @@
       "label": "Add Timeline Layer",
       "description": "Create a new timeline layer using the existing project store helpers.",
       "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": false
+      },
       "fields": [
         {
           "name": "type",
@@ -375,6 +289,11 @@
       "label": "Add Timeline Clip",
       "description": "Insert a new clip on the timeline using the project store's existing helpers.",
       "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": true,
+        "langgraphName": "addClipToTimeline"
+      },
       "fields": [
         {
           "name": "type",
@@ -827,6 +746,10 @@
       "label": "Split Timeline Clip",
       "description": "Split an existing clip using the project store's split action to preserve history.",
       "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": false
+      },
       "fields": [
         {
           "name": "clipId",
@@ -872,6 +795,10 @@
       "label": "Update Timeline Clip",
       "description": "Adjust clip timing and type-specific settings while reusing the existing project store update action.",
       "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": false
+      },
       "fields": [
         {
           "name": "clipId",
@@ -1118,135 +1045,15 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
     },
-    "renderVideo": {
-      "name": "renderVideo",
-      "label": "Render Video",
-      "description": "Queue a timeline render job on the renderer service and publish status updates via Google Cloud Pub/Sub.",
-      "runLocation": "server",
-      "fields": [
-        {
-          "name": "format",
-          "label": "Format",
-          "type": "select",
-          "options": [
-            {
-              "value": "mp4",
-              "label": "MP4"
-            },
-            {
-              "value": "webm",
-              "label": "WebM"
-            },
-            {
-              "value": "gif",
-              "label": "GIF"
-            }
-          ],
-          "defaultValue": "mp4",
-          "required": true
-        },
-        {
-          "name": "quality",
-          "label": "Quality",
-          "type": "select",
-          "options": [
-            {
-              "value": "web",
-              "label": "Web"
-            },
-            {
-              "value": "low",
-              "label": "Low"
-            },
-            {
-              "value": "social",
-              "label": "Social"
-            },
-            {
-              "value": "studio",
-              "label": "Studio"
-            }
-          ],
-          "defaultValue": "web"
-        },
-        {
-          "name": "fps",
-          "label": "Frames Per Second",
-          "type": "number",
-          "placeholder": "Leave blank to use the project FPS"
-        },
-        {
-          "name": "width",
-          "label": "Width (px)",
-          "type": "number",
-          "placeholder": "Leave blank to use the project width"
-        },
-        {
-          "name": "height",
-          "label": "Height (px)",
-          "type": "number",
-          "placeholder": "Leave blank to use the project height"
-        },
-        {
-          "name": "upload_url",
-          "label": "Upload URL",
-          "type": "text",
-          "placeholder": "Optional presigned URL for the rendered file"
-        }
-      ],
-      "inputSchema": {
-        "$ref": "#/definitions/renderVideoInput",
-        "definitions": {
-          "renderVideoInput": {
-            "type": "object",
-            "properties": {
-              "format": {
-                "type": "string",
-                "enum": ["mp4", "webm", "gif"]
-              },
-              "quality": {
-                "type": "string",
-                "enum": ["low", "web", "social", "studio"]
-              },
-              "fps": {
-                "type": "number",
-                "minimum": 1
-              },
-              "width": {
-                "type": "number",
-                "minimum": 1
-              },
-              "height": {
-                "type": "number",
-                "minimum": 1
-              },
-              "upload_url": {
-                "type": "string",
-                "format": "uri"
-              },
-              "include_audio": {
-                "type": "boolean"
-              },
-              "project_id": {
-                "type": "string",
-                "minLength": 1
-              },
-              "user_id": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
-            "additionalProperties": false
-          }
-        },
-        "$schema": "http://json-schema.org/draft-07/schema#"
-      }
-    },
     "videoEffectsList": {
       "name": "videoEffectsList",
       "label": "List Video Effects",
       "description": "Show the available video effect providers and their default parameters.",
       "runLocation": "server",
+      "implementations": {
+        "app": true,
+        "langgraph": false
+      },
       "fields": [],
       "inputSchema": {
         "$ref": "#/definitions/videoEffectsListInput",
@@ -1265,6 +1072,10 @@
       "label": "Start Video Effect",
       "description": "Kick off a video effect job (for example Replicate SAM-2) for a given asset, using the configured provider.",
       "runLocation": "server",
+      "implementations": {
+        "app": true,
+        "langgraph": false
+      },
       "fields": [
         {
           "name": "assetId",
@@ -1339,6 +1150,10 @@
       "label": "Check Video Effect Job",
       "description": "Retrieve the latest status for a video effect job.",
       "runLocation": "server",
+      "implementations": {
+        "app": true,
+        "langgraph": false
+      },
       "fields": [
         {
           "name": "jobId",
@@ -1367,6 +1182,58 @@
         },
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
+    },
+    "getProjectSummary": {
+      "name": "getProjectSummary",
+      "label": "Get Project Summary",
+      "description": "Retrieve a summary of the current project including timeline layers and clips.",
+      "runLocation": "server",
+      "implementations": {
+        "app": false,
+        "langgraph": true,
+        "langgraphName": "getProjectSummary"
+      },
+      "fields": [],
+      "inputSchema": null
+    },
+    "listProjectAssets": {
+      "name": "listProjectAssets",
+      "label": "List Project Assets",
+      "description": "List all assets associated with a specific project.",
+      "runLocation": "server",
+      "implementations": {
+        "app": false,
+        "langgraph": true,
+        "langgraphName": "listProjectAssets"
+      },
+      "fields": [],
+      "inputSchema": null
+    },
+    "renderVideo": {
+      "name": "renderVideo",
+      "label": "Render Video",
+      "description": "Trigger a video render job for the current project.",
+      "runLocation": "server",
+      "implementations": {
+        "app": false,
+        "langgraph": true,
+        "langgraphName": "renderVideo"
+      },
+      "fields": [],
+      "inputSchema": null
+    },
+    "deleteClipFromTimeline": {
+      "name": "deleteClipFromTimeline",
+      "label": "Delete Clip from Timeline",
+      "description": "Remove a clip from the timeline by its ID.",
+      "runLocation": "server",
+      "implementations": {
+        "app": false,
+        "langgraph": true,
+        "langgraphName": "deleteClipFromTimeline"
+      },
+      "fields": [],
+      "inputSchema": null
     }
   }
 }

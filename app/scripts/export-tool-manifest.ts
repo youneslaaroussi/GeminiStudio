@@ -6,6 +6,61 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/**
+ * Mapping of app tool names to their corresponding langgraph server tool names.
+ * This is maintained manually - update when adding new langgraph implementations.
+ *
+ * Format: { appToolName: langgraphToolName }
+ */
+const LANGGRAPH_TOOL_MAP: Record<string, string> = {
+  timelineAddClip: "addClipToTimeline",
+  timelineDeleteClip: "deleteClipFromTimeline",
+  listAssets: "listAssets",
+};
+
+/**
+ * Langgraph-only tools that don't have app equivalents.
+ * These are included in the manifest for visibility.
+ */
+const LANGGRAPH_ONLY_TOOLS: Array<{
+  name: string;
+  label: string;
+  description: string;
+  langgraphName: string;
+}> = [
+  {
+    name: "getProjectSummary",
+    label: "Get Project Summary",
+    description: "Retrieve a summary of the current project including timeline layers and clips.",
+    langgraphName: "getProjectSummary",
+  },
+  {
+    name: "listProjectAssets",
+    label: "List Project Assets",
+    description: "List all assets associated with a specific project.",
+    langgraphName: "listProjectAssets",
+  },
+  {
+    name: "renderVideo",
+    label: "Render Video",
+    description: "Trigger a video render job for the current project.",
+    langgraphName: "renderVideo",
+  },
+  {
+    name: "deleteClipFromTimeline",
+    label: "Delete Clip from Timeline",
+    description: "Remove a clip from the timeline by its ID.",
+    langgraphName: "deleteClipFromTimeline",
+  },
+];
+
+interface ToolImplementations {
+  app: boolean;
+  langgraph: boolean;
+  langgraphName?: string;
+  notes?: string;
+}
+
 async function exportManifest() {
   process.env.NEXT_PUBLIC_FIREBASE_API_KEY ??= "test-key";
   process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ??= "localhost";
@@ -16,18 +71,62 @@ async function exportManifest() {
 
   const { toolRegistry } = await import("../app/lib/tools/tool-registry");
   const tools = toolRegistry.list();
-  const entries = tools.map((tool) => ({
+
+  // Tools that require browser APIs and can't be ported to langgraph
+  const browserOnlyTools = new Set([
+    "captureAsset",
+    "captureFaces",
+    "projectHistory",
+  ]);
+
+  const entries = tools.map((tool) => {
+    const langgraphName = LANGGRAPH_TOOL_MAP[tool.name];
+    const isBrowserOnly = browserOnlyTools.has(tool.name);
+
+    const implementations: ToolImplementations = {
+      app: true,
+      langgraph: !!langgraphName,
+    };
+
+    if (langgraphName) {
+      implementations.langgraphName = langgraphName;
+    }
+
+    if (isBrowserOnly) {
+      implementations.notes = "Requires browser APIs (canvas, video elements)";
+    }
+
+    return {
+      name: tool.name,
+      label: tool.label,
+      description: tool.description,
+      runLocation: tool.runLocation ?? "server",
+      implementations,
+      fields: tool.fields,
+      inputSchema: zodToJsonSchema(tool.inputSchema, `${tool.name}Input`),
+    };
+  });
+
+  // Add langgraph-only tools
+  const langgraphOnlyEntries = LANGGRAPH_ONLY_TOOLS.map((tool) => ({
     name: tool.name,
     label: tool.label,
     description: tool.description,
-    runLocation: tool.runLocation ?? "server",
-    fields: tool.fields,
-    inputSchema: zodToJsonSchema(tool.inputSchema, `${tool.name}Input`),
+    runLocation: "server" as const,
+    implementations: {
+      app: false,
+      langgraph: true,
+      langgraphName: tool.langgraphName,
+    },
+    fields: [],
+    inputSchema: null, // Schema defined in langgraph server
   }));
+
+  const allEntries = [...entries, ...langgraphOnlyEntries];
 
   const manifest = {
     generatedAt: new Date().toISOString(),
-    tools: entries.reduce<Record<string, (typeof entries)[number]>>(
+    tools: allEntries.reduce<Record<string, (typeof allEntries)[number]>>(
       (acc, tool) => {
         acc[tool.name] = tool;
         return acc;
@@ -42,7 +141,14 @@ async function exportManifest() {
   await mkdir(outputDir, { recursive: true });
   await writeFile(outputPath, JSON.stringify(manifest, null, 2), "utf8");
 
-  console.log(`Exported ${entries.length} tools to ${outputPath}`);
+  const appCount = entries.length;
+  const langgraphOnlyCount = langgraphOnlyEntries.length;
+  const bothCount = entries.filter((e) => e.implementations.langgraph).length;
+
+  console.log(`Exported ${allEntries.length} tools to ${outputPath}`);
+  console.log(`  - App only: ${appCount - bothCount}`);
+  console.log(`  - Langgraph only: ${langgraphOnlyCount}`);
+  console.log(`  - Both: ${bothCount}`);
 }
 
 exportManifest().catch((error) => {
