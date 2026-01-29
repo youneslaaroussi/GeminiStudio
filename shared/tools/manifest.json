@@ -1,6 +1,80 @@
 {
   "generatedAt": "2026-01-28T15:41:05.520Z",
   "tools": {
+    "addClipToTimeline": {
+      "name": "addClipToTimeline",
+      "label": "Add Clip to Timeline",
+      "description": "Add a new video, audio, image, or text clip to the project timeline. Modifies the session's branch.",
+      "runLocation": "server",
+      "fields": [
+        {
+          "name": "clip_type",
+          "label": "Clip Type",
+          "type": "select",
+          "options": [
+            { "value": "video", "label": "Video" },
+            { "value": "audio", "label": "Audio" },
+            { "value": "image", "label": "Image" },
+            { "value": "text", "label": "Text" }
+          ],
+          "required": true
+        },
+        {
+          "name": "start",
+          "label": "Start (seconds)",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "duration",
+          "label": "Duration (seconds)",
+          "type": "number",
+          "required": true
+        },
+        {
+          "name": "src",
+          "label": "Source URL",
+          "type": "text",
+          "description": "Required for video, audio, image clips"
+        },
+        {
+          "name": "text",
+          "label": "Text Content",
+          "type": "textarea",
+          "description": "Required for text clips"
+        },
+        {
+          "name": "name",
+          "label": "Clip Name",
+          "type": "text"
+        },
+        {
+          "name": "asset_id",
+          "label": "Asset ID",
+          "type": "text"
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/addClipToTimelineInput",
+        "definitions": {
+          "addClipToTimelineInput": {
+            "type": "object",
+            "properties": {
+              "clip_type": { "type": "string", "enum": ["video", "audio", "image", "text"] },
+              "start": { "type": "number", "minimum": 0 },
+              "duration": { "type": "number", "exclusiveMinimum": 0 },
+              "src": { "type": "string" },
+              "text": { "type": "string" },
+              "name": { "type": "string" },
+              "asset_id": { "type": "string" }
+            },
+            "required": ["clip_type", "start", "duration"],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
     "captureAsset": {
       "name": "captureAsset",
       "label": "Capture Asset",
@@ -111,6 +185,24 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
     },
+    "getProjectSummary": {
+      "name": "getProjectSummary",
+      "label": "Get Project Summary",
+      "description": "Return a summary of the current project including name, resolution, fps, layers, and clips. Uses the session's branch.",
+      "runLocation": "server",
+      "fields": [],
+      "inputSchema": {
+        "$ref": "#/definitions/getProjectSummaryInput",
+        "definitions": {
+          "getProjectSummaryInput": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
     "listAssets": {
       "name": "listAssets",
       "label": "List Assets",
@@ -121,6 +213,24 @@
         "$ref": "#/definitions/listAssetsInput",
         "definitions": {
           "listAssetsInput": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "listProjectAssets": {
+      "name": "listProjectAssets",
+      "label": "List Project Assets",
+      "description": "Return the uploaded assets in the project's media library (not the timeline). Branch does not apply.",
+      "runLocation": "server",
+      "fields": [],
+      "inputSchema": {
+        "$ref": "#/definitions/listProjectAssetsInput",
+        "definitions": {
+          "listProjectAssetsInput": {
             "type": "object",
             "properties": {},
             "additionalProperties": false

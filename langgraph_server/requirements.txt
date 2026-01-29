@@ -9,3 +9,4 @@ pydantic-settings
 google-cloud-storage
 google-cloud-pubsub>=2.23.0,<3.0.0
 uvicorn[standard]>=0.30.0,<1.0.0
+telegramify-markdown>=0.5.4,<1.0.0

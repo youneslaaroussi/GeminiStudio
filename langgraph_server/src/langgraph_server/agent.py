@@ -53,10 +53,17 @@ def create_graph(settings: Settings | None = None):
         project_id = ctx.get("project_id")
         branch_id = ctx.get("branch_id")
         
+        logger.info("[AGENT] call_tool: context = thread_id=%s, user_id=%s, project_id=%s, branch_id=%s",
+                    thread_id, user_id, project_id, branch_id)
+        
         for tool_call in last_message.tool_calls:
             tool = tools_by_name.get(tool_call["name"])
+            tool_name = tool_call["name"]
+            logger.info("[AGENT] Executing tool: %s", tool_name)
+            
             if not tool:
-                observation: str = f"Requested tool '{tool_call['name']}' is not available."
+                observation: str = f"Requested tool '{tool_name}' is not available."
+                logger.warning("[AGENT] Tool not found: %s", tool_name)
             else:
                 try:
                     args = dict(tool_call.get("args") or {})
@@ -66,6 +73,9 @@ def create_graph(settings: Settings | None = None):
                         args["user_id"] = user_id
                     if branch_id and "branch_id" not in args:
                         args["branch_id"] = branch_id
+                    
+                    logger.info("[AGENT] Tool args (with context): %s", str(args)[:500])
+                    
                     if getattr(tool, "name", None) == "renderVideo":
                         args["_agent_context"] = {
                             "thread_id": thread_id,
@@ -77,8 +87,10 @@ def create_graph(settings: Settings | None = None):
                     else:
                         result = tool.invoke(args, config=config)
                     observation = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+                    logger.info("[AGENT] Tool result: %s", observation[:500] if len(observation) > 500 else observation)
                 except Exception as exc:  # pragma: no cover - surface tool exceptions
-                    observation = f"Tool '{tool_call['name']}' failed: {exc}"
+                    logger.exception("[AGENT] Tool execution failed: %s", tool_name)
+                    observation = f"Tool '{tool_name}' failed: {exc}"
             tool_outputs.append(ToolMessage(content=observation, tool_call_id=tool_call["id"]))
         return {"messages": tool_outputs}
 

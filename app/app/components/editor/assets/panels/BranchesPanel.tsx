@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { GitBranch, Plus, Merge, Loader2, Check, Trash2 } from "lucide-react";
+import { GitBranch, Plus, Merge, Loader2, Check, Trash2, RefreshCw } from "lucide-react";
 import { useBranches } from "@/app/lib/hooks/useBranches";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useAuth } from "@/app/lib/hooks/useAuth";
@@ -75,6 +75,16 @@ export function BranchesPanel({ projectId }: BranchesPanelProps) {
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <span className="text-xs font-medium text-muted-foreground">Branches</span>
           <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              onClick={() => void reloadBranches()}
+              disabled={loading}
+              title="Refresh branches"
+            >
+              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
+            </Button>
             <Button
               variant="ghost"
               size="sm"

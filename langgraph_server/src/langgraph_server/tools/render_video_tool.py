@@ -148,6 +148,7 @@ def renderVideo(
   include_audio: bool = True,
   project_id: str | None = None,
   user_id: str | None = None,
+  branch_id: str | None = None,
   _agent_context: Annotated[Optional[Dict[str, Any]], InjectedToolArg] = None,
 ) -> dict:
   """Queue a timeline render for the active project and notify when it completes."""
@@ -164,7 +165,7 @@ def renderVideo(
     }
 
   effective_project_id = project_id or context.get("project_id")
-  effective_branch_id = context.get("branch_id")
+  effective_branch_id = branch_id or context.get("branch_id")
   # When branch_id is set (chat session branch), only that branch's data is used
   if effective_branch_id and effective_project_id:
     projects = fetch_user_projects(effective_user_id, settings, branch_id=effective_branch_id, project_id=effective_project_id)

@@ -7,8 +7,11 @@ from typing import Dict
 
 from langchain_core.tools import BaseTool
 
+from .add_clip_tool import addClipToTimeline
 from .docs_tool import search_product_docs
+from .get_project_summary_tool import getProjectSummary
 from .list_assets_tool import listAssets
+from .list_project_assets_tool import listProjectAssets
 from .render_video_tool import renderVideo
 from .time_tool import get_current_time_utc
 from .weather_tool import lookup_weather_snapshot
@@ -18,8 +21,11 @@ def get_registered_tools() -> Sequence[BaseTool]:
     """Return all tools available to the agent."""
 
     return (
+        addClipToTimeline,
         get_current_time_utc,
+        getProjectSummary,
         listAssets,
+        listProjectAssets,
         search_product_docs,
         renderVideo,
         lookup_weather_snapshot,

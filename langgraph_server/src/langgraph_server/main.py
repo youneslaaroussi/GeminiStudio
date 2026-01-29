@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +9,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from .api import router
 from .config import get_settings
 from .render_events import RenderEventSubscriber
+
+# Configure logging for the entire langgraph_server package
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+
+# Set our package to INFO level
+logging.getLogger("langgraph_server").setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)
 

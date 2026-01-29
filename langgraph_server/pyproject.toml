@@ -31,11 +31,18 @@ httpx = ">=0.28.1,<1.0.0"
 rich = "^13.7.0"
 google-cloud-pubsub = "^2.23.0"
 automerge = {version = ">=1.0.0rc1", allow-prereleases = true}
+telegramify-markdown = "^0.5.4"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.0"
 pytest-asyncio = "^0.23.0"
 httpx = ">=0.28.1,<1.0.0"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
 
 [build-system]
 requires = ["poetry-core>=1.8.0"]

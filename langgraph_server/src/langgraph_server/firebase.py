@@ -49,6 +49,10 @@ def decode_automerge_state(base64_state: str) -> Optional[dict[str, Any]]:
 def automerge_doc_to_dict(doc, obj_id) -> Any:
     """
     Recursively convert Automerge document to Python dict/list.
+    
+    automerge-py returns values as (val_type, val) where:
+    - For scalars: val_type is tuple (ScalarType.X, actual_value), val is internal ref
+    - For objects: val_type is ObjType.Map/List/Text, val is object ID to recurse
     """
     from automerge.core import ObjType
 
@@ -60,11 +64,12 @@ def automerge_doc_to_dict(doc, obj_id) -> Any:
             value = doc.get(obj_id, key)
             if value is not None:
                 val_type, val = value
-                if val_type in (ObjType.Map, ObjType.List, ObjType.Text):
-                    # It's a nested object, recurse
+                if isinstance(val_type, tuple):
+                    # Scalar value: val_type is (ScalarType.X, actual_value)
+                    result[key] = val_type[1]
+                elif val_type in (ObjType.Map, ObjType.List, ObjType.Text):
+                    # Nested object: recurse using val as object ID
                     result[key] = automerge_doc_to_dict(doc, val)
-                else:
-                    result[key] = val
         return result
     elif obj_type == ObjType.List:
         result = []
@@ -73,10 +78,12 @@ def automerge_doc_to_dict(doc, obj_id) -> Any:
             value = doc.get(obj_id, i)
             if value is not None:
                 val_type, val = value
-                if val_type in (ObjType.Map, ObjType.List, ObjType.Text):
+                if isinstance(val_type, tuple):
+                    # Scalar value: val_type is (ScalarType.X, actual_value)
+                    result.append(val_type[1])
+                elif val_type in (ObjType.Map, ObjType.List, ObjType.Text):
+                    # Nested object: recurse using val as object ID
                     result.append(automerge_doc_to_dict(doc, val))
-                else:
-                    result.append(val)
         return result
     elif obj_type == ObjType.Text:
         return doc.text(obj_id)
@@ -234,18 +241,21 @@ def create_branch_for_chat(
 ) -> str:
     """
     Create a new branch for this chat session (from main).
-    Returns the new branch_id. Branch ID is Firestore-safe: feature_chat_<sanitized_chat_id>.
+    Returns the new branch_id. Each call creates a unique branch with timestamp suffix.
     """
     import re
     import logging
     import uuid
+    import time
     logger = logging.getLogger(__name__)
 
     db = get_firestore_client(settings)
 
     # Firestore doc ID must not contain /
-    safe_suffix = re.sub(r"[^a-zA-Z0-9]", "_", chat_id)[:80].strip("_") or "chat"
-    branch_id = f"feature_chat_{safe_suffix}"
+    safe_suffix = re.sub(r"[^a-zA-Z0-9]", "_", chat_id)[:60].strip("_") or "chat"
+    # Add timestamp to ensure unique branch per /newchat
+    timestamp = int(time.time())
+    branch_id = f"chat_{safe_suffix}_{timestamp}"
 
     # Load main branch
     main_ref = (
@@ -552,8 +562,40 @@ def _extract_media_url(text: str) -> tuple[str | None, str | None]:
     return None, None
 
 
+def _convert_to_telegram_markdown(text: str) -> str:
+    """Convert standard Markdown to Telegram MarkdownV2 format."""
+    try:
+        import telegramify_markdown
+        from telegramify_markdown import customize
+        
+        # Configure for cleaner output
+        customize.strict_markdown = True  # Treat __text__ as bold (Telegram style)
+        customize.cite_expandable = False  # Keep quotes simple
+        
+        return telegramify_markdown.markdownify(
+            text,
+            max_line_length=None,
+            normalize_whitespace=False,
+        )
+    except ImportError:
+        # Fallback: basic escaping for MarkdownV2
+        import re
+        # Escape special characters that aren't part of formatting
+        escape_chars = r'_[]()~`>#+-=|{}.!'
+        result = text
+        for char in escape_chars:
+            result = result.replace(char, f'\\{char}')
+        return result
+    except Exception:
+        # If conversion fails, return original text (will be sent as plain)
+        return text
+
+
 async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> bool:
-    """Send a message to a Telegram chat. Auto-detects and embeds media URLs."""
+    """Send a message to a Telegram chat. Auto-detects and embeds media URLs.
+    
+    Converts standard Markdown to Telegram MarkdownV2 format before sending.
+    """
     import httpx
     import logging
     logger = logging.getLogger(__name__)
@@ -575,21 +617,26 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
             caption = re.sub(r'https?://[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?', '', caption, flags=re.IGNORECASE)
             caption = re.sub(r'\s+', ' ', caption).strip().strip('.:')
             
+            # Convert caption to MarkdownV2
+            if caption:
+                caption = _convert_to_telegram_markdown(caption)
+            
             if media_type == 'video':
                 endpoint = f"{base_url}/sendVideo"
-                payload = {"chat_id": chat_id, "video": media_url, "caption": caption[:1024] if caption else None}
+                payload = {"chat_id": chat_id, "video": media_url, "caption": caption[:1024] if caption else None, "parse_mode": "MarkdownV2"}
             elif media_type == 'animation':
                 endpoint = f"{base_url}/sendAnimation"
-                payload = {"chat_id": chat_id, "animation": media_url, "caption": caption[:1024] if caption else None}
+                payload = {"chat_id": chat_id, "animation": media_url, "caption": caption[:1024] if caption else None, "parse_mode": "MarkdownV2"}
             elif media_type == 'audio':
                 endpoint = f"{base_url}/sendAudio"
-                payload = {"chat_id": chat_id, "audio": media_url, "caption": caption[:1024] if caption else None}
+                payload = {"chat_id": chat_id, "audio": media_url, "caption": caption[:1024] if caption else None, "parse_mode": "MarkdownV2"}
             elif media_type == 'photo':
                 endpoint = f"{base_url}/sendPhoto"
-                payload = {"chat_id": chat_id, "photo": media_url, "caption": caption[:1024] if caption else None}
+                payload = {"chat_id": chat_id, "photo": media_url, "caption": caption[:1024] if caption else None, "parse_mode": "MarkdownV2"}
             else:
                 endpoint = f"{base_url}/sendMessage"
-                payload = {"chat_id": chat_id, "text": text}
+                formatted_text = _convert_to_telegram_markdown(text)
+                payload = {"chat_id": chat_id, "text": formatted_text, "parse_mode": "MarkdownV2"}
             
             # Remove None values
             payload = {k: v for k, v in payload.items() if v is not None}
@@ -599,21 +646,46 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
                 logger.info(f"Sent Telegram {media_type} to {chat_id}")
                 return True
             else:
-                logger.warning(f"Failed to send {media_type}, falling back to text: {response.text}")
-                # Fall back to text message
+                logger.warning(f"Failed to send {media_type} with MarkdownV2, trying plain text: {response.text}")
+                # Fall back to plain text without parse_mode
+                payload.pop("parse_mode", None)
+                if "caption" in payload and caption:
+                    # Use original caption without markdown conversion
+                    original_caption = re.sub(r'\[[^\]]*\]\(https?://[^\)]+\)', '', text)
+                    original_caption = re.sub(r'https?://[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?', '', original_caption, flags=re.IGNORECASE)
+                    original_caption = re.sub(r'\s+', ' ', original_caption).strip().strip('.:')
+                    payload["caption"] = original_caption[:1024] if original_caption else None
+                    payload = {k: v for k, v in payload.items() if v is not None}
+                response = await client.post(endpoint, json=payload, timeout=30.0)
+                if response.status_code == 200:
+                    logger.info(f"Sent Telegram {media_type} (plain) to {chat_id}")
+                    return True
+                # Fall through to text message
         
-        # Send as text message
+        # Send as text message with MarkdownV2
+        formatted_text = _convert_to_telegram_markdown(text)
         response = await client.post(
             f"{base_url}/sendMessage",
-            json={"chat_id": chat_id, "text": text},
+            json={"chat_id": chat_id, "text": formatted_text, "parse_mode": "MarkdownV2"},
             timeout=10.0
         )
         if response.status_code == 200:
             logger.info(f"Sent Telegram message to {chat_id}")
             return True
         else:
-            logger.error(f"Failed to send Telegram message: {response.text}")
-            return False
+            # Fallback to plain text if MarkdownV2 fails
+            logger.warning(f"MarkdownV2 failed, trying plain text: {response.text}")
+            response = await client.post(
+                f"{base_url}/sendMessage",
+                json={"chat_id": chat_id, "text": text},
+                timeout=10.0
+            )
+            if response.status_code == 200:
+                logger.info(f"Sent Telegram message (plain) to {chat_id}")
+                return True
+            else:
+                logger.error(f"Failed to send Telegram message: {response.text}")
+                return False
 
 
 def fetch_user_projects(

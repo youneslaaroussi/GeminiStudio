@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
+import time
+import uuid
 from typing import Callable, Iterable, Optional
+
 
 import httpx
 
@@ -15,6 +19,7 @@ from ..firebase import (
     fetch_user_projects,
     update_chat_session_messages,
     create_project,
+    send_telegram_message,
 )
 from ..phone import extract_phone_number
 from .base import ChatProvider
@@ -39,6 +44,23 @@ class TelegramProvider(ChatProvider):
         self.email_lookup = email_lookup or (lambda phone: lookup_email_by_phone(phone, settings))
         if not self.bot_token:
             raise ValueError("Telegram bot token is not configured.")
+        # Media-group (album) buffering: buffer updates, reset timer on each new item
+        self._mg_buf: dict[tuple[str, str], list[dict]] = {}
+        self._mg_events: dict[tuple[str, str], asyncio.Event] = {}
+        self._mg_tasks: dict[tuple[str, str], asyncio.Task] = {}
+        self._mg_lock = asyncio.Lock()
+
+    async def send_typing_indicator(self, chat_id: str) -> None:
+        """Send typing indicator to show the bot is processing."""
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{self.api_base_url}/bot{self.bot_token}/sendChatAction",
+                    json={"chat_id": chat_id, "action": "typing"},
+                    timeout=5.0,
+                )
+        except Exception as e:
+            logger.debug("Failed to send typing indicator: %s", e)
 
     def _extract_link_code(self, text: str) -> str | None:
         """Extract a link code from /link command."""
@@ -48,6 +70,233 @@ class TelegramProvider(ChatProvider):
             return match.group(1).upper()
         return None
 
+    def _parse_upload_command(self, caption: str | None) -> tuple[bool, str | None]:
+        """
+        Check if caption is /upload command and extract user caption if any.
+        Returns (is_upload_command, effective_caption).
+        - ("/upload") -> (True, None)  # generate random caption
+        - ("/upload my cat") -> (True, "my cat")
+        - ("hello") -> (False, None)
+        """
+        c = (caption or "").strip()
+        lower = c.lower()
+        if lower == "/upload":
+            return (True, None)
+        if lower.startswith("/upload "):
+            rest = c[7:].strip()  # after "/upload "
+            return (True, rest if rest else None)
+        return (False, None)
+
+    def _upload_filename(
+        self,
+        file_info: dict,
+        effective_caption: str | None,
+        batch_index: int | None = None,
+    ) -> str:
+        """Compute filename for upload: user caption (sanitized) + ext, or type-UUID + ext.
+        batch_index: when uploading multiple assets (e.g. album), use caption-N to avoid duplicates.
+        """
+        raw = file_info.get("file_name", "upload")
+        ext = ""
+        if "." in raw:
+            idx = raw.rfind(".")
+            ext = raw[idx:]  # include dot
+        if effective_caption is not None:
+            sane = re.sub(r"[^\w\s\-\.]", "", effective_caption)
+            sane = re.sub(r"\s+", "-", sane).strip("-") or "caption"
+            sane = sane[:80]
+            base = f"{sane}-{batch_index}" if batch_index is not None else sane
+            return f"{base}{ext}" if ext else base
+        # Generate: type-UUID
+        t = file_info.get("type", "asset")
+        uid = uuid.uuid4().hex[:12]
+        return f"{t}-{uid}{ext}" if ext else f"{t}-{uid}"
+
+    def _file_info_from_message(self, message: dict) -> dict | None:
+        """Extract file_info dict from a Telegram message, or None if no file."""
+        document = message.get("document")
+        photo = message.get("photo")
+        video = message.get("video")
+        audio = message.get("audio")
+        voice = message.get("voice")
+        video_note = message.get("video_note")
+        if document:
+            return {
+                "type": "document",
+                "file_id": document.get("file_id"),
+                "file_name": document.get("file_name", "document"),
+                "mime_type": document.get("mime_type", "application/octet-stream"),
+                "file_size": document.get("file_size"),
+            }
+        if photo:
+            largest = max(photo, key=lambda p: p.get("file_size", 0))
+            return {
+                "type": "photo",
+                "file_id": largest.get("file_id"),
+                "file_name": "photo.jpg",
+                "mime_type": "image/jpeg",
+                "file_size": largest.get("file_size"),
+            }
+        if video:
+            return {
+                "type": "video",
+                "file_id": video.get("file_id"),
+                "file_name": video.get("file_name", "video.mp4"),
+                "mime_type": video.get("mime_type", "video/mp4"),
+                "file_size": video.get("file_size"),
+            }
+        if audio:
+            return {
+                "type": "audio",
+                "file_id": audio.get("file_id"),
+                "file_name": audio.get("file_name", "audio.mp3"),
+                "mime_type": audio.get("mime_type", "audio/mpeg"),
+                "file_size": audio.get("file_size"),
+            }
+        if voice:
+            return {
+                "type": "voice",
+                "file_id": voice.get("file_id"),
+                "file_name": "voice.ogg",
+                "mime_type": voice.get("mime_type", "audio/ogg"),
+                "file_size": voice.get("file_size"),
+            }
+        if video_note:
+            return {
+                "type": "video_note",
+                "file_id": video_note.get("file_id"),
+                "file_name": "video_note.mp4",
+                "mime_type": "video/mp4",
+                "file_size": video_note.get("file_size"),
+            }
+        return None
+
+    def _parse_file_from_payload(self, payload: dict) -> tuple[dict, str | None, str] | None:
+        """Extract (file_info, caption, chat_id) from a Telegram update, or None if no file."""
+        message = payload.get("message") or payload.get("edited_message")
+        if not message:
+            return None
+        chat = message.get("chat") or {}
+        chat_id = str(chat.get("id"))
+        file_info = self._file_info_from_message(message)
+        if not file_info:
+            return None
+        caption = message.get("caption")
+        return (file_info, caption, chat_id)
+
+    async def _buffer_media_group(self, payload: dict) -> bool:
+        """If update is a media-group (album) file, append to buffer and schedule drain. Return True if buffered."""
+        parsed = self._parse_file_from_payload(payload)
+        if not parsed:
+            logger.debug("[MG] _buffer_media_group: no file in payload")
+            return False
+        message = payload.get("message") or payload.get("edited_message")
+        mgid = message.get("media_group_id") if message else None
+        if not mgid:
+            logger.debug("[MG] _buffer_media_group: no media_group_id, processing as single file")
+            return False
+        chat = message.get("chat") or {}
+        chat_id = str(chat.get("id"))
+        key = (chat_id, mgid)
+        async with self._mg_lock:
+            self._mg_buf.setdefault(key, []).append(payload)
+            buf_size = len(self._mg_buf[key])
+            if key in self._mg_events:
+                # Signal drain task to reset its timer
+                self._mg_events[key].set()
+                logger.info("[MG] Buffered item %d for media_group_id=%s, reset timer", buf_size, mgid)
+            else:
+                # First item: create event and start drain task
+                event = asyncio.Event()
+                self._mg_events[key] = event
+                t = asyncio.create_task(self._drain_media_group(chat_id, mgid, event))
+                self._mg_tasks[key] = t
+                logger.info("[MG] First item for media_group_id=%s, started drain task", mgid)
+        return True
+
+    async def _drain_media_group(self, chat_id: str, media_group_id: str, reset_event: asyncio.Event) -> None:
+        """Wait for silence (no new items for 1.5s), then process all buffered updates."""
+        silence_timeout = 1.5  # seconds of no new items before processing
+        max_wait = 10.0  # maximum total wait time
+        start = time.monotonic()
+        logger.info("[MG] Drain task started for media_group_id=%s", media_group_id)
+        while (time.monotonic() - start) < max_wait:
+            reset_event.clear()
+            try:
+                await asyncio.wait_for(reset_event.wait(), timeout=silence_timeout)
+                logger.info("[MG] Drain timer reset for media_group_id=%s (new item arrived)", media_group_id)
+            except asyncio.TimeoutError:
+                logger.info("[MG] Silence timeout reached for media_group_id=%s, processing", media_group_id)
+                break
+        key = (chat_id, media_group_id)
+        async with self._mg_lock:
+            updates = self._mg_buf.pop(key, [])
+            self._mg_tasks.pop(key, None)
+            self._mg_events.pop(key, None)
+        logger.info("[MG] Draining media_group_id=%s with %d updates", media_group_id, len(updates))
+        if not updates:
+            return
+        updates.sort(key=lambda p: p.get("update_id", 0))
+        items: list[tuple[dict, str | None, str]] = []
+        for p in updates:
+            x = self._parse_file_from_payload(p)
+            if x:
+                items.append(x)
+        if not items:
+            return
+        caption = None
+        for _fi, cap, _cid in items:
+            s = (cap or "").strip()
+            if s:
+                caption = s
+                break
+        user_info = get_user_by_telegram_chat_id(chat_id, self.settings)
+        if not user_info:
+            await self.dispatch_responses([
+                OutgoingMessage(provider=self.name, recipient_id=chat_id, text="Link your account first with /link <CODE> before uploading files.")
+            ])
+            return
+        await self.send_typing_indicator(chat_id)
+        is_upload, effective_caption = self._parse_upload_command(caption)
+        if is_upload:
+            lines: list[str] = []
+            ok = 0
+            for i, (fi, _cap, _cid) in enumerate(items):
+                idx = i + 1 if effective_caption is not None and len(items) > 1 else None
+                custom = self._upload_filename(fi, effective_caption, batch_index=idx)
+                err, _c, _m, res = await self._do_upload(user_info, chat_id, fi, custom_filename=custom)
+                if err:
+                    lines.append(f"• {fi.get('file_name', '?')}: {err}")
+                    continue
+                ok += 1
+                a = (res or {}).get("asset", {})
+                name = a.get("name", custom)
+                typ = a.get("type", "unknown")
+                line = f"• {name} ({typ})"
+                if a.get("duration"):
+                    line += f", {a['duration']:.1f}s"
+                if res.get("pipelineStarted"):
+                    line += " — processing"
+                lines.append(line)
+            if effective_caption is not None:
+                lines.append(f"\nCaption: {effective_caption}")
+            head = f"Uploaded {ok} of {len(items)} asset(s):" if ok < len(items) else f"Uploaded {len(items)} asset(s):"
+            text = head + "\n" + "\n".join(lines)
+            await self.dispatch_responses([OutgoingMessage(provider=self.name, recipient_id=chat_id, text=text)])
+        else:
+            inline_media: list[tuple[bytes, str]] = []
+            for fi, _cap, _cid in items:
+                err, content, mime, _res = await self._do_upload(user_info, chat_id, fi)
+                if err:
+                    await self.dispatch_responses([
+                        OutgoingMessage(provider=self.name, recipient_id=chat_id, text=err)
+                    ])
+                    return
+                if content and mime:
+                    inline_media.append((content, mime))
+            reply = await self._invoke_agent(user_info, chat_id, (caption or "").strip(), inline_media=inline_media or None)
+            await self.dispatch_responses([OutgoingMessage(provider=self.name, recipient_id=chat_id, text=reply)])
+
     async def parse_update(self, payload: dict) -> Iterable[IncomingMessage]:
         message = payload.get("message") or payload.get("edited_message")
         if not message:
@@ -55,67 +304,7 @@ class TelegramProvider(ChatProvider):
         chat = message.get("chat") or {}
         chat_id = str(chat.get("id"))
         text = message.get("text")
-
-        # Check for document/photo/video/audio uploads
-        document = message.get("document")
-        photo = message.get("photo")
-        video = message.get("video")
-        audio = message.get("audio")
-        voice = message.get("voice")
-        video_note = message.get("video_note")
-
-        file_info = None
-        if document:
-            file_info = {
-                "type": "document",
-                "file_id": document.get("file_id"),
-                "file_name": document.get("file_name", "document"),
-                "mime_type": document.get("mime_type", "application/octet-stream"),
-                "file_size": document.get("file_size"),
-            }
-        elif photo:
-            # Get the largest photo
-            largest = max(photo, key=lambda p: p.get("file_size", 0))
-            file_info = {
-                "type": "photo",
-                "file_id": largest.get("file_id"),
-                "file_name": "photo.jpg",
-                "mime_type": "image/jpeg",
-                "file_size": largest.get("file_size"),
-            }
-        elif video:
-            file_info = {
-                "type": "video",
-                "file_id": video.get("file_id"),
-                "file_name": video.get("file_name", "video.mp4"),
-                "mime_type": video.get("mime_type", "video/mp4"),
-                "file_size": video.get("file_size"),
-            }
-        elif audio:
-            file_info = {
-                "type": "audio",
-                "file_id": audio.get("file_id"),
-                "file_name": audio.get("file_name", "audio.mp3"),
-                "mime_type": audio.get("mime_type", "audio/mpeg"),
-                "file_size": audio.get("file_size"),
-            }
-        elif voice:
-            file_info = {
-                "type": "voice",
-                "file_id": voice.get("file_id"),
-                "file_name": "voice.ogg",
-                "mime_type": voice.get("mime_type", "audio/ogg"),
-                "file_size": voice.get("file_size"),
-            }
-        elif video_note:
-            file_info = {
-                "type": "video_note",
-                "file_id": video_note.get("file_id"),
-                "file_name": "video_note.mp4",
-                "mime_type": "video/mp4",
-                "file_size": video_note.get("file_size"),
-            }
-
+        file_info = self._file_info_from_message(message)
         metadata = {
             "username": chat.get("username"),
             "first_name": chat.get("first_name"),
@@ -123,7 +312,6 @@ class TelegramProvider(ChatProvider):
             "file_info": file_info,
             "caption": message.get("caption"),
         }
-
         return [
             IncomingMessage(
                 provider=self.name,
@@ -134,6 +322,10 @@ class TelegramProvider(ChatProvider):
         ]
 
     async def handle_update(self, payload: dict) -> Iterable[OutgoingMessage]:
+        buffered = await self._buffer_media_group(payload)
+        if buffered:
+            logger.info("[MG] Update buffered for media group, returning early")
+            return []
         messages = await self.parse_update(payload)
         responses: list[OutgoingMessage] = []
         for message in messages:
@@ -149,14 +341,15 @@ class TelegramProvider(ChatProvider):
         return responses
 
     async def dispatch_responses(self, messages: Iterable[OutgoingMessage]) -> None:
-        async with httpx.AsyncClient(base_url=f"{self.api_base_url}/bot{self.bot_token}") as client:
-            for message in messages:
-                payload = {
-                    "chat_id": message.recipient_id,
-                    "text": message.text,
-                }
-                response = await client.post("/sendMessage", json=payload, timeout=10.0)
-                response.raise_for_status()
+        """Send responses via the centralized send_telegram_message (handles MarkdownV2 conversion)."""
+        for message in messages:
+            success = await send_telegram_message(
+                message.recipient_id,
+                message.text,
+                self.settings,
+            )
+            if not success:
+                logger.warning(f"Failed to send message to {message.recipient_id}")
 
     async def _build_response(self, message: IncomingMessage) -> str:
         text = (message.text or "").strip()
@@ -170,13 +363,20 @@ class TelegramProvider(ChatProvider):
             user_info = get_user_by_telegram_chat_id(chat_id, self.settings)
             if not user_info:
                 return "Link your account first with /link <CODE> before uploading files."
+            # Show typing indicator for file processing
+            await self.send_typing_indicator(chat_id)
             # Caption is the user's message text (for media, Telegram sends it as caption)
             user_text = (caption or "").strip()
-            if user_text.lower() == "/upload":
-                # Explicit /upload command: current behavior — upload, show summary, stop
-                return await self._handle_file_upload(user_info, chat_id, file_info, caption)
+            is_upload, effective_caption = self._parse_upload_command(user_text or None)
+            if is_upload:
+                # /upload or /upload <caption>: upload-only, show summary, do not invoke agent
+                return await self._handle_file_upload(
+                    user_info, chat_id, file_info, effective_caption
+                )
             # Default: upload silently, then feed media + text to agent (multimodal)
-            return await self._upload_and_invoke_agent(user_info, chat_id, file_info, user_text or "")
+            return await self._upload_and_invoke_agent(
+                user_info, chat_id, file_info, user_text or ""
+            )
 
         if not text:
             return self._get_help_message(chat_id)
@@ -229,6 +429,9 @@ class TelegramProvider(ChatProvider):
                 "2. Click 'Link Telegram Account'\n"
                 "3. Send me the code using: /link <CODE>"
             )
+
+        # Show typing indicator before agent processing
+        await self.send_typing_indicator(chat_id)
 
         # User is linked - invoke the agent
         return await self._invoke_agent(user_info, chat_id, text)
@@ -311,7 +514,7 @@ class TelegramProvider(ChatProvider):
                 "/newchat - Start a fresh conversation\n\n"
                 "Send any message to interact with your active project.\n"
                 "Send photos/videos (with or without text): they're uploaded and sent to the agent.\n"
-                "Use /upload as caption to only upload and get a summary (no agent)."
+                "Use /upload or /upload <caption> as caption to only upload and get a summary (no agent)."
             )
         return (
             base_help + "\n"
@@ -319,7 +522,11 @@ class TelegramProvider(ChatProvider):
         )
 
     async def _do_upload(
-        self, user_info: dict, chat_id: str, file_info: dict
+        self,
+        user_info: dict,
+        chat_id: str,
+        file_info: dict,
+        custom_filename: str | None = None,
     ) -> tuple[str | None, bytes | None, str | None, dict | None]:
         """
         Download file from Telegram and upload to asset service.
@@ -370,7 +577,8 @@ class TelegramProvider(ChatProvider):
                 if not asset_service_url:
                     return ("Asset service is not configured.", None, None, None)
 
-                files = {"file": (file_name, file_content, mime_type)}
+                upload_name = custom_filename or file_name
+                files = {"file": (upload_name, file_content, mime_type)}
                 data = {"source": "telegram", "run_pipeline": "true"}
 
                 upload_response = await client.post(
@@ -390,14 +598,25 @@ class TelegramProvider(ChatProvider):
             logger.exception("Failed to handle file upload")
             return (f"Upload failed: {str(e)}", None, None, None)
 
-    async def _handle_file_upload(self, user_info: dict, chat_id: str, file_info: dict, caption: str | None) -> str:
-        """Upload-only path: upload asset, return summary message, do not invoke agent. Used for /upload command."""
-        err, _content, _mime, result = await self._do_upload(user_info, chat_id, file_info)
+    async def _handle_file_upload(
+        self,
+        user_info: dict,
+        chat_id: str,
+        file_info: dict,
+        effective_caption: str | None,
+    ) -> str:
+        """
+        Upload-only path: upload asset, return summary, do not invoke agent.
+        effective_caption: None = generate type-UUID filename; str = use as asset name (sanitized).
+        """
+        custom_filename = self._upload_filename(file_info, effective_caption)
+        err, _content, _mime, result = await self._do_upload(
+            user_info, chat_id, file_info, custom_filename=custom_filename
+        )
         if err:
             return err
         asset = result.get("asset", {})
-        file_name = file_info.get("file_name", "upload")
-        asset_name = asset.get("name", file_name)
+        asset_name = asset.get("name", custom_filename)
         asset_type = asset.get("type", "unknown")
         pipeline_started = result.get("pipelineStarted", False)
         response_lines = [f"Uploaded: {asset_name} ({asset_type})"]
@@ -407,8 +626,8 @@ class TelegramProvider(ChatProvider):
             response_lines.append(f"Resolution: {asset['width']}x{asset['height']}")
         if pipeline_started:
             response_lines.append("Processing pipeline started.")
-        if caption:
-            response_lines.append(f"\nCaption: {caption}")
+        if effective_caption is not None:
+            response_lines.append(f"\nCaption: {effective_caption}")
         return "\n".join(response_lines)
 
     async def _upload_and_invoke_agent(
@@ -428,15 +647,20 @@ class TelegramProvider(ChatProvider):
             return "Error: Could not identify user."
 
         from ..firebase import get_firestore_client
+        from google.cloud.firestore import DELETE_FIELD
         db = get_firestore_client(self.settings)
 
         session_id = f"telegram-{chat_id}"
         session_ref = db.collection("users").document(user_id).collection("chatSessions").document(session_id)
 
-        # Clear messages but keep activeProjectId
-        session_ref.update({"messages": []})
+        # Clear messages and branchId so a new branch is created on next message
+        # Keep activeProjectId so user stays on the same project
+        session_ref.update({
+            "messages": [],
+            "branchId": DELETE_FIELD,
+        })
 
-        return "Conversation cleared. Send a message to start fresh."
+        return "Conversation cleared. A new branch will be created on your next message."
 
     def _handle_newproject_command(self, user_info: dict, chat_id: str, text: str) -> str:
         """Handle /newproject command to create a new project."""
@@ -536,12 +760,18 @@ class TelegramProvider(ChatProvider):
 
         user_id = user_info.get("userId")
         if not user_id:
+            logger.error("[TELEGRAM] No user_id in user_info")
             return "Error: Could not identify user."
+
+        logger.info("[TELEGRAM] === New message from user %s ===", user_id)
+        logger.info("[TELEGRAM] Chat ID: %s", chat_id)
+        logger.info("[TELEGRAM] Message: %s", text[:200] if text else "(empty)")
 
         cost = get_credits_for_action("chat")
         try:
             deduct_credits(user_id, cost, "chat", self.settings)
         except InsufficientCreditsError as e:
+            logger.warning("[TELEGRAM] Insufficient credits for user %s", user_id)
             return (
                 f"Insufficient credits. You need {e.required} R‑Credits for this message. "
                 "Add credits in Gemini Studio Settings to continue."
@@ -550,9 +780,11 @@ class TelegramProvider(ChatProvider):
         # Get or create chat session
         session = get_or_create_telegram_chat_session(user_id, chat_id, self.settings)
         session_id = session.get("id")
+        logger.info("[TELEGRAM] Session ID: %s", session_id)
 
         # Get current messages
         current_messages = list(session.get("messages", []))
+        logger.info("[TELEGRAM] Existing messages in session: %d", len(current_messages))
 
         # Add user message to session
         user_message = {
@@ -596,9 +828,11 @@ class TelegramProvider(ChatProvider):
         # Build project context
         project_context = None
         active_project_id = session.get("activeProjectId")
+        branch_id = session.get("branchId")
         selected_project = None
 
         try:
+            # First fetch without branch to find projects
             projects = fetch_user_projects(user_id, self.settings)
             if projects:
                 # Use active project if set, otherwise prompt user
@@ -612,6 +846,28 @@ class TelegramProvider(ChatProvider):
                         active_project_id = selected_project.get("id")
                     else:
                         return "You have multiple projects. Use /project to select one first."
+
+                # Create branch for this Telegram session if not exists
+                if not branch_id and active_project_id:
+                    try:
+                        from ..firebase import create_branch_for_chat, update_chat_session_branch, get_firestore_client
+                        branch_id = create_branch_for_chat(user_id, active_project_id, session_id, self.settings)
+                        # Update session with branchId
+                        db = get_firestore_client(self.settings)
+                        session_ref = db.collection("users").document(user_id).collection("chatSessions").document(session_id)
+                        session_ref.update({"branchId": branch_id})
+                        logger.info("[TELEGRAM] Created branch %s for session %s", branch_id, session_id)
+                    except Exception as e:
+                        logger.warning("[TELEGRAM] Could not create branch: %s, using main", e)
+                        branch_id = "main"
+
+                # Re-fetch project with branch to get branch-specific data
+                if branch_id and active_project_id:
+                    projects = fetch_user_projects(user_id, self.settings, branch_id=branch_id, project_id=active_project_id)
+                    if projects:
+                        selected_project = projects[0]
+
+                logger.info("[TELEGRAM] Using branch: %s for project: %s", branch_id, active_project_id)
 
                 project_data = selected_project.get("_projectData", {})
 
@@ -629,6 +885,7 @@ class TelegramProvider(ChatProvider):
 
                     project_context = f"""Current Project: {selected_project.get('name', 'Untitled')}
 Project ID: {active_project_id}
+Branch: {branch_id or 'main'}
 Resolution: {resolution.get('width', '?')}x{resolution.get('height', '?')} @ {project_data.get('fps', '?')}fps
 Tracks: {len(layers)}
 Assets: {len(assets_info)}"""
@@ -637,6 +894,7 @@ Assets: {len(assets_info)}"""
 
         if project_context:
             langchain_messages.insert(0, SystemMessage(content=f"[Project Context]\n{project_context}"))
+            logger.info("[TELEGRAM] Project context: %s", project_context[:200])
 
         # Invoke agent
         config = {
@@ -644,6 +902,7 @@ Assets: {len(assets_info)}"""
                 "thread_id": session_id,
                 "user_id": user_id,
                 "project_id": active_project_id,
+                "branch_id": branch_id,
             }
         }
         
@@ -651,20 +910,41 @@ Assets: {len(assets_info)}"""
             "thread_id": session_id,
             "user_id": user_id,
             "project_id": active_project_id,
+            "branch_id": branch_id,
         }
         
-        logger.info("Invoking agent for Telegram: user_id=%s, project_id=%s, thread_id=%s", user_id, active_project_id, session_id)
+        logger.info("[TELEGRAM] === Invoking agent ===")
+        logger.info("[TELEGRAM] user_id=%s, project_id=%s, branch_id=%s, thread_id=%s", user_id, active_project_id, branch_id, session_id)
+        logger.info("[TELEGRAM] Total messages to agent: %d", len(langchain_messages))
+
+        # Show typing indicator while processing
+        await self.send_typing_indicator(chat_id)
 
         try:
             last_response = None
+            tool_calls_made = []
+            
             for event in graph.stream({"messages": langchain_messages}, config=config, stream_mode="values", context=agent_context):
                 messages = event.get("messages", [])
                 if not messages:
                     continue
 
                 last_msg = messages[-1]
+                
+                # Log tool results (ToolMessage)
+                from langchain_core.messages import ToolMessage
+                if isinstance(last_msg, ToolMessage):
+                    logger.info("[TELEGRAM] Tool result for %s: %s", last_msg.name if hasattr(last_msg, 'name') else 'unknown', str(last_msg.content)[:500])
+                
                 if isinstance(last_msg, AIMessage):
-                    if not (hasattr(last_msg, 'tool_calls') and last_msg.tool_calls):
+                    # Log tool calls
+                    if hasattr(last_msg, 'tool_calls') and last_msg.tool_calls:
+                        for tc in last_msg.tool_calls:
+                            tool_name = tc.get("name", "unknown")
+                            tool_args = tc.get("args", {})
+                            logger.info("[TELEGRAM] Tool call: %s(%s)", tool_name, str(tool_args)[:200])
+                            tool_calls_made.append(tool_name)
+                    else:
                         content = last_msg.content
                         if isinstance(content, str):
                             last_response = content
@@ -674,6 +954,11 @@ Assets: {len(assets_info)}"""
                                 if isinstance(block, dict) and block.get("type") == "text":
                                     text_parts.append(block.get("text", ""))
                             last_response = "\n".join(text_parts)
+
+            logger.info("[TELEGRAM] Tool calls made: %s", tool_calls_made if tool_calls_made else "none")
+            logger.info("[TELEGRAM] Response length: %d chars", len(last_response) if last_response else 0)
+            if last_response:
+                logger.info("[TELEGRAM] Response preview: %s", last_response[:300])
 
             if last_response:
                 # Add assistant message to session
@@ -688,8 +973,9 @@ Assets: {len(assets_info)}"""
 
                 return last_response
 
+            logger.warning("[TELEGRAM] No response from agent")
             return "I processed your message but have no response."
 
         except Exception as e:
-            logger.exception("Agent invocation failed")
+            logger.exception("[TELEGRAM] Agent invocation failed: %s", str(e))
             return f"Error: {str(e)}"
