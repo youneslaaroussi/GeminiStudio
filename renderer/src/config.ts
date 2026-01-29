@@ -10,6 +10,8 @@ export interface RendererConfig {
   tmpDir: string;
   chromeExecutablePath?: string;
   headless: boolean;
+  gcpProjectId?: string;
+  renderEventTopic: string;
 }
 
 export const loadConfig = (): RendererConfig => {
@@ -21,6 +23,8 @@ export const loadConfig = (): RendererConfig => {
     RENDERER_TMP_DIR,
     PUPPETEER_EXECUTABLE_PATH,
     RENDERER_HEADLESS,
+    RENDERER_EVENT_TOPIC,
+    GOOGLE_PROJECT_ID,
   } = process.env;
 
   return {
@@ -31,5 +35,7 @@ export const loadConfig = (): RendererConfig => {
     tmpDir: RENDERER_TMP_DIR ?? '/tmp/gemini-renderer',
     chromeExecutablePath: PUPPETEER_EXECUTABLE_PATH,
     headless: RENDERER_HEADLESS ? RENDERER_HEADLESS.toLowerCase() === 'true' : true,
+    gcpProjectId: GOOGLE_PROJECT_ID,
+    renderEventTopic: RENDERER_EVENT_TOPIC ?? 'gemini-render-events',
   };
 };

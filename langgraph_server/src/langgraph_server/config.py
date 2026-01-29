@@ -36,11 +36,16 @@ class Settings(BaseSettings):
     # Optional default system prompt
     system_prompt: str = Field(
         default=(
-            "You are Gemini Studio's cloud assistant. You have access to tools and MUST use them when asked. "
-            "CRITICAL: You MUST only call ONE tool at a time. NEVER make multiple tool calls in a single response. "
-            "After each tool call, wait for the result before deciding what to do next. "
-            "Always use your tools - don't just say you need information, go get it. "
-            "The project context and user info are automatically provided to your tools."
+            "You are an autonomous task executor for Gemini Studio. You are NOT a chatbot. "
+            "ABSOLUTE RULES - VIOLATION IS FAILURE: "
+            "1. FORBIDDEN: Asking questions. FORBIDDEN: Asking for preferences. FORBIDDEN: Asking for confirmation. "
+            "2. When user says 'render' - IMMEDIATELY call renderVideo with defaults. No discussion. "
+            "3. Defaults: format='mp4', quality='web', include_audio=True. USE THESE. DO NOT ASK. "
+            "4. Call ONE tool per response. Wait for result. Continue until done. "
+            "5. Your ONLY output when executing a task should be a tool call. Not a question. "
+            "6. If a task is requested, your FIRST response MUST be a tool call, not text asking questions. "
+            "EXAMPLE - User: 'render this video' -> You: [call renderVideo tool immediately] "
+            "WRONG - User: 'render this video' -> You: 'What format do you want?' <- THIS IS FORBIDDEN"
         ),
         alias="SYSTEM_PROMPT",
     )
@@ -62,6 +67,14 @@ class Settings(BaseSettings):
     # Asset service
     asset_service_url: str | None = Field(
         default="http://localhost:8081", alias="ASSET_SERVICE_URL"
+    )
+
+    # Renderer integration
+    renderer_base_url: str = Field(default="http://localhost:4000", alias="RENDERER_BASE_URL")
+    render_event_topic: str = Field(default="gemini-render-events", alias="RENDER_EVENT_TOPIC")
+    render_event_subscription: str = Field(
+        default="gemini-render-events-sub",
+        alias="RENDER_EVENT_SUBSCRIPTION",
     )
 
 

@@ -424,8 +424,45 @@ def create_project(user_id: str, name: str, settings: Settings) -> dict[str, Any
     }
 
 
+def _extract_media_url(text: str) -> tuple[str | None, str | None]:
+    """Extract media URL from text. Returns (url, media_type) or (None, None)."""
+    import re
+
+    url = None
+
+    # 1. Markdown [text](url) or [url](url) – use URL from parentheses (signed link)
+    md = re.search(r'\[([^\]]*)\]\((https?://[^\)]+)\)', text)
+    if md:
+        url = md.group(2)
+
+    # 2. Raw URL
+    if not url:
+        raw = re.search(
+            r'(https?://[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?)',
+            text,
+            re.IGNORECASE,
+        )
+        if raw:
+            url = raw.group(1)
+
+    if not url:
+        return None, None
+
+    lower = url.lower().split('?')[0]
+    if any(lower.endswith(ext) for ext in ['.mp4', '.webm', '.mov', '.avi', '.mkv']):
+        return url, 'video'
+    if lower.endswith('.gif'):
+        return url, 'animation'
+    if any(lower.endswith(ext) for ext in ['.mp3', '.wav', '.ogg']):
+        return url, 'audio'
+    if any(lower.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.webp']):
+        return url, 'photo'
+
+    return None, None
+
+
 async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> bool:
-    """Send a message to a Telegram chat."""
+    """Send a message to a Telegram chat. Auto-detects and embeds media URLs."""
     import httpx
     import logging
     logger = logging.getLogger(__name__)
@@ -434,11 +471,49 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
         logger.warning("Telegram bot token not configured")
         return False
 
-    api_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
-
+    base_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}"
+    
+    # Check if message contains a media URL
+    media_url, media_type = _extract_media_url(text)
+    
     async with httpx.AsyncClient() as client:
+        if media_url and media_type:
+            # Remove markdown [text](url) or raw URL from caption
+            import re
+            caption = re.sub(r'\[[^\]]*\]\(https?://[^\)]+\)', '', text)
+            caption = re.sub(r'https?://[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?', '', caption, flags=re.IGNORECASE)
+            caption = re.sub(r'\s+', ' ', caption).strip().strip('.:')
+            
+            if media_type == 'video':
+                endpoint = f"{base_url}/sendVideo"
+                payload = {"chat_id": chat_id, "video": media_url, "caption": caption[:1024] if caption else None}
+            elif media_type == 'animation':
+                endpoint = f"{base_url}/sendAnimation"
+                payload = {"chat_id": chat_id, "animation": media_url, "caption": caption[:1024] if caption else None}
+            elif media_type == 'audio':
+                endpoint = f"{base_url}/sendAudio"
+                payload = {"chat_id": chat_id, "audio": media_url, "caption": caption[:1024] if caption else None}
+            elif media_type == 'photo':
+                endpoint = f"{base_url}/sendPhoto"
+                payload = {"chat_id": chat_id, "photo": media_url, "caption": caption[:1024] if caption else None}
+            else:
+                endpoint = f"{base_url}/sendMessage"
+                payload = {"chat_id": chat_id, "text": text}
+            
+            # Remove None values
+            payload = {k: v for k, v in payload.items() if v is not None}
+            
+            response = await client.post(endpoint, json=payload, timeout=30.0)
+            if response.status_code == 200:
+                logger.info(f"Sent Telegram {media_type} to {chat_id}")
+                return True
+            else:
+                logger.warning(f"Failed to send {media_type}, falling back to text: {response.text}")
+                # Fall back to text message
+        
+        # Send as text message
         response = await client.post(
-            api_url,
+            f"{base_url}/sendMessage",
             json={"chat_id": chat_id, "text": text},
             timeout=10.0
         )

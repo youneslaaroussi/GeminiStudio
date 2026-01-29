@@ -9,6 +9,7 @@ from langchain_core.tools import BaseTool
 
 from .docs_tool import search_product_docs
 from .list_assets_tool import listAssets
+from .render_video_tool import renderVideo
 from .time_tool import get_current_time_utc
 from .weather_tool import lookup_weather_snapshot
 
@@ -20,6 +21,7 @@ def get_registered_tools() -> Sequence[BaseTool]:
         get_current_time_utc,
         listAssets,
         search_product_docs,
+        renderVideo,
         lookup_weather_snapshot,
     )
 

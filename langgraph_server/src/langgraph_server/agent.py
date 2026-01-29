@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Literal
 
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -12,6 +13,8 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from .checkpoint import create_checkpointer
 from .config import Settings, get_settings
 from .tools import get_registered_tools, get_tools_by_name
+
+logger = logging.getLogger(__name__)
 
 
 def build_model(settings: Settings) -> ChatGoogleGenerativeAI:
@@ -40,6 +43,15 @@ def create_graph(settings: Settings | None = None):
     def call_tool(state: MessagesState, config: RunnableConfig):
         tool_outputs = []
         last_message = state["messages"][-1]
+        
+        # Extract context from runtime (passed via graph.stream(..., context={...}))
+        runtime = config.get("configurable", {}).get("__pregel_runtime")
+        ctx = getattr(runtime, "context", None) or {}
+        
+        thread_id = ctx.get("thread_id")
+        user_id = ctx.get("user_id")
+        project_id = ctx.get("project_id")
+        
         for tool_call in last_message.tool_calls:
             tool = tools_by_name.get(tool_call["name"])
             if not tool:
@@ -47,14 +59,19 @@ def create_graph(settings: Settings | None = None):
             else:
                 try:
                     args = dict(tool_call.get("args") or {})
-                    configurable = config.get("configurable", {})
-                    project_id = configurable.get("project_id")
-                    user_id = configurable.get("user_id")
                     if project_id and "project_id" not in args:
                         args["project_id"] = project_id
                     if user_id and "user_id" not in args:
                         args["user_id"] = user_id
-                    result = tool.invoke(args, config=config)
+                    if getattr(tool, "name", None) == "renderVideo":
+                        args["_agent_context"] = {
+                            "thread_id": thread_id,
+                            "project_id": project_id,
+                            "user_id": user_id,
+                        }
+                        result = tool.func(**args)
+                    else:
+                        result = tool.invoke(args, config=config)
                     observation = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
                 except Exception as exc:  # pragma: no cover - surface tool exceptions
                     observation = f"Tool '{tool_call['name']}' failed: {exc}"

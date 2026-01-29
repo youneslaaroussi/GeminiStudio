@@ -77,6 +77,7 @@ def invoke(
         configurable.setdefault("project_id", settings.default_project_id)
 
     config: RunnableConfig = {"configurable": configurable}
+    config["thread_id"] = payload.thread_id
 
     inputs = {"messages": _as_langchain_messages(payload.messages)}
     try:
@@ -354,12 +355,15 @@ Media Assets in Project ({len(assets_info)}):
         console.print(f"[dim]Added project context to agent[/dim]")
 
     # Invoke the graph with the chat_id as thread_id for persistence
+    thread_id = payload.thread_id or payload.chat_id
+
     config: RunnableConfig = {
         "configurable": {
-            "thread_id": payload.chat_id,
+            "thread_id": thread_id,
             "user_id": session.get("userId"),
             "project_id": first_project_id,
-        }
+        },
+        "thread_id": thread_id,
     }
 
     try:
@@ -425,7 +429,12 @@ Media Assets in Project ({len(assets_info)}):
 
         # Stream the graph to get intermediate responses
         last_response = None
-        for event in graph.stream({"messages": langchain_messages}, config=config, stream_mode="values"):
+        agent_context = {
+            "thread_id": thread_id,
+            "user_id": session.get("userId"),
+            "project_id": first_project_id,
+        }
+        for event in graph.stream({"messages": langchain_messages}, config=config, stream_mode="values", context=agent_context):
             messages = event.get("messages", [])
             if not messages:
                 continue

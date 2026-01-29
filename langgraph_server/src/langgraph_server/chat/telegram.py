@@ -602,10 +602,18 @@ Assets: {len(assets_info)}"""
                 "project_id": active_project_id,
             }
         }
+        
+        agent_context = {
+            "thread_id": session_id,
+            "user_id": user_id,
+            "project_id": active_project_id,
+        }
+        
+        logger.info("Invoking agent for Telegram: user_id=%s, project_id=%s, thread_id=%s", user_id, active_project_id, session_id)
 
         try:
             last_response = None
-            for event in graph.stream({"messages": langchain_messages}, config=config, stream_mode="values"):
+            for event in graph.stream({"messages": langchain_messages}, config=config, stream_mode="values", context=agent_context):
                 messages = event.get("messages", [])
                 if not messages:
                     continue

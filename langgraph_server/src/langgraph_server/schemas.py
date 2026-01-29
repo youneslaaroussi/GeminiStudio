@@ -31,6 +31,10 @@ class TeleportRequest(BaseModel):
     """Request to teleport/continue a chat session from the cloud."""
 
     chat_id: str = Field(..., description="The ID of the saved chat session to continue")
+    thread_id: str | None = Field(
+        default=None,
+        description="Optional override for the LangGraph thread identifier; defaults to chat_id if omitted.",
+    )
 
 
 class TeleportResponse(BaseModel):

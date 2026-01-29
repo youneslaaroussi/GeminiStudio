@@ -68,6 +68,7 @@ import {
   generateSessionName,
   type ChatSessionSummary,
 } from "@/app/lib/services/chat-sessions";
+import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/app/lib/server/firebase";
 
@@ -144,15 +145,16 @@ export function ChatPanel() {
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        body: { mode },
+        body: { mode, id: sessionId },
       }),
-    [mode]
+    [mode, sessionId]
   );
 
   const { messages, sendMessage, setMessages, status, error, clearError, stop } =
     useChat<TimelineChatMessage>({
       transport: chatTransport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+      id: sessionId,
     });
 
   const isBusy = status === "submitted" || status === "streaming" || isCloudProcessing;
@@ -178,8 +180,10 @@ export function ChatPanel() {
           formData.append("files", file);
         }
 
+        const authHeaders = await getAuthHeaders();
         const response = await fetch("/api/chat/attachments", {
           method: "POST",
+          headers: authHeaders,
           body: formData,
         });
 
@@ -374,7 +378,10 @@ export function ChatPanel() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ chat_id: savedSession.id }),
+          body: JSON.stringify({
+            chat_id: savedSession.id,
+            thread_id: savedSession.id,
+          }),
         }
       );
 
@@ -499,7 +506,10 @@ export function ChatPanel() {
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: session.id }),
+            body: JSON.stringify({
+              chat_id: session.id,
+              thread_id: session.id,
+            }),
           }
         );
 

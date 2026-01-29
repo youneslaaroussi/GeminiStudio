@@ -44,6 +44,20 @@ export const renderJobSchema = z.object({
       maxSegmentDuration: z.number().positive().optional(),
     })
     .optional(),
+  metadata: z
+    .object({
+      agent: z
+        .object({
+          threadId: z.string().optional(),
+          projectId: z.string().optional(),
+          userId: z.string().optional(),
+          requestId: z.string().optional(),
+        })
+        .optional(),
+      tags: z.array(z.string()).optional(),
+      extra: z.record(z.unknown()).optional(),
+    })
+    .optional(),
 });
 
 export type RenderJobData = z.infer<typeof renderJobSchema>;

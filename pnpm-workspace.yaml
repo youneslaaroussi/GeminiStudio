@@ -5,6 +5,7 @@ packages:
   - packages/*
 
 onlyBuiltDependencies:
+  - '@firebase/util'
   - esbuild
   - msgpackr-extract
   - protobufjs

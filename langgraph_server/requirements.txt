@@ -7,4 +7,5 @@ langgraph-api>=0.7.0,<0.8.0
 pydantic
 pydantic-settings
 google-cloud-storage
+google-cloud-pubsub>=2.23.0,<3.0.0
 uvicorn[standard]>=0.30.0,<1.0.0

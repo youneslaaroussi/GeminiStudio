@@ -1,9 +1,12 @@
-import { Queue, Worker, JobsOptions, Job } from 'bullmq';
+import { Queue, Worker, JobsOptions, Job, QueueEvents } from 'bullmq';
 import { Redis } from 'ioredis';
 import type { RenderJobData } from './jobs/render-job.js';
 import { renderJobSchema } from './jobs/render-job.js';
 import { logger } from './logger.js';
 import { loadConfig } from './config.js';
+import { publishRenderEvent } from './pubsub.js';
+import type { RenderEventMetadata } from './pubsub.js';
+import type { RenderResult } from './services/render-runner.js';
 
 const cfg = loadConfig();
 
@@ -24,6 +27,74 @@ export const renderQueue = new Queue<RenderJobData>(RENDER_QUEUE_NAME, {
     removeOnFail: false,
     attempts: 1,
   },
+});
+
+const renderQueueEvents = new QueueEvents(RENDER_QUEUE_NAME, {
+  connection: createRedisConnection(),
+});
+
+renderQueueEvents
+  .waitUntilReady()
+  .then(() => logger.info('Render queue events ready'))
+  .catch((err) => {
+    logger.error({ err }, 'Render queue events failed to initialize');
+  });
+
+const coerceReturnValue = (value: unknown): RenderResult | null => {
+  if (!value) return null;
+  if (typeof value === 'object') {
+    return value as RenderResult;
+  }
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as RenderResult;
+    } catch (err) {
+      logger.warn({ err }, 'Failed to parse return value JSON');
+      return null;
+    }
+  }
+  return null;
+};
+
+renderQueueEvents.on('completed', async ({ jobId, returnvalue }) => {
+  try {
+    const job = await renderQueue.getJob(jobId);
+    const metadata: RenderEventMetadata | undefined = job?.data.metadata
+      ? { ...job.data.metadata }
+      : undefined;
+    await publishRenderEvent({
+      type: 'render.completed',
+      jobId,
+      result: coerceReturnValue(returnvalue),
+      metadata,
+    });
+  } catch (err) {
+    logger.error({ err, jobId }, 'Failed to publish render completed event');
+  }
+});
+
+renderQueueEvents.on('failed', async ({ jobId, failedReason }) => {
+  try {
+    const job = await renderQueue.getJob(jobId);
+    const metadata: RenderEventMetadata | undefined = job?.data.metadata
+      ? { ...job.data.metadata }
+      : undefined;
+    const stacktrace = job?.stacktrace ?? null;
+    await publishRenderEvent({
+      type: 'render.failed',
+      jobId,
+      error: failedReason ?? 'Render job failed',
+      failedReason,
+      stacktrace,
+      metadata,
+    });
+  } catch (pubErr) {
+    logger.error({ err: pubErr, jobId }, 'Failed to publish render failed event');
+  }
+});
+
+renderQueueEvents.on('error', (err) => {
+  logger.error({ err }, 'Render queue events error');
 });
 
 export type RenderWorkerProcessor = (job: Job<RenderJobData>) => Promise<unknown>;
