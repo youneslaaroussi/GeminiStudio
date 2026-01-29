@@ -513,7 +513,7 @@ class TelegramProvider(ChatProvider):
                 "/newproject <name> - Create a new project\n"
                 "/newchat - Start a fresh conversation\n\n"
                 "Send any message to interact with your active project.\n"
-                "Send photos/videos (with or without text): they're uploaded and sent to the agent.\n"
+                "Send photos/videos/voice messages (with or without text): they're uploaded and sent to the agent.\n"
                 "Use /upload or /upload <caption> as caption to only upload and get a summary (no agent)."
             )
         return (
@@ -811,10 +811,10 @@ class TelegramProvider(ChatProvider):
             if role == "user":
                 is_last_user = i == len(current_messages) - 1
                 if is_last_user and inline_media:
-                    # Multimodal: text + image/video as data URLs for Gemini
+                    # Multimodal: text + image/video/audio as data URLs for Gemini
                     parts: list = [{"type": "text", "text": text or "(no text)"}]
                     for data, mime in inline_media:
-                        if mime.startswith("image/") or mime.startswith("video/"):
+                        if mime.startswith("image/") or mime.startswith("video/") or mime.startswith("audio/"):
                             b64 = base64.b64encode(data).decode("utf-8")
                             parts.append(
                                 {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}

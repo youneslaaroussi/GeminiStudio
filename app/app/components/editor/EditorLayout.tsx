@@ -6,7 +6,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Loader2, Wrench, MessageSquare } from "lucide-react";
+import { AlertTriangle, GripVertical, Loader2, Wrench, MessageSquare, Mic, X } from "lucide-react";
 import { AssetsPanel } from "./assets";
 import { PreviewPanel } from "./PreviewPanel";
 import { TimelinePanel } from "./TimelinePanel";
@@ -24,6 +24,8 @@ import { SettingsPanel } from "./settings";
 import { TopBar } from "./TopBar";
 import { ChatPanel } from "./ChatPanel";
 import { ToolboxPanel } from "./ToolboxPanel";
+import { motion, AnimatePresence } from "motion/react";
+import { VoiceChat } from "@/app/components/VoiceChat";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useShortcuts } from "@/app/hooks/use-shortcuts";
 import { usePageReloadBlocker } from "@/app/hooks/use-page-reload-blocker";
@@ -166,6 +168,84 @@ export function EditorLayout() {
     };
   }, [player, setIsPlaying, setLooping, setMuted, setPlaybackSpeed]);
 
+  const [showVoiceChat, setShowVoiceChat] = useState(false);
+  // Position stores left (x) and bottom (distance from viewport bottom)
+  const [voiceChatPosition, setVoiceChatPosition] = useState<{ left: number; bottom: number } | null>(null);
+  const voiceChatPanelRef = useRef<HTMLDivElement>(null);
+  const dragStartRef = useRef<{
+    mouseX: number;
+    mouseY: number;
+    startLeft: number;
+    startBottom: number;
+    fromButton?: boolean;
+  } | null>(null);
+  const movedRef = useRef(false);
+
+  const handleVoiceChatDragStart = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    const el = voiceChatPanelRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    // Calculate bottom position (distance from viewport bottom to element bottom)
+    const bottom = viewportHeight - rect.bottom;
+    const left = rect.left + rect.width / 2; // Center X
+    setVoiceChatPosition({ left, bottom });
+    movedRef.current = false;
+    dragStartRef.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      startLeft: left,
+      startBottom: bottom,
+    };
+  }, []);
+
+  const handleVoiceButtonMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    const el = voiceChatPanelRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const bottom = viewportHeight - rect.bottom;
+    const left = rect.left + rect.width / 2;
+    setVoiceChatPosition({ left, bottom });
+    movedRef.current = false;
+    dragStartRef.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      startLeft: left,
+      startBottom: bottom,
+      fromButton: true,
+    };
+  }, []);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const start = dragStartRef.current;
+      if (!start) return;
+      movedRef.current = true;
+      // Moving mouse down = bottom decreases, moving mouse right = left increases
+      setVoiceChatPosition({
+        left: start.startLeft + (e.clientX - start.mouseX),
+        bottom: start.startBottom - (e.clientY - start.mouseY),
+      });
+    };
+    const onUp = () => {
+      const wasButton = dragStartRef.current?.fromButton;
+      const wasClick = !movedRef.current;
+      dragStartRef.current = null;
+      if (wasButton && wasClick) {
+        setShowVoiceChat(true);
+      }
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, []);
+
   return (
     <>
       <div className="flex h-screen w-full flex-col overflow-hidden bg-background">
@@ -287,6 +367,89 @@ export function EditorLayout() {
               </div>
             </ResizablePanel>
           </ResizablePanelGroup>
+        </div>
+
+        {/* Floating Voice Chat - button expands into panel from bottom center */}
+        <div
+          ref={voiceChatPanelRef}
+          className="fixed z-50 flex flex-col items-center"
+          style={
+            voiceChatPosition
+              ? { left: voiceChatPosition.left, bottom: voiceChatPosition.bottom, transform: "translateX(-50%)" }
+              : { bottom: "2rem", left: "50%", transform: "translateX(-50%)" }
+          }
+        >
+          <AnimatePresence mode="popLayout" initial={false}>
+            {showVoiceChat ? (
+              <motion.div
+                key="panel"
+                layoutId="voice-chat-container"
+                initial={{ opacity: 0, scaleX: 0.3, scaleY: 0.1 }}
+                animate={{ opacity: 1, scaleX: 1, scaleY: 1 }}
+                exit={{ opacity: 0, scaleX: 0.3, scaleY: 0.1 }}
+                transition={{
+                  type: "spring",
+                  damping: 30,
+                  stiffness: 400,
+                  mass: 0.8,
+                }}
+                style={{ originX: 0.5, originY: 1 }}
+                className="relative bg-zinc-900/95 backdrop-blur-xl rounded-2xl border border-zinc-700/50 shadow-2xl w-[320px] min-w-[280px] overflow-hidden"
+              >
+                {/* Drag handle - top bar */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.1 }}
+                  onMouseDown={handleVoiceChatDragStart}
+                  className="flex items-center justify-center gap-1 py-2 px-4 cursor-grab active:cursor-grabbing border-b border-zinc-700/50 text-zinc-400 hover:text-zinc-300 select-none"
+                >
+                  <GripVertical className="size-4" />
+                  <span className="text-xs font-medium">Voice Assistant</span>
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.05 }}
+                  className="p-6 pt-4"
+                >
+                  <button
+                    onClick={() => setShowVoiceChat(false)}
+                    className="absolute top-[6px] right-3 text-zinc-500 hover:text-zinc-300 transition-colors"
+                  >
+                    <X className="size-5" />
+                  </button>
+                  <VoiceChat />
+                </motion.div>
+                <div className="flex items-center justify-center gap-1.5 py-2 px-4 border-t border-zinc-700/50 bg-zinc-900/50">
+                  <img src="/gemini-logo.png" alt="" className="size-3.5 opacity-70" aria-hidden />
+                  <span className="text-[10px] text-zinc-500">Powered by Gemini Live Audio</span>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.button
+                key="button"
+                layoutId="voice-chat-container"
+                type="button"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{
+                  type: "spring",
+                  damping: 25,
+                  stiffness: 350,
+                }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onMouseDown={handleVoiceButtonMouseDown}
+                className="flex items-center justify-center gap-2 rounded-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-600/50 shadow-lg text-zinc-300 hover:text-white px-4 py-3 cursor-grab active:cursor-grabbing"
+                title="Voice"
+              >
+                <Mic className="size-5" />
+                <span className="text-sm font-medium">Voice</span>
+              </motion.button>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 

@@ -6,13 +6,15 @@ import { TRACK_LABEL_WIDTH } from "./constants";
 
 interface PlayheadProps {
   onPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  /** Left offset in px (e.g. 0 when playhead is inside the scrollable timeline column) */
+  labelOffset?: number;
 }
 
-export function Playhead({ onPointerDown }: PlayheadProps) {
+export function Playhead({ onPointerDown, labelOffset = TRACK_LABEL_WIDTH }: PlayheadProps) {
   const currentTime = useProjectStore((s) => s.currentTime);
   const zoom = useProjectStore((s) => s.zoom);
 
-  const left = currentTime * zoom + TRACK_LABEL_WIDTH;
+  const left = currentTime * zoom + labelOffset;
 
   return (
     <div

@@ -7,6 +7,8 @@ import type { ProjectTranscription } from '@/app/types/transcription';
 import { useDrag } from '@/app/hooks/use-drag';
 import { SelectionOverlay } from './SelectionOverlay';
 import { useProjectStore } from '@/app/lib/store/project-store';
+import { EditorSkeleton } from '@/app/components/editor/EditorSkeleton';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface SceneNode {
   worldToLocal: () => DOMMatrix;
@@ -615,11 +617,18 @@ export function ScenePlayer({
           </div>
         </div>
       </div>
-      {!project && !error && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <p className="text-sm text-muted-foreground">Loading scene…</p>
-        </div>
-      )}
+      <AnimatePresence>
+        {!project && !error && (
+          <motion.div
+            className="absolute inset-0 pointer-events-none"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <EditorSkeleton />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

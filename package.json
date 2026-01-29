@@ -5,5 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r run build"
+  },
+  "dependencies": {
+    "ws": "^8.19.0"
   }
 }

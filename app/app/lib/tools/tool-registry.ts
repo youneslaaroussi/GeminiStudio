@@ -18,6 +18,8 @@ import {
   videoEffectsListTool,
   videoEffectsJobStatusTool,
 } from "./video-effects-run";
+import { veoGenerateTool, veoJobStatusTool } from "./veo-generate";
+import { digestAssetTool } from "./digest-asset";
 
 type AnyToolDefinition = ToolDefinition<any, Project>;
 
@@ -51,6 +53,9 @@ toolRegistry.register(timelineUpdateClipTool);
 toolRegistry.register(videoEffectsListTool);
 toolRegistry.register(videoEffectsRunTool);
 toolRegistry.register(videoEffectsJobStatusTool);
+toolRegistry.register(veoGenerateTool);
+toolRegistry.register(veoJobStatusTool);
+toolRegistry.register(digestAssetTool);
 
 type ToolInput = Record<string, unknown>;
 

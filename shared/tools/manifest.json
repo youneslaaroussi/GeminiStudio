@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-01-29T19:44:39.866Z",
+  "generatedAt": "2026-01-29T20:04:56.127Z",
   "tools": {
     "captureAsset": {
       "name": "captureAsset",
@@ -1176,6 +1176,290 @@
             },
             "required": [
               "jobId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "veoGenerate": {
+      "name": "veoGenerate",
+      "label": "Generate Veo Video",
+      "description": "Generate a video using Google Veo 3. Returns a job ID that can be polled for completion.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": false
+      },
+      "fields": [
+        {
+          "name": "projectId",
+          "label": "Project ID",
+          "type": "text",
+          "placeholder": "project_abc123...",
+          "description": "The project to associate this video with.",
+          "required": true
+        },
+        {
+          "name": "prompt",
+          "label": "Prompt",
+          "type": "textarea",
+          "placeholder": "A cinematic shot of a mountain landscape at sunrise...",
+          "description": "Describe the video you want to generate in detail.",
+          "required": true
+        },
+        {
+          "name": "durationSeconds",
+          "label": "Duration",
+          "type": "select",
+          "options": [
+            {
+              "value": "4",
+              "label": "4 seconds"
+            },
+            {
+              "value": "6",
+              "label": "6 seconds"
+            },
+            {
+              "value": "8",
+              "label": "8 seconds"
+            }
+          ],
+          "defaultValue": "8",
+          "description": "Video duration. Only 8s is available for 1080p and 4K."
+        },
+        {
+          "name": "aspectRatio",
+          "label": "Aspect Ratio",
+          "type": "select",
+          "options": [
+            {
+              "value": "16:9",
+              "label": "16:9 Landscape"
+            },
+            {
+              "value": "9:16",
+              "label": "9:16 Portrait"
+            }
+          ],
+          "defaultValue": "16:9"
+        },
+        {
+          "name": "resolution",
+          "label": "Resolution",
+          "type": "select",
+          "options": [
+            {
+              "value": "720p",
+              "label": "720p"
+            },
+            {
+              "value": "1080p",
+              "label": "1080p"
+            },
+            {
+              "value": "4k",
+              "label": "4K"
+            }
+          ],
+          "defaultValue": "720p",
+          "description": "Higher resolutions cost more credits and require 8s duration."
+        },
+        {
+          "name": "generateAudio",
+          "label": "Generate Audio",
+          "type": "select",
+          "options": [
+            {
+              "value": "true",
+              "label": "Yes"
+            },
+            {
+              "value": "false",
+              "label": "No"
+            }
+          ],
+          "defaultValue": "true",
+          "description": "Whether to generate audio with the video."
+        },
+        {
+          "name": "negativePrompt",
+          "label": "Negative Prompt",
+          "type": "text",
+          "placeholder": "blurry, low quality, text, watermark...",
+          "description": "Optional: describe what to avoid in the generated video."
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/veoGenerateInput",
+        "definitions": {
+          "veoGenerateInput": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "prompt": {
+                "type": "string",
+                "minLength": 1
+              },
+              "durationSeconds": {
+                "type": "string",
+                "enum": [
+                  "4",
+                  "6",
+                  "8"
+                ],
+                "default": "8"
+              },
+              "aspectRatio": {
+                "type": "string",
+                "enum": [
+                  "16:9",
+                  "9:16"
+                ],
+                "default": "16:9"
+              },
+              "resolution": {
+                "type": "string",
+                "enum": [
+                  "720p",
+                  "1080p",
+                  "4k"
+                ],
+                "default": "720p"
+              },
+              "generateAudio": {
+                "type": "boolean",
+                "default": true
+              },
+              "negativePrompt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "projectId",
+              "prompt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "veoJobStatus": {
+      "name": "veoJobStatus",
+      "label": "Check Veo Job Status",
+      "description": "Check the status of a Veo video generation job.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": false
+      },
+      "fields": [
+        {
+          "name": "jobId",
+          "label": "Job ID",
+          "type": "text",
+          "placeholder": "veo_abc123...",
+          "required": true
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/veoJobStatusInput",
+        "definitions": {
+          "veoJobStatusInput": {
+            "type": "object",
+            "properties": {
+              "jobId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "jobId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "digestAsset": {
+      "name": "digestAsset",
+      "label": "Digest Asset",
+      "description": "Analyze an asset (video, image, or audio) using Gemini's multimodal capabilities. Returns a detailed description of the content.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": false
+      },
+      "fields": [
+        {
+          "name": "assetId",
+          "label": "Asset ID",
+          "type": "text",
+          "placeholder": "e.g. asset_abc123",
+          "description": "The ID of the asset to analyze.",
+          "required": true
+        },
+        {
+          "name": "query",
+          "label": "Question (optional)",
+          "type": "textarea",
+          "placeholder": "What specific aspects would you like to know about?",
+          "description": "Optional: Ask a specific question about the asset instead of getting a general analysis."
+        },
+        {
+          "name": "depth",
+          "label": "Analysis Depth",
+          "type": "select",
+          "options": [
+            {
+              "value": "quick",
+              "label": "Quick (2-3 sentences)"
+            },
+            {
+              "value": "detailed",
+              "label": "Detailed (comprehensive analysis)"
+            },
+            {
+              "value": "exhaustive",
+              "label": "Exhaustive (scene-by-scene, every detail)"
+            }
+          ],
+          "defaultValue": "detailed",
+          "description": "How thorough should the analysis be?"
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/digestAssetInput",
+        "definitions": {
+          "digestAssetInput": {
+            "type": "object",
+            "properties": {
+              "assetId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "query": {
+                "type": "string"
+              },
+              "depth": {
+                "type": "string",
+                "enum": [
+                  "quick",
+                  "detailed",
+                  "exhaustive"
+                ],
+                "default": "detailed"
+              }
+            },
+            "required": [
+              "assetId"
             ],
             "additionalProperties": false
           }

@@ -2,7 +2,9 @@
 
 import { use, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "motion/react";
 import { EditorLayout } from "../../components/editor/EditorLayout";
+import { EditorSkeleton } from "../../components/editor/EditorSkeleton";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import { getStoredBranchForProject } from "@/app/lib/store/branch-storage";
@@ -34,17 +36,25 @@ export default function EditorPage({ params }: EditorPageProps) {
     }
   }, [projectId, loadProject, initializeSync, user, loading, router]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-slate-950">
-        <div className="text-slate-400">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!user) {
+  if (!loading && !user) {
     return null;
   }
 
-  return <EditorLayout key={projectId} />;
+  return (
+    <>
+      {user && <EditorLayout key={projectId} />}
+      <AnimatePresence>
+        {loading && (
+          <motion.div
+            className="absolute inset-0 z-10 h-screen w-full"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <EditorSkeleton />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
 }

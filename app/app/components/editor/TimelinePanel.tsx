@@ -17,7 +17,7 @@ import {
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { cn } from "@/lib/utils";
 import { TimeRuler } from "../timeline/TimeRuler";
-import { LayerTrack } from "../timeline/LayerTrack";
+import { LayerTrackLabel, LayerTrackBody } from "../timeline/LayerTrack";
 import { Playhead } from "../timeline/Playhead";
 import type { ClipType } from "@/app/types/timeline";
 import { createLayerTemplate } from "@/app/lib/store/project-store";
@@ -49,6 +49,7 @@ export function TimelinePanel({
 }: TimelinePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const horizontalScrollRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(600);
 
   const currentTime = useProjectStore((s) => s.currentTime);
@@ -138,7 +139,8 @@ export function TimelinePanel({
       const area = timelineAreaRef.current;
       if (!area) return;
       const rect = area.getBoundingClientRect();
-      const x = event.clientX - rect.left - TRACK_LABEL_WIDTH;
+      // timelineAreaRef is the right column; content starts at rect.left
+      const x = event.clientX - rect.left;
       const start = Math.max(0, x / zoom);
       const clip = createClipFromAsset(asset, start);
       addClip(clip);
@@ -179,7 +181,7 @@ export function TimelinePanel({
       if (Math.abs(deltaScale) < 0.005) {
         return;
       }
-      const scroller = scrollContainerRef.current;
+      const scroller = horizontalScrollRef.current;
       if (!scroller) return;
       const sensitivity = 500;
       scroller.scrollLeft -= deltaScale * sensitivity;
@@ -232,7 +234,8 @@ export function TimelinePanel({
       const area = timelineAreaRef.current;
       if (!area) return 0;
       const rect = area.getBoundingClientRect();
-      const x = clientX - rect.left - TRACK_LABEL_WIDTH;
+      // timelineAreaRef is the right column; content starts at rect.left
+      const x = clientX - rect.left;
       const seconds = x / zoom;
       return Math.min(Math.max(seconds, 0), duration);
     },
@@ -301,11 +304,20 @@ export function TimelinePanel({
     (
       event: Pick<
         WheelEvent,
-        "preventDefault" | "stopPropagation" | "metaKey" | "ctrlKey" | "altKey" | "deltaX" | "deltaY"
+        "preventDefault" | "stopPropagation" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey" | "deltaX" | "deltaY"
       >
     ) => {
       event.preventDefault();
       event.stopPropagation();
+
+      const verticalScroller = scrollContainerRef.current;
+      const horizontalScroller = horizontalScrollRef.current;
+
+      if (event.shiftKey) {
+        // Shift + wheel: vertical scroll (layers)
+        if (verticalScroller) verticalScroller.scrollTop += event.deltaY;
+        return;
+      }
 
       if (event.metaKey || event.ctrlKey || event.altKey) {
         const direction = Math.sign(event.deltaY || event.deltaX || 1);
@@ -315,11 +327,10 @@ export function TimelinePanel({
         return;
       }
 
-      const scroller = scrollContainerRef.current;
-      if (!scroller) return;
+      // Default: horizontal scroll (time) on the right column only
       const dominantDelta =
         Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-      scroller.scrollLeft += dominantDelta;
+      if (horizontalScroller) horizontalScroller.scrollLeft += dominantDelta;
     },
     [setZoom, zoom]
   );
@@ -500,84 +511,101 @@ export function TimelinePanel({
         </div>
       </div>
 
-      {/* Timeline content */}
-      <div className="flex-1 overflow-hidden min-w-0">
+      {/* Timeline content: scroll = time, Shift+scroll = layers, Ctrl/Cmd+scroll = zoom. Two columns: fixed labels (left) + scrollable timeline (right). */}
+      <div className="relative flex-1 overflow-hidden min-w-0 flex flex-col" title="Scroll: time. Shift+scroll: layers. Ctrl/Cmd+scroll: zoom.">
         <div
           ref={scrollContainerRef}
-          className="h-full overflow-auto"
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
         >
-          <div
-            ref={timelineAreaRef}
-            className="relative min-h-full touch-none"
-            style={{
-              width: Math.max(containerWidth, duration * zoom + TRACK_LABEL_WIDTH),
-            }}
-            onPointerDown={handleTimelinePointerDown}
-          onDragOver={handleTimelineDragOver}
-          onDrop={handleTimelineDrop}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowLeft") {
-              e.preventDefault();
-              setCurrentTime(currentTime - 1);
-            }
-            if (e.key === "ArrowRight") {
-              e.preventDefault();
-              setCurrentTime(currentTime + 1);
-            }
-          }}
-          tabIndex={0}
-          role="slider"
-          aria-label="Timeline"
-          aria-valuemin={0}
-          aria-valuemax={duration}
-          aria-valuenow={currentTime}
-        >
-          {/* Time ruler with track label offset */}
-          <div className="flex">
+          <div className="flex min-h-full">
+            {/* Fixed left column: layer labels (always visible) */}
             <div
-              className="shrink-0 bg-muted/30 border-r border-border"
+              className="shrink-0 flex flex-col border-r border-border bg-card"
               style={{ width: TRACK_LABEL_WIDTH }}
-            />
-            <TimeRuler
-              width={Math.max(containerWidth - TRACK_LABEL_WIDTH, duration * zoom)}
-            />
-          </div>
-
-          <div className="relative overflow-auto">
-            {/* Tracks */}
-            {layers.map((layer, index) => (
-              <LayerTrack
-                key={layer.id}
-                layer={layer}
-                layerIndex={index}
-                width={Math.max(containerWidth, duration * zoom + TRACK_LABEL_WIDTH)}
-                labelWidth={TRACK_LABEL_WIDTH}
-                onDragStart={handleLayerDragStart}
-                onDragOver={handleLayerDragOver}
-                onDrop={handleLayerDrop}
-                onDragEnd={handleLayerDragEnd}
-                isDragTarget={dragTargetIndex === index && draggedLayerIndex !== index}
-                dropPosition={dragTargetIndex === index ? dropPosition : null}
+            >
+              <div
+                className="shrink-0 h-6 border-b border-border bg-muted/30"
+                style={{ width: TRACK_LABEL_WIDTH }}
               />
-            ))}
+              {layers.map((layer, index) => (
+                <LayerTrackLabel
+                  key={layer.id}
+                  layer={layer}
+                  layerIndex={index}
+                  labelWidth={TRACK_LABEL_WIDTH}
+                  onDragStart={handleLayerDragStart}
+                  onDragOver={handleLayerDragOver}
+                  onDrop={handleLayerDrop}
+                  onDragEnd={handleLayerDragEnd}
+                  isDragTarget={dragTargetIndex === index && draggedLayerIndex !== index}
+                  dropPosition={dragTargetIndex === index ? dropPosition : null}
+                />
+              ))}
+            </div>
 
-            {/* Playhead */}
-            <Playhead onPointerDown={handleScrubPointerDown} />
-          </div>
-
-          {!hasClips && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="rounded-lg border border-dashed border-border/80 bg-background/90 px-6 py-5 text-center">
-                <img src="/gemini-logo.png" alt="Gemini" className="size-8 mx-auto mb-3 opacity-60" />
-                <p className="text-sm text-muted-foreground">
-                  Timeline is empty. Upload assets or add clips to start building your project.
-                </p>
+            {/* Scrollable right column: ruler + tracks + playhead */}
+            <div
+              ref={horizontalScrollRef}
+              className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden flex flex-col"
+            >
+              <div
+                ref={timelineAreaRef}
+                className="relative touch-none flex flex-col"
+                style={{
+                  width: Math.max(containerWidth - TRACK_LABEL_WIDTH, duration * zoom),
+                }}
+                onPointerDown={handleTimelinePointerDown}
+                onDragOver={handleTimelineDragOver}
+                onDrop={handleTimelineDrop}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowLeft") {
+                    e.preventDefault();
+                    setCurrentTime(currentTime - 1);
+                  }
+                  if (e.key === "ArrowRight") {
+                    e.preventDefault();
+                    setCurrentTime(currentTime + 1);
+                  }
+                }}
+                tabIndex={0}
+                role="slider"
+                aria-label="Timeline"
+                aria-valuemin={0}
+                aria-valuemax={duration}
+                aria-valuenow={currentTime}
+              >
+                <TimeRuler
+                  width={Math.max(containerWidth - TRACK_LABEL_WIDTH, duration * zoom)}
+                />
+                <div className="relative">
+                  {layers.map((layer) => (
+                    <LayerTrackBody
+                      key={layer.id}
+                      layer={layer}
+                      trackWidth={Math.max(containerWidth - TRACK_LABEL_WIDTH, duration * zoom)}
+                    />
+                  ))}
+                  <Playhead
+                    labelOffset={0}
+                    onPointerDown={handleScrubPointerDown}
+                  />
+                </div>
               </div>
             </div>
-          )}
+          </div>
         </div>
+
+        {!hasClips && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="rounded-lg border border-dashed border-border/80 bg-background/90 px-6 py-5 text-center">
+              <img src="/gemini-logo.png" alt="Gemini" className="size-8 mx-auto mb-3 opacity-60" />
+              <p className="text-sm text-muted-foreground">
+                Timeline is empty. Upload assets or add clips to start building your project.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
-  </div>
   );
 }

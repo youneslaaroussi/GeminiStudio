@@ -5,10 +5,7 @@ import type { RemoteAsset } from "@/app/types/assets";
 
 export async function loadAssetsSnapshot(): Promise<RemoteAsset[]> {
   if (typeof window === "undefined") {
-    // Server-side: cannot load assets without user context
-    // Asset service requires userId and projectId which aren't available here
-    console.warn("[asset-utils] loadAssetsSnapshot called on server - returning empty array");
-    return [];
+    throw new Error("loadAssetsSnapshot cannot be called on server! requires browser context for user authentication");
   }
   const assetsStore = useAssetsStore.getState();
   if (assetsStore.assets.length > 0) {

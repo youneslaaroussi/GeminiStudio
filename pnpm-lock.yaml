@@ -6,7 +6,11 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    dependencies:
+      ws:
+        specifier: ^8.19.0
+        version: 8.19.0
 
   app:
     dependencies:
@@ -40,6 +44,9 @@ importers:
       '@google-cloud/video-intelligence':
         specifier: ^6.2.1
         version: 6.2.1
+      '@google/genai':
+        specifier: ^1.38.0
+        version: 1.38.0
       '@motion-canvas/2d':
         specifier: ^3.17.2
         version: 3.17.2
@@ -100,6 +107,9 @@ importers:
       google-auth-library:
         specifier: ^9.14.1
         version: 9.15.1
+      gsap:
+        specifier: ^3.14.2
+        version: 3.14.2
       idb-keyval:
         specifier: ^6.2.2
         version: 6.2.2
@@ -1218,6 +1228,15 @@ packages:
   '@google-cloud/video-intelligence@6.2.1':
     resolution: {integrity: sha512-lsKhpGx4Ao9wk9mgqHS3M6/3LxUu58uFyj+hPZrVLl90aeuFRYI7NeNQro2AwehAfC1XPPe4ldzufSv59ebaNQ==}
     engines: {node: '>=18'}
+
+  '@google/genai@1.38.0':
+    resolution: {integrity: sha512-V/4CQVQGovvGHuS73lwJwHKR9x33kCij3zz/ReEQ4A7RJaV0U7m4k1mvYhFk55cGZdF5JLKu2S9BTaFuEs5xTA==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      '@modelcontextprotocol/sdk': ^1.25.2
+    peerDependenciesMeta:
+      '@modelcontextprotocol/sdk':
+        optional: true
 
   '@grpc/grpc-js@1.14.3':
     resolution: {integrity: sha512-Iq8QQQ/7X3Sac15oB6p0FmUg/klxQvXLeileoqrTRGJYLV+/9tubbr9ipz0GKHjmXVsgFPo/+W+2cA8eNcR+XA==}
@@ -3773,6 +3792,9 @@ packages:
 
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
+
+  gsap@3.14.2:
+    resolution: {integrity: sha512-P8/mMxVLU7o4+55+1TCnQrPmgjPKnwkzkXOK1asnR9Jg2lna4tEY5qBJjMmAaOBDDZWtlRjBXjLa0w53G/uBLA==}
 
   gtoken@7.1.0:
     resolution: {integrity: sha512-pCcEwRi+TKpMlxAQObHDQ56KawURgyAf6jtIY046fJ5tIv3zDe/LEIubckAO8fj6JnAxLdmWkUfNyulQ2iKdEw==}
@@ -6770,6 +6792,16 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@google/genai@1.38.0':
+    dependencies:
+      google-auth-library: 10.5.0
+      protobufjs: 7.5.4
+      ws: 8.19.0
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+
   '@grpc/grpc-js@1.14.3':
     dependencies:
       '@grpc/proto-loader': 0.8.0
@@ -7742,7 +7774,7 @@ snapshots:
 
   '@types/connect@3.4.38':
     dependencies:
-      '@types/node': 22.19.7
+      '@types/node': 20.19.30
 
   '@types/cors@2.8.19':
     dependencies:
@@ -7801,7 +7833,7 @@ snapshots:
   '@types/jsonwebtoken@9.0.10':
     dependencies:
       '@types/ms': 2.1.0
-      '@types/node': 22.19.7
+      '@types/node': 20.19.30
 
   '@types/long@4.0.2': {}
 
@@ -7836,7 +7868,7 @@ snapshots:
   '@types/request@2.48.13':
     dependencies:
       '@types/caseless': 0.12.5
-      '@types/node': 22.19.7
+      '@types/node': 20.19.30
       '@types/tough-cookie': 4.0.5
       form-data: 2.5.5
 
@@ -7847,7 +7879,7 @@ snapshots:
 
   '@types/send@1.2.1':
     dependencies:
-      '@types/node': 22.19.7
+      '@types/node': 20.19.30
 
   '@types/serve-static@1.15.10':
     dependencies:
@@ -9601,6 +9633,8 @@ snapshots:
 
   graceful-fs@4.2.11: {}
 
+  gsap@3.14.2: {}
+
   gtoken@7.1.0:
     dependencies:
       gaxios: 6.7.1
@@ -10779,7 +10813,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.0
-      '@types/node': 22.19.7
+      '@types/node': 20.19.30
       long: 5.3.2
 
   proxy-addr@2.0.7:
