@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import {
   FileVideo,
   FileAudio,
@@ -12,12 +12,14 @@ import {
   MoreHorizontal,
   GripVertical,
   Trash2,
+  Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RemoteAsset, AssetDragPayload } from "@/app/types/assets";
 import { ASSET_DRAG_DATA_MIME } from "@/app/types/assets";
 import type { ProjectTranscription } from "@/app/types/transcription";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -34,6 +36,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatBytes, formatDuration } from "./utils";
 
+const ASSET_REORDER_MIME = "application/x-gemini-asset-reorder";
+
 interface AssetListProps {
   assets: RemoteAsset[];
   isLoading: boolean;
@@ -45,6 +49,8 @@ interface AssetListProps {
   onStartTranscription: (asset: RemoteAsset) => void;
   onViewTranscription: (assetId: string) => void;
   onViewDetails: (assetId: string) => void;
+  onRename: (assetId: string, name: string) => Promise<boolean>;
+  onReorder: (orderedIds: string[]) => Promise<boolean>;
   onDelete: (assetId: string) => Promise<boolean>;
   onRefresh: () => void;
 }
@@ -70,10 +76,26 @@ export function AssetList({
   onStartTranscription,
   onViewTranscription,
   onViewDetails,
+  onRename,
+  onReorder,
   onDelete,
   onRefresh,
 }: AssetListProps) {
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [reordering, setReordering] = useState(false);
+  const editInputRef = useRef<HTMLInputElement>(null);
+  const dragFromReorderHandleRef = useRef(false);
+
+  useEffect(() => {
+    if (editingAssetId) {
+      setEditingName(assets.find((a) => a.id === editingAssetId)?.name ?? "");
+      editInputRef.current?.focus();
+      editInputRef.current?.select();
+    }
+  }, [editingAssetId, assets]);
 
   const handleDelete = useCallback(
     async (assetId: string) => {
@@ -90,26 +112,90 @@ export function AssetList({
     },
     [onDelete]
   );
+
   const handleDragStart = useCallback(
     (asset: RemoteAsset, event: React.DragEvent<HTMLDivElement>) => {
       if (!event.dataTransfer) return;
-      const assetMeta = metadata[asset.id];
-      const payload: AssetDragPayload = {
-        id: asset.id,
-        name: asset.name,
-        url: asset.url,
-        type: asset.type,
-        duration: resolveAssetDuration(asset),
-        width: assetMeta?.width,
-        height: assetMeta?.height,
-      };
-      event.dataTransfer.setData(ASSET_DRAG_DATA_MIME, JSON.stringify(payload));
-      event.dataTransfer.effectAllowed = "copy";
+      // Row is the draggable element so event.target is often the row; we track
+      // pointer-down on the grip instead to distinguish reorder vs timeline drag.
+      const isReorder = dragFromReorderHandleRef.current;
+      dragFromReorderHandleRef.current = false;
+
+      if (isReorder) {
+        event.dataTransfer.setData(ASSET_REORDER_MIME, asset.id);
+        event.dataTransfer.effectAllowed = "move";
+        setReordering(true);
+      } else {
+        const assetMeta = metadata[asset.id];
+        const payload: AssetDragPayload = {
+          id: asset.id,
+          name: asset.name,
+          url: asset.url,
+          type: asset.type,
+          duration: resolveAssetDuration(asset),
+          width: assetMeta?.width,
+          height: assetMeta?.height,
+        };
+        event.dataTransfer.setData(ASSET_DRAG_DATA_MIME, JSON.stringify(payload));
+        event.dataTransfer.effectAllowed = "copy";
+      }
     },
     [metadata, resolveAssetDuration]
   );
 
-  if (isLoading) {
+  const handleDragEnd = useCallback(() => {
+    dragFromReorderHandleRef.current = false;
+    setReordering(false);
+    setDragOverId(null);
+  }, []);
+
+  const handleDragOver = useCallback(
+    (e: React.DragEvent<HTMLDivElement>, assetId: string) => {
+      if (!e.dataTransfer.types.includes(ASSET_REORDER_MIME)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      setDragOverId(assetId);
+    },
+    []
+  );
+
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverId(null);
+    }
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>, dropTargetId: string) => {
+      if (!e.dataTransfer.types.includes(ASSET_REORDER_MIME)) return;
+      e.preventDefault();
+      setDragOverId(null);
+      setReordering(false);
+      const draggedId = e.dataTransfer.getData(ASSET_REORDER_MIME);
+      if (!draggedId || draggedId === dropTargetId) return;
+      const ids = assets.map((a) => a.id);
+      const fromIdx = ids.indexOf(draggedId);
+      const toIdx = ids.indexOf(dropTargetId);
+      if (fromIdx === -1 || toIdx === -1) return;
+      ids.splice(fromIdx, 1);
+      ids.splice(toIdx, 0, draggedId);
+      void onReorder(ids);
+    },
+    [assets, onReorder]
+  );
+
+  const submitRename = useCallback(
+    async (assetId: string) => {
+      const trimmed = editingName.trim();
+      setEditingAssetId(null);
+      if (!trimmed) return;
+      await onRename(assetId, trimmed);
+    },
+    [editingName, onRename]
+  );
+
+  // Full-screen loader only on initial load (no assets yet)
+  if (isLoading && assets.length === 0) {
     return (
       <div className="flex items-center justify-center py-12 text-muted-foreground">
         <Loader2 className="size-5 animate-spin mr-2" />
@@ -118,7 +204,8 @@ export function AssetList({
     );
   }
 
-  if (error) {
+  // Full error UI only when we have no assets (initial load failed)
+  if (error && assets.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <p className="text-sm text-destructive mb-2">{error}</p>
@@ -141,6 +228,14 @@ export function AssetList({
 
   return (
     <div className="divide-y divide-border">
+      {error && assets.length > 0 && (
+        <div className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs text-destructive bg-destructive/10">
+          <span className="truncate">{error}</span>
+          <Button variant="ghost" size="sm" className="h-6 px-2 shrink-0" onClick={onRefresh}>
+            Try again
+          </Button>
+        </div>
+      )}
       {assets.map((asset) => {
         const transcription = transcriptions[asset.id];
         const canTranscribe = asset.type === "audio" || asset.type === "video";
@@ -152,11 +247,30 @@ export function AssetList({
           <ContextMenu key={asset.id}>
             <ContextMenuTrigger asChild>
               <div
-                className="group flex items-center gap-2 p-2 cursor-grab hover:bg-muted/50 transition-colors"
+                className={cn(
+                  "group flex items-center gap-2 p-2 cursor-grab hover:bg-muted/50 transition-colors",
+                  dragOverId === asset.id && "bg-primary/10 ring-1 ring-primary/30"
+                )}
                 draggable
                 onDragStart={(e) => handleDragStart(asset, e)}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => handleDragOver(e, asset.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, asset.id)}
               >
-                <GripVertical className="size-3.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                <div
+                  data-drag-handle="reorder"
+                  className="shrink-0 touch-none cursor-grab active:cursor-grabbing p-1 -m-1"
+                  title="Drag to reorder"
+                  onPointerDown={() => {
+                    dragFromReorderHandleRef.current = true;
+                  }}
+                  onPointerUp={() => {
+                    dragFromReorderHandleRef.current = false;
+                  }}
+                >
+                  <GripVertical className="size-3.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
 
                 {/* Thumbnail / Icon */}
                 <div className="size-10 rounded-md bg-muted flex items-center justify-center shrink-0 overflow-hidden">
@@ -192,7 +306,23 @@ export function AssetList({
 
                 {/* Info */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{asset.name}</p>
+                  {editingAssetId === asset.id ? (
+                    <Input
+                      ref={editInputRef}
+                      className="h-7 text-sm font-medium"
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onBlur={() => void submitRename(asset.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void submitRename(asset.id);
+                        if (e.key === "Escape") setEditingAssetId(null);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onDragStart={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <p className="text-sm font-medium truncate">{asset.name}</p>
+                  )}
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <span className="uppercase">{asset.type}</span>
                     <span>•</span>
@@ -251,6 +381,15 @@ export function AssetList({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setEditingAssetId(asset.id);
+                          setEditingName(asset.name);
+                        }}
+                      >
+                        <Pencil className="size-4 mr-2" />
+                        Rename
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => onAddToTimeline(asset)}>
                         <Plus className="size-4 mr-2" />
                         Add to timeline
@@ -295,6 +434,15 @@ export function AssetList({
               </div>
             </ContextMenuTrigger>
             <ContextMenuContent>
+              <ContextMenuItem
+                onClick={() => {
+                  setEditingAssetId(asset.id);
+                  setEditingName(asset.name);
+                }}
+              >
+                <Pencil className="size-4 mr-2" />
+                Rename
+              </ContextMenuItem>
               <ContextMenuItem onClick={() => onAddToTimeline(asset)}>
                 <Plus className="size-4 mr-2" />
                 Add to timeline

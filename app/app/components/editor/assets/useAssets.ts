@@ -21,6 +21,7 @@ export function useAssets() {
   const transcriptions = useProjectStore((s) => s.project.transcriptions ?? {});
 
   const assetsRef = useRef<RemoteAsset[]>([]);
+  const previousAssetsRef = useRef<RemoteAsset[] | null>(null);
 
   const fetchAssets = useCallback(async () => {
     if (!projectId) return;
@@ -51,6 +52,99 @@ export function useAssets() {
   const addAssets = useCallback((newAssets: RemoteAsset[]) => {
     setAssets((prev) => [...newAssets, ...prev]);
   }, []);
+
+  const renameAsset = useCallback(
+    async (assetId: string, name: string): Promise<boolean> => {
+      if (!projectId) {
+        toast.error("No project selected");
+        return false;
+      }
+      const trimmed = name.trim();
+      if (!trimmed) {
+        toast.error("Name cannot be empty");
+        return false;
+      }
+      // Optimistic update: apply new name immediately
+      setAssets((prev) => {
+        previousAssetsRef.current = prev;
+        return prev.map((a) =>
+          a.id === assetId ? { ...a, name: trimmed } : a
+        );
+      });
+      try {
+        const authHeaders = await getAuthHeaders();
+        const url = new URL(`/api/assets/${assetId}`, window.location.origin);
+        url.searchParams.set("projectId", projectId);
+        const response = await fetch(url.toString(), {
+          method: "PATCH",
+          headers: { ...authHeaders, "Content-Type": "application/json" },
+          body: JSON.stringify({ name: trimmed }),
+        });
+        if (!response.ok) {
+          const data = (await response.json()) as { error?: string };
+          throw new Error(data.error || "Failed to rename asset");
+        }
+        previousAssetsRef.current = null;
+        return true;
+      } catch (err) {
+        console.error("Failed to rename asset", err);
+        if (previousAssetsRef.current) {
+          setAssets(previousAssetsRef.current);
+          previousAssetsRef.current = null;
+        }
+        toast.error("Failed to rename asset", {
+          description: "Reverted. " + (err instanceof Error ? err.message : "Unknown error"),
+        });
+        return false;
+      }
+    },
+    [projectId]
+  );
+
+  const reorderAssets = useCallback(
+    async (orderedIds: string[]): Promise<boolean> => {
+      if (!projectId) {
+        toast.error("No project selected");
+        return false;
+      }
+      if (orderedIds.length === 0) return true;
+      // Optimistic update: reorder list immediately
+      setAssets((prev) => {
+        previousAssetsRef.current = prev;
+        const orderMap = new Map(orderedIds.map((id, i) => [id, i]));
+        return [...prev].sort(
+          (a, b) => (orderMap.get(a.id) ?? 999) - (orderMap.get(b.id) ?? 999)
+        );
+      });
+      try {
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch("/api/assets/reorder", {
+          method: "POST",
+          headers: { ...authHeaders, "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId, assetIds: orderedIds }),
+        });
+        if (!response.ok) {
+          const data = (await response.json()) as { error?: string };
+          throw new Error(data.error || "Failed to reorder assets");
+        }
+        const data = (await response.json()) as { assets: RemoteAsset[] };
+        previousAssetsRef.current = null;
+        setAssets(data.assets ?? []);
+        return true;
+      } catch (err) {
+        console.error("Failed to reorder assets", err);
+        if (previousAssetsRef.current) {
+          setAssets(previousAssetsRef.current);
+          previousAssetsRef.current = null;
+        }
+        toast.error("Failed to reorder assets", {
+          description: "Reverted. " + (err instanceof Error ? err.message : "Unknown error"),
+        });
+        return false;
+      }
+    },
+    [projectId]
+  );
 
   const deleteAsset = useCallback(
     async (assetId: string): Promise<boolean> => {
@@ -285,6 +379,8 @@ export function useAssets() {
     projectId,
     fetchAssets,
     addAssets,
+    renameAsset,
+    reorderAssets,
     deleteAsset,
     resolveAssetDuration,
     startTranscription,

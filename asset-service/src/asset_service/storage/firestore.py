@@ -144,7 +144,7 @@ def list_assets(
     project_id: str,
     settings: Settings | None = None,
 ) -> list[dict[str, Any]]:
-    """List all assets for a project."""
+    """List all assets for a project, ordered by sortOrder then uploadedAt."""
     settings = settings or get_settings()
     db = get_firestore_client(settings)
 
@@ -157,6 +157,7 @@ def list_assets(
         data["id"] = doc.id
         assets.append(data)
 
+    assets.sort(key=lambda a: (a.get("sortOrder", 0), a.get("uploadedAt", "")))
     return assets
 
 
@@ -206,3 +207,56 @@ def delete_asset(
     doc_ref.delete()
     logger.info(f"Deleted asset {asset_id}")
     return True
+
+
+def batch_update_sort_orders(
+    user_id: str,
+    project_id: str,
+    asset_ids: list[str],
+    settings: Settings | None = None,
+) -> list[str]:
+    """
+    Update sortOrder for multiple assets in a single batch write.
+
+    Args:
+        user_id: User ID
+        project_id: Project ID
+        asset_ids: List of asset IDs in desired order (index becomes sortOrder)
+        settings: Optional settings override
+
+    Returns:
+        List of asset IDs that were updated
+
+    Raises:
+        ValueError: If any asset_id is not found
+    """
+    settings = settings or get_settings()
+    db = get_firestore_client(settings)
+
+    collection_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("projects")
+        .document(project_id)
+        .collection("assets")
+    )
+
+    # Single query to get all existing asset IDs
+    existing_ids = {doc.id for doc in collection_ref.stream()}
+
+    # Validate all requested IDs exist
+    for asset_id in asset_ids:
+        if asset_id not in existing_ids:
+            raise ValueError(f"Asset not found: {asset_id}")
+
+    # Batch update all sortOrders in one write
+    now = datetime.utcnow().isoformat() + "Z"
+    batch = db.batch()
+
+    for index, asset_id in enumerate(asset_ids):
+        doc_ref = collection_ref.document(asset_id)
+        batch.update(doc_ref, {"sortOrder": index, "updatedAt": now})
+
+    batch.commit()
+    logger.info(f"Batch updated sortOrder for {len(asset_ids)} assets")
+    return asset_ids

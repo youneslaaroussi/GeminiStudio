@@ -82,6 +82,8 @@ export function AssetsPanel() {
     projectId,
     fetchAssets,
     addAssets,
+    renameAsset,
+    reorderAssets,
     deleteAsset,
     resolveAssetDuration,
     startTranscription,
@@ -335,7 +337,7 @@ export function AssetsPanel() {
                   <RefreshCw className={cn("size-3.5", isLoading && "animate-spin")} />
                 </Button>
               </div>
-              <ScrollArea className="flex-1">
+              <ScrollArea className="flex-1 min-h-0 overflow-hidden">
                 <AssetList
                   assets={assets}
                   isLoading={isLoading}
@@ -347,6 +349,8 @@ export function AssetsPanel() {
                   onStartTranscription={startTranscription}
                   onViewTranscription={setTranscriptDialogAssetId}
                   onViewDetails={setDetailsDialogAssetId}
+                  onRename={renameAsset}
+                  onReorder={reorderAssets}
                   onDelete={deleteAsset}
                   onRefresh={fetchAssets}
                 />

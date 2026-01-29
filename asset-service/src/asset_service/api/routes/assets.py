@@ -10,8 +10,11 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Path, UploadFile
 from pydantic import BaseModel
+
+# Path segment for asset ID. Reorder is not ambiguous: POST .../reorder is defined before .../{asset_id}.
+ASSET_ID_PATH = Path(..., description="Asset ID")
 
 from ...config import get_settings
 from ...metadata.ffprobe import extract_metadata, determine_asset_type
@@ -21,6 +24,7 @@ from ...storage.firestore import (
     list_assets,
     update_asset,
     delete_asset,
+    batch_update_sort_orders,
 )
 from ...storage.gcs import create_signed_url, delete_from_gcs, upload_to_gcs
 from ...tasks.queue import get_task_queue
@@ -47,6 +51,13 @@ class AssetResponse(BaseModel):
     height: int | None = None
     duration: float | None = None
     source: str = "api"
+    sortOrder: int | None = None
+
+
+class ReorderBody(BaseModel):
+    """Body for reorder request."""
+
+    assetIds: list[str]
 
 
 class UploadResponse(BaseModel):
@@ -200,8 +211,41 @@ async def list_project_assets(user_id: str, project_id: str):
     return [AssetResponse(**asset) for asset in assets]
 
 
+@router.post("/{user_id}/{project_id}/reorder", response_model=list[AssetResponse])
+async def reorder_assets(
+    user_id: str,
+    project_id: str,
+    body: ReorderBody,
+):
+    """Set asset order by providing ordered list of asset IDs."""
+    settings = get_settings()
+
+    try:
+        await asyncio.to_thread(
+            batch_update_sort_orders, user_id, project_id, body.assetIds, settings
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    # Return list in new order (re-fetch to get signed URLs)
+    assets = await asyncio.to_thread(list_assets, user_id, project_id, settings)
+    async def get_signed_url(asset: dict) -> None:
+        object_name = asset.get("objectName")
+        if object_name:
+            try:
+                url = await asyncio.to_thread(create_signed_url, object_name, settings=settings)
+                asset["signedUrl"] = url
+            except Exception as e:
+                logger.warning(f"Failed to create signed URL for {object_name}: {e}")
+
+    await asyncio.gather(*[get_signed_url(asset) for asset in assets])
+    return [AssetResponse(**asset) for asset in assets]
+
+
 @router.get("/{user_id}/{project_id}/{asset_id}", response_model=AssetResponse)
-async def get_asset_by_id(user_id: str, project_id: str, asset_id: str):
+async def get_asset_by_id(
+    user_id: str, project_id: str, asset_id: str = ASSET_ID_PATH
+):
     """Get a single asset by ID."""
     settings = get_settings()
 
@@ -228,8 +272,8 @@ async def get_asset_by_id(user_id: str, project_id: str, asset_id: str):
 async def update_asset_by_id(
     user_id: str,
     project_id: str,
-    asset_id: str,
-    updates: dict[str, Any],
+    asset_id: str = ASSET_ID_PATH,
+    updates: dict[str, Any] = ...,
 ):
     """Update an asset."""
     settings = get_settings()
@@ -247,7 +291,9 @@ async def update_asset_by_id(
 
 
 @router.delete("/{user_id}/{project_id}/{asset_id}")
-async def delete_asset_by_id(user_id: str, project_id: str, asset_id: str):
+async def delete_asset_by_id(
+    user_id: str, project_id: str, asset_id: str = ASSET_ID_PATH
+):
     """Delete an asset."""
     settings = get_settings()
 

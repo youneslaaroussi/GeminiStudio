@@ -20,6 +20,7 @@ export interface AssetServiceAsset {
   height?: number;
   duration?: number;
   source?: string;
+  sortOrder?: number;
 }
 
 export interface UploadResponse {
@@ -120,6 +121,59 @@ export async function getAssetFromService(
       throw new Error("Asset not found");
     }
     throw new Error(`Asset service get failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Update an asset (e.g. name, sortOrder).
+ */
+export async function updateAssetFromService(
+  userId: string,
+  projectId: string,
+  assetId: string,
+  updates: { name?: string; sortOrder?: number }
+): Promise<AssetServiceAsset> {
+  const response = await fetch(
+    `${ASSET_SERVICE_URL}/api/assets/${userId}/${projectId}/${assetId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    }
+  );
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error("Asset not found");
+    }
+    throw new Error(`Asset service update failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Reorder assets by providing ordered list of asset IDs.
+ */
+export async function reorderAssetsFromService(
+  userId: string,
+  projectId: string,
+  assetIds: string[]
+): Promise<AssetServiceAsset[]> {
+  const response = await fetch(
+    `${ASSET_SERVICE_URL}/api/assets/${userId}/${projectId}/reorder`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assetIds }),
+    }
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Asset service reorder failed: ${response.status} - ${text}`);
   }
 
   return response.json();
