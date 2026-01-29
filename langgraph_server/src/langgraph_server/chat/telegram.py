@@ -165,12 +165,18 @@ class TelegramProvider(ChatProvider):
         file_info = message.metadata.get("file_info") if message.metadata else None
         caption = message.metadata.get("caption") if message.metadata else None
 
-        # Handle file uploads
+        # Handle file uploads: /upload = upload-only with summary; else upload silently and feed to agent
         if file_info:
             user_info = get_user_by_telegram_chat_id(chat_id, self.settings)
             if not user_info:
                 return "Link your account first with /link <CODE> before uploading files."
-            return await self._handle_file_upload(user_info, chat_id, file_info, caption)
+            # Caption is the user's message text (for media, Telegram sends it as caption)
+            user_text = (caption or "").strip()
+            if user_text.lower() == "/upload":
+                # Explicit /upload command: current behavior — upload, show summary, stop
+                return await self._handle_file_upload(user_info, chat_id, file_info, caption)
+            # Default: upload silently, then feed media + text to agent (multimodal)
+            return await self._upload_and_invoke_agent(user_info, chat_id, file_info, user_text or "")
 
         if not text:
             return self._get_help_message(chat_id)
@@ -304,42 +310,44 @@ class TelegramProvider(ChatProvider):
                 "/newproject <name> - Create a new project\n"
                 "/newchat - Start a fresh conversation\n\n"
                 "Send any message to interact with your active project.\n"
-                "Send files (photos, videos, audio) to upload them as assets."
+                "Send photos/videos (with or without text): they're uploaded and sent to the agent.\n"
+                "Use /upload as caption to only upload and get a summary (no agent)."
             )
         return (
             base_help + "\n"
             "/link <CODE> - Link your Gemini Studio account"
         )
 
-    async def _handle_file_upload(self, user_info: dict, chat_id: str, file_info: dict, caption: str | None) -> str:
-        """Handle file uploads from Telegram by sending to asset service."""
-        import tempfile
-        import os
-
+    async def _do_upload(
+        self, user_info: dict, chat_id: str, file_info: dict
+    ) -> tuple[str | None, bytes | None, str | None, dict | None]:
+        """
+        Download file from Telegram and upload to asset service.
+        Returns (error_message, file_content, mime_type, upload_result).
+        On success: error_message is None, file_content and mime_type are set, upload_result is the API response.
+        On failure: error_message is set, others are None.
+        """
         user_id = user_info.get("userId")
         if not user_id:
-            return "Error: Could not identify user."
+            return ("Error: Could not identify user.", None, None, None)
 
-        # Get active project
         session = get_or_create_telegram_chat_session(user_id, chat_id, self.settings)
         active_project_id = session.get("activeProjectId")
 
         if not active_project_id:
             projects = fetch_user_projects(user_id, self.settings)
             if not projects:
-                return "Create a project first using /newproject <name>"
+                return ("Create a project first using /newproject <name>", None, None, None)
             if len(projects) == 1:
                 active_project_id = projects[0].get("id")
             else:
-                return "Select a project first with /project"
+                return ("Select a project first with /project", None, None, None)
 
-        # Get file from Telegram
         file_id = file_info.get("file_id")
         file_name = file_info.get("file_name", "upload")
         mime_type = file_info.get("mime_type", "application/octet-stream")
 
         try:
-            # Get file path from Telegram
             async with httpx.AsyncClient() as client:
                 file_response = await client.get(
                     f"{self.api_base_url}/bot{self.bot_token}/getFile",
@@ -351,63 +359,67 @@ class TelegramProvider(ChatProvider):
 
                 file_path = file_data.get("result", {}).get("file_path")
                 if not file_path:
-                    return "Failed to get file from Telegram."
+                    return ("Failed to get file from Telegram.", None, None, None)
 
-                # Download the file
                 download_url = f"{self.api_base_url}/file/bot{self.bot_token}/{file_path}"
                 file_content_response = await client.get(download_url, timeout=120.0)
                 file_content_response.raise_for_status()
                 file_content = file_content_response.content
 
-                # Send to asset service
                 asset_service_url = self.settings.asset_service_url
                 if not asset_service_url:
-                    return "Asset service is not configured."
+                    return ("Asset service is not configured.", None, None, None)
 
-                # Create multipart form data
-                files = {
-                    "file": (file_name, file_content, mime_type),
-                }
-                data = {
-                    "source": "telegram",
-                    "run_pipeline": "true",
-                }
+                files = {"file": (file_name, file_content, mime_type)}
+                data = {"source": "telegram", "run_pipeline": "true"}
 
                 upload_response = await client.post(
                     f"{asset_service_url}/api/assets/{user_id}/{active_project_id}/upload",
                     files=files,
                     data=data,
-                    timeout=300.0,  # 5 minutes for large files
+                    timeout=300.0,
                 )
                 upload_response.raise_for_status()
                 result = upload_response.json()
-
-                asset = result.get("asset", {})
-                asset_name = asset.get("name", file_name)
-                asset_type = asset.get("type", "unknown")
-                pipeline_started = result.get("pipelineStarted", False)
-
-                response_lines = [f"Uploaded: {asset_name} ({asset_type})"]
-
-                if asset.get("duration"):
-                    response_lines.append(f"Duration: {asset['duration']:.1f}s")
-                if asset.get("width") and asset.get("height"):
-                    response_lines.append(f"Resolution: {asset['width']}x{asset['height']}")
-
-                if pipeline_started:
-                    response_lines.append("Processing pipeline started.")
-
-                if caption:
-                    response_lines.append(f"\nCaption: {caption}")
-
-                return "\n".join(response_lines)
+                return (None, file_content, mime_type, result)
 
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error during upload: {e}")
-            return f"Upload failed: {e.response.status_code}"
+            return (f"Upload failed: {e.response.status_code}", None, None, None)
         except Exception as e:
             logger.exception("Failed to handle file upload")
-            return f"Upload failed: {str(e)}"
+            return (f"Upload failed: {str(e)}", None, None, None)
+
+    async def _handle_file_upload(self, user_info: dict, chat_id: str, file_info: dict, caption: str | None) -> str:
+        """Upload-only path: upload asset, return summary message, do not invoke agent. Used for /upload command."""
+        err, _content, _mime, result = await self._do_upload(user_info, chat_id, file_info)
+        if err:
+            return err
+        asset = result.get("asset", {})
+        file_name = file_info.get("file_name", "upload")
+        asset_name = asset.get("name", file_name)
+        asset_type = asset.get("type", "unknown")
+        pipeline_started = result.get("pipelineStarted", False)
+        response_lines = [f"Uploaded: {asset_name} ({asset_type})"]
+        if asset.get("duration"):
+            response_lines.append(f"Duration: {asset['duration']:.1f}s")
+        if asset.get("width") and asset.get("height"):
+            response_lines.append(f"Resolution: {asset['width']}x{asset['height']}")
+        if pipeline_started:
+            response_lines.append("Processing pipeline started.")
+        if caption:
+            response_lines.append(f"\nCaption: {caption}")
+        return "\n".join(response_lines)
+
+    async def _upload_and_invoke_agent(
+        self, user_info: dict, chat_id: str, file_info: dict, user_text: str
+    ) -> str:
+        """Upload asset silently (no feedback), then feed media + text to the agent (multimodal)."""
+        err, file_content, mime_type, _result = await self._do_upload(user_info, chat_id, file_info)
+        if err:
+            return err
+        inline_media = [(file_content, mime_type)] if file_content and mime_type else None
+        return await self._invoke_agent(user_info, chat_id, user_text, inline_media=inline_media)
 
     def _handle_newchat_command(self, user_info: dict, chat_id: str) -> str:
         """Handle /newchat command to start a fresh conversation."""
@@ -504,8 +516,18 @@ class TelegramProvider(ChatProvider):
         except ValueError:
             return "Usage: /project or /project <number>"
 
-    async def _invoke_agent(self, user_info: dict, chat_id: str, text: str) -> str:
-        """Invoke the agent with the user's message and return the response."""
+    async def _invoke_agent(
+        self,
+        user_info: dict,
+        chat_id: str,
+        text: str,
+        *,
+        inline_media: list[tuple[bytes, str]] | None = None,
+    ) -> str:
+        """Invoke the agent with the user's message and return the response.
+        inline_media: optional list of (bytes, mime_type) for the current turn (multimodal).
+        """
+        import base64
         import time
         from datetime import datetime
         from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
@@ -534,9 +556,9 @@ class TelegramProvider(ChatProvider):
         # Update Firebase with user message
         update_chat_session_messages(user_id, session_id, current_messages, self.settings)
 
-        # Convert to LangChain messages
+        # Convert to LangChain messages (last user message may have inline_media for multimodal)
         langchain_messages = []
-        for msg in current_messages:
+        for i, msg in enumerate(current_messages):
             role = msg.get("role", "user")
             text_parts = []
             for part in msg.get("parts", []):
@@ -545,7 +567,19 @@ class TelegramProvider(ChatProvider):
             content = "\n".join(text_parts) if text_parts else ""
 
             if role == "user":
-                langchain_messages.append(HumanMessage(content=content))
+                is_last_user = i == len(current_messages) - 1
+                if is_last_user and inline_media:
+                    # Multimodal: text + image/video as data URLs for Gemini
+                    parts: list = [{"type": "text", "text": text or "(no text)"}]
+                    for data, mime in inline_media:
+                        if mime.startswith("image/") or mime.startswith("video/"):
+                            b64 = base64.b64encode(data).decode("utf-8")
+                            parts.append(
+                                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
+                            )
+                    langchain_messages.append(HumanMessage(content=parts))
+                else:
+                    langchain_messages.append(HumanMessage(content=content))
             elif role == "assistant":
                 langchain_messages.append(AIMessage(content=content))
 
