@@ -1,17 +1,27 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-import { doc, setDoc, getDoc, onSnapshot, collection, query, orderBy, limit } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/app/lib/server/firebase';
-import { saveToCacheIDB, loadFromCacheIDB } from './indexeddb-cache';
+import { saveToCacheIDB, loadFromCacheIDB, type AutomergeDoc } from './indexeddb-cache';
 import type { AutomergeProject, BranchHead } from './types';
 
-// Dynamically import Automerge to avoid WASM loading issues in Next.js
-// See: https://github.com/automerge/automerge/issues/925
 const loadAutomerge = async () => {
-  const Automerge = await import('@automerge/automerge');
-  return Automerge;
+  return import('@automerge/automerge');
 };
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  return new Uint8Array(atob(base64).split('').map((c) => c.charCodeAt(0)));
+}
+
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]!);
+  return btoa(s);
+}
+
+function toBytes(v: string | Uint8Array): Uint8Array {
+  return typeof v === 'string' ? base64ToUint8Array(v) : v;
+}
 
 /**
  * Represents a single undoable/redoable change
@@ -117,8 +127,10 @@ export class ProjectSyncManager {
 
       if (snapshot.exists()) {
         const data = snapshot.data() as BranchHead;
-        const binary = new Uint8Array(atob(data.automergeState).split('').map(c => c.charCodeAt(0)));
-        const remoteDoc = this.automerge.load(binary);
+        const binary = toBytes(data.automergeState);
+        const load = (A: typeof this.automerge, d: Uint8Array) =>
+          (A as { load<T>(x: Uint8Array): T }).load<AutomergeProject>(d);
+        const remoteDoc = load(this.automerge!, binary);
         this.lastRemoteTimestamp = data.timestamp;
 
         if (this.automergeDoc) {
@@ -159,12 +171,14 @@ export class ProjectSyncManager {
         // Only merge if this is newer than what we've seen
         if (data.timestamp > this.lastRemoteTimestamp) {
           try {
-            const binary = new Uint8Array(atob(data.automergeState).split('').map(c => c.charCodeAt(0)));
-            const remoteDoc = Automerge.load<AutomergeProject>(binary);
+            const binary = toBytes(data.automergeState);
+            const AM = this.automerge!;
+            const load = (A: typeof AM, d: Uint8Array) =>
+              (A as { load<T>(x: Uint8Array): T }).load<AutomergeProject>(d);
+            const remoteDoc = load(AM, binary);
 
             if (this.automergeDoc) {
-              // Merge remote changes with local
-              this.automergeDoc = Automerge.merge(this.automergeDoc, remoteDoc);
+              this.automergeDoc = AM.merge(this.automergeDoc, remoteDoc);
             } else {
               this.automergeDoc = remoteDoc;
             }
@@ -195,7 +209,7 @@ export class ProjectSyncManager {
       const snapshotBefore = Automerge.clone(this.automergeDoc);
 
       // Apply change
-      this.automergeDoc = Automerge.change(this.automergeDoc, (doc) => {
+      this.automergeDoc = Automerge.change(this.automergeDoc, (doc: AutomergeProject) => {
         changeFn(doc);
       });
 
@@ -246,8 +260,8 @@ export class ProjectSyncManager {
       );
 
       const Automerge = await this.ensureAutomerge();
-      const binary = Automerge.save(this.automergeDoc);
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(binary)));
+      const binary = Automerge.save(this.automergeDoc) as Uint8Array;
+      const base64 = uint8ArrayToBase64(binary);
       await setDoc(branchRef, {
         commitId: crypto.randomUUID(),
         automergeState: base64,
@@ -291,7 +305,7 @@ export class ProjectSyncManager {
   /**
    * Get current Automerge document
    */
-  getDocument(): Automerge.Doc<AutomergeProject> | null {
+  getDocument(): AutomergeDoc | null {
     return this.automergeDoc;
   }
 

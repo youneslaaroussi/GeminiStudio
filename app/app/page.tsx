@@ -148,7 +148,7 @@ export default function ProjectsPage() {
                     <img
                       src={project.thumbnail}
                       alt={project.name}
-                      className="w-full h-full object-cover"
+                      className="absolute inset-0 w-full h-full object-cover"
                     />
                   ) : (
                     <div className="flex items-center justify-center">

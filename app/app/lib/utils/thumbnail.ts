@@ -2,14 +2,20 @@
  * Thumbnail capture and compression utilities for project previews
  */
 
+const THUMB_WIDTH = 480;
+const THUMB_HEIGHT = 270;
+
 export async function captureThumbnail(
   sourceCanvas: HTMLCanvasElement
 ): Promise<string | null> {
   try {
-    // Create 480x270 offscreen canvas (16:9 aspect ratio)
+    const sw = sourceCanvas.width;
+    const sh = sourceCanvas.height;
+    if (!sw || !sh) return null;
+
     const canvas = document.createElement('canvas');
-    canvas.width = 480;
-    canvas.height = 270;
+    canvas.width = THUMB_WIDTH;
+    canvas.height = THUMB_HEIGHT;
     const ctx = canvas.getContext('2d');
 
     if (!ctx) {
@@ -17,8 +23,13 @@ export async function captureThumbnail(
       return null;
     }
 
-    // Draw scaled source onto thumbnail canvas
-    ctx.drawImage(sourceCanvas, 0, 0, 480, 270);
+    // Scale to COVER 480x270 so aspect ratio is preserved (no stretch)
+    const scale = Math.max(THUMB_WIDTH / sw, THUMB_HEIGHT / sh);
+    const dw = sw * scale;
+    const dh = sh * scale;
+    const dx = (THUMB_WIDTH - dw) / 2;
+    const dy = (THUMB_HEIGHT - dh) / 2;
+    ctx.drawImage(sourceCanvas, 0, 0, sw, sh, dx, dy, dw, dh);
 
     // Compress to JPEG, starting at quality 0.7
     let quality = 0.7;

@@ -14,7 +14,7 @@ async function exportManifest() {
   process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ??= "000000000000";
   process.env.NEXT_PUBLIC_FIREBASE_APP_ID ??= "1:000000000000:web:demo";
 
-  const { toolRegistry } = await import("../app/lib/tools/tool-registry.ts");
+  const { toolRegistry } = await import("../app/lib/tools/tool-registry");
   const tools = toolRegistry.list();
   const entries = tools.map((tool) => ({
     name: tool.name,

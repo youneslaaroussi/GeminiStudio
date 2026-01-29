@@ -3,6 +3,8 @@ import { initAdmin } from "@/app/lib/server/firebase-admin";
 import { getAuth } from "firebase-admin/auth";
 import { startVeoJob, listVeoJobsForProject } from "@/app/lib/server/veo-service";
 import { isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
+import { deductCredits } from "@/app/lib/server/credits";
+import { getCreditsForAction } from "@/app/lib/credits-config";
 import type { VeoJobParams } from "@/app/types/veo";
 
 export const runtime = "nodejs";
@@ -129,6 +131,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Veo 3.1 supports up to 3 reference images." },
         { status: 400 }
+      );
+    }
+
+    const cost = getCreditsForAction("veo_generation", {
+      veo: { resolution, durationSeconds },
+    });
+
+    try {
+      await deductCredits(userId, cost, "veo_generation");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Insufficient credits";
+      return NextResponse.json(
+        { error: msg, required: cost },
+        { status: 402 }
       );
     }
 

@@ -6,7 +6,7 @@ const loadAutomerge = async () => {
 };
 
 const base64ToUint8Array = (base64: string): Uint8Array => {
-  return new Uint8Array(atob(base64).split('').map(c => c.charCodeAt(0)));
+  return new Uint8Array(atob(base64).split('').map((c) => c.charCodeAt(0)));
 };
 
 const uint8ArrayToBase64 = (binary: Uint8Array): string => {
@@ -53,7 +53,11 @@ export async function createBranch(
     }
 
     const sourceData = sourceSnapshot.data() as BranchHead;
-    const sourceDoc = Automerge.load<AutomergeProject>(base64ToUint8Array(sourceData.automergeState));
+    const raw =
+      typeof sourceData.automergeState === 'string'
+        ? base64ToUint8Array(sourceData.automergeState)
+        : sourceData.automergeState;
+    const sourceDoc = (Automerge as { load<T>(d: Uint8Array): T }).load<AutomergeProject>(raw);
 
     // 2. Clone Automerge doc (creates independent copy)
     const newDoc = Automerge.clone(sourceDoc);
@@ -170,8 +174,11 @@ export async function switchBranch(
     }
 
     const data = snapshot.data() as BranchHead;
-    const Automerge = await loadAutomerge();
-    return Automerge.load<AutomergeProject>(base64ToUint8Array(data.automergeState));
+    const raw =
+      typeof data.automergeState === 'string'
+        ? base64ToUint8Array(data.automergeState)
+        : data.automergeState;
+    return (Automerge as { load<T>(d: Uint8Array): T }).load<AutomergeProject>(raw);
   } catch (error) {
     console.error(`Failed to switch to branch ${targetBranch}:`, error);
     throw error;
@@ -215,8 +222,13 @@ export async function mergeBranch(
     const sourceData = sourceSnapshot.data() as BranchHead;
     const targetData = targetSnapshot.data() as BranchHead;
 
-    const sourceDoc = Automerge.load<AutomergeProject>(base64ToUint8Array(sourceData.automergeState));
-    const targetDoc = Automerge.load<AutomergeProject>(base64ToUint8Array(targetData.automergeState));
+    const toBytes = (v: string | Uint8Array) =>
+      typeof v === 'string' ? base64ToUint8Array(v) : v;
+    const load = (A: typeof Automerge, d: string | Uint8Array) =>
+      (A as { load<T>(x: Uint8Array): T }).load<AutomergeProject>(toBytes(d));
+
+    const sourceDoc = load(Automerge, sourceData.automergeState);
+    const targetDoc = load(Automerge, targetData.automergeState);
 
     // 2. Merge using Automerge CRDT
     // Automerge handles most conflicts automatically
@@ -260,8 +272,13 @@ export async function getBranchDiff(
     const dataA = snapshotA.data() as BranchHead;
     const dataB = snapshotB.data() as BranchHead;
 
-    const docA = Automerge.load<AutomergeProject>(base64ToUint8Array(dataA.automergeState));
-    const docB = Automerge.load<AutomergeProject>(base64ToUint8Array(dataB.automergeState));
+    const toBytes = (v: string | Uint8Array) =>
+      typeof v === 'string' ? base64ToUint8Array(v) : v;
+    const load = (A: typeof Automerge, d: string | Uint8Array) =>
+      (A as { load<T>(x: Uint8Array): T }).load<AutomergeProject>(toBytes(d));
+
+    const docA = load(Automerge, dataA.automergeState);
+    const docB = load(Automerge, dataB.automergeState);
 
     // Diff between two branches represented as their Automerge documents
     // Returns empty array as baseline - can be enhanced with Automerge history API

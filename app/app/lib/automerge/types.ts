@@ -5,16 +5,15 @@ import type { Project } from '@/app/types/timeline';
  * needed for version control and branching
  */
 export interface AutomergeProject extends Omit<Project, 'transcriptions' | 'transitions'> {
-  // Keep transcriptions and transitions as they are for Automerge compatibility
   transcriptions: Record<string, any>;
   transitions: Record<string, any>;
-
-  // Metadata for version control
   _meta: {
     branchId: string;
     commitId: string;
     lastSyncedAt: number;
   };
+  /** Serialized project JSON used by sync / Firebase format */
+  projectJSON?: string;
 }
 
 /**
@@ -49,7 +48,8 @@ export interface BranchMetadata {
  */
 export interface BranchHead {
   commitId: string;
-  automergeState: Uint8Array; // Binary Automerge state
+  /** Base64 string (Firestore) or binary */
+  automergeState: string | Uint8Array;
   timestamp: number;
   author: string;
 }

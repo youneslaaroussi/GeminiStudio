@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, type ChangeEvent } from "react";
+import { useState, useCallback, useMemo, type ChangeEvent } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Sparkles, X, ImageIcon, Video, CheckCircle2 } from "lucide-react";
 import type { VeoJob } from "@/app/types/veo";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { encodeFile, type EncodedFile } from "../utils";
 import { toast } from "sonner";
+import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
+import { getCreditsForAction } from "@/app/lib/credits-config";
 
 interface VideoPanelProps {
   projectId: string | null;
@@ -16,6 +19,7 @@ interface VideoPanelProps {
 }
 
 export function VideoPanel({ projectId, onJobStarted }: VideoPanelProps) {
+  const router = useRouter();
   const [prompt, setPrompt] = useState("");
   const [promptIdea, setPromptIdea] = useState("");
   const [duration, setDuration] = useState<4 | 6 | 8>(8);
@@ -28,6 +32,14 @@ export function VideoPanel({ projectId, onJobStarted }: VideoPanelProps) {
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastJobId, setLastJobId] = useState<string | null>(null);
+
+  const veoCredits = useMemo(
+    () =>
+      getCreditsForAction("veo_generation", {
+        veo: { resolution, durationSeconds: duration },
+      }),
+    [resolution, duration]
+  );
 
   // Lock duration to 8s for higher resolutions
   const handleResolutionChange = useCallback((newResolution: "720p" | "1080p" | "4k") => {
@@ -110,15 +122,32 @@ export function VideoPanel({ projectId, onJobStarted }: VideoPanelProps) {
         payload.negativePrompt = negativePrompt.trim();
       }
 
+      const authHeaders = await getAuthHeaders();
       const response = await fetch("/api/veo", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify(payload),
       });
       const data = (await response.json()) as {
         job?: VeoJob;
         error?: string;
+        required?: number;
       };
+
+      if (response.status === 402) {
+        const msg = data.error ?? "Insufficient credits";
+        setError(msg);
+        toast.error(msg, {
+          description: data.required != null
+            ? `This generation requires ${data.required} R‑Credits. Add credits to continue.`
+            : "Add credits in Settings to continue.",
+          action: {
+            label: "Add credits",
+            onClick: () => router.push("/settings?billing=fill"),
+          },
+        });
+        return;
+      }
 
       if (!response.ok || !data.job) {
         throw new Error(data.error || "Failed to start video generation");
@@ -153,6 +182,7 @@ export function VideoPanel({ projectId, onJobStarted }: VideoPanelProps) {
     imageInput,
     negativePrompt,
     onJobStarted,
+    router,
   ]);
 
   return (
@@ -324,24 +354,29 @@ export function VideoPanel({ projectId, onJobStarted }: VideoPanelProps) {
           </div>
         )}
 
-        <Button
-          className="w-full"
-          size="sm"
-          onClick={handleGenerate}
-          disabled={!prompt.trim() || isStarting || !projectId}
-        >
-          {isStarting ? (
-            <>
-              <Loader2 className="size-3.5 animate-spin mr-1.5" />
-              Starting...
-            </>
-          ) : (
-            <>
-              <Video className="size-3.5 mr-1.5" />
-              Generate Video
-            </>
-          )}
-        </Button>
+        <div className="space-y-1.5">
+          <p className="text-[11px] text-muted-foreground text-center">
+            This generation uses <span className="font-medium tabular-nums text-foreground">{veoCredits}</span> R‑Credits
+          </p>
+          <Button
+            className="w-full"
+            size="sm"
+            onClick={handleGenerate}
+            disabled={!prompt.trim() || isStarting || !projectId}
+          >
+            {isStarting ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                Starting...
+              </>
+            ) : (
+              <>
+                <Video className="size-3.5 mr-1.5" />
+                Generate Video
+              </>
+            )}
+          </Button>
+        </div>
 
         {!projectId && (
           <p className="text-[11px] text-muted-foreground text-center">

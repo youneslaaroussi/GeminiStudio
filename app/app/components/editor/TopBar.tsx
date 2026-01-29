@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Save, Upload, Check, Loader2, Film, LogOut } from "lucide-react";
+import { Save, Upload, Check, Loader2, Film, LogOut, Plus, RefreshCw, Settings, CreditCard } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useProjectsListStore } from "@/app/lib/store/projects-list-store";
 import { useAuth } from "@/app/lib/hooks/useAuth";
+import { useCredits } from "@/app/lib/hooks/useCredits";
 import type { Project } from "@/app/types/timeline";
 import { EditableInput } from "@/app/components/ui/EditableInput";
 import { cn } from "@/lib/utils";
@@ -13,6 +14,16 @@ import { HistoryControls } from "./HistoryControls";
 import { RenderDialog } from "./RenderDialog";
 import { useRender } from "@/app/hooks/useRender";
 import { captureThumbnail } from "@/app/lib/utils/thumbnail";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 
 const supportsFileSystemAccess =
   typeof window !== "undefined" && "showSaveFilePicker" in window;
@@ -49,9 +60,21 @@ interface TopBarProps {
   previewCanvas?: HTMLCanvasElement | null;
 }
 
+function userInitials(user: { displayName?: string | null; email?: string | null }): string {
+  if (user.displayName) {
+    const parts = user.displayName.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
+    if (parts[0]!.length) return parts[0]!.slice(0, 2).toUpperCase();
+  }
+  const e = (user.email ?? "").trim();
+  if (e) return e.slice(0, 2).toUpperCase();
+  return "?";
+}
+
 export function TopBar({ previewCanvas }: TopBarProps) {
   const router = useRouter();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
+  const { credits, refresh, loading: creditsLoading } = useCredits(user?.uid);
   const project = useProjectStore((s) => s.project);
   const setProject = useProjectStore((s) => s.setProject);
   const updateProjectSettings = useProjectStore((s) => s.updateProjectSettings);
@@ -60,6 +83,7 @@ export function TopBar({ previewCanvas }: TopBarProps) {
   const [isBusy, setIsBusy] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [renderDialogOpen, setRenderDialogOpen] = useState(false);
+  const [avatarImgError, setAvatarImgError] = useState(false);
 
   const { isRendering, jobStatus } = useRender();
 
@@ -75,6 +99,18 @@ export function TopBar({ previewCanvas }: TopBarProps) {
       console.error('Logout failed:', error);
     }
   }, [logout, router]);
+
+  const handleAddCredits = useCallback(() => {
+    router.push('/settings?billing=fill');
+  }, [router]);
+
+  const handleRefreshCredits = useCallback(() => {
+    refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    setAvatarImgError(false);
+  }, [user?.photoURL]);
 
   const payload = useMemo(
     () =>
@@ -314,15 +350,84 @@ export function TopBar({ previewCanvas }: TopBarProps) {
           <Film className="size-4" />
           {isRendering ? `Rendering... ${jobStatus?.progress ?? 0}%` : "Render"}
         </button>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-accent hover:text-red-400"
-          title="Logout"
-        >
-          <LogOut className="size-4" />
-          Logout
-        </button>
+
+        <div className="inline-flex items-center rounded-md border border-border bg-muted/30 overflow-hidden">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs border-r border-border">
+            <CreditCard className="size-3.5 text-muted-foreground" />
+            <span className="font-medium tabular-nums">{credits}</span>
+            <span className="text-muted-foreground">R‑Credits</span>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 rounded-none border-r border-border gap-1 px-2 text-xs"
+            onClick={handleAddCredits}
+          >
+            <Plus className="size-3.5" />
+            Add
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 rounded-none p-0"
+            onClick={handleRefreshCredits}
+            disabled={creditsLoading}
+            title="Refresh credits"
+          >
+            <RefreshCw className={cn("size-3.5", creditsLoading && "animate-spin")} />
+          </Button>
+        </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="rounded-full ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-label="User menu"
+            >
+              <Avatar className="size-8 border border-border">
+                {user?.photoURL && !avatarImgError ? (
+                  <AvatarImage
+                    src={user.photoURL}
+                    alt={user.displayName ?? ""}
+                    onError={() => setAvatarImgError(true)}
+                  />
+                ) : null}
+                <AvatarFallback className="text-xs">{user ? userInitials(user) : "?"}</AvatarFallback>
+              </Avatar>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-medium truncate">{user?.email ?? "—"}</span>
+                <span className="text-xs text-muted-foreground">
+                  {credits} R‑Credits
+                </span>
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleAddCredits}>
+              <Plus className="size-4" />
+              Add credits
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleRefreshCredits} disabled={creditsLoading}>
+              <RefreshCw className={cn("size-4", creditsLoading && "animate-spin")} />
+              Refresh credits
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => router.push("/settings")}>
+              <Settings className="size-4" />
+              Settings
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleLogout} variant="destructive">
+              <LogOut className="size-4" />
+              Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       </div>
 

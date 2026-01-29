@@ -1,13 +1,14 @@
 import { get, set, del } from 'idb-keyval';
 import type { AutomergeProject } from './types';
 
-let AutomergeLib: any = null;
+type AutomergeLib = Awaited<typeof import('@automerge/automerge')>;
+let automergeLib: AutomergeLib | null = null;
 
-async function loadAutomerge() {
-  if (!AutomergeLib) {
-    AutomergeLib = await import('@automerge/automerge');
+async function loadAutomerge(): Promise<AutomergeLib> {
+  if (!automergeLib) {
+    automergeLib = await import('@automerge/automerge');
   }
-  return AutomergeLib;
+  return automergeLib;
 }
 
 /**
@@ -17,18 +18,21 @@ function getCacheKey(projectId: string, branchId: string): string {
   return `automerge:${projectId}:${branchId}`;
 }
 
+/** Automerge doc type (project store shape) */
+export type AutomergeDoc = import('@automerge/automerge').Doc<AutomergeProject>;
+
 /**
  * Save Automerge document to IndexedDB cache
  */
 export async function saveToCacheIDB(
   projectId: string,
   branchId: string,
-  doc: Automerge.Doc<AutomergeProject>
+  doc: AutomergeDoc
 ): Promise<void> {
   try {
     const Automerge = await loadAutomerge();
     const key = getCacheKey(projectId, branchId);
-    const binary = Automerge.save(doc);
+    const binary = Automerge.save(doc) as Uint8Array;
     await set(key, binary);
   } catch (error) {
     console.error(`Failed to save to IndexedDB cache (${projectId}/${branchId}):`, error);
@@ -42,7 +46,7 @@ export async function saveToCacheIDB(
 export async function loadFromCacheIDB(
   projectId: string,
   branchId: string
-): Promise<Automerge.Doc<AutomergeProject> | null> {
+): Promise<AutomergeDoc | null> {
   try {
     const Automerge = await loadAutomerge();
     const key = getCacheKey(projectId, branchId);
@@ -52,7 +56,7 @@ export async function loadFromCacheIDB(
       return null;
     }
 
-    return Automerge.load<AutomergeProject>(binary);
+    return (Automerge as { load<T>(d: Uint8Array): T }).load<AutomergeProject>(binary);
   } catch (error) {
     console.error(`Failed to load from IndexedDB cache (${projectId}/${branchId}):`, error);
     return null;

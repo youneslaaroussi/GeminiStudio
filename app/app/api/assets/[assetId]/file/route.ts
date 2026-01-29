@@ -38,6 +38,18 @@ export async function GET(
       { status: 400 }
     );
   }
+  if (!userId) {
+    return NextResponse.json(
+      { error: "userId is required" },
+      { status: 400 }
+    );
+  }
+  if (!assetId) {
+    return NextResponse.json(
+      { error: "assetId is required" },
+      { status: 400 }
+    );
+  }
 
   try {
     // Get asset info including signed URL
