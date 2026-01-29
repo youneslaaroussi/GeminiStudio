@@ -3,6 +3,7 @@
 import { Settings2 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { EditableInput } from "@/app/components/ui/EditableInput";
+import { DEFAULT_TEXT_CLIP_SETTINGS } from "@/app/types/timeline";
 import { toNumber, inputClassName, labelClassName, cardClassName } from "./utils";
 import {
   Collapsible,
@@ -124,6 +125,103 @@ export function SceneSettings() {
                 className={inputClassName}
               />
             </div>
+          </div>
+
+          {/* Text clip defaults (font etc., reused from caption settings) */}
+          <div className="pt-3 border-t border-border">
+            <h3 className="text-xs font-medium mb-3">Text clip defaults</h3>
+            {(() => {
+              const textClipSettings = project.textClipSettings ?? DEFAULT_TEXT_CLIP_SETTINGS;
+              return (
+                <>
+                  <div>
+                    <label className={labelClassName}>Font family</label>
+                    <select
+                      value={textClipSettings.fontFamily}
+                      onChange={(e) =>
+                        updateProjectSettings({
+                          textClipSettings: {
+                            ...textClipSettings,
+                            fontFamily: e.target.value as typeof textClipSettings.fontFamily,
+                          },
+                        })
+                      }
+                      className={inputClassName}
+                    >
+                      <option value="Inter Variable">Inter</option>
+                      <option value="Roboto">Roboto</option>
+                      <option value="Montserrat">Montserrat</option>
+                      <option value="Poppins">Poppins</option>
+                    </select>
+                  </div>
+                  <div className="pt-2">
+                    <label className={labelClassName}>Font weight</label>
+                    <select
+                      value={textClipSettings.fontWeight}
+                      onChange={(e) =>
+                        updateProjectSettings({
+                          textClipSettings: {
+                            ...textClipSettings,
+                            fontWeight: Number(e.target.value) as typeof textClipSettings.fontWeight,
+                          },
+                        })
+                      }
+                      className={inputClassName}
+                    >
+                      <option value="400">Regular</option>
+                      <option value="500">Medium</option>
+                      <option value="700">Bold</option>
+                    </select>
+                  </div>
+                  <div className="pt-2">
+                    <label className={labelClassName}>Default font size</label>
+                    <EditableInput
+                      type="number"
+                      value={textClipSettings.defaultFontSize}
+                      min={1}
+                      className={inputClassName}
+                      onValueCommit={(val) => {
+                        const next = toNumber(val);
+                        if (next === null) return;
+                        updateProjectSettings({
+                          textClipSettings: {
+                            ...textClipSettings,
+                            defaultFontSize: Math.max(1, next),
+                          },
+                        });
+                      }}
+                    />
+                  </div>
+                  <div className="pt-2">
+                    <label className={labelClassName}>Default color</label>
+                    <div className="flex items-center gap-2">
+                      <EditableInput
+                        type="color"
+                        value={textClipSettings.defaultFill}
+                        commitOnChange
+                        onValueCommit={(val) =>
+                          updateProjectSettings({
+                            textClipSettings: { ...textClipSettings, defaultFill: val },
+                          })
+                        }
+                        className="size-8 rounded-md border border-border cursor-pointer shrink-0"
+                      />
+                      <EditableInput
+                        type="text"
+                        value={textClipSettings.defaultFill}
+                        onValueCommit={(val) =>
+                          updateProjectSettings({
+                            textClipSettings: { ...textClipSettings, defaultFill: val },
+                          })
+                        }
+                        className={inputClassName}
+                        placeholder="#ffffff"
+                      />
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       </CollapsibleContent>

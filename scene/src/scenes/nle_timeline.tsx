@@ -118,6 +118,18 @@ export default makeScene2D(function* (view) {
     distanceFromBottom: 140,
   })();
 
+  const textClipSettings = scene.variables.get<{
+    fontFamily: string;
+    fontWeight: number;
+    defaultFontSize: number;
+    defaultFill: string;
+  }>('textClipSettings', {
+    fontFamily: 'Inter Variable',
+    fontWeight: 400,
+    defaultFontSize: 48,
+    defaultFill: '#ffffff',
+  })();
+
   const audioClips = layers
     .filter((layer) => layer.type === 'audio')
     .flatMap((layer) => layer.clips as AudioClip[]);
@@ -499,13 +511,17 @@ export default makeScene2D(function* (view) {
       const clip = sortedTextClips[i];
       const textRef = createRef<Txt>();
       textRefs.push(textRef);
+      const fontSize = clip.fontSize ?? textClipSettings.defaultFontSize ?? 48;
+      const fill = clip.fill ?? textClipSettings.defaultFill ?? '#ffffff';
       view.add(
         <Txt
           key={`text-clip-${clip.id}`}
           ref={textRef}
           text={clip.text}
-          fontSize={clip.fontSize ?? 48}
-          fill={clip.fill ?? '#ffffff'}
+          fontFamily={textClipSettings.fontFamily}
+          fontWeight={textClipSettings.fontWeight}
+          fontSize={fontSize}
+          fill={fill}
           x={clip.position.x}
           y={clip.position.y}
           scale={clip.scale}

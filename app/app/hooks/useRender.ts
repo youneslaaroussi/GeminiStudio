@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { create } from "zustand";
 import { toast } from "sonner";
 import type { Project } from "@/app/types/timeline";
@@ -309,6 +310,7 @@ export interface UseRenderReturn {
 }
 
 export function useRender(): UseRenderReturn {
+  const router = useRouter();
   const store = useRenderStore();
 
   // Load stored jobs on mount
@@ -354,7 +356,23 @@ export function useRender(): UseRenderReturn {
       });
 
       if (!response.ok) {
-        const data = await response.json();
+        const data = (await response.json()) as { error?: string; required?: number };
+        if (response.status === 402) {
+          const msg = data.error ?? "Insufficient credits";
+          store.setError(msg);
+          store.setIsRendering(false);
+          toast.error(msg, {
+            description:
+              data.required != null
+                ? `This render requires ${data.required} R‑Credits. Add credits to continue.`
+                : "Add credits in Settings to continue.",
+            action: {
+              label: "Add credits",
+              onClick: () => router.push("/settings?billing=fill"),
+            },
+          });
+          return;
+        }
         throw new Error(data.error || `Render request failed: ${response.status}`);
       }
 

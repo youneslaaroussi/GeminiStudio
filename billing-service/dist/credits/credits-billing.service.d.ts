@@ -48,4 +48,12 @@ export declare class CreditsBillingService {
     }>;
     constructWebhookEvent(rawBody: Buffer, signature: string): Stripe.Event;
     handleCheckoutCompleted(session: Stripe.Checkout.Session): Promise<void>;
+    private handleSubscriptionCheckoutCompleted;
+    handleSubscriptionCreated(subscription: Stripe.Subscription): Promise<void>;
+    handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void>;
+    handleSubscriptionDeleted(subscription: Stripe.Subscription): Promise<void>;
+    handleInvoicePaid(invoice: Stripe.Invoice): Promise<void>;
+    createCustomerPortalSession(userId: string): Promise<{
+        url: string;
+    }>;
 }

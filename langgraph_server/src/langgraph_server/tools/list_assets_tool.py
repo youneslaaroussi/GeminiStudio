@@ -7,8 +7,12 @@ from ..firebase import fetch_user_projects
 
 
 @tool
-def listAssets(project_id: str | None = None, user_id: str | None = None) -> dict:
-    """Return the media assets currently in the user's project timeline."""
+def listAssets(
+    project_id: str | None = None,
+    user_id: str | None = None,
+    branch_id: str | None = None,
+) -> dict:
+    """Return the media assets currently in the user's project timeline. Uses the session's branch when provided."""
 
     if not user_id:
         # Gracefully handle - agent should use project context instead
@@ -18,7 +22,11 @@ def listAssets(project_id: str | None = None, user_id: str | None = None) -> dic
         }
 
     settings = get_settings()
-    projects = fetch_user_projects(user_id, settings)
+    # When branch_id is set (chat session branch), only that branch's data is used
+    if branch_id and project_id:
+        projects = fetch_user_projects(user_id, settings, branch_id=branch_id, project_id=project_id)
+    else:
+        projects = fetch_user_projects(user_id, settings)
 
     # Find the matching project or use the first one
     target_project = None

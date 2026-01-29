@@ -25,6 +25,10 @@ import { logger } from "@/app/lib/server/logger";
 import type { ToolExecutionResult } from "@/app/lib/tools/types";
 import { waitForClientToolResult } from "@/app/lib/server/tools/client-tool-bridge";
 import { attachmentToGeminiPart } from "@/app/lib/server/gemini";
+import { initAdmin } from "@/app/lib/server/firebase-admin";
+import { getAuth } from "firebase-admin/auth";
+import { deductCredits } from "@/app/lib/server/credits";
+import { getCreditsForAction } from "@/app/lib/credits-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -154,7 +158,39 @@ function createToolboxTools(): ToolMap {
   }, {} as ToolMap);
 }
 
+async function verifyToken(req: Request): Promise<string | null> {
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  const token = authHeader.slice(7);
+  try {
+    await initAdmin();
+    const decoded = await getAuth().verifyIdToken(token);
+    return decoded.uid;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
+  const userId = await verifyToken(req);
+  if (!userId) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const cost = getCreditsForAction("chat");
+  try {
+    await deductCredits(userId, cost, "chat");
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Insufficient credits";
+    return new Response(
+      JSON.stringify({ error: msg, required: cost }),
+      { status: 402, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
   const body = await req.json();
   const messages: UIMessage[] = Array.isArray(body?.messages)
     ? body.messages
@@ -163,9 +199,38 @@ export async function POST(req: Request) {
     typeof body?.id === "string" && body.id.length > 0 ? body.id : "default";
   const fallbackMode = isChatMode(body?.mode) ? body.mode : "ask";
 
+  logger.info(
+    {
+      messageCount: messages.length,
+      bodyKeys: Object.keys(body ?? {}),
+      messages: messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        roleType: typeof m.role,
+        partsCount: Array.isArray(m.parts) ? m.parts.length : 0,
+        hasContent: !!(m as { content?: string }).content,
+        keys: Object.keys(m ?? {}),
+      })),
+    },
+    "Incoming chat request"
+  );
+
   const filteredMessages = messages.filter(
     (message) => typeof message.role === "string" && message.role.length > 0
   );
+
+  if (filteredMessages.length !== messages.length) {
+    logger.warn(
+      {
+        originalCount: messages.length,
+        filteredCount: filteredMessages.length,
+        droppedMessages: messages
+          .filter((m) => !(typeof m.role === "string" && m.role.length > 0))
+          .map((m) => ({ id: m.id, role: m.role, keys: Object.keys(m ?? {}) })),
+      },
+      "Some messages were filtered out due to missing role"
+    );
+  }
 
   const messagesWithMetadata = filteredMessages.map((message) => {
     if (message.role !== "user") return message;
@@ -185,6 +250,29 @@ export async function POST(req: Request) {
 
   // Inject attachment parts into user messages
   const messagesWithAttachments = injectAttachmentParts(messagesWithMetadata);
+
+  logger.info(
+    {
+      filteredCount: filteredMessages.length,
+      withAttachmentsCount: messagesWithAttachments.length,
+      messagesWithAttachments: messagesWithAttachments.map((m) => ({
+        id: m.id,
+        role: m.role,
+        partsCount: Array.isArray(m.parts) ? m.parts.length : 0,
+        partTypes: Array.isArray(m.parts) ? m.parts.map((p) => p.type) : [],
+      })),
+    },
+    "After processing messages"
+  );
+
+  // Gemini API requires at least one user message
+  if (messagesWithAttachments.length === 0) {
+    logger.warn({ originalCount: messages.length }, "No messages after filtering");
+    return new Response(
+      JSON.stringify({ error: "No messages provided" }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+  }
 
   const activeMode = determineActiveMode(messagesWithAttachments, fallbackMode);
 
@@ -209,6 +297,25 @@ export async function POST(req: Request) {
         ? { ...generalTools, ...toolboxTools, ...planningTools }
         : planningTools;
 
+  const modelMessages = await convertToModelMessages([
+    systemMessage,
+    ...messagesWithAttachments,
+  ]);
+
+  logger.info(
+    {
+      modelMessagesCount: modelMessages.length,
+      modelMessages: modelMessages.map((m) => ({
+        role: m.role,
+        contentLength: Array.isArray(m.content) ? m.content.length : 0,
+        contentTypes: Array.isArray(m.content)
+          ? m.content.map((c) => c.type)
+          : [],
+      })),
+    },
+    "Converted model messages"
+  );
+
   const result = streamText({
     model: google(process.env.AI_CHAT_GOOGLE_MODEL ?? "gemini-3-pro-preview"),
     providerOptions: {
@@ -218,10 +325,7 @@ export async function POST(req: Request) {
         },
       },
     },
-    messages: await convertToModelMessages([
-      systemMessage,
-      ...messagesWithAttachments,
-    ]),
+    messages: modelMessages,
     stopWhen: stepCountIs(5),
     toolChoice: activeMode === "ask" ? "none" : undefined,
     tools,
@@ -287,13 +391,27 @@ function injectAttachmentParts(
       return null;
     }).filter((part): part is NonNullable<typeof part> => part !== null);
 
-    // Get existing parts
-    const existingParts = Array.isArray(message.parts) ? message.parts : [];
+    // Get existing parts; fallback to message.content (string) so we never send empty contents to Gemini
+    const existingParts = (() => {
+      if (Array.isArray(message.parts) && message.parts.length > 0) {
+        return message.parts;
+      }
+      const content = (message as { content?: string }).content;
+      if (typeof content === "string" && content.trim().length > 0) {
+        return [{ type: "text" as const, text: content.trim() }];
+      }
+      return [];
+    })();
 
     // Combine: attachments first, then existing parts (per Gemini best practices)
+    const parts = [...attachmentParts, ...existingParts];
+    // Gemini requires at least one part per user message; avoid empty contents
+    const safeParts =
+      parts.length > 0 ? parts : [{ type: "text" as const, text: " " }];
+
     return {
       ...message,
-      parts: [...attachmentParts, ...existingParts],
+      parts: safeParts,
     };
   });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { Film, Download, Loader2, AlertCircle, CheckCircle, X } from "lucide-react";
 import {
   Dialog,
@@ -14,6 +14,7 @@ import { Progress } from "@/components/ui/progress";
 import type { Project } from "@/app/types/timeline";
 import { useRender, type RenderFormat, type RenderQuality } from "@/app/hooks/useRender";
 import { useProjectStore } from "@/app/lib/store/project-store";
+import { getCreditsForAction } from "@/app/lib/credits-config";
 
 interface RenderDialogProps {
   open: boolean;
@@ -56,6 +57,7 @@ export function RenderDialog({
   } = useRender();
 
   const saveProject = useProjectStore((state) => state.saveProject);
+  const renderCredits = useMemo(() => getCreditsForAction("render"), []);
 
   // Reset form when dialog closes (but keep job status)
   useEffect(() => {
@@ -197,6 +199,12 @@ export function RenderDialog({
                 {project.resolution.width} x {project.resolution.height} @ {project.fps} fps
               </p>
             </div>
+
+            <p className="text-[11px] text-muted-foreground text-center">
+              This render uses{" "}
+              <span className="font-medium tabular-nums text-foreground">{renderCredits}</span>{" "}
+              R‑Credits
+            </p>
           </div>
         )}
 

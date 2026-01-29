@@ -40,3 +40,18 @@ export async function createCheckout(input: CreateCheckoutInput): Promise<{ url:
   }
   return res.json();
 }
+
+/** Create a Stripe Customer Portal session for managing subscription and payment method. */
+export async function createPortalSession(): Promise<{ url: string }> {
+  if (!BASE) throw new Error('Billing service URL not configured');
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${BASE}/credits/portal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(t || 'Failed to open billing portal');
+  }
+  return res.json();
+}

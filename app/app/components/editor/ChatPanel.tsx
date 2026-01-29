@@ -8,11 +8,13 @@ import {
   useRef,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
 } from "ai";
+import { toast } from "sonner";
 import {
   Bot,
   Loader2,
@@ -69,6 +71,7 @@ import {
   type ChatSessionSummary,
 } from "@/app/lib/services/chat-sessions";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
+import { getCreditsForAction } from "@/app/lib/credits-config";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/app/lib/server/firebase";
 
@@ -139,13 +142,23 @@ export function ChatPanel() {
   const sessionIdRef = useRef(`chat-${Date.now()}`);
   const sessionId = sessionIdRef.current;
 
+  const router = useRouter();
   const { user } = useAuth();
+
+  const chatCredits = useMemo(() => getCreditsForAction("chat"), []);
 
   const chatTransport = useMemo(
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
         body: { mode, id: sessionId },
+        prepareSendMessagesRequest: async ({ headers, body }) => {
+          const auth = (await getAuthHeaders()) as Record<string, string>;
+          return {
+            body: body ?? {},
+            headers: { ...auth, ...(headers as Record<string, string>) },
+          };
+        },
       }),
     [mode, sessionId]
   );
@@ -155,6 +168,25 @@ export function ChatPanel() {
       transport: chatTransport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
       id: sessionId,
+      onError: useCallback(
+        (err: Error) => {
+          try {
+            const d = JSON.parse(err.message) as { error?: string; required?: number };
+            if (typeof d.required === "number") {
+              toast.error(d.error ?? "Insufficient credits", {
+                description: `Each message uses ${d.required} R‑Credits. Add credits to continue.`,
+                action: {
+                  label: "Add credits",
+                  onClick: () => router.push("/settings?billing=fill"),
+                },
+              });
+            }
+          } catch {
+            /* ignore */
+          }
+        },
+        [router]
+      ),
     });
 
   const isBusy = status === "submitted" || status === "streaming" || isCloudProcessing;
@@ -920,6 +952,12 @@ export function ChatPanel() {
             ))}
           </div>
         )}
+
+        <p className="text-[11px] text-muted-foreground text-center py-0.5">
+          Each message uses{" "}
+          <span className="font-medium tabular-nums text-foreground">{chatCredits}</span>{" "}
+          R‑Credits
+        </p>
 
         {/* Message Input */}
         <form onSubmit={handleSubmit} className="flex gap-2">

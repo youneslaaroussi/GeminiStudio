@@ -1,12 +1,15 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Volume2 } from "lucide-react";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
+import { getCreditsForAction } from "@/app/lib/credits-config";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { toast } from "sonner";
 import type { RemoteAsset } from "@/app/types/assets";
 import {
   CHIRP3_HD_VOICES,
@@ -27,6 +30,7 @@ const AUDIO_ENCODING_OPTIONS: { id: SupportedTtsEncoding; label: string }[] = [
 ];
 
 export function TtsPanel({ projectId, onGenerated }: TtsPanelProps) {
+  const router = useRouter();
   const [text, setText] = useState("");
   const [fileName, setFileName] = useState("");
   const [voiceName, setVoiceName] = useState(CHIRP3_HD_VOICES[0]?.id ?? "");
@@ -35,6 +39,8 @@ export function TtsPanel({ projectId, onGenerated }: TtsPanelProps) {
   const [encoding, setEncoding] = useState<SupportedTtsEncoding>("mp3");
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const ttsCredits = useMemo(() => getCreditsForAction("tts"), []);
 
   const selectedVoice = useMemo(
     () => CHIRP3_HD_VOICES.find((item) => item.id === voiceName),
@@ -76,7 +82,28 @@ export function TtsPanel({ projectId, onGenerated }: TtsPanelProps) {
           projectId,
         }),
       });
-      const data = (await response.json()) as { asset?: RemoteAsset; error?: string };
+      const data = (await response.json()) as {
+        asset?: RemoteAsset;
+        error?: string;
+        required?: number;
+      };
+
+      if (response.status === 402) {
+        const msg = data.error ?? "Insufficient credits";
+        setError(msg);
+        toast.error(msg, {
+          description:
+            data.required != null
+              ? `This generation requires ${data.required} R‑Credits. Add credits to continue.`
+              : "Add credits in Settings to continue.",
+          action: {
+            label: "Add credits",
+            onClick: () => router.push("/settings?billing=fill"),
+          },
+        });
+        return;
+      }
+
       if (!response.ok || !data.asset) {
         throw new Error(data.error || "Text-to-speech generation failed");
       }
@@ -101,6 +128,7 @@ export function TtsPanel({ projectId, onGenerated }: TtsPanelProps) {
     encoding,
     fileName,
     onGenerated,
+    router,
   ]);
 
   return (
@@ -234,19 +262,26 @@ export function TtsPanel({ projectId, onGenerated }: TtsPanelProps) {
           </div>
         )}
 
-        <Button
-          className="w-full"
-          size="sm"
-          onClick={() => void handleGenerate()}
-          disabled={isGenerating || !text.trim() || !projectId}
-        >
-          {isGenerating ? (
-            <Loader2 className="size-3.5 animate-spin mr-1.5" />
-          ) : (
-            <Volume2 className="size-3.5 mr-1.5" />
-          )}
-          {isGenerating ? "Generating..." : "Generate Audio"}
-        </Button>
+        <div className="space-y-1.5">
+          <p className="text-[11px] text-muted-foreground text-center">
+            This generation uses{" "}
+            <span className="font-medium tabular-nums text-foreground">{ttsCredits}</span>{" "}
+            R‑Credits
+          </p>
+          <Button
+            className="w-full"
+            size="sm"
+            onClick={() => void handleGenerate()}
+            disabled={isGenerating || !text.trim() || !projectId}
+          >
+            {isGenerating ? (
+              <Loader2 className="size-3.5 animate-spin mr-1.5" />
+            ) : (
+              <Volume2 className="size-3.5 mr-1.5" />
+            )}
+            {isGenerating ? "Generating..." : "Generate Audio"}
+          </Button>
+        </div>
 
         {!projectId && (
           <p className="text-[11px] text-muted-foreground text-center">

@@ -45,6 +45,13 @@ let CreditsController = class CreditsController {
             cancelUrl: body.cancelUrl,
         });
     }
+    async createPortalSession(req) {
+        const uid = req[firebase_auth_guard_1.FIREBASE_USER]?.uid;
+        if (!uid) {
+            throw new common_1.BadRequestException('Missing authenticated user');
+        }
+        return this.billing.createCustomerPortalSession(uid);
+    }
     async handleWebhook(req, signature) {
         if (!signature) {
             throw new common_1.BadRequestException('Missing stripe-signature header');
@@ -61,8 +68,24 @@ let CreditsController = class CreditsController {
             const msg = e instanceof Error ? e.message : 'Invalid webhook';
             throw new common_1.BadRequestException(`Stripe webhook error: ${msg}`);
         }
-        if (event.type === 'checkout.session.completed') {
-            await this.billing.handleCheckoutCompleted(event.data.object);
+        switch (event.type) {
+            case 'checkout.session.completed':
+                await this.billing.handleCheckoutCompleted(event.data.object);
+                break;
+            case 'customer.subscription.created':
+                await this.billing.handleSubscriptionCreated(event.data.object);
+                break;
+            case 'customer.subscription.updated':
+                await this.billing.handleSubscriptionUpdated(event.data.object);
+                break;
+            case 'customer.subscription.deleted':
+                await this.billing.handleSubscriptionDeleted(event.data.object);
+                break;
+            case 'invoice.paid':
+                await this.billing.handleInvoicePaid(event.data.object);
+                break;
+            default:
+                break;
         }
         return { received: true };
     }
@@ -84,6 +107,14 @@ __decorate([
     __metadata("design:paramtypes", [Object, CreateCheckoutDto]),
     __metadata("design:returntype", Promise)
 ], CreditsController.prototype, "createCheckout", null);
+__decorate([
+    (0, common_1.Post)('portal'),
+    (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], CreditsController.prototype, "createPortalSession", null);
 __decorate([
     (0, common_1.Post)('webhook'),
     (0, skip_auth_decorator_1.SkipAuth)(),

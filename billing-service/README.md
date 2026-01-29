@@ -15,28 +15,38 @@ NestJS microservice for R-Credits billing via Stripe. Handles credit pack listin
 
 2. **Stripe**
 
-   - Create three Products (e.g. "Starter", "Pro", "Enterprise") and one-time Prices in the Dashboard.
-   - Create a Webhook endpoint: `https://<billing-service-host>/credits/webhook`, event `checkout.session.completed`.
+   - Create three Products (e.g. "Starter", "Pro", "Enterprise") with **recurring** Prices (monthly subscription) in the Dashboard.
+   - Create a Webhook endpoint: `https://<billing-service-host>/credits/webhook` and subscribe to: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`.
 
-3. **Run**
+3. **Local webhooks (Stripe CLI)**
+
+   Forward Stripe events to your local billing service and get a signing secret for `.env`:
+
+   ```bash
+   stripe listen --forward-to localhost:3100/credits/webhook
+   ```
+
+   Use the printed `whsec_...` value as `STRIPE_CREDITS_WEBHOOK_SECRET` in `.env`. Leave the CLI running while testing checkout.
+
+4. **Run**
 
    ```bash
    pnpm install
    pnpm run start:dev
    ```
 
-   Default port: `3100`. Override with `PORT`.
+   Default port: `3100`. Override with `PORT`. For local checkout testing, run `stripe listen --forward-to localhost:3100/credits/webhook` in another terminal and set `STRIPE_CREDITS_WEBHOOK_SECRET` to the CLI’s secret.
 
 ## API
 
 - `GET /credits/packs` — List credit packs (id, name, credits, amount, currency, priceId). No auth.
-- `POST /credits/checkout` — Create Stripe Checkout session. Body: `{ packId, successUrl?, cancelUrl? }`. Requires `Authorization: Bearer <Firebase ID token>`.
-- `POST /credits/webhook` — Stripe webhook. Expects `stripe-signature` header and raw body. No auth.
+- `POST /credits/checkout` — Create Stripe Checkout session (subscription mode). Body: `{ packId, successUrl?, cancelUrl? }`. Requires `Authorization: Bearer <Firebase ID token>`.
+- `POST /credits/portal` — Create Stripe Customer Portal session (manage subscription, payment method). Requires `Authorization: Bearer <Firebase ID token>`.
+- `POST /credits/webhook` — Stripe webhook. Expects `stripe-signature` header and raw body. No auth. Handles: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`.
 
 ## Firestore
 
-- **Read/write (client):** `users/{userId}/settings/billing` — `{ credits, tier?, updatedAt? }`. Used by the app for balance and tier.
-- **Server-only:** `creditPurchases` — Pending/completed purchases for idempotency and audit.
+- **Read/write (client):** `users/{userId}/settings/billing` — `{ credits, tier?, subscriptionId?, customerId?, subscriptionStatus?, currentPeriodEnd?, updatedAt? }`. Used by the app for balance, tier, and subscription management.
 
 ## Frontend
 

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { EditorLayout } from "../../components/editor/EditorLayout";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useAuth } from "@/app/lib/hooks/useAuth";
+import { getStoredBranchForProject } from "@/app/lib/store/branch-storage";
 
 interface EditorPageProps {
   params: Promise<{
@@ -27,8 +28,9 @@ export default function EditorPage({ params }: EditorPageProps) {
 
     if (user) {
       loadProject(projectId);
-      console.log('[EDITOR] Initializing sync with userId:', user.uid);
-      initializeSync(user.uid, projectId, 'main');
+      const branchId = getStoredBranchForProject(projectId);
+      console.log('[EDITOR] Initializing sync with userId:', user.uid, 'branch:', branchId);
+      initializeSync(user.uid, projectId, branchId);
     }
   }, [projectId, loadProject, initializeSync, user, loading, router]);
 

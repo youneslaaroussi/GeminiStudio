@@ -19,6 +19,13 @@ export declare class CreditsController {
         url: string;
         sessionId: string;
     }>;
+    createPortalSession(req: Request & {
+        [FIREBASE_USER]?: {
+            uid: string;
+        };
+    }): Promise<{
+        url: string;
+    }>;
     handleWebhook(req: RawBodyRequest<Request>, signature: string): Promise<{
         received: boolean;
     }>;

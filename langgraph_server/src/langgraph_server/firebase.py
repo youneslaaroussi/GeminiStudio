@@ -163,6 +163,7 @@ def fetch_chat_session(chat_id: str, settings: Settings) -> Optional[dict[str, A
             "messages": data.get("messages", []),
             "createdAt": data.get("createdAt"),
             "updatedAt": data.get("updatedAt"),
+            "branchId": data.get("branchId"),
         }
 
     logger.warning(f"Session not found: {chat_id}")
@@ -198,6 +199,96 @@ def update_chat_session_messages(
     except Exception as e:
         logger.error(f"Failed to update chat session {chat_id}: {e}")
         return False
+
+
+def update_chat_session_branch(
+    user_id: str,
+    chat_id: str,
+    branch_id: str,
+    settings: Settings,
+) -> bool:
+    """Set branchId on a chat session (direct mapping chat_id -> branch_id)."""
+    import logging
+    from datetime import datetime
+    logger = logging.getLogger(__name__)
+
+    db = get_firestore_client(settings)
+    try:
+        session_ref = db.collection("users").document(user_id).collection("chatSessions").document(chat_id)
+        session_ref.update({
+            "branchId": branch_id,
+            "updatedAt": datetime.utcnow().isoformat() + "Z",
+        })
+        logger.info(f"Set chat session {chat_id} branchId to {branch_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to update chat session branch {chat_id}: {e}")
+        return False
+
+
+def create_branch_for_chat(
+    user_id: str,
+    project_id: str,
+    chat_id: str,
+    settings: Settings,
+) -> str:
+    """
+    Create a new branch for this chat session (from main).
+    Returns the new branch_id. Branch ID is Firestore-safe: feature_chat_<sanitized_chat_id>.
+    """
+    import re
+    import logging
+    import uuid
+    logger = logging.getLogger(__name__)
+
+    db = get_firestore_client(settings)
+
+    # Firestore doc ID must not contain /
+    safe_suffix = re.sub(r"[^a-zA-Z0-9]", "_", chat_id)[:80].strip("_") or "chat"
+    branch_id = f"feature_chat_{safe_suffix}"
+
+    # Load main branch
+    main_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("projects")
+        .document(project_id)
+        .collection("branches")
+        .document("main")
+    )
+    main_doc = main_ref.get()
+
+    if not main_doc.exists:
+        raise ValueError(f"Main branch not found for project {project_id}")
+
+    main_data = main_doc.to_dict()
+    automerge_state = main_data.get("automergeState")
+    if not automerge_state:
+        raise ValueError(f"Main branch has no automerge state for project {project_id}")
+
+    # Create new branch (copy of main)
+    new_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("projects")
+        .document(project_id)
+        .collection("branches")
+        .document(branch_id)
+    )
+    new_ref.set({
+        "name": f"Chat {chat_id[:20]}{'…' if len(chat_id) > 20 else ''}",
+        "createdAt": main_data.get("createdAt"),
+        "createdBy": user_id,
+        "parentBranch": "main",
+        "parentCommit": main_data.get("commitId"),
+        "commitId": str(uuid.uuid4()),
+        "automergeState": automerge_state,
+        "timestamp": main_data.get("timestamp"),
+        "author": user_id,
+    })
+
+    logger.info(f"Created branch {branch_id} for chat {chat_id} (project {project_id})")
+    return branch_id
 
 
 def fetch_project(project_id: str, settings: Settings) -> Optional[dict[str, Any]]:
@@ -525,38 +616,62 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
             return False
 
 
-def fetch_user_projects(user_id: str, settings: Settings) -> list[dict[str, Any]]:
+def fetch_user_projects(
+    user_id: str,
+    settings: Settings,
+    branch_id: str | None = None,
+    project_id: str | None = None,
+) -> list[dict[str, Any]]:
     """
-    Fetch all projects for a user.
+    Fetch projects for a user.
 
     Projects metadata are stored at: users/{userId}/projects
     Project data (Automerge) is stored at: users/{userId}/projects/{projectId}/branches/{branchId}
+
+    When branch_id and project_id are provided, returns only that project using that branch's data
+    (enforces chat_id -> branch mapping so the agent only sees that branch).
     """
     import logging
     logger = logging.getLogger(__name__)
 
     db = get_firestore_client(settings)
 
-    logger.info(f"Fetching projects for user: {user_id}")
+    logger.info(f"Fetching projects for user: {user_id}" + (f" (branch={branch_id}, project={project_id})" if branch_id and project_id else ""))
 
     # Projects are stored under users/{userId}/projects
     projects_ref = db.collection("users").document(user_id).collection("projects")
-    results = list(projects_ref.stream())
+    if project_id:
+        # Single project
+        proj_ref = projects_ref.document(project_id)
+        proj_doc = proj_ref.get()
+        results = [proj_doc] if proj_doc.exists else []
+    else:
+        results = list(projects_ref.stream())
 
     projects = []
     for doc in results:
+        if not doc.exists:
+            continue
         data = doc.to_dict()
-        data["id"] = doc.id
+        doc_id = doc.reference.id
+        data["id"] = doc_id
 
-        # Try to fetch the main branch data (Automerge state)
-        branch_id = data.get("currentBranch", "main")
-        branch_ref = db.collection("users").document(user_id).collection("projects").document(doc.id).collection("branches").document(branch_id)
+        # Use session branch when provided (chat_id -> branch mapping)
+        use_branch_id = branch_id if branch_id else data.get("currentBranch", "main")
+        branch_ref = (
+            db.collection("users")
+            .document(user_id)
+            .collection("projects")
+            .document(doc_id)
+            .collection("branches")
+            .document(use_branch_id)
+        )
         branch_doc = branch_ref.get()
 
         if branch_doc.exists:
             branch_data = branch_doc.to_dict()
             data["_branch"] = {
-                "branchId": branch_id,
+                "branchId": use_branch_id,
                 "commitId": branch_data.get("commitId"),
                 "timestamp": branch_data.get("timestamp"),
                 "author": branch_data.get("author"),

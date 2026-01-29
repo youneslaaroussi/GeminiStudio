@@ -25,6 +25,21 @@ export const DEFAULT_CAPTION_SETTINGS: CaptionSettings = {
   distanceFromBottom: 140,
 };
 
+/** Project-level defaults for text clips (font etc.). Reuses same font options as captions. */
+export interface TextClipSettings {
+  fontFamily: CaptionSettings['fontFamily'];
+  fontWeight: CaptionSettings['fontWeight'];
+  defaultFontSize: number;
+  defaultFill: string;
+}
+
+export const DEFAULT_TEXT_CLIP_SETTINGS: TextClipSettings = {
+  fontFamily: 'Inter Variable',
+  fontWeight: 400,
+  defaultFontSize: 48,
+  defaultFill: '#ffffff',
+};
+
 export interface ClipTransition {
   type: TransitionType;
   duration: number;
@@ -126,6 +141,7 @@ export interface Project {
   assistantChats?: AssistantChatSession[];
   activeAssistantChatId?: string | null;
   captionSettings?: CaptionSettings;
+  textClipSettings?: TextClipSettings;
 }
 
 // Test videos for development

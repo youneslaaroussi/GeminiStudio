@@ -25,6 +25,7 @@ import { subscribeToBilling, SUBSCRIPTION_TIERS, type BillingData } from "@/app/
 import {
   listPacks,
   createCheckout,
+  createPortalSession,
   type CreditPack,
   type PackId,
 } from "@/app/lib/services/billing-api";
@@ -54,6 +55,7 @@ function SettingsContent() {
   const [packsLoading, setPacksLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState<PackId | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -78,7 +80,7 @@ function SettingsContent() {
   useEffect(() => {
     const billing = searchParams.get("billing");
     if (billing === "success") {
-      toast.success("Payment complete. Your R-Credits have been added.");
+      toast.success("Subscription set up. Your R-Credits have been added.");
       router.replace("/settings", { scroll: false });
     } else if (billing === "cancel") {
       toast.info("Checkout cancelled.");
@@ -230,6 +232,18 @@ function SettingsContent() {
     }
   };
 
+  const handleManageSubscription = async () => {
+    setPortalLoading(true);
+    try {
+      const { url } = await createPortalSession();
+      if (url) window.location.href = url;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to open billing portal");
+    } finally {
+      setPortalLoading(false);
+    }
+  };
+
   if (!user || loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#141417] text-white">
@@ -305,11 +319,11 @@ function SettingsContent() {
                 <CreditCard className="size-6 text-amber-400" />
               </div>
               <div className="flex-1">
-                <h3 className="font-medium text-white mb-1">R-Credits</h3>
+                <h3 className="font-medium text-white mb-1">R-Credits & subscription</h3>
                 <p className="text-sm text-slate-400 mb-4">
-                  Current balance from Firebase. Use R-Credits for renders and other usage.
+                  Your balance and plan. Use R-Credits for renders and other usage. Subscriptions renew monthly with credits added each cycle.
                 </p>
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3 mb-3">
                   <span className="text-2xl font-bold text-white">{billing.credits}</span>
                   <span className="text-slate-400">R-Credits</span>
                   {billing.tier && (
@@ -317,12 +331,49 @@ function SettingsContent() {
                       {SUBSCRIPTION_TIERS[billing.tier].name}
                     </span>
                   )}
+                </div>
+                {billing.tier && billing.currentPeriodEnd && (
+                  <p className="text-sm text-slate-400 mb-3">
+                    {billing.cancelAtPeriodEnd ? (
+                      <>
+                        <span className="text-amber-400/90 font-medium">Cancelled</span>
+                        {" — "}
+                        R-Credits and access until{" "}
+                        {new Date(billing.currentPeriodEnd).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </>
+                    ) : (
+                      <>
+                        {SUBSCRIPTION_TIERS[billing.tier].creditsPerMonth} credits/month · Renews{" "}
+                        {new Date(billing.currentPeriodEnd).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </>
+                    )}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-2">
                   <Button
                     onClick={() => setFillUpOpen(true)}
                     className="bg-amber-600 hover:bg-amber-700 text-white"
                   >
-                    Add credits
+                    {billing.customerId ? "Change plan" : "Subscribe"}
                   </Button>
+                  {billing.customerId && (
+                    <Button
+                      variant="outline"
+                      onClick={handleManageSubscription}
+                      disabled={portalLoading}
+                      className="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"
+                    >
+                      {portalLoading ? <Loader2 className="size-4 animate-spin" /> : "Manage subscription"}
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -437,13 +488,13 @@ function SettingsContent() {
           </div>
         </section>
 
-        {/* Add credits dialog */}
+        {/* Subscribe / change plan dialog */}
         <Dialog open={fillUpOpen} onOpenChange={(open) => { setFillUpOpen(open); setCheckoutError(null); }}>
           <DialogContent className="bg-slate-900 border-slate-700 text-white sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Add credits</DialogTitle>
+              <DialogTitle>{billing.customerId ? "Change plan" : "Subscribe"}</DialogTitle>
               <DialogDescription className="text-slate-400">
-                Add credits to your account to use premium features.
+                Choose a plan. You get R-Credits every month; unused credits roll over until the next cycle.
               </DialogDescription>
             </DialogHeader>
             {checkoutError && (
@@ -458,9 +509,9 @@ function SettingsContent() {
               <div className="flex gap-3 rounded-lg border border-red-500/50 bg-red-500/10 p-4 py-5">
                 <AlertCircle className="size-5 text-red-400 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-medium text-red-200">Credits unavailable</p>
+                  <p className="font-medium text-red-200">Plans unavailable</p>
                   <p className="text-sm text-red-300/90 mt-1">
-                    Credits are not available at the moment. Please try again later.
+                    Plans are not available at the moment. Please try again later.
                   </p>
                 </div>
               </div>
@@ -468,6 +519,7 @@ function SettingsContent() {
               <div className="grid gap-3 py-2">
                 {packs.map((pack) => {
                   const loading = checkoutLoading === pack.id;
+                  const isCurrentPlan = billing.tier === pack.id;
                   return (
                     <div
                       key={pack.id}
@@ -476,15 +528,23 @@ function SettingsContent() {
                       <div>
                         <p className="font-medium text-white">{pack.name}</p>
                         <p className="text-sm text-slate-400">
-                          {pack.credits} R-Credits · ${pack.amountUsd.toFixed(2)} {pack.currency}
+                          {pack.credits} R-Credits/month · ${pack.amountUsd.toFixed(2)}/{pack.currency}
                         </p>
                       </div>
                       <Button
                         onClick={() => handleSubscribe(pack.id)}
-                        disabled={!!checkoutLoading}
-                        className="bg-amber-600 hover:bg-amber-700 text-white shrink-0"
+                        disabled={!!checkoutLoading || isCurrentPlan}
+                        className="bg-amber-600 hover:bg-amber-700 text-white shrink-0 disabled:opacity-60"
                       >
-                        {loading ? <Loader2 className="size-4 animate-spin" /> : "Buy"}
+                        {loading ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : isCurrentPlan ? (
+                          "Current plan"
+                        ) : billing.customerId ? (
+                          "Switch"
+                        ) : (
+                          "Subscribe"
+                        )}
                       </Button>
                     </div>
                   );

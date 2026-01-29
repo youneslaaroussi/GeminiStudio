@@ -52,6 +52,18 @@ export class CreditsController {
     });
   }
 
+  @Post('portal')
+  @UseGuards(FirebaseAuthGuard)
+  async createPortalSession(
+    @Req() req: Request & { [FIREBASE_USER]?: { uid: string } },
+  ) {
+    const uid = req[FIREBASE_USER]?.uid;
+    if (!uid) {
+      throw new BadRequestException('Missing authenticated user');
+    }
+    return this.billing.createCustomerPortalSession(uid);
+  }
+
   @Post('webhook')
   @SkipAuth()
   async handleWebhook(
@@ -72,10 +84,33 @@ export class CreditsController {
       const msg = e instanceof Error ? e.message : 'Invalid webhook';
       throw new BadRequestException(`Stripe webhook error: ${msg}`);
     }
-    if (event.type === 'checkout.session.completed') {
-      await this.billing.handleCheckoutCompleted(
-        event.data.object as Stripe.Checkout.Session,
-      );
+    switch (event.type) {
+      case 'checkout.session.completed':
+        await this.billing.handleCheckoutCompleted(
+          event.data.object as Stripe.Checkout.Session,
+        );
+        break;
+      case 'customer.subscription.created':
+        await this.billing.handleSubscriptionCreated(
+          event.data.object as Stripe.Subscription,
+        );
+        break;
+      case 'customer.subscription.updated':
+        await this.billing.handleSubscriptionUpdated(
+          event.data.object as Stripe.Subscription,
+        );
+        break;
+      case 'customer.subscription.deleted':
+        await this.billing.handleSubscriptionDeleted(
+          event.data.object as Stripe.Subscription,
+        );
+        break;
+      case 'invoice.paid':
+        await this.billing.handleInvoicePaid(event.data.object as Stripe.Invoice);
+        break;
+      default:
+        // Log unhandled events but don't fail
+        break;
     }
     return { received: true };
   }

@@ -532,10 +532,20 @@ class TelegramProvider(ChatProvider):
         from datetime import datetime
         from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
         from ..agent import graph
+        from ..credits import deduct_credits, get_credits_for_action, InsufficientCreditsError
 
         user_id = user_info.get("userId")
         if not user_id:
             return "Error: Could not identify user."
+
+        cost = get_credits_for_action("chat")
+        try:
+            deduct_credits(user_id, cost, "chat", self.settings)
+        except InsufficientCreditsError as e:
+            return (
+                f"Insufficient credits. You need {e.required} R‑Credits for this message. "
+                "Add credits in Gemini Studio Settings to continue."
+            )
 
         # Get or create chat session
         session = get_or_create_telegram_chat_session(user_id, chat_id, self.settings)

@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useCallback, type ChangeEvent } from "react";
+import { useState, useCallback, useMemo, type ChangeEvent } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, ImageIcon, X } from "lucide-react";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
+import { getCreditsForAction } from "@/app/lib/credits-config";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { toast } from "sonner";
 import type { RemoteAsset } from "@/app/types/assets";
 import { encodeFile, type EncodedFile } from "../utils";
 
@@ -15,12 +18,15 @@ interface ImagePanelProps {
 }
 
 export function ImagePanel({ projectId, onGenerated }: ImagePanelProps) {
+  const router = useRouter();
   const [prompt, setPrompt] = useState("");
   const [aspectRatio, setAspectRatio] = useState("1:1");
   const [imageSize, setImageSize] = useState<"1K" | "2K" | "4K">("1K");
   const [sourceImage, setSourceImage] = useState<EncodedFile | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const imageCredits = useMemo(() => getCreditsForAction("image_generation"), []);
 
   const handleSourceChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -67,7 +73,25 @@ export function ImagePanel({ projectId, onGenerated }: ImagePanelProps) {
       const data = (await response.json()) as {
         asset?: RemoteAsset;
         error?: string;
+        required?: number;
       };
+
+      if (response.status === 402) {
+        const msg = data.error ?? "Insufficient credits";
+        setError(msg);
+        toast.error(msg, {
+          description:
+            data.required != null
+              ? `This generation requires ${data.required} R‑Credits. Add credits to continue.`
+              : "Add credits in Settings to continue.",
+          action: {
+            label: "Add credits",
+            onClick: () => router.push("/settings?billing=fill"),
+          },
+        });
+        return;
+      }
+
       if (!response.ok || !data.asset) {
         throw new Error(data.error || "Failed to generate image");
       }
@@ -82,7 +106,7 @@ export function ImagePanel({ projectId, onGenerated }: ImagePanelProps) {
     } finally {
       setIsGenerating(false);
     }
-  }, [isGenerating, prompt, aspectRatio, imageSize, projectId, sourceImage, onGenerated]);
+  }, [isGenerating, prompt, aspectRatio, imageSize, projectId, sourceImage, onGenerated, router]);
 
   return (
     <ScrollArea className="h-full">
@@ -180,24 +204,31 @@ export function ImagePanel({ projectId, onGenerated }: ImagePanelProps) {
           </div>
         )}
 
-        <Button
-          className="w-full"
-          size="sm"
-          onClick={handleGenerate}
-          disabled={!prompt.trim() || isGenerating || !projectId}
-        >
-          {isGenerating ? (
-            <>
-              <Loader2 className="size-3.5 animate-spin mr-1.5" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <ImageIcon className="size-3.5 mr-1.5" />
-              Generate Image
-            </>
-          )}
-        </Button>
+        <div className="space-y-1.5">
+          <p className="text-[11px] text-muted-foreground text-center">
+            This generation uses{" "}
+            <span className="font-medium tabular-nums text-foreground">{imageCredits}</span>{" "}
+            R‑Credits
+          </p>
+          <Button
+            className="w-full"
+            size="sm"
+            onClick={handleGenerate}
+            disabled={!prompt.trim() || isGenerating || !projectId}
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <ImageIcon className="size-3.5 mr-1.5" />
+                Generate Image
+              </>
+            )}
+          </Button>
+        </div>
 
         {!projectId && (
           <p className="text-[11px] text-muted-foreground text-center">

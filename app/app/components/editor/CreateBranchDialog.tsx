@@ -108,7 +108,7 @@ export function CreateBranchDialog({
             </label>
             <Input
               id="branch-name"
-              placeholder="e.g., feature/new-effect"
+              placeholder="e.g. new-effect or my-feature"
               value={branchName}
               onChange={(e) => setBranchName(e.target.value)}
               disabled={isCreating}
@@ -118,8 +118,8 @@ export function CreateBranchDialog({
                 }
               }}
             />
-            <p className="text-xs text-gray-500">
-              Use descriptive names like feature/*, bugfix/*, etc.
+            <p className="text-xs text-muted-foreground">
+              Stored as <code className="rounded bg-muted px-1">feature_&lt;name&gt;</code>. Use letters, numbers, and underscores.
             </p>
           </div>
         </div>

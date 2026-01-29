@@ -4,6 +4,8 @@ import { synthesizeSpeech, type SupportedTtsEncoding } from "@/app/lib/services/
 import { initAdmin } from "@/app/lib/server/firebase-admin";
 import { getAuth } from "firebase-admin/auth";
 import { uploadToAssetService, isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
+import { deductCredits } from "@/app/lib/server/credits";
+import { getCreditsForAction } from "@/app/lib/credits-config";
 
 export const runtime = "nodejs";
 
@@ -65,6 +67,14 @@ export async function POST(request: NextRequest) {
   try {
     const payload = requestSchema.parse(await request.json());
     const encoding: SupportedTtsEncoding = payload.audioEncoding ?? "mp3";
+
+    const cost = getCreditsForAction("tts");
+    try {
+      await deductCredits(userId, cost, "tts");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Insufficient credits";
+      return NextResponse.json({ error: msg, required: cost }, { status: 402 });
+    }
 
     const audioBuffer = await synthesizeSpeech({
       text: payload.text,

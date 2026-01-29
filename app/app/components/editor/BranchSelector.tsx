@@ -13,8 +13,10 @@ import { Button } from '@/components/ui/button';
 import { GitBranch, Plus, Merge } from 'lucide-react';
 import { useBranches } from '@/app/lib/hooks/useBranches';
 import { useProjectStore } from '@/app/lib/store/project-store';
+import { useAuth } from '@/app/lib/hooks/useAuth';
 import { CreateBranchDialog } from './CreateBranchDialog';
 import { MergeDialog } from './MergeDialog';
+import { toast } from 'sonner';
 
 interface BranchSelectorProps {
   projectId: string | null;
@@ -24,22 +26,22 @@ interface BranchSelectorProps {
  * Component to select and manage branches
  */
 export function BranchSelector({ projectId }: BranchSelectorProps) {
-  const { currentBranch } = useProjectStore();
-  const { branches, createBranch, switchBranch, loading } = useBranches(projectId);
+  const { user } = useAuth();
+  const { currentBranch, initializeSync } = useProjectStore();
+  const { branches, switchBranch, loading, reloadBranches } = useBranches(projectId);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showMergeDialog, setShowMergeDialog] = useState(false);
 
   const handleSwitchBranch = async (branchId: string) => {
+    if (!projectId || !user?.uid || branchId === currentBranch) return;
     try {
       await switchBranch(branchId);
-      // Update store with new branch
-      if (projectId && branchId) {
-        const { initializeSync } = useProjectStore.getState();
-        // Need to re-initialize sync manager for new branch
-        // This is a simplified version - in reality you'd need to update the store
-      }
+      await initializeSync(user.uid, projectId, branchId);
+      await reloadBranches();
+      toast.success(`Switched to ${branchId === 'main' ? 'main' : branchId}`);
     } catch (error) {
       console.error('Failed to switch branch:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to switch branch');
     }
   };
 

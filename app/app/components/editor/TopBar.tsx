@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save, Upload, Check, Loader2, Film, LogOut, Plus, RefreshCw, Settings, CreditCard } from "lucide-react";
+import { BranchSelector } from "./BranchSelector";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useProjectsListStore } from "@/app/lib/store/projects-list-store";
 import { useAuth } from "@/app/lib/hooks/useAuth";
@@ -276,6 +277,9 @@ export function TopBar({ previewCanvas }: TopBarProps) {
             <img src="/gemini-logo.png" alt="Gemini" className="size-6" />
           </button>
           <HistoryControls />
+          {projectId && (
+            <BranchSelector projectId={projectId} />
+          )}
         <div className="flex items-baseline gap-2">
           <EditableInput
             value={project.name}

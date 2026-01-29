@@ -4,6 +4,8 @@ import { initAdmin } from "@/app/lib/server/firebase-admin";
 import { getAuth } from "firebase-admin/auth";
 import { getPipelineStateFromService, isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
 import { createV4SignedUrl } from "@/app/lib/server/gcs-signed-url";
+import { deductCredits } from "@/app/lib/server/credits";
+import { getCreditsForAction } from "@/app/lib/credits-config";
 
 const RENDERER_API_URL = process.env.RENDERER_API_URL || "http://localhost:4000";
 const GCS_BUCKET = process.env.ASSET_GCS_BUCKET;
@@ -259,6 +261,14 @@ export async function POST(request: NextRequest) {
         { error: "Missing project or projectId" },
         { status: 400 }
       );
+    }
+
+    const cost = getCreditsForAction("render");
+    try {
+      await deductCredits(userId, cost, "render");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Insufficient credits";
+      return NextResponse.json({ error: msg, required: cost }, { status: 402 });
     }
 
     if (!GCS_BUCKET) {

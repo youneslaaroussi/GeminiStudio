@@ -62,8 +62,9 @@ export async function createBranch(
     // 2. Clone Automerge doc (creates independent copy)
     const newDoc = Automerge.clone(sourceDoc);
 
-    // 3. Create branch ID
-    const branchId = `feature/${newBranchName}`;
+    // 3. Create branch ID (Firestore doc IDs must not contain "/" — use single segment)
+    const safeName = newBranchName.replace(/\//g, '_').replace(/\s+/g, '_').trim() || 'unnamed';
+    const branchId = `feature_${safeName}`;
 
     // 4. Save new branch (metadata + state combined)
     const newBranchRef = doc(
@@ -131,21 +132,13 @@ export async function deleteBranch(
       throw new Error('Cannot delete main branch');
     }
 
-    const branchMetadataRef = doc(
+    const branchRef = doc(
       db,
-      `users/${userId}/projects/${projectId}/branches/${branchId}`
-    );
-    const headRef = doc(
-      db,
-      `users/${userId}/projects/${projectId}/branches/${branchId}/head`
+      `users/${userId}/projects/${projectId}/branches`,
+      branchId
     );
 
-    // Delete both metadata and head
-    // Note: In a production app, you might want to soft-delete or archive
-    await Promise.all([
-      deleteDoc(branchMetadataRef),
-      deleteDoc(headRef),
-    ]);
+    await deleteDoc(branchRef);
   } catch (error) {
     console.error(`Failed to delete branch ${branchId}:`, error);
     throw error;

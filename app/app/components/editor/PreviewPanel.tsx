@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Player } from "@motion-canvas/core";
 import { ScenePlayer } from "../ScenePlayer";
 import { useProjectStore, setOnFirebaseSync } from "@/app/lib/store/project-store";
-import type { Layer, CaptionSettings } from "@/app/types/timeline";
+import type { Layer, CaptionSettings, TextClipSettings } from "@/app/types/timeline";
 import type { ProjectTranscription } from "@/app/types/transcription";
 
 interface PreviewPanelProps {
@@ -17,6 +17,7 @@ interface PreviewPanelProps {
   transcriptions: Record<string, ProjectTranscription>;
   transitions?: Record<string, any>;
   captionSettings?: CaptionSettings;
+  textClipSettings?: TextClipSettings;
   sceneConfig: {
     resolution: { width: number; height: number };
     renderScale: number;
@@ -34,6 +35,7 @@ export function PreviewPanel({
   transcriptions,
   transitions,
   captionSettings,
+  textClipSettings,
   sceneConfig,
 }: PreviewPanelProps) {
   const [showUpdateIndicator, setShowUpdateIndicator] = useState(false);
@@ -124,6 +126,7 @@ export function PreviewPanel({
             transcriptions={transcriptions}
             transitions={transitions}
             captionSettings={captionSettings}
+            textClipSettings={textClipSettings}
             sceneConfig={sceneConfig}
           />
       </div>

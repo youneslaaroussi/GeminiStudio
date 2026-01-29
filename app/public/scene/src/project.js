@@ -11908,6 +11908,12 @@ const description = makeScene2D(function* (view) {
     fontWeight: 400,
     distanceFromBottom: 140
   })();
+  const textClipSettings = scene.variables.get("textClipSettings", {
+    fontFamily: "Inter Variable",
+    fontWeight: 400,
+    defaultFontSize: 48,
+    defaultFill: "#ffffff"
+  })();
   const audioClips = layers.filter((layer) => layer.type === "audio").flatMap((layer) => layer.clips);
   const videoClips = layers.filter((layer) => layer.type === "video").flatMap((layer) => layer.clips);
   const textClips = layers.filter((layer) => layer.type === "text").flatMap((layer) => layer.clips);
@@ -12200,14 +12206,18 @@ const description = makeScene2D(function* (view) {
       const clip = sortedTextClips[i];
       const textRef = createRef();
       textRefs.push(textRef);
+      const fontSize = clip.fontSize ?? textClipSettings.defaultFontSize ?? 48;
+      const fill = clip.fill ?? textClipSettings.defaultFill ?? "#ffffff";
       view.add(
         /* @__PURE__ */ jsx(
           Txt,
           {
             ref: textRef,
             text: clip.text,
-            fontSize: clip.fontSize ?? 48,
-            fill: clip.fill ?? "#ffffff",
+            fontFamily: textClipSettings.fontFamily,
+            fontWeight: textClipSettings.fontWeight,
+            fontSize,
+            fill,
             x: clip.position.x,
             y: clip.position.y,
             scale: clip.scale,

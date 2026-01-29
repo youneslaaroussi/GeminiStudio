@@ -11,7 +11,16 @@ from langchain_core.runnables import RunnableConfig
 from .agent import graph
 from .chat import build_dispatcher
 from .config import Settings, get_settings
-from .firebase import fetch_chat_session, fetch_user_projects, update_chat_session_messages, get_telegram_chat_id_for_user, send_telegram_message
+from .firebase import (
+    fetch_chat_session,
+    fetch_user_projects,
+    update_chat_session_messages,
+    update_chat_session_branch,
+    create_branch_for_chat,
+    get_telegram_chat_id_for_user,
+    send_telegram_message,
+)
+from .credits import deduct_credits, get_credits_for_action, InsufficientCreditsError
 from .schemas import HealthResponse, InvokeRequest, InvokeResponse, MessageEnvelope, TeleportRequest, TeleportResponse
 
 router = APIRouter()
@@ -173,13 +182,33 @@ def teleport(
             )
         console.print(msg_table)
 
-    # === USER PROJECTS ===
+    # === USER PROJECTS & CHAT -> BRANCH MAPPING ===
     user_id = session.get("userId")
     first_project_id = None
     project_context = None
+    branch_id = session.get("branchId")
     if user_id:
         try:
             projects = fetch_user_projects(user_id, settings)
+            if projects:
+                first_project_id = projects[0].get("id")
+                # New conversation: ensure this chat has a dedicated branch (direct chat_id -> branch mapping)
+                if not branch_id and first_project_id:
+                    try:
+                        branch_id = create_branch_for_chat(user_id, first_project_id, payload.chat_id, settings)
+                        update_chat_session_branch(user_id, payload.chat_id, branch_id, settings)
+                        session["branchId"] = branch_id
+                        console.print(f"[bold green]Created branch for chat:[/bold green] {branch_id}")
+                    except Exception as e:
+                        console.print(f"[yellow]Could not create branch for chat:[/yellow] {e}")
+                        branch_id = "main"
+                elif not branch_id:
+                    branch_id = "main"
+            if branch_id and first_project_id:
+                # Fetch project data for this session's branch only (agent must only use this branch)
+                projects = fetch_user_projects(user_id, settings, branch_id=branch_id, project_id=first_project_id)
+            else:
+                projects = fetch_user_projects(user_id, settings)
             if projects:
                 proj_table = Table(title=f"User Projects ({len(projects)})", box=box.ROUNDED)
                 proj_table.add_column("ID", style="dim", max_width=20)
@@ -325,6 +354,19 @@ Media Assets in Project ({len(assets_info)}):
         except Exception as exc:
             console.print(f"[yellow]Could not fetch projects:[/yellow] {exc}")
 
+    # Deduct credits before invoking (chat action)
+    if user_id:
+        cost = get_credits_for_action("chat")
+        try:
+            deduct_credits(user_id, cost, "chat", settings)
+        except InsufficientCreditsError as e:
+            console.print(f"[bold red]Insufficient credits:[/bold red] {e}")
+            return TeleportResponse(
+                success=False,
+                chat_id=payload.chat_id,
+                message=f"Insufficient credits. You need {e.required} R‑Credits. Add credits in Settings to continue.",
+            )
+
     # === INVOKE AGENT ===
     console.print(Panel.fit(
         "[bold cyan]Invoking Agent[/bold cyan]",
@@ -362,6 +404,7 @@ Media Assets in Project ({len(assets_info)}):
             "thread_id": thread_id,
             "user_id": session.get("userId"),
             "project_id": first_project_id,
+            "branch_id": branch_id,
         },
         "thread_id": thread_id,
     }
@@ -427,12 +470,13 @@ Media Assets in Project ({len(assets_info)}):
                 except Exception as e:
                     console.print(f"[yellow]Failed to send to Telegram: {e}[/yellow]")
 
-        # Stream the graph to get intermediate responses
+        # Stream the graph to get intermediate responses (branch_id enforces chat-only branch)
         last_response = None
         agent_context = {
             "thread_id": thread_id,
             "user_id": session.get("userId"),
             "project_id": first_project_id,
+            "branch_id": branch_id,
         }
         for event in graph.stream({"messages": langchain_messages}, config=config, stream_mode="values", context=agent_context):
             messages = event.get("messages", [])

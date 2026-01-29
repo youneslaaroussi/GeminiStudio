@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Music, Sparkles } from "lucide-react";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
+import { getCreditsForAction } from "@/app/lib/credits-config";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
 import type { RemoteAsset } from "@/app/types/assets";
 
 interface MusicPanelProps {
@@ -24,12 +27,15 @@ const EXAMPLE_PROMPTS = [
 ];
 
 export function MusicPanel({ projectId, onGenerated }: MusicPanelProps) {
+  const router = useRouter();
   const [prompt, setPrompt] = useState("");
   const [negativePrompt, setNegativePrompt] = useState("");
   const [useSeed, setUseSeed] = useState(false);
   const [seed, setSeed] = useState<number | undefined>(undefined);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const lyriaCredits = useMemo(() => getCreditsForAction("lyria_generation"), []);
 
   const handleGenerate = useCallback(async () => {
     if (isGenerating || !prompt.trim() || !projectId) return;
@@ -60,7 +66,25 @@ export function MusicPanel({ projectId, onGenerated }: MusicPanelProps) {
       const data = (await response.json()) as {
         asset?: RemoteAsset;
         error?: string;
+        required?: number;
       };
+
+      if (response.status === 402) {
+        const msg = data.error ?? "Insufficient credits";
+        setError(msg);
+        toast.error(msg, {
+          description:
+            data.required != null
+              ? `This generation requires ${data.required} R‑Credits. Add credits to continue.`
+              : "Add credits in Settings to continue.",
+          action: {
+            label: "Add credits",
+            onClick: () => router.push("/settings?billing=fill"),
+          },
+        });
+        return;
+      }
+
       if (!response.ok || !data.asset) {
         throw new Error(data.error || "Failed to generate music");
       }
@@ -77,7 +101,7 @@ export function MusicPanel({ projectId, onGenerated }: MusicPanelProps) {
     } finally {
       setIsGenerating(false);
     }
-  }, [isGenerating, prompt, negativePrompt, useSeed, seed, projectId, onGenerated]);
+  }, [isGenerating, prompt, negativePrompt, useSeed, seed, projectId, onGenerated, router]);
 
   return (
     <ScrollArea className="h-full">
@@ -176,24 +200,31 @@ export function MusicPanel({ projectId, onGenerated }: MusicPanelProps) {
           </div>
         )}
 
-        <Button
-          className="w-full"
-          size="sm"
-          onClick={handleGenerate}
-          disabled={!prompt.trim() || isGenerating || !projectId}
-        >
-          {isGenerating ? (
-            <>
-              <Loader2 className="size-3.5 animate-spin mr-1.5" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <Sparkles className="size-3.5 mr-1.5" />
-              Generate Music
-            </>
-          )}
-        </Button>
+        <div className="space-y-1.5">
+          <p className="text-[11px] text-muted-foreground text-center">
+            This generation uses{" "}
+            <span className="font-medium tabular-nums text-foreground">{lyriaCredits}</span>{" "}
+            R‑Credits
+          </p>
+          <Button
+            className="w-full"
+            size="sm"
+            onClick={handleGenerate}
+            disabled={!prompt.trim() || isGenerating || !projectId}
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles className="size-3.5 mr-1.5" />
+                Generate Music
+              </>
+            )}
+          </Button>
+        </div>
 
         {!projectId && (
           <p className="text-[11px] text-muted-foreground text-center">

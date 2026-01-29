@@ -146,6 +146,11 @@ export function EditorLayout() {
       handler: useProjectStore.getState().redo,
       preventDefault: true,
     },
+    {
+      key: 'Escape',
+      handler: () => useProjectStore.getState().setSelectedClip(null),
+      preventDefault: true,
+    },
   ]);
 
   useEffect(() => {
@@ -194,6 +199,7 @@ export function EditorLayout() {
                           transcriptions={project.transcriptions ?? {}}
                           transitions={project.transitions ?? {}}
                           captionSettings={project.captionSettings}
+                          textClipSettings={project.textClipSettings}
                           sceneConfig={{
                             resolution: project.resolution,
                             renderScale: project.renderScale,

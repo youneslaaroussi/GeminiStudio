@@ -55,6 +55,8 @@ export interface SavedChatSession {
   currentMode: ChatMode;
   messages: TimelineChatMessage[];
   userId: string;
+  /** Branch ID for this chat (direct chat_id → branch mapping). Set by langgraph server on first teleport. */
+  branchId?: string;
 }
 
 export interface ChatSessionSummary {
@@ -128,6 +130,7 @@ export async function loadChatSession(
     currentMode: data.currentMode,
     messages: data.messages || [],
     userId: data.userId,
+    branchId: data.branchId,
   };
 }
 

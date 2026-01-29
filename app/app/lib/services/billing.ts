@@ -6,6 +6,10 @@ export type SubscriptionTier = 'starter' | 'pro' | 'enterprise';
 export interface BillingData {
   credits: number;
   tier?: SubscriptionTier;
+  subscriptionStatus?: string;
+  currentPeriodEnd?: string;
+  cancelAtPeriodEnd?: boolean;
+  customerId?: string;
 }
 
 export const SUBSCRIPTION_TIERS: Record<
@@ -27,10 +31,26 @@ export async function getBilling(userId: string): Promise<BillingData> {
   const ref = doc(db, 'users', userId, 'settings', BILLING_DOC);
   const snap = await getDoc(ref);
   if (!snap.exists()) return { credits: 0 };
-  const d = snap.data() as { credits?: number; tier?: SubscriptionTier };
+  const d = snap.data() as {
+    credits?: number;
+    tier?: SubscriptionTier;
+    subscriptionStatus?: string;
+    currentPeriodEnd?: { toDate?: () => Date } | Date;
+    cancelAtPeriodEnd?: boolean;
+    customerId?: string;
+  };
+  let currentPeriodEnd: string | undefined;
+  if (d.currentPeriodEnd) {
+    const t = d.currentPeriodEnd as { toDate?: () => Date };
+    currentPeriodEnd = typeof t.toDate === 'function' ? t.toDate().toISOString() : undefined;
+  }
   return {
     credits: typeof d.credits === 'number' ? d.credits : 0,
     tier: d.tier && SUBSCRIPTION_TIERS[d.tier] ? d.tier : undefined,
+    subscriptionStatus: d.subscriptionStatus,
+    currentPeriodEnd,
+    cancelAtPeriodEnd: d.cancelAtPeriodEnd === true,
+    customerId: d.customerId,
   };
 }
 
@@ -49,10 +69,26 @@ export function subscribeToBilling(
         callback({ credits: 0 });
         return;
       }
-      const d = snap.data() as { credits?: number; tier?: SubscriptionTier };
+      const d = snap.data() as {
+        credits?: number;
+        tier?: SubscriptionTier;
+        subscriptionStatus?: string;
+        currentPeriodEnd?: { toDate?: () => Date } | Date;
+        cancelAtPeriodEnd?: boolean;
+        customerId?: string;
+      };
+      let currentPeriodEnd: string | undefined;
+      if (d.currentPeriodEnd) {
+        const t = d.currentPeriodEnd as { toDate?: () => Date };
+        currentPeriodEnd = typeof t.toDate === 'function' ? t.toDate().toISOString() : undefined;
+      }
       callback({
         credits: typeof d.credits === 'number' ? d.credits : 0,
         tier: d.tier && SUBSCRIPTION_TIERS[d.tier] ? d.tier : undefined,
+        subscriptionStatus: d.subscriptionStatus,
+        currentPeriodEnd,
+        cancelAtPeriodEnd: d.cancelAtPeriodEnd === true,
+        customerId: d.customerId,
       });
     },
     (err) => {

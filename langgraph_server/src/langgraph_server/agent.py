@@ -51,6 +51,7 @@ def create_graph(settings: Settings | None = None):
         thread_id = ctx.get("thread_id")
         user_id = ctx.get("user_id")
         project_id = ctx.get("project_id")
+        branch_id = ctx.get("branch_id")
         
         for tool_call in last_message.tool_calls:
             tool = tools_by_name.get(tool_call["name"])
@@ -63,11 +64,14 @@ def create_graph(settings: Settings | None = None):
                         args["project_id"] = project_id
                     if user_id and "user_id" not in args:
                         args["user_id"] = user_id
+                    if branch_id and "branch_id" not in args:
+                        args["branch_id"] = branch_id
                     if getattr(tool, "name", None) == "renderVideo":
                         args["_agent_context"] = {
                             "thread_id": thread_id,
                             "project_id": project_id,
                             "user_id": user_id,
+                            "branch_id": branch_id,
                         }
                         result = tool.func(**args)
                     else:

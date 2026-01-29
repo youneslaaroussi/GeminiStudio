@@ -8,7 +8,8 @@
     "build:scene": "cd ../scene && pnpm run build",
     "start": "next start",
     "lint": "eslint",
-    "export:tools": "tsx scripts/export-tool-manifest.ts"
+    "export:tools": "tsx scripts/export-tool-manifest.ts",
+    "add-credits": "tsx scripts/add-credits.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "3.0.13",

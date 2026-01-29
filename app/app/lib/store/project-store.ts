@@ -21,6 +21,7 @@ import type {
 import { ProjectSyncManager } from '@/app/lib/automerge/sync-manager';
 import { automergeToProject, projectToAutomerge } from '@/app/lib/automerge/adapter';
 import type { AutomergeProject } from '@/app/lib/automerge/types';
+import { setStoredBranchForProject } from '@/app/lib/store/branch-storage';
 
 interface ProjectStore {
   project: Project;
@@ -56,7 +57,7 @@ interface ProjectStore {
   setPlaybackSpeed: (speed: number) => void;
   splitClipAtTime: (id: string, time: number) => void;
   updateProjectSettings: (
-    settings: Partial<Pick<Project, 'renderScale' | 'background' | 'resolution' | 'fps' | 'name' | 'captionSettings'>>
+    settings: Partial<Pick<Project, 'renderScale' | 'background' | 'resolution' | 'fps' | 'name' | 'captionSettings' | 'textClipSettings'>>
   ) => void;
   setProject: (project: Project, options?: { markSaved?: boolean }) => void;
   upsertProjectTranscription: (transcription: ProjectTranscription) => void;
@@ -345,6 +346,8 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
         console.log('[SYNC] No project data in Firebase or Automerge doc is null');
         set({ syncManager, currentBranch: branchId, projectId });
       }
+
+      setStoredBranchForProject(projectId, branchId);
     },
 
     // History using Automerge
@@ -630,6 +633,10 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
               settings.captionSettings !== undefined
                 ? settings.captionSettings
                 : state.project.captionSettings,
+            textClipSettings:
+              settings.textClipSettings !== undefined
+                ? settings.textClipSettings
+                : state.project.textClipSettings,
           },
         }));
       },

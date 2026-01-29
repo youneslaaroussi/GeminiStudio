@@ -2,9 +2,21 @@
 
 import { Player, Stage, Vector2, type Project, type Scene } from '@motion-canvas/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Layer } from '@/app/types/timeline';
+import type { Layer, TimelineClip } from '@/app/types/timeline';
 import type { ProjectTranscription } from '@/app/types/transcription';
 import { useDrag } from '@/app/hooks/use-drag';
+import { SelectionOverlay } from './SelectionOverlay';
+import { useProjectStore } from '@/app/lib/store/project-store';
+
+interface SceneNode {
+  worldToLocal: () => DOMMatrix;
+  width?: () => number;
+  height?: () => number;
+}
+
+interface SceneGraph {
+  getNode?: (key: string) => SceneNode | null;
+}
 
 const SCENE_URL = '/scene/src/project.js';
 const PREVIEW_FPS = 30;
@@ -25,6 +37,12 @@ interface ScenePlayerProps {
     fontWeight: number;
     distanceFromBottom: number;
   };
+  textClipSettings?: {
+    fontFamily: string;
+    fontWeight: number;
+    defaultFontSize: number;
+    defaultFill: string;
+  };
   sceneConfig: {
     resolution: { width: number; height: number };
     renderScale: number;
@@ -43,9 +61,11 @@ export function ScenePlayer({
   transcriptions = {},
   transitions = {},
   captionSettings,
+  textClipSettings,
   sceneConfig,
 }: ScenePlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const canvasWrapperRef = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState<Stage | null>(null);
   const [player, setPlayer] = useState<Player | null>(null);
   const [project, setProject] = useState<Project | null>(null);
@@ -55,7 +75,10 @@ export function ScenePlayer({
   const latestTranscriptionsRef = useRef(transcriptions);
   const latestTransitionsRef = useRef(transitions);
   const latestCaptionSettingsRef = useRef(captionSettings);
+  const latestTextClipSettingsRef = useRef(textClipSettings);
   const onVariablesUpdatedRef = useRef(onVariablesUpdated);
+  
+  const setSelectedClip = useProjectStore((s) => s.setSelectedClip);
 
   useEffect(() => {
     latestLayersRef.current = layers;
@@ -72,6 +95,10 @@ export function ScenePlayer({
   useEffect(() => {
     latestCaptionSettingsRef.current = captionSettings;
   }, [captionSettings]);
+
+  useEffect(() => {
+    latestTextClipSettingsRef.current = textClipSettings;
+  }, [textClipSettings]);
 
   useEffect(() => {
     onVariablesUpdatedRef.current = onVariablesUpdated;
@@ -198,6 +225,103 @@ export function ScenePlayer({
     null
   );
 
+  // Handle click to select clips
+  const handleSceneClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (!player || !containerRef.current) return;
+      // Don't handle if shift is held (that's for panning)
+      if (e.shiftKey) return;
+
+      const rect = containerRef.current.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+
+      // Convert screen click to CSS canvas coordinates
+      // Reverse the transform: screenX = (cssX - w/2) * zoom + w/2 + tx
+      // cssX = (screenX - w/2 - tx) / zoom + w/2
+      const w = containerSize.width;
+      const h = containerSize.height;
+      const cssX = (clickX - w / 2 - transform.x) / transform.zoom + w / 2;
+      const cssY = (clickY - h / 2 - transform.y) / transform.zoom + h / 2;
+
+      // Convert CSS to render coordinates
+      const renderX = cssX * sceneConfig.renderScale;
+      const renderY = cssY * sceneConfig.renderScale;
+
+      const scene = player.playback.currentScene as SceneGraph | null;
+      if (!scene?.getNode) return;
+
+      // Check clips in reverse order (top layers first) for hit detection
+      // Only check clips that are active at current time
+      const currentSeconds = currentTime;
+      let foundClipId: string | null = null;
+
+      // Iterate layers in reverse (top to bottom visually)
+      for (let i = layers.length - 1; i >= 0 && !foundClipId; i--) {
+        const layer = layers[i];
+        // Skip audio layers
+        if (layer.type === 'audio') continue;
+
+        // Check clips in reverse order
+        for (let j = layer.clips.length - 1; j >= 0 && !foundClipId; j--) {
+          const clip = layer.clips[j] as TimelineClip;
+          const speed = clip.speed ?? 1;
+          const safeSpeed = Math.max(speed, 0.0001);
+          const clipStart = clip.start;
+          const clipEnd = clipStart + clip.duration / safeSpeed;
+
+          // Skip if clip is not active at current time
+          if (currentSeconds < clipStart || currentSeconds > clipEnd) continue;
+
+          // Get node key based on clip type
+          let nodeKey: string | null = null;
+          if (clip.type === 'video') nodeKey = `video-clip-${clip.id}`;
+          else if (clip.type === 'text') nodeKey = `text-clip-${clip.id}`;
+          else if (clip.type === 'image') nodeKey = `image-clip-${clip.id}`;
+
+          if (!nodeKey) continue;
+
+          try {
+            const node = scene.getNode(nodeKey);
+            if (!node) continue;
+
+            // Convert click to node's local space
+            const worldToLocal = node.worldToLocal();
+            const localPoint = new DOMPoint(renderX, renderY).matrixTransform(worldToLocal);
+
+            // Get node dimensions
+            const nodeWidth = typeof node.width === 'function' ? node.width() ?? 0 : 0;
+            const nodeHeight = typeof node.height === 'function' ? node.height() ?? 0 : 0;
+
+            // Check if click is within node bounds (centered at origin in local space)
+            const halfW = nodeWidth / 2;
+            const halfH = nodeHeight / 2;
+
+            if (
+              localPoint.x >= -halfW &&
+              localPoint.x <= halfW &&
+              localPoint.y >= -halfH &&
+              localPoint.y <= halfH
+            ) {
+              foundClipId = clip.id;
+            }
+          } catch {
+            // Node lookup failed, skip
+          }
+        }
+      }
+
+      if (foundClipId) {
+        e.stopPropagation();
+        setSelectedClip(foundClipId);
+      } else {
+        // Click on empty space - deselect
+        setSelectedClip(null);
+      }
+    },
+    [player, containerSize, transform, sceneConfig.renderScale, currentTime, layers, setSelectedClip]
+  );
+
   // Handle Wheel
   useEffect(() => {
     const container = containerRef.current;
@@ -254,7 +378,7 @@ export function ScenePlayer({
 
   // Init player, stage, render loop when project is ready
   useEffect(() => {
-    if (!project || !containerRef.current) return;
+    if (!project || !canvasWrapperRef.current) return;
 
     const m = project;
     const meta = m.meta;
@@ -302,6 +426,12 @@ export function ScenePlayer({
         fontWeight: 400,
         distanceFromBottom: 140,
       },
+      textClipSettings: latestTextClipSettingsRef.current ?? {
+        fontFamily: 'Inter Variable',
+        fontWeight: 400,
+        defaultFontSize: 48,
+        defaultFill: '#ffffff',
+      },
     });
     (playerInstance as unknown as { requestRecalculation?: () => void }).requestRecalculation?.();
     playerInstance.requestRender();
@@ -312,7 +442,7 @@ export function ScenePlayer({
     canvas.style.height = `${initialSize.height}px`;
     canvas.style.display = 'block';
     
-    containerRef.current.append(canvas);
+    canvasWrapperRef.current.append(canvas);
 
     setStage(stageInstance);
     setPlayer(playerInstance);
@@ -334,11 +464,10 @@ export function ScenePlayer({
     onPlayerChange,
     onCanvasReady,
     duration,
-    transcriptions,
     sceneConfig.resolution.width,
     sceneConfig.resolution.height,
-    sceneConfig.renderScale,
-    sceneConfig.background,
+    // Note: renderScale and background are handled by the stage.configure() useEffect below
+    // to avoid recreating the player (which resets to frame 0)
   ]);
 
   // Update canvas transform
@@ -383,13 +512,19 @@ export function ScenePlayer({
         fontWeight: 400,
         distanceFromBottom: 140,
       },
+      textClipSettings: textClipSettings ?? {
+        fontFamily: 'Inter Variable',
+        fontWeight: 400,
+        defaultFontSize: 48,
+        defaultFill: '#ffffff',
+      },
     });
     (player as unknown as { requestRecalculation?: () => void }).requestRecalculation?.();
     player.requestRender();
 
     // Notify parent that variables were updated
     onVariablesUpdatedRef.current?.();
-  }, [player, layers, duration, transcriptions, transitions, captionSettings]);
+  }, [player, layers, duration, transcriptions, transitions, captionSettings, textClipSettings]);
 
   // Sync playhead time from player back to the store during playback
   useEffect(() => {
@@ -459,14 +594,25 @@ export function ScenePlayer({
         >
           <div
             ref={containerRef}
-            className="w-full h-full"
+            className="relative w-full h-full"
             onMouseDown={(e) => {
               if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
                 handleDrag(e);
               }
             }}
+            onClick={handleSceneClick}
             onContextMenu={(e) => e.preventDefault()}
-          />
+          >
+            <div ref={canvasWrapperRef} className="absolute inset-0" />
+            {player && (
+              <SelectionOverlay
+                player={player}
+                transform={transform}
+                containerSize={containerSize}
+                renderScale={sceneConfig.renderScale}
+              />
+            )}
+          </div>
         </div>
       </div>
       {!project && !error && (

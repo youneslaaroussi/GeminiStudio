@@ -10,6 +10,7 @@ import {
   Music,
   Volume2,
   ListTodo,
+  GitBranch,
 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { createTextClip, createVideoClip, createAudioClip, createImageClip } from "@/app/types/timeline";
@@ -49,9 +50,10 @@ import {
   MusicPanel,
   TtsPanel,
   JobsPanel,
+  BranchesPanel,
 } from "./panels";
 
-type TabId = "assets" | "video" | "image" | "music" | "tts" | "jobs";
+type TabId = "assets" | "video" | "image" | "music" | "tts" | "jobs" | "branches";
 
 interface TabConfig {
   id: TabId;
@@ -67,6 +69,7 @@ const TABS: TabConfig[] = [
   { id: "music", icon: Music, label: "Music", shortcut: "4" },
   { id: "tts", icon: Volume2, label: "Speech", shortcut: "5" },
   { id: "jobs", icon: ListTodo, label: "Jobs", shortcut: "6" },
+  { id: "branches", icon: GitBranch, label: "Branches", shortcut: "7" },
 ];
 
 export function AssetsPanel() {
@@ -451,6 +454,16 @@ export function AssetsPanel() {
               onRefresh={() => { fetchAssets(); refreshPipelineStates(); }}
               isLoading={isLoading}
             />
+          </div>
+
+          {/* Branches Panel */}
+          <div
+            className={cn(
+              "absolute inset-0",
+              activeTab !== "branches" && "invisible pointer-events-none"
+            )}
+          >
+            <BranchesPanel projectId={projectId} />
           </div>
         </div>
       </div>

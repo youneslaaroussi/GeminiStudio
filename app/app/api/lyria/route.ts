@@ -4,6 +4,8 @@ import { parseGoogleServiceAccount, assertGoogleCredentials } from "@/app/lib/se
 import { initAdmin } from "@/app/lib/server/firebase-admin";
 import { getAuth } from "firebase-admin/auth";
 import { uploadToAssetService, isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
+import { deductCredits } from "@/app/lib/server/credits";
+import { getCreditsForAction } from "@/app/lib/credits-config";
 
 export const runtime = "nodejs";
 
@@ -94,6 +96,14 @@ export async function POST(request: NextRequest) {
         { error: "Cannot use seed with multiple samples. Set sample count to 1 when using a seed." },
         { status: 400 }
       );
+    }
+
+    const cost = getCreditsForAction("lyria_generation");
+    try {
+      await deductCredits(userId, cost, "lyria_generation");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Insufficient credits";
+      return NextResponse.json({ error: msg, required: cost }, { status: 402 });
     }
 
     assertEnv();

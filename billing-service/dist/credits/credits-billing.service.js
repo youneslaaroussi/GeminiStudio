@@ -22,7 +22,6 @@ const config_1 = require("@nestjs/config");
 const common_2 = require("@nestjs/common");
 const firestore_1 = require("firebase-admin/firestore");
 const stripe_1 = __importDefault(require("stripe"));
-const crypto_1 = require("crypto");
 const PACKS = [
     { id: 'starter', name: 'Starter', credits: 100, priceIdEnv: 'STRIPE_PRICE_STARTER' },
     { id: 'pro', name: 'Pro', credits: 500, priceIdEnv: 'STRIPE_PRICE_PRO' },
@@ -63,10 +62,7 @@ let CreditsBillingService = CreditsBillingService_1 = class CreditsBillingServic
         for (const pack of PACKS) {
             const priceId = this.resolvePriceId(pack);
             const price = await this.stripe.prices.retrieve(priceId);
-            const unit = price.unit_amount;
-            if (unit == null) {
-                throw new Error(`Stripe price ${priceId} has no unit_amount`);
-            }
+            const unit = price.unit_amount ?? 0;
             out.push({
                 id: pack.id,
                 name: pack.name,
@@ -88,30 +84,18 @@ let CreditsBillingService = CreditsBillingService_1 = class CreditsBillingServic
             `${this.frontendUrl}/settings?billing=success&session_id={CHECKOUT_SESSION_ID}`;
         const cancel = input.cancelUrl ?? `${this.frontendUrl}/settings?billing=cancel`;
         const session = await this.stripe.checkout.sessions.create({
-            mode: 'payment',
-            customer_creation: 'if_required',
+            mode: 'subscription',
             line_items: [{ price: priceId, quantity: 1 }],
             success_url: success,
             cancel_url: cancel,
-            metadata: {
-                userId: input.userId,
-                packId: pack.id,
-                credits: String(pack.credits),
+            subscription_data: {
+                metadata: {
+                    userId: input.userId,
+                    packId: pack.id,
+                    credits: String(pack.credits),
+                },
             },
             allow_promotion_codes: true,
-        });
-        const purchaseId = (0, crypto_1.randomUUID)();
-        const now = new Date();
-        await this.purchasesRef.doc(purchaseId).set({
-            id: purchaseId,
-            userId: input.userId,
-            packId: pack.id,
-            credits: pack.credits,
-            stripeSessionId: session.id,
-            stripeCustomerId: session.customer ? String(session.customer) : null,
-            status: 'pending',
-            createdAt: firestore_1.Timestamp.fromDate(now),
-            updatedAt: firestore_1.Timestamp.fromDate(now),
         });
         return {
             url: session.url,
@@ -125,26 +109,187 @@ let CreditsBillingService = CreditsBillingService_1 = class CreditsBillingServic
         return this.stripe.webhooks.constructEvent(rawBody, signature, this.webhookSecret);
     }
     async handleCheckoutCompleted(session) {
-        const meta = session.metadata ?? {};
+        if (session.mode === 'subscription' && session.subscription) {
+            await this.handleSubscriptionCheckoutCompleted(session);
+            return;
+        }
+        this.logger.debug('Ignoring non-subscription checkout', { sessionId: session.id, mode: session.mode });
+    }
+    async handleSubscriptionCheckoutCompleted(session) {
+        const subscriptionId = typeof session.subscription === 'string' ? session.subscription : session.subscription?.id;
+        if (!subscriptionId) {
+            this.logger.error('Subscription ID missing on checkout.session.completed', { sessionId: session.id });
+            return;
+        }
+        const subscription = await this.stripe.subscriptions.retrieve(subscriptionId);
+        const meta = subscription.metadata ?? {};
         const userId = meta.userId;
-        const packId = meta.packId;
-        const credits = Number(meta.credits);
-        if (!userId || !packId || !Number.isFinite(credits) || credits <= 0) {
-            this.logger.error('Checkout session missing metadata', { sessionId: session.id });
+        const packId = (meta.packId ?? '');
+        const creditsPerMonth = (Number(meta.credits) || PACKS.find((p) => p.id === packId)?.credits) ?? 0;
+        if (!userId || !packId || !PACKS.some((p) => p.id === packId)) {
+            this.logger.error('Subscription missing userId/packId metadata', {
+                subscriptionId,
+                metadata: subscription.metadata,
+            });
             return;
         }
-        const snap = await this.purchasesRef
-            .where('stripeSessionId', '==', session.id)
-            .limit(1)
-            .get();
-        if (snap.empty) {
-            this.logger.warn('No purchase found for session', { sessionId: session.id });
+        const billingRef = this.db
+            .collection('users')
+            .doc(userId)
+            .collection('settings')
+            .doc(BILLING_DOC);
+        const now = new Date();
+        const nowTs = firestore_1.Timestamp.fromDate(now);
+        const customerId = subscription.customer ? String(subscription.customer) : null;
+        const periodEnd = subscription.items?.data?.[0]?.current_period_end ?? 0;
+        const currentPeriodEnd = new Date(periodEnd * 1000);
+        await this.db.runTransaction(async (tx) => {
+            const billingSnap = await tx.get(billingRef);
+            const current = billingSnap.exists
+                ? billingSnap.data()
+                : {};
+            const prev = typeof current.credits === 'number' && Number.isFinite(current.credits) ? current.credits : 0;
+            const next = prev + creditsPerMonth;
+            tx.set(billingRef, {
+                credits: next,
+                tier: packId,
+                subscriptionId,
+                customerId,
+                subscriptionStatus: subscription.status,
+                cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
+                currentPeriodEnd: firestore_1.Timestamp.fromDate(currentPeriodEnd),
+                updatedAt: nowTs,
+            }, { merge: true });
+        });
+        this.logger.log('Subscription checkout completed', {
+            userId,
+            packId,
+            creditsGranted: creditsPerMonth,
+            subscriptionId,
+        });
+    }
+    async handleSubscriptionCreated(subscription) {
+        const meta = subscription.metadata ?? {};
+        const userId = meta.userId;
+        const packId = (meta.packId ?? '');
+        const creditsPerMonth = (Number(meta.credits) || PACKS.find((p) => p.id === packId)?.credits) ?? 0;
+        if (!userId || !packId || !PACKS.some((p) => p.id === packId)) {
+            this.logger.warn('Subscription created with missing metadata', {
+                subscriptionId: subscription.id,
+                metadata: subscription.metadata,
+            });
             return;
         }
-        const docRef = snap.docs[0].ref;
-        const purchase = snap.docs[0].data();
-        if (purchase.status === 'completed') {
-            this.logger.log('Purchase already processed', { sessionId: session.id });
+        const billingRef = this.db
+            .collection('users')
+            .doc(userId)
+            .collection('settings')
+            .doc(BILLING_DOC);
+        const now = new Date();
+        const nowTs = firestore_1.Timestamp.fromDate(now);
+        const customerId = subscription.customer ? String(subscription.customer) : null;
+        const periodEnd = subscription.items?.data?.[0]?.current_period_end ?? 0;
+        const currentPeriodEnd = new Date(periodEnd * 1000);
+        await this.db.runTransaction(async (tx) => {
+            const billingSnap = await tx.get(billingRef);
+            const current = billingSnap.exists ? billingSnap.data() : {};
+            const prev = typeof current.credits === 'number' && Number.isFinite(current.credits) ? current.credits : 0;
+            const next = prev + creditsPerMonth;
+            tx.set(billingRef, {
+                credits: next,
+                tier: packId,
+                subscriptionId: subscription.id,
+                customerId,
+                subscriptionStatus: subscription.status,
+                cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
+                currentPeriodEnd: firestore_1.Timestamp.fromDate(currentPeriodEnd),
+                updatedAt: nowTs,
+            }, { merge: true });
+        });
+        this.logger.log('Subscription created', { userId, packId, subscriptionId: subscription.id });
+    }
+    async handleSubscriptionUpdated(subscription) {
+        const meta = subscription.metadata ?? {};
+        const userId = meta.userId;
+        if (!userId) {
+            this.logger.warn('Subscription updated with missing userId', {
+                subscriptionId: subscription.id,
+            });
+            return;
+        }
+        const raw = subscription;
+        const periodEnd = raw.current_period_end ?? subscription.items?.data?.[0]?.current_period_end ?? 0;
+        const cancelAtPeriodEnd = raw.cancel_at_period_end === true;
+        this.logger.log('customer.subscription.updated payload', {
+            subscriptionId: subscription.id,
+            'raw.cancel_at_period_end': raw.cancel_at_period_end,
+            'raw.current_period_end': raw.current_period_end,
+            cancelAtPeriodEnd,
+        });
+        this.logger.log('Subscription updated', {
+            userId,
+            subscriptionId: subscription.id,
+            status: subscription.status,
+            cancelAtPeriodEnd,
+            currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+        });
+        const billingRef = this.db
+            .collection('users')
+            .doc(userId)
+            .collection('settings')
+            .doc(BILLING_DOC);
+        const packId = (meta.packId ?? '');
+        const currentPeriodEnd = new Date(periodEnd * 1000);
+        await billingRef.set({
+            tier: PACKS.some((p) => p.id === packId) ? packId : undefined,
+            subscriptionStatus: subscription.status,
+            cancelAtPeriodEnd,
+            currentPeriodEnd: firestore_1.Timestamp.fromDate(currentPeriodEnd),
+            updatedAt: firestore_1.Timestamp.fromDate(new Date()),
+        }, { merge: true });
+    }
+    async handleSubscriptionDeleted(subscription) {
+        const meta = subscription.metadata ?? {};
+        const userId = meta.userId;
+        if (!userId) {
+            this.logger.warn('Subscription deleted with missing userId', {
+                subscriptionId: subscription.id,
+            });
+            return;
+        }
+        const billingRef = this.db
+            .collection('users')
+            .doc(userId)
+            .collection('settings')
+            .doc(BILLING_DOC);
+        await billingRef.set({
+            subscriptionStatus: 'canceled',
+            subscriptionId: null,
+            customerId: null,
+            cancelAtPeriodEnd: false,
+            currentPeriodEnd: null,
+            updatedAt: firestore_1.Timestamp.fromDate(new Date()),
+        }, { merge: true });
+        this.logger.log('Subscription deleted', { userId, subscriptionId: subscription.id });
+    }
+    async handleInvoicePaid(invoice) {
+        const subRef = invoice.parent?.subscription_details?.subscription;
+        if (invoice.billing_reason !== 'subscription_cycle' || !subRef) {
+            return;
+        }
+        const subscriptionId = typeof subRef === 'string' ? subRef : subRef.id;
+        const subscription = await this.stripe.subscriptions.retrieve(subscriptionId);
+        const meta = subscription.metadata ?? {};
+        const userId = meta.userId;
+        const packId = (meta.packId ?? '');
+        const pack = PACKS.find((p) => p.id === packId);
+        const creditsPerMonth = pack?.credits ?? Number(meta.credits) ?? 0;
+        if (!userId || creditsPerMonth <= 0) {
+            this.logger.warn('Invoice paid but cannot grant renewal credits', {
+                subscriptionId,
+                userId,
+                packId,
+            });
             return;
         }
         const billingRef = this.db
@@ -156,27 +301,38 @@ let CreditsBillingService = CreditsBillingService_1 = class CreditsBillingServic
         const nowTs = firestore_1.Timestamp.fromDate(now);
         await this.db.runTransaction(async (tx) => {
             const billingSnap = await tx.get(billingRef);
-            const current = billingSnap.exists
-                ? billingSnap.data()
-                : {};
-            const prev = typeof current.credits === 'number' && Number.isFinite(current.credits)
-                ? current.credits
-                : 0;
-            const next = prev + credits;
-            tx.set(billingRef, { credits: next, tier: packId, updatedAt: nowTs }, { merge: true });
-            tx.update(docRef, {
-                status: 'completed',
+            const current = billingSnap.exists ? billingSnap.data() : {};
+            const prev = typeof current.credits === 'number' && Number.isFinite(current.credits) ? current.credits : 0;
+            const next = prev + creditsPerMonth;
+            const periodEnd = subscription.items?.data?.[0]?.current_period_end ?? 0;
+            tx.set(billingRef, {
+                credits: next,
+                tier: packId,
+                subscriptionStatus: subscription.status,
+                cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
+                currentPeriodEnd: firestore_1.Timestamp.fromDate(new Date(periodEnd * 1000)),
                 updatedAt: nowTs,
-                completedAt: nowTs,
-                stripeCustomerId: session.customer ? String(session.customer) : purchase.stripeCustomerId,
-            });
+            }, { merge: true });
         });
-        this.logger.log('Credits added', {
-            userId,
-            packId,
-            credits,
-            sessionId: session.id,
+        this.logger.log('Renewal credits added', { userId, packId, credits: creditsPerMonth, subscriptionId });
+    }
+    async createCustomerPortalSession(userId) {
+        const billingRef = this.db
+            .collection('users')
+            .doc(userId)
+            .collection('settings')
+            .doc(BILLING_DOC);
+        const snap = await billingRef.get();
+        const data = snap.exists ? snap.data() : {};
+        const customerId = data.customerId;
+        if (!customerId) {
+            throw new Error('No billing customer found. Subscribe to a plan first.');
+        }
+        const session = await this.stripe.billingPortal.sessions.create({
+            customer: customerId,
+            return_url: `${this.frontendUrl}/settings`,
         });
+        return { url: session.url };
     }
 };
 exports.CreditsBillingService = CreditsBillingService;
