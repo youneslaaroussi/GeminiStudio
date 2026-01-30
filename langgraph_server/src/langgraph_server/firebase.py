@@ -630,9 +630,9 @@ def _extract_media_url(text: str) -> tuple[str | None, str | None]:
         )
         if raw:
             url = raw.group(1)
-            logger.debug(f"[MEDIA_EXTRACT] Found raw URL: {url[:80]}...")
+            logger.info(f"[MEDIA_EXTRACT] Found raw URL ending: ...{url[-50:]}")
         else:
-            logger.debug(f"[MEDIA_EXTRACT] No media URL found in text: {text[:100]}...")
+            logger.info(f"[MEDIA_EXTRACT] No media URL found in text ({len(text)} chars)")
 
     if not url:
         return None, None
