@@ -12,6 +12,7 @@ export interface RendererConfig {
   headless: boolean;
   gcpProjectId?: string;
   renderEventTopic: string;
+  taskTimeoutMs: number;
 }
 
 export const loadConfig = (): RendererConfig => {
@@ -25,6 +26,7 @@ export const loadConfig = (): RendererConfig => {
     RENDERER_HEADLESS,
     RENDERER_EVENT_TOPIC,
     GOOGLE_PROJECT_ID,
+    RENDERER_TASK_TIMEOUT_MS,
   } = process.env;
 
   return {
@@ -37,5 +39,6 @@ export const loadConfig = (): RendererConfig => {
     headless: RENDERER_HEADLESS ? RENDERER_HEADLESS.toLowerCase() === 'true' : true,
     gcpProjectId: GOOGLE_PROJECT_ID,
     renderEventTopic: RENDERER_EVENT_TOPIC ?? 'gemini-render-events',
+    taskTimeoutMs: Number(RENDERER_TASK_TIMEOUT_MS ?? 600000), // 10 minutes default
   };
 };

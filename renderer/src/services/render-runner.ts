@@ -438,6 +438,7 @@ export class RenderRunner {
         concurrency: Cluster.CONCURRENCY_CONTEXT,
         maxConcurrency: Math.max(1, Math.min(config.headlessConcurrency, segments.length)),
         puppeteerOptions,
+        timeout: config.taskTimeoutMs,
       });
 
       const failedSegments: { segment: SegmentDefinition; error: Error }[] = [];
