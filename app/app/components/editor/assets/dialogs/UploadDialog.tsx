@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload, Trash2, File as FileIcon, Loader2 } from "lucide-react";
+import { Upload, Trash2, File as FileIcon, Loader2, Coins, Video, Image, Music } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,10 @@ import { Progress } from "@/components/ui/progress";
 import type { RemoteAsset } from "@/app/types/assets";
 import { createId, formatBytes } from "../utils";
 import { getAuthToken } from "@/app/lib/hooks/useAuthFetch";
+import {
+  CREDITS_PER_ACTION,
+  getUploadCreditBreakdown,
+} from "@/app/lib/credits-config";
 
 interface QueuedFile {
   id: string;
@@ -84,6 +88,11 @@ export function UploadDialog({
     [queuedFiles]
   );
 
+  const creditBreakdown = useMemo(
+    () => getUploadCreditBreakdown(queuedFiles.map((item) => item.file)),
+    [queuedFiles]
+  );
+
   const handleUpload = useCallback(async () => {
     if (!queuedFiles.length || isUploading || !projectId) return;
     setIsUploading(true);
@@ -123,6 +132,14 @@ export function UploadDialog({
               }
             } else if (xhr.status === 401) {
               reject(new Error("Unauthorized. Please log in again."));
+            } else if (xhr.status === 402) {
+              // Insufficient credits
+              try {
+                const data = JSON.parse(xhr.responseText);
+                reject(new Error(data.error || "Insufficient credits"));
+              } catch {
+                reject(new Error("Insufficient credits to upload files"));
+              }
             } else if (xhr.status === 503) {
               reject(new Error("Asset service not available. Check ASSET_SERVICE_URL."));
             } else {
@@ -176,7 +193,7 @@ export function UploadDialog({
         </div>
 
         {queuedFiles.length > 0 && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="flex items-center justify-between text-sm">
               <span className="font-medium">
                 {queuedFiles.length} file{queuedFiles.length !== 1 && "s"}
@@ -207,6 +224,47 @@ export function UploadDialog({
                   </Button>
                 </div>
               ))}
+            </div>
+
+            {/* Credit cost breakdown */}
+            <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Coins className="size-4 text-amber-500" />
+                <span>Credit Cost</span>
+              </div>
+              <div className="grid gap-1.5 text-xs">
+                {creditBreakdown.videos > 0 && (
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <Video className="size-3.5" />
+                      {creditBreakdown.videos} video{creditBreakdown.videos !== 1 && "s"}
+                    </span>
+                    <span>{creditBreakdown.videos * CREDITS_PER_ACTION.upload_video} R-Credits</span>
+                  </div>
+                )}
+                {creditBreakdown.images > 0 && (
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <Image className="size-3.5" />
+                      {creditBreakdown.images} image{creditBreakdown.images !== 1 && "s"}
+                    </span>
+                    <span>{creditBreakdown.images * CREDITS_PER_ACTION.upload_image} R-Credits</span>
+                  </div>
+                )}
+                {creditBreakdown.audio > 0 && (
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <Music className="size-3.5" />
+                      {creditBreakdown.audio} audio file{creditBreakdown.audio !== 1 && "s"}
+                    </span>
+                    <span>{creditBreakdown.audio * CREDITS_PER_ACTION.upload_audio} R-Credits</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between pt-1.5 border-t border-border font-medium text-foreground">
+                  <span>Total</span>
+                  <span className="text-amber-500">{creditBreakdown.totalCredits} R-Credits</span>
+                </div>
+              </div>
             </div>
           </div>
         )}

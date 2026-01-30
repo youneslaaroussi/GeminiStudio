@@ -48,6 +48,7 @@ export function EditorLayout() {
   const loadRef = useRef<(() => void) | null>(null);
   const exportRef = useRef<(() => void) | null>(null);
   const refreshRef = useRef<(() => void) | null>(null);
+  const setAssetTabRef = useRef<((tab: "assets" | "video" | "image" | "music" | "tts" | "jobs" | "branches") => void) | null>(null);
 
   const handleRecenterReady = useCallback((recenter: () => void) => {
     recenterRef.current = recenter;
@@ -63,6 +64,10 @@ export function EditorLayout() {
 
   const handleRefreshReady = useCallback((refresh: () => void) => {
     refreshRef.current = refresh;
+  }, []);
+
+  const handleAssetTabReady = useCallback((setTab: (tab: "assets" | "video" | "image" | "music" | "tts" | "jobs" | "branches") => void) => {
+    setAssetTabRef.current = setTab;
   }, []);
 
   // Connect to Zustand store
@@ -321,6 +326,70 @@ export function EditorLayout() {
       handler: () => setCommandMenuOpen((prev) => !prev),
       preventDefault: true,
     },
+    // Asset panel tabs: 1–7 (no modifiers; Cmd+1 etc. left to browser)
+    {
+      key: '1',
+      handler: (e) => {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          setAssetTabRef.current?.('assets');
+          e.preventDefault();
+        }
+      },
+    },
+    {
+      key: '2',
+      handler: (e) => {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          setAssetTabRef.current?.('video');
+          e.preventDefault();
+        }
+      },
+    },
+    {
+      key: '3',
+      handler: (e) => {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          setAssetTabRef.current?.('image');
+          e.preventDefault();
+        }
+      },
+    },
+    {
+      key: '4',
+      handler: (e) => {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          setAssetTabRef.current?.('music');
+          e.preventDefault();
+        }
+      },
+    },
+    {
+      key: '5',
+      handler: (e) => {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          setAssetTabRef.current?.('tts');
+          e.preventDefault();
+        }
+      },
+    },
+    {
+      key: '6',
+      handler: (e) => {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          setAssetTabRef.current?.('jobs');
+          e.preventDefault();
+        }
+      },
+    },
+    {
+      key: '7',
+      handler: (e) => {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          setAssetTabRef.current?.('branches');
+          e.preventDefault();
+        }
+      },
+    },
   ]);
 
   useEffect(() => {
@@ -437,7 +506,7 @@ export function EditorLayout() {
                     {/* Left: Assets */}
                     <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
                       <div className="h-full bg-card border-r border-border min-w-0">
-                        <AssetsPanel />
+                        <AssetsPanel onSetAssetTabReady={handleAssetTabReady} />
                       </div>
                     </ResizablePanel>
 

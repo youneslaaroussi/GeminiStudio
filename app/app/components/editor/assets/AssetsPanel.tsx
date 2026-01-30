@@ -72,7 +72,11 @@ const TABS: TabConfig[] = [
   { id: "branches", icon: GitBranch, label: "Branches", shortcut: "7" },
 ];
 
-export function AssetsPanel() {
+interface AssetsPanelProps {
+  onSetAssetTabReady?: (setTab: (tab: TabId) => void) => void;
+}
+
+export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
   const {
     assets,
     isLoading,
@@ -166,6 +170,14 @@ export function AssetsPanel() {
 
   // Active tab
   const [activeTab, setActiveTab] = useState<TabId>("assets");
+
+  // Expose setActiveTab to parent for keyboard shortcuts (1–7)
+  useEffect(() => {
+    onSetAssetTabReady?.(setActiveTab);
+    return () => {
+      onSetAssetTabReady?.(() => {});
+    };
+  }, [onSetAssetTabReady]);
 
   // Dialog states (keeping transcript and details as dialogs)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);

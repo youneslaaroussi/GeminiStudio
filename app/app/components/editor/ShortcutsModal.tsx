@@ -49,6 +49,18 @@ const SHORTCUTS: { section: string; items: { action: string; keys: string }[] }[
       { action: "Exit fullscreen", keys: "Escape" },
     ],
   },
+  {
+    section: "Asset tabs",
+    items: [
+      { action: "Assets", keys: "1" },
+      { action: "Video", keys: "2" },
+      { action: "Image", keys: "3" },
+      { action: "Music", keys: "4" },
+      { action: "Speech", keys: "5" },
+      { action: "Jobs", keys: "6" },
+      { action: "Branches", keys: "7" },
+    ],
+  },
 ];
 
 interface ShortcutsModalProps {

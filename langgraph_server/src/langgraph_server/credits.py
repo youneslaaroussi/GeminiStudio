@@ -23,6 +23,9 @@ CREDITS_PER_ACTION: dict[str, int] = {
     "tts": 2,
     "image_generation": 4,
     "live_voice_chat": 3,
+    "upload_video": 5,
+    "upload_image": 2,
+    "upload_audio": 3,
 }
 
 
