@@ -11,6 +11,7 @@ from uuid import uuid4
 from langchain_core.tools import tool, InjectedToolArg
 
 from ..config import get_settings
+from ..credits import deduct_credits, get_credits_for_action, InsufficientCreditsError
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +118,20 @@ def generateVeoVideo(
             "status": "error",
             "message": "Please provide a more detailed prompt (at least 10 characters).",
             "reason": "invalid_prompt",
+        }
+
+    # Deduct credits before generation (cost varies by resolution)
+    cost = get_credits_for_action("veo_generation", resolution)
+    try:
+        deduct_credits(effective_user_id, cost, "veo_generation", settings)
+    except InsufficientCreditsError as e:
+        logger.warning("[VEO] Insufficient credits for user %s", effective_user_id)
+        return {
+            "status": "error",
+            "message": f"Insufficient credits. You need {e.required} R‑Credits for {resolution} video generation. Add credits in Gemini Studio Settings to continue.",
+            "reason": "insufficient_credits",
+            "required": e.required,
+            "current": e.current,
         }
 
     request_id = uuid4().hex

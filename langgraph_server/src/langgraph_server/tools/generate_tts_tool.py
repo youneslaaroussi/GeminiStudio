@@ -18,6 +18,7 @@ from google.oauth2 import service_account
 from langchain_core.tools import tool
 
 from ..config import Settings, get_settings
+from ..credits import deduct_credits, get_credits_for_action, InsufficientCreditsError
 
 logger = logging.getLogger(__name__)
 
@@ -320,6 +321,20 @@ def generateSpeech(
             "status": "error",
             "message": f"Invalid voice '{voice}'. Choose from: {voice_list}",
             "reason": "invalid_voice",
+        }
+
+    # Deduct credits before generation
+    cost = get_credits_for_action("tts")
+    try:
+        deduct_credits(user_id, cost, "tts", settings)
+    except InsufficientCreditsError as e:
+        logger.warning("[TTS] Insufficient credits for user %s", user_id)
+        return {
+            "status": "error",
+            "message": f"Insufficient credits. You need {e.required} R‑Credits for TTS generation. Add credits in Gemini Studio Settings to continue.",
+            "reason": "insufficient_credits",
+            "required": e.required,
+            "current": e.current,
         }
 
     request_id = uuid4().hex

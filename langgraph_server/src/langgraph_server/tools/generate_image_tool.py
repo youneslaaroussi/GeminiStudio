@@ -16,6 +16,7 @@ from google.oauth2 import service_account
 from langchain_core.tools import tool
 
 from ..config import Settings, get_settings
+from ..credits import deduct_credits, get_credits_for_action, InsufficientCreditsError
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +206,20 @@ def generateImage(
             "status": "error",
             "message": f"Invalid image_size '{image_size}'. Choose from {sorted(_SIZE_CHOICES)}.",
             "reason": "invalid_size",
+        }
+
+    # Deduct credits before generation
+    cost = get_credits_for_action("image_generation")
+    try:
+        deduct_credits(user_id, cost, "image_generation", settings)
+    except InsufficientCreditsError as e:
+        logger.warning("[BANANA] Insufficient credits for user %s", user_id)
+        return {
+            "status": "error",
+            "message": f"Insufficient credits. You need {e.required} R‑Credits for image generation. Add credits in Gemini Studio Settings to continue.",
+            "reason": "insufficient_credits",
+            "required": e.required,
+            "current": e.current,
         }
 
     request_id = uuid4().hex

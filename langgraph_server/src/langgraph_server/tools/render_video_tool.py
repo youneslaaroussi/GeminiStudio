@@ -15,6 +15,7 @@ from google.oauth2 import service_account
 from langchain_core.tools import tool, InjectedToolArg
 
 from ..config import Settings, get_settings
+from ..credits import deduct_credits, get_credits_for_action, InsufficientCreditsError
 from ..firebase import fetch_user_projects
 
 logger = logging.getLogger(__name__)
@@ -205,6 +206,20 @@ def renderVideo(
   output_quality = (quality or "web").lower()
   if output_quality not in _QUALITY_CHOICES:
     output_quality = "web"
+
+  # Deduct credits before render
+  cost = get_credits_for_action("render")
+  try:
+    deduct_credits(effective_user_id, cost, "render", settings)
+  except InsufficientCreditsError as e:
+    logger.warning("[RENDER] Insufficient credits for user %s", effective_user_id)
+    return {
+      "status": "error",
+      "message": f"Insufficient credits. You need {e.required} R‑Credits to render. Add credits in Gemini Studio Settings to continue.",
+      "reason": "insufficient_credits",
+      "required": e.required,
+      "current": e.current,
+    }
 
   resolution = project_data.get("resolution") or {}
   default_width = int(resolution.get("width") or 1920)

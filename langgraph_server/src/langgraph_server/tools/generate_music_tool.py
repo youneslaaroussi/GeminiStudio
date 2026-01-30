@@ -18,6 +18,7 @@ from google.oauth2 import service_account
 from langchain_core.tools import tool
 
 from ..config import Settings, get_settings
+from ..credits import deduct_credits, get_credits_for_action, InsufficientCreditsError
 
 logger = logging.getLogger(__name__)
 
@@ -268,6 +269,20 @@ def generateMusic(
             "status": "error",
             "message": f"Invalid duration_seconds '{duration_seconds}'. Choose from {sorted(_DURATION_CHOICES)}.",
             "reason": "invalid_duration",
+        }
+
+    # Deduct credits before generation
+    cost = get_credits_for_action("lyria_generation")
+    try:
+        deduct_credits(user_id, cost, "lyria_generation", settings)
+    except InsufficientCreditsError as e:
+        logger.warning("[LYRIA] Insufficient credits for user %s", user_id)
+        return {
+            "status": "error",
+            "message": f"Insufficient credits. You need {e.required} R‑Credits for music generation. Add credits in Gemini Studio Settings to continue.",
+            "reason": "insufficient_credits",
+            "required": e.required,
+            "current": e.current,
         }
 
     request_id = uuid4().hex

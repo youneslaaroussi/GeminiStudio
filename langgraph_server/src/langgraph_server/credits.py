@@ -26,8 +26,13 @@ CREDITS_PER_ACTION: dict[str, int] = {
 }
 
 
-def get_credits_for_action(action: str) -> int:
-    return CREDITS_PER_ACTION.get(action, 0)
+def get_credits_for_action(action: str, resolution: str | None = None) -> int:
+    """Get credits required for an action. Optional resolution for Veo."""
+    base = CREDITS_PER_ACTION.get(action, 0)
+    if action == "veo_generation" and resolution:
+        mult = {"720p": 1, "1080p": 2, "4k": 4}
+        return max(1, round(base * mult.get(resolution, 1)))
+    return base
 
 
 class InsufficientCreditsError(Exception):
