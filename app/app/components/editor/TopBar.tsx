@@ -67,6 +67,7 @@ interface TopBarProps {
   onShortcutsModalOpenChange?: (open: boolean) => void;
   onLoadReady?: (handler: () => void) => void;
   onExportReady?: (handler: () => void) => void;
+  onRefreshReady?: (handler: () => void) => void;
 }
 
 function userInitials(user: { displayName?: string | null; email?: string | null }): string {
@@ -80,7 +81,7 @@ function userInitials(user: { displayName?: string | null; email?: string | null
   return "?";
 }
 
-export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, onRenderDialogOpenChange, shortcutsModalOpen: shortcutsModalOpenProp, onShortcutsModalOpenChange, onLoadReady, onExportReady }: TopBarProps) {
+export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, onRenderDialogOpenChange, shortcutsModalOpen: shortcutsModalOpenProp, onShortcutsModalOpenChange, onLoadReady, onExportReady, onRefreshReady }: TopBarProps) {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { credits, refresh, loading: creditsLoading } = useCredits(user?.uid);
@@ -89,8 +90,10 @@ export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, 
   const updateProjectSettings = useProjectStore((s) => s.updateProjectSettings);
   const projectId = useProjectStore((s) => s.projectId);
   const saveStatus = useProjectStore((s) => s.saveStatus);
+  const refreshProjectFromFirebase = useProjectStore((s) => s.refreshProjectFromFirebase);
   const updateListProject = useProjectsListStore((s) => s.updateProject);
   const [isBusy, setIsBusy] = useState(false);
+  const [refreshBusy, setRefreshBusy] = useState(false);
   const [avatarImgError, setAvatarImgError] = useState(false);
   const [renderDialogOpenLocal, setRenderDialogOpenLocal] = useState(false);
   const [shortcutsModalOpenLocal, setShortcutsModalOpenLocal] = useState(false);
@@ -166,7 +169,6 @@ export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, 
       }
     } catch (error) {
       console.error("Failed to export project", error);
-      alert("Failed to export project. Check console for details.");
     } finally {
       setIsBusy(false);
     }
@@ -252,7 +254,6 @@ export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, 
       }
     } catch (error) {
       console.error("Failed to load project", error);
-      alert("Failed to load project. Check console for details.");
     } finally {
       setIsBusy(false);
     }
@@ -265,6 +266,30 @@ export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, 
   useEffect(() => {
     onExportReady?.(handleExport);
   }, [onExportReady, handleExport]);
+
+  const handleRefreshFromFirebase = useCallback(async () => {
+    if (!projectId || refreshBusy) return;
+    setRefreshBusy(true);
+    const minDuration = 600; // minimum animation duration for intentionality
+    const startTime = Date.now();
+    try {
+      await refreshProjectFromFirebase();
+    } catch (error) {
+      console.error('Failed to refresh project from Firebase', error);
+    } finally {
+      const elapsed = Date.now() - startTime;
+      const remaining = minDuration - elapsed;
+      if (remaining > 0) {
+        setTimeout(() => setRefreshBusy(false), remaining);
+      } else {
+        setRefreshBusy(false);
+      }
+    }
+  }, [projectId, refreshBusy, refreshProjectFromFirebase]);
+
+  useEffect(() => {
+    onRefreshReady?.(handleRefreshFromFirebase);
+  }, [onRefreshReady, handleRefreshFromFirebase]);
 
   return (
     <>
@@ -290,7 +315,27 @@ export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, 
           </button>
           <HistoryControls />
           {projectId && (
-            <BranchSelector projectId={projectId} />
+            <>
+              <BranchSelector projectId={projectId} />
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={handleRefreshFromFirebase}
+                      disabled={refreshBusy}
+                      className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+                      aria-label="Refresh project from Firebase"
+                    >
+                      <RefreshCw className={cn("size-4", refreshBusy && "animate-spin")} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>Refresh from Firebase (⌥⇧R)</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </>
           )}
         <div className="flex items-baseline gap-2">
           <EditableInput

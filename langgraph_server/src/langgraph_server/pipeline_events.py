@@ -34,6 +34,7 @@ async def subscribe_to_asset_pipeline(
     user_id: str,
     project_id: str,
     asset_name: str | None = None,
+    branch_id: str | None = None,
 ) -> None:
     """
     Register interest in an asset's pipeline completion.
@@ -46,12 +47,14 @@ async def subscribe_to_asset_pipeline(
         user_id: User ID
         project_id: Project ID
         asset_name: Optional asset name for display
+        branch_id: Optional branch ID for timeline operations
     """
     async with _subscription_lock:
         _subscribed_assets[asset_id] = {
             "threadId": thread_id,
             "userId": user_id,
             "projectId": project_id,
+            "branchId": branch_id,
             "assetName": asset_name,
             "subscribedAt": datetime.utcnow().isoformat() + "Z",
         }
@@ -209,10 +212,16 @@ class PipelineEventSubscriber:
 
         # Dispatch to agent
         configurable: Dict[str, str] = {"thread_id": thread_id}
-        if project_id:
-            configurable["project_id"] = project_id
-        if user_id:
-            configurable["user_id"] = user_id
+        # Get user_id and project_id from subscription if not in event
+        sub_user_id = user_id or subscription.get("userId")
+        sub_project_id = project_id or subscription.get("projectId")
+        sub_branch_id = subscription.get("branchId")
+        if sub_project_id:
+            configurable["project_id"] = sub_project_id
+        if sub_user_id:
+            configurable["user_id"] = sub_user_id
+        if sub_branch_id:
+            configurable["branch_id"] = sub_branch_id
 
         try:
             from .agent import graph

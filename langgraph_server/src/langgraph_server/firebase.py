@@ -623,21 +623,26 @@ def create_project(user_id: str, name: str, settings: Settings) -> dict[str, Any
     }
 
 
-def _extract_media_url(text: str) -> tuple[str | None, str | None]:
-    """Extract media URL from text. Returns (url, media_type) or (None, None)."""
+def _extract_media_url(text: str, base_url: str | None = None) -> tuple[str | None, str | None]:
+    """Extract media URL from text. Returns (url, media_type) or (None, None).
+    
+    Args:
+        text: The text to search for media URLs
+        base_url: Optional base URL to prepend to relative URLs (e.g., "https://app.example.com")
+    """
     import re
     import logging
     logger = logging.getLogger(__name__)
 
     url = None
 
-    # 1. Markdown [text](url) or [url](url) – use URL from parentheses (signed link)
-    md = re.search(r'\[([^\]]*)\]\((https?://[^\)]+)\)', text)
+    # 1. Markdown [text](url) – supports both absolute and relative URLs
+    md = re.search(r'\[([^\]]*)\]\((https?://[^\)]+|/api/assets/[^\)]+)\)', text)
     if md:
         url = md.group(2)
         logger.debug(f"[MEDIA_EXTRACT] Found markdown URL: {url[:80]}...")
 
-    # 2. Raw URL
+    # 2. Raw absolute URL with media extension
     if not url:
         raw = re.search(
             r'(https?://[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|m4a|aac|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?)',
@@ -646,11 +651,25 @@ def _extract_media_url(text: str) -> tuple[str | None, str | None]:
         )
         if raw:
             url = raw.group(1)
-            logger.info(f"[MEDIA_EXTRACT] Found raw URL ending: ...{url[-50:]}")
-        else:
-            logger.info(f"[MEDIA_EXTRACT] No media URL found in text ({len(text)} chars)")
+            logger.info(f"[MEDIA_EXTRACT] Found raw absolute URL: ...{url[-50:]}")
+
+    # 3. Raw relative proxy URL (/api/assets/...)
+    if not url:
+        proxy = re.search(
+            r'(/api/assets/[a-f0-9-]+/file/[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|m4a|aac|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?)',
+            text,
+            re.IGNORECASE,
+        )
+        if proxy:
+            url = proxy.group(1)
+            logger.info(f"[MEDIA_EXTRACT] Found proxy URL: {url[:80]}...")
+            # Convert relative proxy URL to absolute if base_url provided
+            if base_url:
+                url = base_url.rstrip('/') + url
+                logger.info(f"[MEDIA_EXTRACT] Converted to absolute: {url[:80]}...")
 
     if not url:
+        logger.info(f"[MEDIA_EXTRACT] No media URL found in text ({len(text)} chars)")
         return None, None
 
     lower = url.lower().split('?')[0]
@@ -713,18 +732,22 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
         logger.warning("Telegram bot token not configured")
         return False
 
-    base_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}"
+    telegram_base_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}"
     
-    # Check if message contains a media URL
-    media_url, media_type = _extract_media_url(text)
+    # Check if message contains a media URL (pass public_app_url to convert relative proxy URLs)
+    media_url, media_type = _extract_media_url(text, base_url=settings.public_app_url)
     logger.info(f"[TELEGRAM] Media detection: url_found={media_url is not None}, type={media_type}, text_preview={text[:150]}...")
     
     async with httpx.AsyncClient() as client:
         if media_url and media_type:
             # Remove markdown [text](url) or raw URL from caption
             import re
-            caption = re.sub(r'\[[^\]]*\]\(https?://[^\)]+\)', '', text)
+            # Handle both absolute URLs and relative proxy URLs in markdown
+            caption = re.sub(r'\[[^\]]*\]\((https?://[^\)]+|/api/assets/[^\)]+)\)', '', text)
+            # Remove raw absolute URLs
             caption = re.sub(r'https?://[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|m4a|aac|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?', '', caption, flags=re.IGNORECASE)
+            # Remove raw relative proxy URLs
+            caption = re.sub(r'/api/assets/[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|m4a|aac|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?', '', caption, flags=re.IGNORECASE)
             caption = re.sub(r'\s+', ' ', caption).strip().strip('.:')
             
             # Convert caption to MarkdownV2
@@ -732,19 +755,19 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
                 caption = _convert_to_telegram_markdown(caption)
             
             if media_type == 'video':
-                endpoint = f"{base_url}/sendVideo"
+                endpoint = f"{telegram_base_url}/sendVideo"
                 payload = {"chat_id": chat_id, "video": media_url, "caption": caption[:1024] if caption else None, "parse_mode": "MarkdownV2"}
             elif media_type == 'animation':
-                endpoint = f"{base_url}/sendAnimation"
+                endpoint = f"{telegram_base_url}/sendAnimation"
                 payload = {"chat_id": chat_id, "animation": media_url, "caption": caption[:1024] if caption else None, "parse_mode": "MarkdownV2"}
             elif media_type == 'audio':
-                endpoint = f"{base_url}/sendAudio"
+                endpoint = f"{telegram_base_url}/sendAudio"
                 payload = {"chat_id": chat_id, "audio": media_url, "caption": caption[:1024] if caption else None, "parse_mode": "MarkdownV2"}
             elif media_type == 'photo':
-                endpoint = f"{base_url}/sendPhoto"
+                endpoint = f"{telegram_base_url}/sendPhoto"
                 payload = {"chat_id": chat_id, "photo": media_url, "caption": caption[:1024] if caption else None, "parse_mode": "MarkdownV2"}
             else:
-                endpoint = f"{base_url}/sendMessage"
+                endpoint = f"{telegram_base_url}/sendMessage"
                 formatted_text = _convert_to_telegram_markdown(text)
                 payload = {"chat_id": chat_id, "text": formatted_text, "parse_mode": "MarkdownV2"}
             
@@ -782,7 +805,7 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
         # Send as text message with MarkdownV2
         formatted_text = _convert_to_telegram_markdown(text)
         response = await client.post(
-            f"{base_url}/sendMessage",
+            f"{telegram_base_url}/sendMessage",
             json={"chat_id": chat_id, "text": formatted_text, "parse_mode": "MarkdownV2"},
             timeout=10.0
         )
@@ -795,7 +818,7 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
             # Fallback to plain text if MarkdownV2 fails
             logger.warning(f"MarkdownV2 failed, trying plain text: {response.text}")
             response = await client.post(
-                f"{base_url}/sendMessage",
+                f"{telegram_base_url}/sendMessage",
                 json={"chat_id": chat_id, "text": text},
                 timeout=10.0
             )

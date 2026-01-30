@@ -278,6 +278,7 @@ def renderVideo(
       "projectId": (project_id or target_project.get("id")),
       "userId": effective_user_id,
       "requestId": request_id,
+      "branchId": effective_branch_id,
     }.items()
     if value is not None
   }

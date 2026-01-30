@@ -45,13 +45,15 @@ def create_graph(settings: Settings | None = None):
         last_message = state["messages"][-1]
         
         # Extract context from runtime (passed via graph.stream(..., context={...}))
+        # Falls back to reading directly from configurable (for ainvoke() calls)
         runtime = config.get("configurable", {}).get("__pregel_runtime")
         ctx = getattr(runtime, "context", None) or {}
+        configurable = config.get("configurable", {})
         
-        thread_id = ctx.get("thread_id")
-        user_id = ctx.get("user_id")
-        project_id = ctx.get("project_id")
-        branch_id = ctx.get("branch_id")
+        thread_id = ctx.get("thread_id") or configurable.get("thread_id")
+        user_id = ctx.get("user_id") or configurable.get("user_id")
+        project_id = ctx.get("project_id") or configurable.get("project_id")
+        branch_id = ctx.get("branch_id") or configurable.get("branch_id")
         
         logger.info("[AGENT] call_tool: context = thread_id=%s, user_id=%s, project_id=%s, branch_id=%s",
                     thread_id, user_id, project_id, branch_id)

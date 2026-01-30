@@ -96,6 +96,7 @@ interface ProjectStore {
   loadProject: (id: string) => void;
   saveProject: () => void;
   forceSyncToFirestore: () => Promise<void>;
+  refreshProjectFromFirebase: () => Promise<void>;
   exportProject: () => void;
   hasUnsavedChanges: boolean;
   lastSavedSnapshot: string;
@@ -1057,6 +1058,19 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
           await syncManager.forceSyncToFirestore();
         } catch (error) {
           console.error('Failed to force sync to Firestore:', error);
+          throw error;
+        }
+      },
+
+      refreshProjectFromFirebase: async () => {
+        if (!syncManager) {
+          console.warn('[SYNC] Cannot refresh: sync not initialized');
+          return;
+        }
+        try {
+          await syncManager.refreshFromFirestore();
+        } catch (error) {
+          console.error('Failed to refresh project from Firebase:', error);
           throw error;
         }
       },

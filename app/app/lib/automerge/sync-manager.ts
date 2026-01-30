@@ -324,6 +324,13 @@ export class ProjectSyncManager {
   }
 
   /**
+   * Fetch latest project state from Firestore and update local state (source of truth refresh)
+   */
+  async refreshFromFirestore(): Promise<void> {
+    await this.syncWithFirestore();
+  }
+
+  /**
    * Undo last change
    */
   async undo(): Promise<void> {

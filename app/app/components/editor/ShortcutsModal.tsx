@@ -13,7 +13,8 @@ const SHORTCUTS: { section: string; items: { action: string; keys: string }[] }[
   {
     section: "General",
     items: [
-      { action: "Show this shortcuts modal", keys: "Ctrl+/ / ⌘/" },
+      { action: "Open command menu", keys: "Ctrl+K / ⌘K" },
+      { action: "Show keyboard shortcuts", keys: "Ctrl+/ / ⌘/" },
     ],
   },
   {
@@ -22,6 +23,7 @@ const SHORTCUTS: { section: string; items: { action: string; keys: string }[] }[
       { action: "Load project", keys: "Ctrl+O / ⌘O" },
       { action: "Save project", keys: "Ctrl+S / ⌘S" },
       { action: "Export project", keys: "Ctrl+E / ⌘E" },
+      { action: "Refresh project", keys: "Alt+Shift+R / ⌥⇧R" },
       { action: "Open render modal", keys: "Ctrl+Shift+R / ⌘⇧R" },
     ],
   },
@@ -80,7 +82,10 @@ export function ShortcutsModal({ open, onOpenChange }: ShortcutsModalProps) {
                       <span className="text-sm text-muted-foreground">
                         {action}
                       </span>
-                      <kbd className="shrink-0 rounded border border-border bg-muted px-2 py-0.5 text-xs font-mono tabular-nums">
+                      <kbd 
+                        className="shrink-0 rounded-md border border-border/50 bg-muted/80 px-2.5 py-1 text-xs tracking-wide shadow-sm"
+                        style={{ fontFamily: "var(--font-keyboard)" }}
+                      >
                         {keys}
                       </kbd>
                     </div>

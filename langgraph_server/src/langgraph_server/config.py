@@ -64,6 +64,9 @@ class Settings(BaseSettings):
         default=None, alias="TELEGRAM_API_BASE_URL"
     )
 
+    # Public app URL for converting relative URLs to absolute (e.g., for Telegram media)
+    public_app_url: str | None = Field(default=None, alias="PUBLIC_APP_URL")
+
     # Asset service
     asset_service_url: str | None = Field(
         default="http://localhost:8081", alias="ASSET_SERVICE_URL"

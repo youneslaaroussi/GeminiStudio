@@ -328,14 +328,16 @@ class VeoEventPoller:
             )
             
             if asset_data:
-                # Use asset service proxy URL (CORS-safe)
+                # Prefer signedUrl for external clients (Telegram) - it's a full https:// URL
+                # Fall back to proxyUrl for web app (CORS-safe)
+                download_url = asset_data.get("signedUrl") or asset_data.get("proxyUrl")
                 await self._dispatch_event(
                     thread_id=thread_id,
                     event_type="veo.completed",
                     agent_meta=agent_meta,
                     extra_meta=extra_meta,
                     gcs_uri=asset_data.get("gcsUri"),
-                    download_url=asset_data.get("proxyUrl"),
+                    download_url=download_url,
                     asset_id=asset_data.get("assetId"),
                 )
             else:
@@ -430,10 +432,13 @@ class VeoEventPoller:
         configurable: Dict[str, str] = {"thread_id": thread_id}
         project_id = agent_meta.get("projectId")
         user_id = agent_meta.get("userId")
+        branch_id = agent_meta.get("branchId")
         if project_id:
             configurable["project_id"] = project_id
         if user_id:
             configurable["user_id"] = user_id
+        if branch_id:
+            configurable["branch_id"] = branch_id
 
         messages = self._build_messages(
             event_type=event_type,
@@ -596,8 +601,9 @@ class VeoEventPoller:
 
         system_prompt = (
             "Veo video generation status update received. Craft a concise message for the user "
-            "summarizing the outcome. If successful, include the download link and suggest they "
-            "can add it to their project timeline. If failed, explain the issue briefly."
+            "summarizing the outcome. If successful, include the video URL using markdown link format "
+            "like [Watch your video](URL) so it can be embedded. Suggest they can add it to their "
+            "project timeline. If failed, explain the issue briefly."
         )
 
         return [

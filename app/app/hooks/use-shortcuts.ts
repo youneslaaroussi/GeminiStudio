@@ -26,7 +26,18 @@ export function useShortcuts(shortcuts: ShortcutConfig[]) {
       if (isInput) return;
 
       for (const config of shortcuts) {
-        if (e.key.toLowerCase() === config.key.toLowerCase()) {
+        // Use e.code for letter/number keys when alt is involved (Mac produces special chars with Option)
+        // e.code gives physical key like "KeyR", "KeyS", etc.
+        const configKeyLower = config.key.toLowerCase();
+        let keyMatches = e.key.toLowerCase() === configKeyLower;
+        
+        // Fallback to e.code for single letter keys (handles Mac Option key producing special chars)
+        if (!keyMatches && configKeyLower.length === 1 && /^[a-z]$/.test(configKeyLower)) {
+          const expectedCode = `Key${configKeyLower.toUpperCase()}`;
+          keyMatches = e.code === expectedCode;
+        }
+        
+        if (keyMatches) {
           // Check modifiers
           if (config.ctrlKey !== undefined && config.ctrlKey !== e.ctrlKey) continue;
           if (config.shiftKey !== undefined && config.shiftKey !== e.shiftKey) continue;

@@ -322,30 +322,47 @@ def addClipToTimeline(
         # Try to extract asset_id and filename from GCS URL if not provided directly
         effective_asset_id = asset_id
         asset_filename = None
+        is_already_proxy_url = False
         if src and clip_type in ("video", "audio", "image"):
-            # GCS URL format: https://storage.googleapis.com/.../assets/{asset_id}/{filename}?query...
             import re
-            # Extract asset_id
-            asset_match = re.search(r'/assets/([a-f0-9-]{36})/', src)
-            if asset_match:
+            
+            # Check if src is already a proxy URL (starts with /api/assets/)
+            proxy_match = re.match(r'^/api/assets/([a-f0-9-]{36})/file/(.+?)(?:\?|$)', src)
+            if proxy_match:
+                # Already a proxy URL, extract asset_id and use as-is
                 if not effective_asset_id:
-                    effective_asset_id = asset_match.group(1)
-                    logger.info("[ADD_CLIP] Extracted asset_id from URL: %s", effective_asset_id)
-                # Extract filename (after asset_id, before query params)
-                filename_match = re.search(r'/assets/[a-f0-9-]{36}/([^?]+)', src)
-                if filename_match:
-                    asset_filename = filename_match.group(1)
-                    logger.info("[ADD_CLIP] Extracted filename from URL: %s", asset_filename)
+                    effective_asset_id = proxy_match.group(1)
+                is_already_proxy_url = True
+                logger.info("[ADD_CLIP] Source is already a proxy URL, using as-is: %s", src[:80])
+            else:
+                # GCS URL format: https://storage.googleapis.com/.../assets/{asset_id}/{filename}?query...
+                # Extract asset_id
+                asset_match = re.search(r'/assets/([a-f0-9-]{36})/', src)
+                if asset_match:
+                    if not effective_asset_id:
+                        effective_asset_id = asset_match.group(1)
+                        logger.info("[ADD_CLIP] Extracted asset_id from URL: %s", effective_asset_id)
+                    # Extract filename (after asset_id, before query params)
+                    filename_match = re.search(r'/assets/[a-f0-9-]{36}/([^?]+)', src)
+                    if filename_match:
+                        asset_filename = filename_match.group(1)
+                        logger.info("[ADD_CLIP] Extracted filename from URL: %s", asset_filename)
         
         if effective_asset_id and clip_type in ("video", "audio", "image"):
-            # Include filename in proxy URL for proper extension detection
-            if asset_filename:
-                proxy_src = f"/api/assets/{effective_asset_id}/file/{asset_filename}?projectId={project_id}&userId={user_id}"
+            if is_already_proxy_url:
+                # Already a valid proxy URL, use as-is
+                clip["src"] = src
+                clip["assetId"] = effective_asset_id
+                logger.info("[ADD_CLIP] Using existing proxy URL: %s", src[:80])
             else:
-                proxy_src = f"/api/assets/{effective_asset_id}/file?projectId={project_id}&userId={user_id}"
-            clip["src"] = proxy_src
-            clip["assetId"] = effective_asset_id
-            logger.info("[ADD_CLIP] Using proxy URL: %s", proxy_src)
+                # Build new proxy URL - include filename for proper extension detection
+                if asset_filename:
+                    proxy_src = f"/api/assets/{effective_asset_id}/file/{asset_filename}?projectId={project_id}&userId={user_id}"
+                else:
+                    proxy_src = f"/api/assets/{effective_asset_id}/file?projectId={project_id}&userId={user_id}"
+                clip["src"] = proxy_src
+                clip["assetId"] = effective_asset_id
+                logger.info("[ADD_CLIP] Using proxy URL: %s", proxy_src)
         elif src:
             clip["src"] = src
             logger.warning("[ADD_CLIP] Using raw src URL (no proxy): %s", src[:80])

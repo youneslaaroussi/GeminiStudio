@@ -158,10 +158,13 @@ class RenderEventSubscriber:
         configurable: Dict[str, str] = {"thread_id": thread_id}
         project_id = agent_meta.get("projectId")
         user_id = agent_meta.get("userId")
+        branch_id = agent_meta.get("branchId")
         if project_id:
             configurable["project_id"] = project_id
         if user_id:
             configurable["user_id"] = user_id
+        if branch_id:
+            configurable["branch_id"] = branch_id
 
         messages = self._build_messages(event_type, event)
         if not messages:

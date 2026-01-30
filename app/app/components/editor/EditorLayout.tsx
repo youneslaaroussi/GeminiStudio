@@ -29,6 +29,7 @@ import { VoiceChat } from "@/app/components/VoiceChat";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useShortcuts } from "@/app/hooks/use-shortcuts";
 import { usePageReloadBlocker } from "@/app/hooks/use-page-reload-blocker";
+import { CommandMenu } from "./CommandMenu";
 
 export function EditorLayout() {
   const [player, setPlayer] = useState<Player | null>(null);
@@ -40,11 +41,13 @@ export function EditorLayout() {
   const [rightPanelTab, setRightPanelTab] = useState<"toolbox" | "chat">("chat");
   const [renderDialogOpen, setRenderDialogOpen] = useState(false);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   const [isPreviewFullscreen, setPreviewFullscreen] = useState(false);
   const recenterRef = useRef<(() => void) | null>(null);
   const previewRef = useRef<PreviewPanelHandle | null>(null);
   const loadRef = useRef<(() => void) | null>(null);
   const exportRef = useRef<(() => void) | null>(null);
+  const refreshRef = useRef<(() => void) | null>(null);
 
   const handleRecenterReady = useCallback((recenter: () => void) => {
     recenterRef.current = recenter;
@@ -56,6 +59,10 @@ export function EditorLayout() {
 
   const handleExportReady = useCallback((export_: () => void) => {
     exportRef.current = export_;
+  }, []);
+
+  const handleRefreshReady = useCallback((refresh: () => void) => {
+    refreshRef.current = refresh;
   }, []);
 
   // Connect to Zustand store
@@ -293,6 +300,27 @@ export function EditorLayout() {
       handler: () => setShortcutsModalOpen((prev) => !prev),
       preventDefault: true,
     },
+    // Refresh project from Firebase: Alt+Shift+R / Option+Shift+R
+    {
+      key: 'r',
+      altKey: true,
+      shiftKey: true,
+      handler: () => refreshRef.current?.(),
+      preventDefault: true,
+    },
+    // Command menu: Ctrl+K / Cmd+K
+    {
+      key: 'k',
+      ctrlKey: true,
+      handler: () => setCommandMenuOpen((prev) => !prev),
+      preventDefault: true,
+    },
+    {
+      key: 'k',
+      metaKey: true,
+      handler: () => setCommandMenuOpen((prev) => !prev),
+      preventDefault: true,
+    },
   ]);
 
   useEffect(() => {
@@ -397,6 +425,7 @@ export function EditorLayout() {
           onShortcutsModalOpenChange={setShortcutsModalOpen}
           onLoadReady={handleLoadReady}
           onExportReady={handleExportReady}
+          onRefreshReady={handleRefreshReady}
         />
         <div className="flex-1 min-h-0">
           <ResizablePanelGroup direction="horizontal" className="h-full">
@@ -653,6 +682,30 @@ export function EditorLayout() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CommandMenu
+        open={commandMenuOpen}
+        onOpenChange={setCommandMenuOpen}
+        onSave={() => useProjectStore.getState().saveProject()}
+        onLoad={() => loadRef.current?.()}
+        onExport={() => exportRef.current?.()}
+        onRefresh={() => refreshRef.current?.()}
+        onRender={() => setRenderDialogOpen(true)}
+        onTogglePlay={togglePlay}
+        onToggleMute={handleToggleMute}
+        onToggleLoop={handleToggleLoop}
+        onRecenter={() => previewRef.current?.recenter()}
+        onEnterFullscreen={() => previewRef.current?.enterFullscreen()}
+        onExitFullscreen={() => previewRef.current?.exitFullscreen()}
+        onShowShortcuts={() => setShortcutsModalOpen(true)}
+        onOpenToolbox={() => setRightPanelTab("toolbox")}
+        onOpenChat={() => setRightPanelTab("chat")}
+        onToggleVoice={() => setShowVoiceChat((prev) => !prev)}
+        isPlaying={isPlaying}
+        isMuted={isMuted}
+        isLooping={isLooping}
+        isFullscreen={isPreviewFullscreen}
+      />
     </>
   );
 }

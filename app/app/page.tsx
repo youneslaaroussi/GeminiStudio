@@ -16,6 +16,8 @@ import {
   MoreHorizontal,
   Pencil,
   Play,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import {
   Dialog,
@@ -40,6 +42,7 @@ import { AppShell } from "@/app/components/layout";
 import { cn } from "@/lib/utils";
 
 type ViewMode = "grid" | "list";
+type SortOption = "name-asc" | "name-desc" | "date-asc" | "date-desc";
 
 function ProjectsContent() {
   const router = useRouter();
@@ -51,9 +54,12 @@ function ProjectsContent() {
   const loadProjects = useProjectsListStore((s) => s.loadProjects);
   const setUserId = useProjectsListStore((s) => s.setUserId);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
+  const [projectsToDelete, setProjectsToDelete] = useState<string[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
+  const [sortOption, setSortOption] = useState<SortOption>("date-desc");
 
   useEffect(() => {
     if (user) {
@@ -62,12 +68,76 @@ function ProjectsContent() {
     }
   }, [user, loadProjects, setUserId]);
 
-  // Filter projects based on search
-  const filteredProjects = useMemo(() => {
-    if (!searchQuery.trim()) return projects;
-    const query = searchQuery.toLowerCase();
-    return projects.filter((p) => p.name.toLowerCase().includes(query));
-  }, [projects, searchQuery]);
+  // Filter and sort projects
+  const filteredAndSortedProjects = useMemo(() => {
+    let filtered = projects;
+    
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter((p) => p.name.toLowerCase().includes(query));
+    }
+    
+    // Sort projects
+    const sorted = [...filtered].sort((a, b) => {
+      switch (sortOption) {
+        case "name-asc":
+          return a.name.localeCompare(b.name);
+        case "name-desc":
+          return b.name.localeCompare(a.name);
+        case "date-asc":
+          return a.lastModified - b.lastModified;
+        case "date-desc":
+        default:
+          return b.lastModified - a.lastModified;
+      }
+    });
+    
+    return sorted;
+  }, [projects, searchQuery, sortOption]);
+
+  // Check if all visible projects are selected
+  const allSelected = filteredAndSortedProjects.length > 0 && 
+    filteredAndSortedProjects.every((p) => selectedProjects.has(p.id));
+  
+  // Check if some (but not all) projects are selected
+  const someSelected = filteredAndSortedProjects.some((p) => selectedProjects.has(p.id)) && !allSelected;
+
+  // Handle keyboard shortcuts: ESC to deselect all, Ctrl/Cmd+A to select all
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // ESC: Deselect all
+      if (e.key === "Escape" && selectedProjects.size > 0) {
+        setSelectedProjects(new Set());
+      }
+      
+      // Ctrl/Cmd+A: Select all visible projects
+      if ((e.ctrlKey || e.metaKey) && e.key === "a" && filteredAndSortedProjects.length > 0) {
+        e.preventDefault(); // Prevent browser's default select all text behavior
+        
+        // Select all visible projects
+        const allVisibleSelected = filteredAndSortedProjects.every((p) => selectedProjects.has(p.id));
+        if (allVisibleSelected) {
+          // Deselect all visible projects
+          setSelectedProjects((prev) => {
+            const next = new Set(prev);
+            filteredAndSortedProjects.forEach((p) => next.delete(p.id));
+            return next;
+          });
+        } else {
+          // Select all visible projects
+          setSelectedProjects((prev) => {
+            const next = new Set(prev);
+            filteredAndSortedProjects.forEach((p) => next.add(p.id));
+            return next;
+          });
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedProjects, filteredAndSortedProjects]);
 
   const handleNewProject = async () => {
     if (!user) return;
@@ -89,7 +159,6 @@ function ProjectsContent() {
       router.push(`/editor/${id}`);
     } catch (err) {
       console.error("Import failed", err);
-      alert("Failed to import project");
     }
   };
 
@@ -98,10 +167,73 @@ function ProjectsContent() {
     setProjectToDelete(id);
   };
 
+  const handleDeleteAllClick = () => {
+    const selected = Array.from(selectedProjects);
+    if (selected.length > 0) {
+      setProjectsToDelete(selected);
+    }
+  };
+
   const confirmDelete = async () => {
     if (projectToDelete) {
       await removeProject(projectToDelete);
       setProjectToDelete(null);
+      setSelectedProjects((prev) => {
+        const next = new Set(prev);
+        next.delete(projectToDelete);
+        return next;
+      });
+    }
+  };
+
+  const confirmDeleteAll = async () => {
+    if (projectsToDelete.length > 0) {
+      for (const id of projectsToDelete) {
+        await removeProject(id);
+      }
+      setProjectsToDelete([]);
+      setSelectedProjects(new Set());
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (allSelected) {
+      // Deselect all visible projects
+      setSelectedProjects((prev) => {
+        const next = new Set(prev);
+        filteredAndSortedProjects.forEach((p) => next.delete(p.id));
+        return next;
+      });
+    } else {
+      // Select all visible projects
+      setSelectedProjects((prev) => {
+        const next = new Set(prev);
+        filteredAndSortedProjects.forEach((p) => next.add(p.id));
+        return next;
+      });
+    }
+  };
+
+  const handleToggleSelect = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setSelectedProjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleCardClick = (e: React.MouseEvent, id: string) => {
+    // If selection mode is active (any projects selected), toggle selection instead of navigating
+    if (selectedProjects.size > 0) {
+      handleToggleSelect(e, id);
+    } else {
+      // Normal behavior: navigate to project
+      router.push(`/editor/${id}`);
     }
   };
 
@@ -136,6 +268,8 @@ function ProjectsContent() {
     ? projects.find((p) => p.id === projectToDelete)?.name
     : null;
 
+  const selectedCount = selectedProjects.size;
+
   return (
     <div className="min-h-[calc(100vh-3.5rem)]">
       {/* Hero Section */}
@@ -163,6 +297,31 @@ function ProjectsContent() {
       <div className="max-w-7xl mx-auto px-6 py-6">
         {/* Toolbar */}
         <div className="flex items-center gap-4 mb-6">
+          {/* Select All Checkbox */}
+          {filteredAndSortedProjects.length > 0 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSelectAll}
+                className={cn(
+                  "flex items-center justify-center w-5 h-5 rounded border transition-colors",
+                  allSelected
+                    ? "bg-white border-white text-slate-900"
+                    : someSelected
+                    ? "bg-white/50 border-white/50 text-slate-900"
+                    : "border-slate-600 hover:border-slate-500"
+                )}
+              >
+                {allSelected && <Check className="size-3.5" />}
+                {someSelected && <div className="w-2 h-2 bg-slate-900 rounded-sm" />}
+              </button>
+              {selectedCount > 0 && (
+                <span className="text-sm text-slate-400">
+                  {selectedCount} {selectedCount === 1 ? "selected" : "selected"}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Search */}
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-500" />
@@ -173,6 +332,74 @@ function ProjectsContent() {
               className="pl-10 bg-slate-900 border-slate-800 text-white placeholder:text-slate-500 focus:border-slate-700"
             />
           </div>
+
+          {/* Sort Dropdown */}
+          {filteredAndSortedProjects.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white"
+                >
+                  Sort by
+                  <ChevronDown className="size-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-slate-900 border-slate-700">
+                <DropdownMenuItem
+                  onClick={() => setSortOption("name-asc")}
+                  className={cn(
+                    "text-slate-300 focus:text-white focus:bg-slate-800",
+                    sortOption === "name-asc" && "bg-slate-800"
+                  )}
+                >
+                  Name (A-Z)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setSortOption("name-desc")}
+                  className={cn(
+                    "text-slate-300 focus:text-white focus:bg-slate-800",
+                    sortOption === "name-desc" && "bg-slate-800"
+                  )}
+                >
+                  Name (Z-A)
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-slate-700" />
+                <DropdownMenuItem
+                  onClick={() => setSortOption("date-desc")}
+                  className={cn(
+                    "text-slate-300 focus:text-white focus:bg-slate-800",
+                    sortOption === "date-desc" && "bg-slate-800"
+                  )}
+                >
+                  Date (Newest)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setSortOption("date-asc")}
+                  className={cn(
+                    "text-slate-300 focus:text-white focus:bg-slate-800",
+                    sortOption === "date-asc" && "bg-slate-800"
+                  )}
+                >
+                  Date (Oldest)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {/* Delete All Button */}
+          {selectedCount > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDeleteAllClick}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              <Trash2 className="size-4 mr-2" />
+              Delete ({selectedCount})
+            </Button>
+          )}
 
           <div className="flex items-center gap-2 ml-auto">
             {/* Refresh */}
@@ -231,25 +458,47 @@ function ProjectsContent() {
         </div>
 
         {/* Projects */}
-        {filteredProjects.length > 0 ? (
+        {filteredAndSortedProjects.length > 0 ? (
           <>
             {/* Results count */}
             {searchQuery && (
               <p className="text-sm text-slate-500 mb-4">
-                {filteredProjects.length} {filteredProjects.length === 1 ? "result" : "results"} for "{searchQuery}"
+                {filteredAndSortedProjects.length} {filteredAndSortedProjects.length === 1 ? "result" : "results"} for "{searchQuery}"
               </p>
             )}
 
             {viewMode === "grid" ? (
               /* Grid View */
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filteredProjects.map((project) => (
+                {filteredAndSortedProjects.map((project) => {
+                  const isSelected = selectedProjects.has(project.id);
+                  return (
                   <div
                     key={project.id}
-                    onClick={() => router.push(`/editor/${project.id}`)}
-                    className="group cursor-pointer"
+                    onClick={(e) => handleCardClick(e, project.id)}
+                    className={cn(
+                      "group cursor-pointer relative",
+                      isSelected && "ring-2 ring-white ring-offset-2 ring-offset-slate-900 rounded-xl"
+                    )}
                   >
-                    <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/50 hover:border-slate-700 hover:bg-slate-900 transition-all duration-200 hover:shadow-xl hover:shadow-black/20">
+                    <div className={cn(
+                      "overflow-hidden rounded-xl border bg-slate-900/50 hover:border-slate-700 hover:bg-slate-900 transition-all duration-200 hover:shadow-xl hover:shadow-black/20",
+                      isSelected ? "border-white" : "border-slate-800"
+                    )}>
+                      {/* Checkbox */}
+                      <div className="absolute top-2 left-2 z-10">
+                        <button
+                          onClick={(e) => handleToggleSelect(e, project.id)}
+                          className={cn(
+                            "flex items-center justify-center w-5 h-5 rounded border transition-colors backdrop-blur-sm",
+                            isSelected
+                              ? "bg-white border-white text-slate-900"
+                              : "bg-black/50 border-white/50 hover:bg-black/70 hover:border-white"
+                          )}
+                        >
+                          {isSelected && <Check className="size-3.5" />}
+                        </button>
+                      </div>
                       {/* Thumbnail */}
                       <div className="relative aspect-video bg-slate-950 overflow-hidden">
                         {project.thumbnail ? (
@@ -319,17 +568,37 @@ function ProjectsContent() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               /* List View */
               <div className="rounded-xl border border-slate-800 overflow-hidden divide-y divide-slate-800">
-                {filteredProjects.map((project) => (
+                {filteredAndSortedProjects.map((project) => {
+                  const isSelected = selectedProjects.has(project.id);
+                  return (
                   <div
                     key={project.id}
-                    onClick={() => router.push(`/editor/${project.id}`)}
-                    className="flex items-center gap-4 p-4 bg-slate-900/50 hover:bg-slate-900 cursor-pointer transition-colors group"
+                    onClick={(e) => handleCardClick(e, project.id)}
+                    className={cn(
+                      "flex items-center gap-4 p-4 cursor-pointer transition-colors group",
+                      isSelected
+                        ? "bg-slate-800 border-l-4 border-l-white"
+                        : "bg-slate-900/50 hover:bg-slate-900"
+                    )}
                   >
+                    {/* Checkbox */}
+                    <button
+                      onClick={(e) => handleToggleSelect(e, project.id)}
+                      className={cn(
+                        "flex items-center justify-center w-5 h-5 rounded border transition-colors shrink-0",
+                        isSelected
+                          ? "bg-white border-white text-slate-900"
+                          : "border-slate-600 hover:border-slate-500"
+                      )}
+                    >
+                      {isSelected && <Check className="size-3.5" />}
+                    </button>
                     {/* Thumbnail */}
                     <div className="w-32 h-20 rounded-lg overflow-hidden bg-slate-950 shrink-0">
                       {project.thumbnail ? (
@@ -402,7 +671,8 @@ function ProjectsContent() {
                       </DropdownMenu>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>
@@ -486,6 +756,30 @@ function ProjectsContent() {
             </Button>
             <Button variant="destructive" onClick={confirmDelete}>
               Delete project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete All Confirmation Dialog */}
+      <Dialog open={projectsToDelete.length > 0} onOpenChange={(open) => !open && setProjectsToDelete([])}>
+        <DialogContent className="bg-slate-900 border-slate-700 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white">Delete projects</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Are you sure you want to delete {projectsToDelete.length} {projectsToDelete.length === 1 ? "project" : "projects"}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="ghost"
+              onClick={() => setProjectsToDelete([])}
+              className="text-slate-300 hover:text-white hover:bg-slate-800"
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteAll}>
+              Delete {projectsToDelete.length} {projectsToDelete.length === 1 ? "project" : "projects"}
             </Button>
           </DialogFooter>
         </DialogContent>

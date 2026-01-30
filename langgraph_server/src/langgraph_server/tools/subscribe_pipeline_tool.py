@@ -69,6 +69,7 @@ async def subscribeToAssetPipeline(
         }
 
     effective_project_id = project_id or context.get("project_id")
+    effective_branch_id = context.get("branch_id")
 
     # Register the subscription
     await subscribe_to_asset_pipeline(
@@ -77,6 +78,7 @@ async def subscribeToAssetPipeline(
         user_id=effective_user_id,
         project_id=effective_project_id or "",
         asset_name=asset_name,
+        branch_id=effective_branch_id,
     )
 
     display_name = asset_name or asset_id[:16]
