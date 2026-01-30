@@ -233,6 +233,91 @@ def update_chat_session_branch(
         return False
 
 
+def create_initial_automerge_state() -> str:
+    """
+    Create an initial Automerge state for a new empty project timeline.
+    Returns a base64-encoded Automerge document.
+    """
+    import base64
+    import json
+    from automerge.core import Document, ROOT, ScalarType
+    
+    # Default empty project structure (matching frontend's defaultProject)
+    default_project = {
+        "name": "Untitled Project",
+        "resolution": {"width": 1920, "height": 1080},
+        "fps": 30,
+        "renderScale": 1,
+        "background": "#141417",
+        "layers": [],
+        "transcriptions": {},
+        "transitions": {},
+    }
+    
+    # Create new Automerge document with projectJSON
+    doc = Document()
+    with doc.transaction() as tx:
+        tx.put(ROOT, "projectJSON", ScalarType.Str, json.dumps(default_project))
+    
+    # Save to base64
+    binary = doc.save()
+    return base64.b64encode(binary).decode("utf-8")
+
+
+def ensure_main_branch_exists(
+    user_id: str,
+    project_id: str,
+    settings: Settings,
+) -> str:
+    """
+    Ensure the main branch exists for a project, creating it if needed.
+    Returns the automerge state.
+    """
+    import uuid
+    import logging
+    from google.cloud.firestore_v1 import SERVER_TIMESTAMP
+    logger = logging.getLogger(__name__)
+    
+    db = get_firestore_client(settings)
+    
+    main_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("projects")
+        .document(project_id)
+        .collection("branches")
+        .document("main")
+    )
+    main_doc = main_ref.get()
+    
+    if main_doc.exists:
+        main_data = main_doc.to_dict()
+        automerge_state = main_data.get("automergeState")
+        if automerge_state:
+            return automerge_state
+        # Main exists but has no automerge state - update it
+        logger.info(f"Main branch exists but has no automerge state, initializing for project {project_id}")
+    else:
+        logger.info(f"Main branch not found, creating for project {project_id}")
+    
+    # Create initial state
+    automerge_state = create_initial_automerge_state()
+    
+    # Create or update main branch
+    main_ref.set({
+        "name": "Main",
+        "createdAt": SERVER_TIMESTAMP,
+        "createdBy": user_id,
+        "commitId": str(uuid.uuid4()),
+        "automergeState": automerge_state,
+        "timestamp": SERVER_TIMESTAMP,
+        "author": user_id,
+    }, merge=True)
+    
+    logger.info(f"Initialized main branch for project {project_id}")
+    return automerge_state
+
+
 def create_branch_for_chat(
     user_id: str,
     project_id: str,
@@ -242,6 +327,7 @@ def create_branch_for_chat(
     """
     Create a new branch for this chat session (from main).
     Returns the new branch_id. Each call creates a unique branch with timestamp suffix.
+    If main doesn't exist, creates it first with an empty timeline.
     """
     import re
     import logging
@@ -257,7 +343,10 @@ def create_branch_for_chat(
     timestamp = int(time.time())
     branch_id = f"chat_{safe_suffix}_{timestamp}"
 
-    # Load main branch
+    # Ensure main branch exists (create if needed)
+    automerge_state = ensure_main_branch_exists(user_id, project_id, settings)
+    
+    # Get main branch data for metadata
     main_ref = (
         db.collection("users")
         .document(user_id)
@@ -267,14 +356,7 @@ def create_branch_for_chat(
         .document("main")
     )
     main_doc = main_ref.get()
-
-    if not main_doc.exists:
-        raise ValueError(f"Main branch not found for project {project_id}")
-
-    main_data = main_doc.to_dict()
-    automerge_state = main_data.get("automergeState")
-    if not automerge_state:
-        raise ValueError(f"Main branch has no automerge state for project {project_id}")
+    main_data = main_doc.to_dict() or {}
 
     # Create new branch (copy of main)
     new_ref = (

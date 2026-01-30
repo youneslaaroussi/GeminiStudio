@@ -11,7 +11,7 @@ from typing import Any
 from langchain_core.tools import tool
 
 from ..config import get_settings
-from ..firebase import get_firestore_client, decode_automerge_state
+from ..firebase import get_firestore_client, decode_automerge_state, ensure_main_branch_exists
 
 logger = logging.getLogger(__name__)
 
@@ -255,23 +255,35 @@ def addClipToTimeline(
         )
         branch_doc = branch_ref.get()
 
+        # If branch doesn't exist and it's "main", create it with empty timeline
         if not branch_doc.exists:
-            logger.error("[ADD_CLIP] Branch not found: %s", use_branch_id)
-            return {
-                "status": "error",
-                "message": f"Branch '{use_branch_id}' not found for project.",
-            }
+            if use_branch_id == "main":
+                logger.info("[ADD_CLIP] Main branch not found, creating with empty timeline")
+                automerge_state = ensure_main_branch_exists(user_id, project_id, settings)
+                # Re-fetch the branch document
+                branch_doc = branch_ref.get()
+            else:
+                logger.error("[ADD_CLIP] Branch not found: %s", use_branch_id)
+                return {
+                    "status": "error",
+                    "message": f"Branch '{use_branch_id}' not found for project.",
+                }
 
         logger.info("[ADD_CLIP] Branch document loaded")
         branch_data = branch_doc.to_dict()
         automerge_state = branch_data.get("automergeState")
 
         if not automerge_state:
-            logger.error("[ADD_CLIP] No automergeState in branch")
-            return {
-                "status": "error",
-                "message": "Project has no timeline data yet.",
-            }
+            # Try to initialize if it's the main branch
+            if use_branch_id == "main":
+                logger.info("[ADD_CLIP] Main branch has no automergeState, initializing")
+                automerge_state = ensure_main_branch_exists(user_id, project_id, settings)
+            else:
+                logger.error("[ADD_CLIP] No automergeState in branch")
+                return {
+                    "status": "error",
+                    "message": "Project has no timeline data yet.",
+                }
 
         logger.info("[ADD_CLIP] automergeState size: %d bytes", len(automerge_state))
 

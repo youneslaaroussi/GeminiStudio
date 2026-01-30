@@ -8,7 +8,7 @@ import uuid
 from langchain_core.tools import tool
 
 from ..config import get_settings
-from ..firebase import get_firestore_client
+from ..firebase import get_firestore_client, ensure_main_branch_exists
 
 from .add_clip_tool import (
     _get_project_data,
@@ -83,22 +83,32 @@ def deleteClipFromTimeline(
         )
         branch_doc = branch_ref.get()
 
+        # If branch doesn't exist and it's "main", create it with empty timeline
         if not branch_doc.exists:
-            logger.error("[DELETE_CLIP] Branch not found: %s", use_branch_id)
-            return {
-                "status": "error",
-                "message": f"Branch '{use_branch_id}' not found for project.",
-            }
+            if use_branch_id == "main":
+                logger.info("[DELETE_CLIP] Main branch not found, creating with empty timeline")
+                automerge_state = ensure_main_branch_exists(user_id, project_id, settings)
+                branch_doc = branch_ref.get()
+            else:
+                logger.error("[DELETE_CLIP] Branch not found: %s", use_branch_id)
+                return {
+                    "status": "error",
+                    "message": f"Branch '{use_branch_id}' not found for project.",
+                }
 
         branch_data = branch_doc.to_dict()
         automerge_state = branch_data.get("automergeState")
 
         if not automerge_state:
-            logger.error("[DELETE_CLIP] No automergeState in branch")
-            return {
-                "status": "error",
-                "message": "Project has no timeline data yet.",
-            }
+            if use_branch_id == "main":
+                logger.info("[DELETE_CLIP] Main branch has no automergeState, initializing")
+                automerge_state = ensure_main_branch_exists(user_id, project_id, settings)
+            else:
+                logger.error("[DELETE_CLIP] No automergeState in branch")
+                return {
+                    "status": "error",
+                    "message": "Project has no timeline data yet.",
+                }
 
         doc = _load_automerge_doc(automerge_state)
         project_data = _get_project_data(doc)
