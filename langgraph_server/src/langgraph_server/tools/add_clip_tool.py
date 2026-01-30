@@ -307,18 +307,30 @@ def addClipToTimeline(
         }
 
         # For media clips, use proxy URL to avoid CORS issues
-        # Try to extract asset_id from GCS URL if not provided directly
+        # Try to extract asset_id and filename from GCS URL if not provided directly
         effective_asset_id = asset_id
-        if not effective_asset_id and src and clip_type in ("video", "audio", "image"):
-            # GCS URL format: https://storage.googleapis.com/.../assets/{asset_id}/filename
+        asset_filename = None
+        if src and clip_type in ("video", "audio", "image"):
+            # GCS URL format: https://storage.googleapis.com/.../assets/{asset_id}/{filename}?query...
             import re
-            match = re.search(r'/assets/([a-f0-9-]{36})/', src)
-            if match:
-                effective_asset_id = match.group(1)
-                logger.info("[ADD_CLIP] Extracted asset_id from URL: %s", effective_asset_id)
+            # Extract asset_id
+            asset_match = re.search(r'/assets/([a-f0-9-]{36})/', src)
+            if asset_match:
+                if not effective_asset_id:
+                    effective_asset_id = asset_match.group(1)
+                    logger.info("[ADD_CLIP] Extracted asset_id from URL: %s", effective_asset_id)
+                # Extract filename (after asset_id, before query params)
+                filename_match = re.search(r'/assets/[a-f0-9-]{36}/([^?]+)', src)
+                if filename_match:
+                    asset_filename = filename_match.group(1)
+                    logger.info("[ADD_CLIP] Extracted filename from URL: %s", asset_filename)
         
         if effective_asset_id and clip_type in ("video", "audio", "image"):
-            proxy_src = f"/api/assets/{effective_asset_id}/file?projectId={project_id}&userId={user_id}"
+            # Include filename in proxy URL for proper extension detection
+            if asset_filename:
+                proxy_src = f"/api/assets/{effective_asset_id}/file/{asset_filename}?projectId={project_id}&userId={user_id}"
+            else:
+                proxy_src = f"/api/assets/{effective_asset_id}/file?projectId={project_id}&userId={user_id}"
             clip["src"] = proxy_src
             clip["assetId"] = effective_asset_id
             logger.info("[ADD_CLIP] Using proxy URL: %s", proxy_src)
