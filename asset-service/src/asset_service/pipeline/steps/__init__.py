@@ -7,6 +7,7 @@ from . import label_detection
 from . import person_detection
 from . import face_detection
 from . import transcription
+from . import gemini_analysis
 
 __all__ = [
     "metadata",
@@ -16,4 +17,5 @@ __all__ = [
     "person_detection",
     "face_detection",
     "transcription",
+    "gemini_analysis",
 ]

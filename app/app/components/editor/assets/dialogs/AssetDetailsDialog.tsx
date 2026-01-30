@@ -353,6 +353,15 @@ function PipelineStepCard({
         if (transcript) return `${transcript.split(" ").length} words`;
         return null;
       }
+      case "gemini-analysis": {
+        const category = step.metadata.category as string | undefined;
+        const totalTokens = step.metadata.totalTokens as number | undefined;
+        if (category && totalTokens) {
+          return `${category} analysis (${totalTokens.toLocaleString()} tokens)`;
+        }
+        if (category) return `${category} analysis`;
+        return "AI analysis complete";
+      }
       default:
         return null;
     }
@@ -708,6 +717,91 @@ function PipelineStepDetails({
               </div>
             </div>
           )}
+        </div>
+      );
+    }
+
+    case "gemini-analysis": {
+      const analysis = metadata.analysis as string | undefined;
+      const category = metadata.category as string | undefined;
+      const totalTokens = metadata.totalTokens as number | undefined;
+      const model = metadata.model as string | undefined;
+
+      if (!analysis) {
+        return <p className="text-xs text-muted-foreground">No analysis available</p>;
+      }
+
+      return (
+        <div className="space-y-3 min-w-0">
+          {/* Header with category and tokens */}
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              {category && (
+                <span className="inline-flex items-center px-2 py-0.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 rounded-full capitalize">
+                  {category}
+                </span>
+              )}
+              {model && (
+                <span className="text-muted-foreground">{model}</span>
+              )}
+            </div>
+            {totalTokens && (
+              <span className="text-muted-foreground">
+                {totalTokens.toLocaleString()} tokens
+              </span>
+            )}
+          </div>
+
+          {/* Analysis content with markdown-like rendering */}
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground mb-1">AI Analysis</p>
+            <div className="text-xs bg-muted/30 rounded p-3 max-h-64 overflow-y-auto space-y-2">
+              {analysis.split('\n').map((line, i) => {
+                // Handle headers (lines starting with **)
+                if (line.startsWith('**') && line.endsWith('**')) {
+                  return (
+                    <p key={i} className="font-semibold text-foreground mt-2 first:mt-0">
+                      {line.replace(/\*\*/g, '')}
+                    </p>
+                  );
+                }
+                // Handle bold inline text and headers like "**Title:**"
+                if (line.includes('**')) {
+                  const parts = line.split(/(\*\*[^*]+\*\*)/g);
+                  return (
+                    <p key={i} className={line.match(/^\d+\./) ? 'mt-1' : ''}>
+                      {parts.map((part, j) => {
+                        if (part.startsWith('**') && part.endsWith('**')) {
+                          return <strong key={j} className="text-foreground">{part.replace(/\*\*/g, '')}</strong>;
+                        }
+                        return <span key={j}>{part}</span>;
+                      })}
+                    </p>
+                  );
+                }
+                // Handle list items
+                if (line.startsWith('- ') || line.startsWith('• ')) {
+                  return (
+                    <p key={i} className="pl-3 text-muted-foreground">
+                      • {line.slice(2)}
+                    </p>
+                  );
+                }
+                // Handle numbered items
+                if (line.match(/^\d+\./)) {
+                  return (
+                    <p key={i} className="mt-1">{line}</p>
+                  );
+                }
+                // Empty lines become spacing
+                if (!line.trim()) {
+                  return <div key={i} className="h-1" />;
+                }
+                // Regular text
+                return <p key={i}>{line}</p>;
+              })}
+            </div>
+          </div>
         </div>
       );
     }

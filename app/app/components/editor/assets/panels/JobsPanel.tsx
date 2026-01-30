@@ -19,6 +19,7 @@ import {
   Scan,
   Users,
   Smile,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -44,6 +45,7 @@ const STEP_ICONS: Record<string, React.ElementType> = {
   "person-detection": Users,
   transcription: FileText,
   "face-detection": Smile,
+  "gemini-analysis": Sparkles,
   video: Video,
   image: Image,
   music: Music,

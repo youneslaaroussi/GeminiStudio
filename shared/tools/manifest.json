@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-01-30T16:45:40.742Z",
+  "generatedAt": "2026-01-30T21:46:41.975Z",
   "tools": {
     "captureAsset": {
       "name": "captureAsset",
@@ -1248,6 +1248,161 @@
             },
             "required": [
               "clipId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "timelineAddTransition": {
+      "name": "timelineAddTransition",
+      "label": "Add Timeline Transition",
+      "description": "Add a transition effect between two adjacent video clips on the same layer. Supports fade and slide transitions.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": false
+      },
+      "fields": [
+        {
+          "name": "fromClipId",
+          "label": "From Clip ID",
+          "type": "text",
+          "placeholder": "ID of the first (left) clip",
+          "required": true
+        },
+        {
+          "name": "toClipId",
+          "label": "To Clip ID",
+          "type": "text",
+          "placeholder": "ID of the second (right) clip",
+          "required": true
+        },
+        {
+          "name": "type",
+          "label": "Transition Type",
+          "type": "select",
+          "options": [
+            {
+              "value": "fade",
+              "label": "Fade"
+            },
+            {
+              "value": "slide-left",
+              "label": "Slide left"
+            },
+            {
+              "value": "slide-right",
+              "label": "Slide right"
+            },
+            {
+              "value": "slide-up",
+              "label": "Slide up"
+            },
+            {
+              "value": "slide-down",
+              "label": "Slide down"
+            }
+          ],
+          "defaultValue": "fade",
+          "description": "The transition effect to apply between clips."
+        },
+        {
+          "name": "duration",
+          "label": "Duration (seconds)",
+          "type": "number",
+          "placeholder": "0.5",
+          "description": "How long the transition lasts (0.1 to 5 seconds)."
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/timelineAddTransitionInput",
+        "definitions": {
+          "timelineAddTransitionInput": {
+            "type": "object",
+            "properties": {
+              "fromClipId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "toClipId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "fade",
+                  "slide-left",
+                  "slide-right",
+                  "slide-up",
+                  "slide-down"
+                ],
+                "default": "fade",
+                "description": "Transition effect type"
+              },
+              "duration": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 5,
+                "default": 0.5,
+                "description": "Transition duration in seconds"
+              }
+            },
+            "required": [
+              "fromClipId",
+              "toClipId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "timelineRemoveTransition": {
+      "name": "timelineRemoveTransition",
+      "label": "Remove Timeline Transition",
+      "description": "Remove an existing transition between two clips.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": false
+      },
+      "fields": [
+        {
+          "name": "fromClipId",
+          "label": "From Clip ID",
+          "type": "text",
+          "placeholder": "ID of the first (left) clip",
+          "required": true
+        },
+        {
+          "name": "toClipId",
+          "label": "To Clip ID",
+          "type": "text",
+          "placeholder": "ID of the second (right) clip",
+          "required": true
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/timelineRemoveTransitionInput",
+        "definitions": {
+          "timelineRemoveTransitionInput": {
+            "type": "object",
+            "properties": {
+              "fromClipId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "toClipId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "fromClipId",
+              "toClipId"
             ],
             "additionalProperties": false
           }

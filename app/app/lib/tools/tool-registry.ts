@@ -17,6 +17,10 @@ import { timelineAddClipTool } from "./timeline-add-clip";
 import { timelineSplitClipTool } from "./timeline-split-clip";
 import { timelineUpdateClipTool } from "./timeline-update-clip";
 import {
+  timelineAddTransitionTool,
+  timelineRemoveTransitionTool,
+} from "./timeline-transition";
+import {
   videoEffectsRunTool,
   videoEffectsListTool,
   videoEffectsJobStatusTool,
@@ -56,6 +60,8 @@ toolRegistry.register(timelineAddLayerTool);
 toolRegistry.register(timelineAddClipTool);
 toolRegistry.register(timelineSplitClipTool);
 toolRegistry.register(timelineUpdateClipTool);
+toolRegistry.register(timelineAddTransitionTool);
+toolRegistry.register(timelineRemoveTransitionTool);
 toolRegistry.register(videoEffectsListTool);
 toolRegistry.register(videoEffectsRunTool);
 toolRegistry.register(videoEffectsJobStatusTool);

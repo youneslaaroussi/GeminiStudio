@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     # Firebase
     firebase_service_account_key: str | None = Field(default=None, alias="FIREBASE_SERVICE_ACCOUNT_KEY")
 
+    # Gemini AI
+    gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
+    gemini_model_id: str = Field(default="gemini-3-pro-preview", alias="GEMINI_MODEL_ID")
+
     # Speech-to-Text
     speech_project_id: str | None = Field(default=None, alias="SPEECH_PROJECT_ID")
     speech_location: str = Field(default="global", alias="SPEECH_LOCATION")
