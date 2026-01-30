@@ -1186,11 +1186,12 @@
     "veoGenerate": {
       "name": "veoGenerate",
       "label": "Generate Veo Video",
-      "description": "Generate a video using Google Veo 3. Returns a job ID that can be polled for completion.",
-      "runLocation": "client",
+      "description": "Generate a video using Google Veo 3.1. Returns immediately with operation ID, then notifies when video is ready.",
+      "runLocation": "server",
       "implementations": {
         "app": true,
-        "langgraph": false
+        "langgraph": true,
+        "langgraphName": "generateVeoVideo"
       },
       "fields": [
         {

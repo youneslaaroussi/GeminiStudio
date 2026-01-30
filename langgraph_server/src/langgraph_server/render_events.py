@@ -193,13 +193,37 @@ class RenderEventSubscriber:
                     # Fetch current messages and append
                     session = await asyncio.to_thread(fetch_chat_session, thread_id, self._settings)
                     current_messages = list(session.get("messages", [])) if session else []
-                    
+
                     new_message = {
                         "id": f"msg-{int(time.time() * 1000)}-render",
                         "role": "assistant",
                         "parts": [{"type": "text", "text": ai_response}],
                         "createdAt": datetime.utcnow().isoformat() + "Z",
                     }
+                    # Embed video in chat when we have a signed download URL
+                    if event_type == "render.completed":
+                        result = event.get("result") or {}
+                        gcs_path = result.get("gcsPath")
+                        if gcs_path:
+                            download_url = _generate_signed_download_url(
+                                gcs_path, self._settings
+                            )
+                            if download_url:
+                                extra_meta = metadata.get("extra") or {}
+                                project_name = (extra_meta.get("projectName") or "Render")[:60]
+                                new_message["metadata"] = {
+                                    "attachments": [
+                                        {
+                                            "id": f"render-{int(time.time() * 1000)}",
+                                            "name": f"Render: {project_name}",
+                                            "mimeType": "video/mp4",
+                                            "size": 0,
+                                            "category": "video",
+                                            "signedUrl": download_url,
+                                            "uploadedAt": datetime.utcnow().isoformat() + "Z",
+                                        }
+                                    ]
+                                }
                     current_messages.append(new_message)
                     
                     await asyncio.to_thread(

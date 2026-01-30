@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .api import router
 from .config import get_settings
 from .render_events import RenderEventSubscriber
+from .veo_events import VeoEventPoller
 
 # Configure logging for the entire langgraph_server package
 logging.basicConfig(
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 render_event_subscriber = RenderEventSubscriber(settings)
+veo_event_poller = VeoEventPoller(settings)
 
 
 def create_app() -> FastAPI:
@@ -53,9 +55,11 @@ app = create_app()
 async def startup_event():
     logger.info("LangGraph Server starting up")
     await render_event_subscriber.start()
+    await veo_event_poller.start()
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("LangGraph Server shutting down")
     await render_event_subscriber.stop()
+    await veo_event_poller.stop()

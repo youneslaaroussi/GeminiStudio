@@ -22,6 +22,7 @@ import { ProjectSyncManager } from '@/app/lib/automerge/sync-manager';
 import { automergeToProject, projectToAutomerge } from '@/app/lib/automerge/adapter';
 import type { AutomergeProject } from '@/app/lib/automerge/types';
 import { setStoredBranchForProject } from '@/app/lib/store/branch-storage';
+import { useProjectsListStore } from '@/app/lib/store/projects-list-store';
 
 interface ProjectStore {
   project: Project;
@@ -330,6 +331,8 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
           const project = JSON.parse(doc.projectJSON);
           console.log('[SYNC] Loaded project from Firebase:', project.name, 'with', project.layers.length, 'layers');
           set({ project, syncManager, currentBranch: branchId, projectId });
+          // Keep projects list name in sync with editor (metadata doc vs projectJSON can diverge)
+          useProjectsListStore.getState().updateProject(projectId, { name: project.name ?? 'Untitled Project' }, userId);
         } catch (e) {
           console.error('Failed to parse project from Firebase:', e);
           set({ syncManager, currentBranch: branchId, projectId });

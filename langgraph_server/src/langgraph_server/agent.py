@@ -76,7 +76,7 @@ def create_graph(settings: Settings | None = None):
                     
                     logger.info("[AGENT] Tool args (with context): %s", str(args)[:500])
                     
-                    if getattr(tool, "name", None) == "renderVideo":
+                    if getattr(tool, "name", None) in ("renderVideo", "generateVeoVideo"):
                         args["_agent_context"] = {
                             "thread_id": thread_id,
                             "project_id": project_id,

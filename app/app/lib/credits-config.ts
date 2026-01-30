@@ -9,7 +9,8 @@ export type CreditAction =
   | "lyria_generation"
   | "tts"
   | "image_generation"
-  | "chat";
+  | "chat"
+  | "live_voice_chat";
 
 /** Base credits per action. Overrides via context when provided. */
 export const CREDITS_PER_ACTION: Record<CreditAction, number> = {
@@ -19,6 +20,7 @@ export const CREDITS_PER_ACTION: Record<CreditAction, number> = {
   tts: 2,
   image_generation: 4,
   chat: 3,
+  live_voice_chat: 3,
 };
 
 export interface VeoCreditsContext {

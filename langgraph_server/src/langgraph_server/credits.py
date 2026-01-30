@@ -22,6 +22,7 @@ CREDITS_PER_ACTION: dict[str, int] = {
     "lyria_generation": 8,
     "tts": 2,
     "image_generation": 4,
+    "live_voice_chat": 3,
 }
 
 

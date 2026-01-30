@@ -77,6 +77,17 @@ class Settings(BaseSettings):
         alias="RENDER_EVENT_SUBSCRIPTION",
     )
 
+    # Veo video generation
+    veo_model: str = Field(default="veo-3.1-generate-preview", alias="VEO_MODEL")
+    veo_event_topic: str = Field(default="gemini-veo-events", alias="VEO_EVENT_TOPIC")
+    veo_event_subscription: str = Field(
+        default="gemini-veo-events-sub",
+        alias="VEO_EVENT_SUBSCRIPTION",
+    )
+
+    # Banana image generation
+    banana_model: str = Field(default="gemini-2.5-flash-image", alias="BANANA_MODEL")
+
 
 @lru_cache
 def get_settings() -> Settings:

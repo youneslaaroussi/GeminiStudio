@@ -67,6 +67,7 @@ export function TimelinePanel({
   const [draggedLayerIndex, setDraggedLayerIndex] = useState<number | null>(null);
   const [dragTargetIndex, setDragTargetIndex] = useState<number | null>(null);
   const [dropPosition, setDropPosition] = useState<"above" | "below">("below");
+  const [isEmptyDropTarget, setIsEmptyDropTarget] = useState(false);
 
   const handleLayerDragStart = useCallback((index: number) => {
     setDraggedLayerIndex(index);
@@ -146,6 +147,37 @@ export function TimelinePanel({
       addClip(clip);
     },
     [addClip, zoom]
+  );
+
+  // Handlers for empty state drop zone
+  const handleEmptyDragOver = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!hasAssetDragData(event)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      if (!isEmptyDropTarget) setIsEmptyDropTarget(true);
+    },
+    [isEmptyDropTarget]
+  );
+
+  const handleEmptyDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && event.currentTarget.contains(nextTarget)) return;
+    setIsEmptyDropTarget(false);
+  }, []);
+
+  const handleEmptyDrop = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!hasAssetDragData(event)) return;
+      event.preventDefault();
+      setIsEmptyDropTarget(false);
+      const asset = readDraggedAsset(event);
+      if (!asset) return;
+      // Start at time 0 for empty timeline drops
+      const clip = createClipFromAsset(asset, 0);
+      addClip(clip);
+    },
+    [addClip]
   );
 
   // Update container width on resize
@@ -595,12 +627,29 @@ export function TimelinePanel({
           </div>
         </div>
 
-        {!hasClips && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="rounded-lg border border-dashed border-border/80 bg-background/90 px-6 py-5 text-center">
+        {layers.length === 0 && (
+          <div
+            className={cn(
+              "absolute inset-0 flex items-center justify-center transition-colors",
+              isEmptyDropTarget && "bg-primary/5"
+            )}
+            onDragOver={handleEmptyDragOver}
+            onDragLeave={handleEmptyDragLeave}
+            onDrop={handleEmptyDrop}
+          >
+            <div
+              className={cn(
+                "rounded-lg border border-dashed px-6 py-5 text-center transition-all",
+                isEmptyDropTarget
+                  ? "border-primary bg-primary/10 scale-105"
+                  : "border-border/80 bg-background/90"
+              )}
+            >
               <img src="/gemini-logo.png" alt="Gemini" className="size-8 mx-auto mb-3 opacity-60" />
               <p className="text-sm text-muted-foreground">
-                Timeline is empty. Upload assets or add clips to start building your project.
+                {isEmptyDropTarget
+                  ? "Drop to add to timeline"
+                  : "Drag assets here or add clips to start building your project."}
               </p>
             </div>
           </div>

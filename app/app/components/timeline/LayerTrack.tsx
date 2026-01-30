@@ -231,13 +231,19 @@ export function LayerTrackBody({ layer, trackWidth }: LayerTrackBodyProps) {
       event.stopPropagation();
       setIsDragOver(false);
       const asset = readDraggedAsset(event);
-      if (!asset || !assetMatchesLayer(asset.type, layer.type)) return;
+      if (!asset) return;
       const rect = trackRef.current?.getBoundingClientRect();
       if (!rect) return;
       const x = event.clientX - rect.left;
       const start = Math.max(0, x / zoom);
       const clip = createClipFromAsset(asset, start);
-      addClip(clip, layer.id);
+      // If asset type matches layer, add to this layer; otherwise add without layerId
+      // to trigger automatic layer creation for the correct type
+      if (assetMatchesLayer(asset.type, layer.type)) {
+        addClip(clip, layer.id);
+      } else {
+        addClip(clip);
+      }
     },
     [addClip, layer.id, layer.type, zoom]
   );
@@ -380,15 +386,19 @@ export function LayerTrack({ layer, layerIndex, width, labelWidth, onDragStart, 
       event.stopPropagation();
       setIsDragOver(false);
       const asset = readDraggedAsset(event);
-      if (!asset || !assetMatchesLayer(asset.type, layer.type)) {
-        return;
-      }
+      if (!asset) return;
       const rect = trackRef.current?.getBoundingClientRect();
       if (!rect) return;
       const x = event.clientX - rect.left;
       const start = Math.max(0, x / zoom);
       const clip = createClipFromAsset(asset, start);
-      addClip(clip, layer.id);
+      // If asset type matches layer, add to this layer; otherwise add without layerId
+      // to trigger automatic layer creation for the correct type
+      if (assetMatchesLayer(asset.type, layer.type)) {
+        addClip(clip, layer.id);
+      } else {
+        addClip(clip);
+      }
     },
     [addClip, layer.id, layer.type, zoom]
   );

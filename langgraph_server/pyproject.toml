@@ -30,6 +30,7 @@ phonenumbers = "^8.13.49"
 httpx = ">=0.28.1,<1.0.0"
 rich = "^13.7.0"
 google-cloud-pubsub = "^2.23.0"
+google-genai = ">=1.0.0,<2.0.0"
 automerge = {version = ">=1.0.0rc1", allow-prereleases = true}
 telegramify-markdown = "^0.5.4"
 
