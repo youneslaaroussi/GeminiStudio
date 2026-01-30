@@ -1468,6 +1468,93 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
     },
+    "getAssetMetadata": {
+      "name": "getAssetMetadata",
+      "label": "Get Asset Metadata",
+      "description": "Get detailed metadata for an asset including face detection, shot detection, labels, transcription, and more.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": true,
+        "langgraphName": "getAssetMetadata"
+      },
+      "fields": [
+        {
+          "name": "assetId",
+          "label": "Asset ID",
+          "type": "text",
+          "placeholder": "e.g. asset_123",
+          "description": "The ID of the asset to get metadata for.",
+          "required": true
+        },
+        {
+          "name": "metadataType",
+          "label": "Metadata Type (optional)",
+          "type": "select",
+          "description": "Filter to a specific type of metadata. Leave empty for all available metadata.",
+          "options": [
+            {
+              "value": "",
+              "label": "All metadata"
+            },
+            {
+              "value": "face-detection",
+              "label": "Face Detection"
+            },
+            {
+              "value": "shot-detection",
+              "label": "Shot Detection"
+            },
+            {
+              "value": "label-detection",
+              "label": "Label Detection"
+            },
+            {
+              "value": "person-detection",
+              "label": "Person Detection"
+            },
+            {
+              "value": "transcription",
+              "label": "Transcription"
+            },
+            {
+              "value": "metadata",
+              "label": "File Metadata"
+            }
+          ]
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/getAssetMetadataInput",
+        "definitions": {
+          "getAssetMetadataInput": {
+            "type": "object",
+            "properties": {
+              "assetId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "metadataType": {
+                "type": "string",
+                "enum": [
+                  "face-detection",
+                  "shot-detection",
+                  "label-detection",
+                  "person-detection",
+                  "transcription",
+                  "metadata"
+                ]
+              }
+            },
+            "required": [
+              "assetId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
     "getProjectSummary": {
       "name": "getProjectSummary",
       "label": "Get Project Summary",

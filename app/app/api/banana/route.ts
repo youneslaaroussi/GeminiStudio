@@ -4,11 +4,12 @@ import { getAuth } from "firebase-admin/auth";
 import { uploadToAssetService, isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
 import { deductCredits } from "@/app/lib/server/credits";
 import { getCreditsForAction } from "@/app/lib/credits-config";
+import { DEFAULT_BANANA_MODEL } from "@/app/lib/model-ids";
 
 export const runtime = "nodejs";
 
 const API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-const BANANA_MODEL = process.env.BANANA_MODEL_ID || "gemini-3-pro-image-preview";
+const BANANA_MODEL = process.env.BANANA_MODEL_ID || DEFAULT_BANANA_MODEL;
 
 interface BananaSourceImage {
   data?: string;

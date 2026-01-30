@@ -7,6 +7,7 @@ import type {
 import type { Project } from "@/app/types/timeline";
 import { captureAssetTool } from "./capture-asset";
 import { captureFacesTool } from "./capture-faces";
+import { getAssetMetadataTool } from "./get-asset-metadata";
 import { listAssetsTool } from "./list-assets";
 import { projectHistoryTool } from "./project-history";
 import { timelineAddLayerTool } from "./timeline-add-layer";
@@ -44,6 +45,7 @@ class ToolRegistry {
 export const toolRegistry = new ToolRegistry();
 toolRegistry.register(captureAssetTool);
 toolRegistry.register(captureFacesTool);
+toolRegistry.register(getAssetMetadataTool);
 toolRegistry.register(listAssetsTool);
 toolRegistry.register(projectHistoryTool);
 toolRegistry.register(timelineAddLayerTool);

@@ -6,12 +6,13 @@ import { getAuth } from "firebase-admin/auth";
 import { uploadToAssetService, isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
 import { deductCredits } from "@/app/lib/server/credits";
 import { getCreditsForAction } from "@/app/lib/credits-config";
+import { LYRIA_MODEL } from "@/app/lib/model-ids";
 
 export const runtime = "nodejs";
 
 const PROJECT_ID = process.env.LYRIA_PROJECT_ID || process.env.VEO_PROJECT_ID;
 const LOCATION = process.env.LYRIA_LOCATION || "us-central1";
-const MODEL_ID = "lyria-002";
+const MODEL_ID = LYRIA_MODEL;
 
 const BASE_URL = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}`;
 const PREDICT_URL = `${BASE_URL}:predict`;

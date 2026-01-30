@@ -12,6 +12,7 @@ from .delete_clip_tool import deleteClipFromTimeline
 from .docs_tool import search_product_docs
 from .generate_image_tool import generateImage
 from .generate_veo_video_tool import generateVeoVideo
+from .get_asset_metadata_tool import getAssetMetadata
 from .get_project_summary_tool import getProjectSummary
 from .list_assets_tool import listAssets
 from .list_project_assets_tool import listProjectAssets
@@ -29,6 +30,7 @@ def get_registered_tools() -> Sequence[BaseTool]:
         generateImage,
         generateVeoVideo,
         get_current_time_utc,
+        getAssetMetadata,
         getProjectSummary,
         listAssets,
         listProjectAssets,

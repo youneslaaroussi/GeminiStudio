@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMediaCategory, normalizeGeminiMimeType } from "@/app/lib/server/gemini/multimodal";
+import { DEFAULT_DIGEST_MODEL } from "@/app/lib/model-ids";
 
 const API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-const MODEL_ID = process.env.DIGEST_MODEL_ID || "gemini-2.5-pro-preview-06-05";
+const MODEL_ID = process.env.DIGEST_MODEL_ID || DEFAULT_DIGEST_MODEL;
 
 export const runtime = "nodejs";
 

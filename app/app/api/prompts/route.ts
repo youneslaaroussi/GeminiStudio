@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { DEFAULT_PROMPT_MODEL } from "@/app/lib/model-ids";
 
 const API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-const MODEL_ID = process.env.PROMPT_MODEL_ID || "gemini-3-flash-preview";
+const MODEL_ID = process.env.PROMPT_MODEL_ID || DEFAULT_PROMPT_MODEL;
 
 export const runtime = "nodejs";
 

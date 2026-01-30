@@ -1,9 +1,10 @@
 import { getGoogleAccessToken, parseGoogleServiceAccount } from "./google-cloud";
+import { DEFAULT_SPEECH_MODEL } from "@/app/lib/model-ids";
 
 const PROJECT_ID = process.env.SPEECH_PROJECT_ID || process.env.VEO_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
 const LOCATION = process.env.SPEECH_LOCATION || "global";
 const RECOGNIZER_ID = process.env.SPEECH_RECOGNIZER_ID || "_";
-const MODEL = process.env.SPEECH_MODEL || "chirp_3";
+const MODEL = process.env.SPEECH_MODEL || DEFAULT_SPEECH_MODEL;
 const SERVICE_ACCOUNT_KEY =
   process.env.SPEECH_SERVICE_ACCOUNT_KEY ||
   process.env.GOOGLE_SERVICE_ACCOUNT_KEY ||

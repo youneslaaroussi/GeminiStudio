@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     google_project_id: str = Field(..., alias="GOOGLE_PROJECT_ID")
     google_api_key: str = Field(..., alias="GOOGLE_API_KEY")
-    gemini_model: str = Field(default="gemini-2.5-pro", alias="GEMINI_MODEL")
+    gemini_model: str = Field(default="gemini-3-pro-preview", alias="GEMINI_MODEL")
 
     langsmith_api_key: str | None = Field(default=None, alias="LANGSMITH_API_KEY")
     langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", alias="LANGSMITH_ENDPOINT")
@@ -86,7 +86,7 @@ class Settings(BaseSettings):
     )
 
     # Banana image generation
-    banana_model: str = Field(default="gemini-2.5-flash-image", alias="BANANA_MODEL")
+    banana_model: str = Field(default="gemini-3-pro-image-preview", alias="BANANA_MODEL")
 
 
 @lru_cache

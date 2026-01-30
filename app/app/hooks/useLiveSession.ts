@@ -4,8 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { LiveSession, getToolsForLiveApi, executeToolByName } from "@/app/lib/live";
 import type { LiveSessionState, ToolCallRequest, LiveVoiceName } from "@/app/lib/live";
 import { useAuth } from "@/app/lib/hooks/useAuth";
-
-const LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
+import { LIVE_MODEL } from "@/app/lib/model-ids";
 
 interface UseLiveSessionOptions {
   systemInstruction?: string;

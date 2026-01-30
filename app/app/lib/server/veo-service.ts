@@ -9,10 +9,11 @@ import {
 } from "@/app/lib/server/veo-store";
 import type { StoredVeoJob, VeoJob, VeoJobParams, VeoJobStatus } from "@/app/types/veo";
 import { parseGoogleServiceAccount, assertGoogleCredentials } from "@/app/lib/server/google-cloud";
+import { DEFAULT_VEO_MODEL } from "@/app/lib/model-ids";
 
 const PROJECT_ID = process.env.VEO_PROJECT_ID;
 const LOCATION = process.env.VEO_LOCATION || "us-central1";
-const MODEL_ID = process.env.VEO_MODEL_ID || "veo-3.0-generate-001";
+const MODEL_ID = process.env.VEO_MODEL_ID || DEFAULT_VEO_MODEL;
 
 const BASE_URL = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}`;
 const PREDICT_URL = `${BASE_URL}:predictLongRunning`;

@@ -4,11 +4,10 @@ import { initAdmin } from "@/app/lib/server/firebase-admin";
 import { getAuth } from "firebase-admin/auth";
 import { deductCredits } from "@/app/lib/server/credits";
 import { getCreditsForAction } from "@/app/lib/credits-config";
+import { LIVE_MODEL } from "@/app/lib/model-ids";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
 
 async function verifyToken(req: Request): Promise<string | null> {
   const authHeader = req.headers.get("authorization");
