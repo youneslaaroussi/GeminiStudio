@@ -610,6 +610,8 @@ def create_project(user_id: str, name: str, settings: Settings) -> dict[str, Any
 def _extract_media_url(text: str) -> tuple[str | None, str | None]:
     """Extract media URL from text. Returns (url, media_type) or (None, None)."""
     import re
+    import logging
+    logger = logging.getLogger(__name__)
 
     url = None
 
@@ -617,6 +619,7 @@ def _extract_media_url(text: str) -> tuple[str | None, str | None]:
     md = re.search(r'\[([^\]]*)\]\((https?://[^\)]+)\)', text)
     if md:
         url = md.group(2)
+        logger.debug(f"[MEDIA_EXTRACT] Found markdown URL: {url[:80]}...")
 
     # 2. Raw URL
     if not url:
@@ -627,6 +630,9 @@ def _extract_media_url(text: str) -> tuple[str | None, str | None]:
         )
         if raw:
             url = raw.group(1)
+            logger.debug(f"[MEDIA_EXTRACT] Found raw URL: {url[:80]}...")
+        else:
+            logger.debug(f"[MEDIA_EXTRACT] No media URL found in text: {text[:100]}...")
 
     if not url:
         return None, None
@@ -641,6 +647,7 @@ def _extract_media_url(text: str) -> tuple[str | None, str | None]:
     if any(lower.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.webp']):
         return url, 'photo'
 
+    logger.debug(f"[MEDIA_EXTRACT] URL found but extension not recognized: {lower[-30:]}")
     return None, None
 
 
@@ -690,7 +697,7 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
     
     # Check if message contains a media URL
     media_url, media_type = _extract_media_url(text)
-    logger.debug(f"[TELEGRAM] Media detection: url={media_url[:100] if media_url else None}..., type={media_type}")
+    logger.info(f"[TELEGRAM] Media detection: url_found={media_url is not None}, type={media_type}, text_preview={text[:150]}...")
     
     async with httpx.AsyncClient() as client:
         if media_url and media_type:
