@@ -22,6 +22,14 @@ def listProjectAssets(
     This fetches from the asset-service (project-level storage), not the timeline.
     Assets here are available to be added to the timeline but may not yet be placed.
     Branch does not apply — asset library is shared across all branches.
+
+    Use this tool when:
+    - User asks to see or show an image/video/asset again
+    - User asks "what assets do I have" or similar
+    - You need to find a signedUrl to display media to the user
+
+    The response includes signedUrl for each asset which you should include in your
+    response if the user wants to see the media.
     """
 
     if not user_id or not project_id:

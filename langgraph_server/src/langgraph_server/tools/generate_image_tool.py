@@ -160,6 +160,10 @@ def generateImage(
 
     This is a synchronous operation - the image is generated and returned immediately.
 
+    IMPORTANT: When this tool succeeds, you MUST include the imageUrl in your response
+    to the user so they can see the image. For example: "Here is your image: [imageUrl]"
+    If the user asks to see the image again later, use listProjectAssets to get the URL.
+
     Args:
         prompt: Detailed description of the image to generate.
         aspect_ratio: Image aspect ratio - "1:1", "16:9", "9:16", "4:3", or "3:4".
@@ -168,7 +172,7 @@ def generateImage(
         user_id: User ID (injected by agent).
 
     Returns:
-        Dict with image URL or error message.
+        Dict with imageUrl that MUST be included in your response to the user.
     """
     settings = get_settings()
 
@@ -295,10 +299,15 @@ def generateImage(
             image_size,
             asset_data["assetId"],
         )
+        # Prefer signed URL for external clients (like Telegram) over proxy URL
+        # Signed URL is a full https:// URL with the image extension, which can be
+        # detected and sent as media. Proxy URL is relative and for CORS-safe web access.
+        image_url = asset_data.get("signedUrl") or asset_data["proxyUrl"]
         return {
             "status": "success",
-            "message": f"Image generated successfully ({aspect_ratio}, {image_size}).",
-            "imageUrl": asset_data["proxyUrl"],
+            "message": f"Image generated successfully. IMPORTANT: Include this URL in your response so the user can see the image: {image_url}",
+            "imageUrl": image_url,
+            "proxyUrl": asset_data["proxyUrl"],  # Keep proxy URL for web app use
             "assetId": asset_data["assetId"],
             "gcsUri": asset_data.get("gcsUri"),
             "mimeType": mime_type,
@@ -319,6 +328,7 @@ def generateImage(
         }
 
     download_url = _generate_signed_url(gcs_uri, settings)
+    image_url = download_url or gcs_uri
 
     logger.info(
         "[BANANA] Generated image (GCS fallback): prompt=%s..., aspect=%s, size=%s, gcs=%s",
@@ -330,8 +340,8 @@ def generateImage(
 
     return {
         "status": "success",
-        "message": f"Image generated successfully ({aspect_ratio}, {image_size}).",
-        "imageUrl": download_url or gcs_uri,
+        "message": f"Image generated successfully. IMPORTANT: Include this URL in your response so the user can see the image: {image_url}",
+        "imageUrl": image_url,
         "gcsUri": gcs_uri,
         "mimeType": mime_type,
         "prompt": prompt[:200],
