@@ -72,8 +72,11 @@ def _upload_to_asset_service(
             logger.error("[LYRIA] Asset service did not return asset ID")
             return None
         
-        # Build proxy URL for CORS-safe access
-        proxy_url = f"/api/assets/{asset_id}/file?projectId={project_id}&userId={user_id}"
+        # Get filename from asset for proper extension in proxy URL
+        asset_filename = asset.get("fileName", "audio.mp3")
+        
+        # Build proxy URL for CORS-safe access (include filename for proper extension)
+        proxy_url = f"/api/assets/{asset_id}/file/{asset_filename}?projectId={project_id}&userId={user_id}"
         
         logger.info("[LYRIA] Uploaded audio to asset service: asset_id=%s", asset_id)
         return {
