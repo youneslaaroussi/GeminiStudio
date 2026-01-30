@@ -32,6 +32,60 @@ def _pcm_to_wav(pcm_data: bytes, sample_rate: int = 24000, channels: int = 1, sa
         wav_file.writeframes(pcm_data)
     return buffer.getvalue()
 
+
+def _pcm_to_mp3(pcm_data: bytes, sample_rate: int = 24000, channels: int = 1) -> bytes:
+    """Convert raw PCM data to MP3 format using ffmpeg.
+    
+    Telegram's sendAudio only supports MP3 and M4A, not WAV.
+    """
+    import subprocess
+    import tempfile
+    import os
+    
+    # Create temp files for input WAV and output MP3
+    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as wav_file:
+        wav_path = wav_file.name
+        wav_bytes = _pcm_to_wav(pcm_data, sample_rate, channels)
+        wav_file.write(wav_bytes)
+    
+    mp3_path = wav_path.replace('.wav', '.mp3')
+    
+    try:
+        result = subprocess.run(
+            [
+                'ffmpeg', '-y',
+                '-i', wav_path,
+                '-codec:a', 'libmp3lame',
+                '-qscale:a', '2',
+                mp3_path
+            ],
+            capture_output=True,
+            timeout=60,  # Longer timeout for music (up to 60s of audio)
+        )
+        
+        if result.returncode != 0:
+            logger.error("[LYRIA] ffmpeg conversion failed: %s", result.stderr.decode()[:500])
+            return wav_bytes
+        
+        with open(mp3_path, 'rb') as f:
+            mp3_bytes = f.read()
+        
+        logger.info("[LYRIA] Converted to MP3: %d bytes", len(mp3_bytes))
+        return mp3_bytes
+        
+    except subprocess.TimeoutExpired:
+        logger.error("[LYRIA] ffmpeg conversion timed out")
+        return _pcm_to_wav(pcm_data, sample_rate, channels)
+    except FileNotFoundError:
+        logger.warning("[LYRIA] ffmpeg not found, falling back to WAV")
+        return _pcm_to_wav(pcm_data, sample_rate, channels)
+    finally:
+        for path in [wav_path, mp3_path]:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
 _DURATION_CHOICES = {10, 20, 30, 60}  # seconds
 
 
@@ -278,8 +332,9 @@ def generateMusic(
 
     logger.info("[LYRIA] Raw audio: %d bytes, mime_type=%s", len(audio_bytes), mime_type)
 
-    # Check if it's raw PCM (L16 = 16-bit linear PCM) and convert to WAV
+    # Check if it's raw PCM (L16 = 16-bit linear PCM) and convert to MP3
     # Gemini models may return "audio/L16;codec=pcm;rate=24000"
+    # Note: Telegram sendAudio only supports MP3/M4A, not WAV
     if mime_type and ("L16" in mime_type or "pcm" in mime_type.lower()):
         # Parse sample rate from mime_type
         sample_rate = 24000  # default
@@ -290,13 +345,13 @@ def generateMusic(
             except (IndexError, ValueError):
                 pass
         
-        logger.info("[LYRIA] Converting raw PCM to WAV (sample_rate=%d)", sample_rate)
-        audio_bytes = _pcm_to_wav(audio_bytes, sample_rate=sample_rate)
-        mime_type = "audio/wav"
-        logger.info("[LYRIA] WAV conversion complete: %d bytes", len(audio_bytes))
+        logger.info("[LYRIA] Converting raw PCM to MP3 (sample_rate=%d)", sample_rate)
+        audio_bytes = _pcm_to_mp3(audio_bytes, sample_rate=sample_rate)
+        mime_type = "audio/mpeg"
+        logger.info("[LYRIA] MP3 conversion complete: %d bytes", len(audio_bytes))
 
     # Determine file extension based on final mime_type
-    ext = ".wav"
+    ext = ".mp3"
     if mime_type:
         if "mp3" in mime_type or "mpeg" in mime_type:
             ext = ".mp3"
