@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import base64
+import io
 import logging
+import wave
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, Dict
@@ -18,6 +20,17 @@ from langchain_core.tools import tool
 from ..config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def _pcm_to_wav(pcm_data: bytes, sample_rate: int = 24000, channels: int = 1, sample_width: int = 2) -> bytes:
+    """Convert raw PCM data to WAV format by adding headers."""
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as wav_file:
+        wav_file.setnchannels(channels)
+        wav_file.setsampwidth(sample_width)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(pcm_data)
+    return buffer.getvalue()
 
 _DURATION_CHOICES = {10, 20, 30, 60}  # seconds
 
@@ -261,16 +274,38 @@ def generateMusic(
     if isinstance(audio_data, str):
         audio_bytes = base64.b64decode(audio_data)
     else:
-        audio_bytes = audio_data
+        audio_bytes = bytes(audio_data) if not isinstance(audio_data, bytes) else audio_data
 
-    # Determine file extension
-    ext = ".mp3"
-    if "wav" in mime_type:
-        ext = ".wav"
-    elif "ogg" in mime_type:
-        ext = ".ogg"
-    elif "mp4" in mime_type or "m4a" in mime_type:
-        ext = ".m4a"
+    logger.info("[LYRIA] Raw audio: %d bytes, mime_type=%s", len(audio_bytes), mime_type)
+
+    # Check if it's raw PCM (L16 = 16-bit linear PCM) and convert to WAV
+    # Gemini models may return "audio/L16;codec=pcm;rate=24000"
+    if mime_type and ("L16" in mime_type or "pcm" in mime_type.lower()):
+        # Parse sample rate from mime_type
+        sample_rate = 24000  # default
+        if "rate=" in mime_type:
+            try:
+                rate_str = mime_type.split("rate=")[1].split(";")[0]
+                sample_rate = int(rate_str)
+            except (IndexError, ValueError):
+                pass
+        
+        logger.info("[LYRIA] Converting raw PCM to WAV (sample_rate=%d)", sample_rate)
+        audio_bytes = _pcm_to_wav(audio_bytes, sample_rate=sample_rate)
+        mime_type = "audio/wav"
+        logger.info("[LYRIA] WAV conversion complete: %d bytes", len(audio_bytes))
+
+    # Determine file extension based on final mime_type
+    ext = ".wav"
+    if mime_type:
+        if "mp3" in mime_type or "mpeg" in mime_type:
+            ext = ".mp3"
+        elif "ogg" in mime_type:
+            ext = ".ogg"
+        elif "mp4" in mime_type or "m4a" in mime_type:
+            ext = ".m4a"
+        elif "wav" in mime_type:
+            ext = ".wav"
 
     effective_project_id = project_id or "unknown"
     prompt_slug = prompt[:30].replace(" ", "-").lower()
