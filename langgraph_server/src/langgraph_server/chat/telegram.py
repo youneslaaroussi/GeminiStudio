@@ -679,15 +679,21 @@ class TelegramProvider(ChatProvider):
 
         project = create_project(user_id, name, self.settings)
 
-        # Set as active project
+        # Set as active project and clear branchId (branch is project-specific)
         from ..firebase import get_firestore_client
+        from google.cloud.firestore import DELETE_FIELD
         db = get_firestore_client(self.settings)
         session_id = f"telegram-{chat_id}"
         session_ref = db.collection("users").document(user_id).collection("chatSessions").document(session_id)
 
         # Ensure session exists
         get_or_create_telegram_chat_session(user_id, chat_id, self.settings)
-        session_ref.update({"activeProjectId": project["id"]})
+        # Clear branchId and messages since we're switching to a new project
+        session_ref.update({
+            "activeProjectId": project["id"],
+            "branchId": DELETE_FIELD,
+            "messages": [],
+        })
 
         return f"Created project: {name}\nIt's now your active project."
 
@@ -728,14 +734,27 @@ class TelegramProvider(ChatProvider):
             proj_id = selected.get("id")
             proj_name = selected.get("name", "Untitled")
 
+            # Check if we're switching to a different project
+            session = get_or_create_telegram_chat_session(user_id, chat_id, self.settings)
+            current_project = session.get("activeProjectId")
+
             # Update session with active project
             from ..firebase import get_firestore_client
+            from google.cloud.firestore import DELETE_FIELD
             db = get_firestore_client(self.settings)
             session_id = f"telegram-{chat_id}"
             session_ref = db.collection("users").document(user_id).collection("chatSessions").document(session_id)
-            session_ref.update({"activeProjectId": proj_id})
 
-            return f"Active project set to: {proj_name}"
+            if current_project != proj_id:
+                # Switching projects - clear branchId and messages (branch is project-specific)
+                session_ref.update({
+                    "activeProjectId": proj_id,
+                    "branchId": DELETE_FIELD,
+                    "messages": [],
+                })
+                return f"Active project set to: {proj_name}\nConversation cleared for new project."
+            else:
+                return f"Already on project: {proj_name}"
 
         except ValueError:
             return "Usage: /project or /project <number>"
