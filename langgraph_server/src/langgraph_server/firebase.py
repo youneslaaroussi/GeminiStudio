@@ -233,10 +233,13 @@ def update_chat_session_branch(
         return False
 
 
-def create_initial_automerge_state() -> str:
+def create_initial_automerge_state(name: str = "Untitled Project") -> str:
     """
     Create an initial Automerge state for a new empty project timeline.
     Returns a base64-encoded Automerge document.
+    
+    Args:
+        name: The project name to use (defaults to "Untitled Project" for backwards compatibility)
     """
     import base64
     import json
@@ -244,7 +247,7 @@ def create_initial_automerge_state() -> str:
     
     # Default empty project structure (matching frontend's defaultProject)
     default_project = {
-        "name": "Untitled Project",
+        "name": name,
         "resolution": {"width": 1920, "height": 1080},
         "fps": 30,
         "renderScale": 1,
@@ -300,8 +303,21 @@ def ensure_main_branch_exists(
     else:
         logger.info(f"Main branch not found, creating for project {project_id}")
     
-    # Create initial state
-    automerge_state = create_initial_automerge_state()
+    # Fetch project metadata to get the correct name
+    project_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("projects")
+        .document(project_id)
+    )
+    project_doc = project_ref.get()
+    project_name = "Untitled Project"
+    if project_doc.exists:
+        project_data = project_doc.to_dict()
+        project_name = project_data.get("name", "Untitled Project") if project_data else "Untitled Project"
+    
+    # Create initial state with the correct project name
+    automerge_state = create_initial_automerge_state(name=project_name)
     
     # Create or update main branch
     main_ref.set({
@@ -314,7 +330,7 @@ def ensure_main_branch_exists(
         "author": user_id,
     }, merge=True)
     
-    logger.info(f"Initialized main branch for project {project_id}")
+    logger.info(f"Initialized main branch for project {project_id} with name '{project_name}'")
     return automerge_state
 
 

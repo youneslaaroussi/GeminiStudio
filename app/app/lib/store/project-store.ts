@@ -23,6 +23,8 @@ import { automergeToProject, projectToAutomerge } from '@/app/lib/automerge/adap
 import type { AutomergeProject } from '@/app/lib/automerge/types';
 import { setStoredBranchForProject } from '@/app/lib/store/branch-storage';
 import { useProjectsListStore } from '@/app/lib/store/projects-list-store';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/app/lib/server/firebase';
 
 interface ProjectStore {
   project: Project;
@@ -293,6 +295,31 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
         syncManager.destroy();
       }
 
+      // Fetch project metadata directly from Firestore to get the canonical name
+      // This is the source of truth since the projects-list-store may not be loaded yet
+      let metadataName: string | null = null;
+      try {
+        const projectMetaRef = doc(db, `users/${userId}/projects/${projectId}`);
+        const projectMetaSnap = await getDoc(projectMetaRef);
+        if (projectMetaSnap.exists()) {
+          const metaData = projectMetaSnap.data();
+          metadataName = metaData?.name || null;
+          console.log('[SYNC] Fetched metadata name from Firestore:', metadataName);
+        }
+      } catch (e) {
+        console.error('[SYNC] Failed to fetch project metadata:', e);
+      }
+
+      // Helper to apply metadata name if Automerge has stale default name
+      const applyMetadataName = (project: Project): Project => {
+        if (metadataName && metadataName !== 'Untitled Project' && 
+            (project.name === 'Untitled Project' || project.name === 'New Project')) {
+          console.log('[SYNC] Using metadata name:', metadataName, 'instead of:', project.name);
+          return { ...project, name: metadataName };
+        }
+        return project;
+      };
+
       syncManager = new ProjectSyncManager(
         userId,
         projectId,
@@ -311,6 +338,8 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
           } else {
             project = automergeToProject(doc);
           }
+          // Preserve the metadata name as source of truth (Automerge name can be stale)
+          project = applyMetadataName(project);
           set({ project, currentBranch: branchId, isOnline: syncManager?.getIsOnline() ?? true });
         },
         () => {
@@ -323,28 +352,29 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
       await syncManager.initialize();
 
       // Load project state from Firebase (source of truth)
-      const doc = syncManager.getDocument();
-      console.log('[SYNC] Firebase document:', doc ? Object.keys(doc) : 'null');
-      if (doc && doc.projectJSON) {
-        console.log('[SYNC] Loading project from Firebase', doc.projectJSON.length, 'chars');
+      const automergeDoc = syncManager.getDocument();
+      console.log('[SYNC] Firebase document:', automergeDoc ? Object.keys(automergeDoc) : 'null');
+      if (automergeDoc && automergeDoc.projectJSON) {
+        console.log('[SYNC] Loading project from Firebase', automergeDoc.projectJSON.length, 'chars');
         try {
-          const project = JSON.parse(doc.projectJSON);
+          let project = JSON.parse(automergeDoc.projectJSON);
+          // Use metadata name as source of truth (Automerge name can be stale)
+          project = applyMetadataName(project);
           console.log('[SYNC] Loaded project from Firebase:', project.name, 'with', project.layers.length, 'layers');
           set({ project, syncManager, currentBranch: branchId, projectId });
-          // Keep projects list name in sync with editor (metadata doc vs projectJSON can diverge)
-          useProjectsListStore.getState().updateProject(projectId, { name: project.name ?? 'Untitled Project' }, userId);
         } catch (e) {
           console.error('Failed to parse project from Firebase:', e);
           set({ syncManager, currentBranch: branchId, projectId });
         }
-      } else if (doc && Object.keys(doc).length === 0) {
-        // Empty document - initialize with current store project
-        const currentProject = get().project;
+      } else if (automergeDoc && Object.keys(automergeDoc).length === 0) {
+        // Empty document - initialize with current store project (but use metadata name)
+        let currentProject = get().project;
+        currentProject = applyMetadataName(currentProject);
         console.log('[SYNC] Initializing empty document with current project:', currentProject.name);
         await syncManager.applyChange((automergeDoc) => {
           automergeDoc.projectJSON = JSON.stringify(currentProject);
         });
-        set({ syncManager, currentBranch: branchId, projectId });
+        set({ project: currentProject, syncManager, currentBranch: branchId, projectId });
       } else {
         console.log('[SYNC] No project data in Firebase or Automerge doc is null');
         set({ syncManager, currentBranch: branchId, projectId });
