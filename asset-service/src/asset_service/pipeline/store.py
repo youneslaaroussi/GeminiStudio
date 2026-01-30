@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
@@ -81,7 +82,8 @@ async def get_pipeline_state(
         .document("state")
     )
 
-    doc = doc_ref.get()
+    # Run blocking Firestore call in thread pool
+    doc = await asyncio.to_thread(doc_ref.get)
     now = datetime.utcnow().isoformat() + "Z"
 
     if not doc.exists:
@@ -91,7 +93,7 @@ async def get_pipeline_state(
             "steps": _get_default_steps(),
             "updatedAt": now,
         }
-        doc_ref.set(state)
+        await asyncio.to_thread(doc_ref.set, state)
         return state
 
     data = doc.to_dict()
@@ -116,8 +118,11 @@ async def get_all_pipeline_states(
         .collection("assets")
     )
 
+    # Run blocking stream() in thread pool and collect results
+    asset_docs = await asyncio.to_thread(lambda: list(assets_ref.stream()))
+    
     states = []
-    for asset_doc in assets_ref.stream():
+    for asset_doc in asset_docs:
         asset_id = asset_doc.id
         state = await get_pipeline_state(user_id, project_id, asset_id, settings)
         states.append(state)
@@ -154,7 +159,7 @@ async def update_pipeline_state(
         "updatedAt": now,
     }
 
-    doc_ref.set(state)
+    await asyncio.to_thread(doc_ref.set, state)
     return state
 
 
@@ -217,9 +222,9 @@ async def delete_pipeline_state(
         .document("state")
     )
 
-    doc = doc_ref.get()
+    doc = await asyncio.to_thread(doc_ref.get)
     if not doc.exists:
         return False
 
-    doc_ref.delete()
+    await asyncio.to_thread(doc_ref.delete)
     return True

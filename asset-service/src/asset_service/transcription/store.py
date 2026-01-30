@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -100,7 +101,7 @@ async def save_transcription_job(
         .document(job.id)
     )
 
-    doc_ref.set(job.to_dict())
+    await asyncio.to_thread(doc_ref.set, job.to_dict())
     logger.info(f"Saved transcription job {job.id}")
     return job
 
@@ -124,7 +125,7 @@ async def get_transcription_job(
         .document(job_id)
     )
 
-    doc = doc_ref.get()
+    doc = await asyncio.to_thread(doc_ref.get)
     if not doc.exists:
         return None
 
@@ -158,7 +159,7 @@ async def find_latest_job_for_asset(
         .limit(1)
     )
 
-    docs = list(query.stream())
+    docs = await asyncio.to_thread(lambda: list(query.stream()))
     if not docs:
         return None
 
@@ -187,14 +188,14 @@ async def update_transcription_job(
         .document(job_id)
     )
 
-    doc = doc_ref.get()
+    doc = await asyncio.to_thread(doc_ref.get)
     if not doc.exists:
         return None
 
     updates["updatedAt"] = datetime.utcnow().isoformat() + "Z"
-    doc_ref.update(updates)
+    await asyncio.to_thread(doc_ref.update, updates)
 
-    updated_doc = doc_ref.get()
+    updated_doc = await asyncio.to_thread(doc_ref.get)
     data = updated_doc.to_dict()
     data["id"] = updated_doc.id
     return TranscriptionJob.from_dict(data)
@@ -217,8 +218,9 @@ async def list_transcription_jobs(
         .collection("transcriptions")
     )
 
+    docs = await asyncio.to_thread(lambda: list(collection_ref.stream()))
     jobs = []
-    for doc in collection_ref.stream():
+    for doc in docs:
         data = doc.to_dict()
         data["id"] = doc.id
         jobs.append(TranscriptionJob.from_dict(data))

@@ -229,8 +229,16 @@ async def run_auto_steps(
     steps_run = []
     failed_steps = []
 
+    # Import shutdown check
+    from ..tasks.worker import is_shutting_down
+
     # First pass: run all steps
     for step in applicable_steps:
+        # Check for shutdown signal
+        if is_shutting_down():
+            logger.info("Pipeline interrupted due to shutdown during step execution")
+            break
+
         # Check current status
         current = next((s for s in state["steps"] if s["id"] == step.id), None)
         if current and current.get("status") in ("succeeded", "running"):
@@ -261,6 +269,11 @@ async def run_auto_steps(
     # Second pass: poll waiting steps until they complete or timeout
     elapsed_seconds = 0
     while elapsed_seconds < MAX_PIPELINE_WAIT_SECONDS:
+        # Check for shutdown signal
+        if is_shutting_down():
+            logger.info("Pipeline interrupted due to shutdown")
+            break
+
         # Get current state
         state = await get_pipeline_state(user_id, project_id, asset.id)
 
@@ -279,12 +292,17 @@ async def run_auto_steps(
             f"({elapsed_seconds}s elapsed)"
         )
 
-        # Wait before polling
-        await asyncio.sleep(POLL_INTERVAL_SECONDS)
+        # Wait before polling (use shorter intervals for faster shutdown)
+        await asyncio.sleep(min(POLL_INTERVAL_SECONDS, 2))
         elapsed_seconds += POLL_INTERVAL_SECONDS
 
         # Re-run waiting steps to poll their status
         for step_id in waiting_step_ids:
+            # Check for shutdown before each step poll
+            if is_shutting_down():
+                logger.info("Pipeline polling interrupted due to shutdown")
+                break
+
             step = get_step(step_id)
             if not step:
                 continue

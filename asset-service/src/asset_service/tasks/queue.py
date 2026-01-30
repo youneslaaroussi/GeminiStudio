@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -183,5 +184,12 @@ async def close_task_queue() -> None:
     global _task_queue
 
     if _task_queue is not None:
-        await _task_queue.redis.close()
-        _task_queue = None
+        try:
+            # Close with a timeout to prevent hanging
+            await asyncio.wait_for(_task_queue.redis.close(), timeout=2.0)
+        except asyncio.TimeoutError:
+            logger.warning("Redis connection close timed out")
+        except Exception as e:
+            logger.warning(f"Error closing Redis connection: {e}")
+        finally:
+            _task_queue = None

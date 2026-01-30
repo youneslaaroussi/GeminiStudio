@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -10,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ..config import get_settings
 from ..tasks import start_worker, stop_worker, close_task_queue
+from ..tasks.worker import signal_shutdown
 from .routes import assets, pipeline
 
 logger = logging.getLogger(__name__)
@@ -34,11 +36,24 @@ async def lifespan(app: FastAPI):
 
     # Stop worker and close connections
     logger.info("Asset service shutting down...")
+    signal_shutdown()  # Signal all threads to stop
+    
     try:
-        await stop_worker()
-        await close_task_queue()
+        # Use timeout to prevent hanging during shutdown
+        await asyncio.wait_for(stop_worker(), timeout=3.0)
+    except asyncio.TimeoutError:
+        logger.warning("Worker stop timed out")
     except Exception as e:
-        logger.warning(f"Error during shutdown: {e}")
+        logger.warning(f"Error stopping worker: {e}")
+    
+    try:
+        await asyncio.wait_for(close_task_queue(), timeout=2.0)
+    except asyncio.TimeoutError:
+        logger.warning("Task queue close timed out")
+    except Exception as e:
+        logger.warning(f"Error closing task queue: {e}")
+    
+    logger.info("Asset service shutdown complete")
 
 
 def create_app() -> FastAPI:
