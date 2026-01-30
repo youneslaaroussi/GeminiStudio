@@ -23,6 +23,7 @@ import type { ClipType } from "@/app/types/timeline";
 import { createLayerTemplate } from "@/app/lib/store/project-store";
 import { TRACK_LABEL_WIDTH } from "../timeline/constants";
 import { createClipFromAsset, hasAssetDragData, readDraggedAsset } from "@/app/lib/assets/drag";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 interface TimelinePanelProps {
   hasPlayer: boolean;
@@ -407,37 +408,57 @@ export function TimelinePanel({
         </div>
 
         {/* Transport Controls */}
-        <div className="flex items-center gap-0.5 rounded-lg bg-muted/50 p-0.5">
-          <button
-            type="button"
-            onClick={() => setCurrentTime(0)}
-            className="p-1.5 rounded-md hover:bg-background text-muted-foreground hover:text-foreground transition-colors"
-            title="Go to Start"
-          >
-            <SkipBack className="size-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={onTogglePlay}
-            disabled={!hasPlayer}
-            className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 transition-colors"
-            title={playing ? "Pause" : "Play"}
-          >
-            {playing ? (
-              <Pause className="size-3.5 fill-current" />
-            ) : (
-              <Play className="size-3.5 fill-current ml-0.5" />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setCurrentTime(duration)}
-            className="p-1.5 rounded-md hover:bg-background text-muted-foreground hover:text-foreground transition-colors"
-            title="Go to End"
-          >
-            <SkipForward className="size-3.5" />
-          </button>
-        </div>
+        <TooltipProvider delayDuration={300}>
+          <div className="flex items-center gap-0.5 rounded-lg bg-muted/50 p-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setCurrentTime(0)}
+                  className="p-1.5 rounded-md hover:bg-background text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <SkipBack className="size-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p>Go to Start</p>
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onTogglePlay}
+                  disabled={!hasPlayer}
+                  className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 transition-colors"
+                >
+                  {playing ? (
+                    <Pause className="size-3.5 fill-current" />
+                  ) : (
+                    <Play className="size-3.5 fill-current ml-0.5" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p>Play / Pause (Space)</p>
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setCurrentTime(duration)}
+                  className="p-1.5 rounded-md hover:bg-background text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <SkipForward className="size-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p>Go to End</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
 
         {/* Playback Options */}
         <div className="flex items-center gap-0.5 rounded-lg bg-muted/50 p-0.5">
@@ -650,6 +671,9 @@ export function TimelinePanel({
                 {isEmptyDropTarget
                   ? "Drop to add to timeline"
                   : "Drag assets here or add clips to start building your project."}
+              </p>
+              <p className="text-xs text-muted-foreground/80 mt-1">
+                0 clips on timeline (0 video, 0 audio, 0 text, 0 image)
               </p>
             </div>
           </div>

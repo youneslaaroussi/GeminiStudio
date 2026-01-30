@@ -19,6 +19,7 @@ from .get_project_summary_tool import getProjectSummary
 from .list_assets_tool import listAssets
 from .list_project_assets_tool import listProjectAssets
 from .render_video_tool import renderVideo
+from .subscribe_pipeline_tool import subscribeToAssetPipeline
 from .time_tool import get_current_time_utc
 from .weather_tool import lookup_weather_snapshot
 
@@ -40,6 +41,7 @@ def get_registered_tools() -> Sequence[BaseTool]:
         listProjectAssets,
         search_product_docs,
         renderVideo,
+        subscribeToAssetPipeline,
         lookup_weather_snapshot,
     )
 

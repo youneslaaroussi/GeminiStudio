@@ -81,7 +81,7 @@ async def _start_batch_recognize(
     id="transcription",
     label="Transcribe audio/video",
     description="Use Google Cloud Speech-to-Text to generate captions.",
-    auto_start=False,  # Not auto-start - requires explicit trigger
+    auto_start=True,
     supported_types=[AssetType.AUDIO, AssetType.VIDEO],
 )
 async def transcription_step(context: PipelineContext) -> PipelineResult:

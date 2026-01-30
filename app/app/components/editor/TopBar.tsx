@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Save, Upload, Check, Loader2, Film, LogOut, Plus, RefreshCw, Settings, CreditCard } from "lucide-react";
+import { Save, Upload, Check, Loader2, Film, LogOut, Plus, RefreshCw, Settings, CreditCard, Keyboard } from "lucide-react";
 import { BranchSelector } from "./BranchSelector";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useProjectsListStore } from "@/app/lib/store/projects-list-store";
@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { ShortcutsModal } from "./ShortcutsModal";
 
 const supportsFileSystemAccess =
   typeof window !== "undefined" && "showSaveFilePicker" in window;
@@ -59,6 +61,12 @@ function sanitizeFilename(name: string) {
 
 interface TopBarProps {
   previewCanvas?: HTMLCanvasElement | null;
+  renderDialogOpen?: boolean;
+  onRenderDialogOpenChange?: (open: boolean) => void;
+  shortcutsModalOpen?: boolean;
+  onShortcutsModalOpenChange?: (open: boolean) => void;
+  onLoadReady?: (handler: () => void) => void;
+  onExportReady?: (handler: () => void) => void;
 }
 
 function userInitials(user: { displayName?: string | null; email?: string | null }): string {
@@ -72,7 +80,7 @@ function userInitials(user: { displayName?: string | null; email?: string | null
   return "?";
 }
 
-export function TopBar({ previewCanvas }: TopBarProps) {
+export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, onRenderDialogOpenChange, shortcutsModalOpen: shortcutsModalOpenProp, onShortcutsModalOpenChange, onLoadReady, onExportReady }: TopBarProps) {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { credits, refresh, loading: creditsLoading } = useCredits(user?.uid);
@@ -80,11 +88,18 @@ export function TopBar({ previewCanvas }: TopBarProps) {
   const setProject = useProjectStore((s) => s.setProject);
   const updateProjectSettings = useProjectStore((s) => s.updateProjectSettings);
   const projectId = useProjectStore((s) => s.projectId);
+  const saveStatus = useProjectStore((s) => s.saveStatus);
   const updateListProject = useProjectsListStore((s) => s.updateProject);
   const [isBusy, setIsBusy] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const [renderDialogOpen, setRenderDialogOpen] = useState(false);
   const [avatarImgError, setAvatarImgError] = useState(false);
+  const [renderDialogOpenLocal, setRenderDialogOpenLocal] = useState(false);
+  const [shortcutsModalOpenLocal, setShortcutsModalOpenLocal] = useState(false);
+
+  const shortcutsModalOpen = shortcutsModalOpenProp ?? shortcutsModalOpenLocal;
+  const setShortcutsModalOpen = onShortcutsModalOpenChange ?? setShortcutsModalOpenLocal;
+
+  const renderDialogOpen = renderDialogOpenProp ?? renderDialogOpenLocal;
+  const setRenderDialogOpen = onRenderDialogOpenChange ?? setRenderDialogOpenLocal;
 
   const { isRendering, jobStatus } = useRender();
 
@@ -159,9 +174,6 @@ export function TopBar({ previewCanvas }: TopBarProps) {
 
   const handleSave = useCallback(async () => {
     if (saveStatus === 'saving') return;
-    setSaveStatus('saving');
-    // Add a small artificial delay so the user sees the spinner
-    await new Promise(resolve => setTimeout(resolve, 500));
 
     try {
       // Capture thumbnail if canvas is available
@@ -170,9 +182,8 @@ export function TopBar({ previewCanvas }: TopBarProps) {
         thumbnail = await captureThumbnail(previewCanvas);
       }
 
-      // Save project
-      const save = useProjectStore.getState().saveProject;
-      save();
+      // Save project (this now manages saveStatus internally)
+      useProjectStore.getState().saveProject();
 
       // Update projects list with thumbnail and name
       if (projectId) {
@@ -184,15 +195,8 @@ export function TopBar({ previewCanvas }: TopBarProps) {
       }
 
       console.log("Project saved locally");
-      setSaveStatus('saved');
-
-      // Reset to idle after 2 seconds
-      setTimeout(() => {
-        setSaveStatus('idle');
-      }, 2000);
     } catch (error) {
       console.error("Failed to save project:", error);
-      setSaveStatus('idle'); // Or error state if we had one
     }
   }, [saveStatus, previewCanvas, projectId, project.name, updateListProject]);
 
@@ -254,6 +258,14 @@ export function TopBar({ previewCanvas }: TopBarProps) {
     }
   }, [parseAndLoadProject]);
 
+  useEffect(() => {
+    onLoadReady?.(handleLoad);
+  }, [onLoadReady, handleLoad]);
+
+  useEffect(() => {
+    onExportReady?.(handleExport);
+  }, [onExportReady, handleExport]);
+
   return (
     <>
       {/* Background Render Progress Bar */}
@@ -301,59 +313,104 @@ export function TopBar({ previewCanvas }: TopBarProps) {
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={handleLoad}
-          disabled={isBusy}
-          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
-        >
-          <Upload className="size-4" />
-          Load
-        </button>
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={isBusy}
-          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
-        >
-          <Upload className="size-4 rotate-180" />
-          Export
-        </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={isBusy || saveStatus === 'saving'}
-          className={cn(
-            "inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-primary-foreground transition-all duration-200",
-            saveStatus === 'saved'
-              ? "bg-green-600 hover:bg-green-700"
-              : "bg-primary hover:bg-primary/90",
-            (isBusy || saveStatus === 'saving') && "opacity-50 cursor-not-allowed"
-          )}
-        >
-          {saveStatus === 'saving' ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : saveStatus === 'saved' ? (
-            <Check className="size-4" />
-          ) : (
-            <Save className="size-4" />
-          )}
-          {saveStatus === 'saved' ? "Saved" : "Save"}
-        </button>
-        <button
-          type="button"
-          onClick={() => setRenderDialogOpen(true)}
-          disabled={isBusy}
-          className={cn(
-            "inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-            isRendering
-              ? "bg-blue-600/80 hover:bg-blue-600 text-white cursor-pointer"
-              : "bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
-          )}
-        >
-          <Film className="size-4" />
-          {isRendering ? `Rendering... ${jobStatus?.progress ?? 0}%` : "Render"}
-        </button>
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={handleLoad}
+                disabled={isBusy}
+                className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
+              >
+                <Upload className="size-4" />
+                Load
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>Load project (Ctrl+O / ⌘O)</p>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={isBusy}
+                className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
+              >
+                <Upload className="size-4 rotate-180" />
+                Export
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>Export project (Ctrl+E / ⌘E)</p>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={isBusy || saveStatus === 'saving'}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium text-primary-foreground transition-all duration-200",
+                  saveStatus === 'saved'
+                    ? "bg-green-600 hover:bg-green-700"
+                    : "bg-primary hover:bg-primary/90",
+                  (isBusy || saveStatus === 'saving') && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                {saveStatus === 'saving' ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : saveStatus === 'saved' ? (
+                  <Check className="size-4" />
+                ) : (
+                  <Save className="size-4" />
+                )}
+                {saveStatus === 'saved' ? "Saved" : "Save"}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>Save project (Ctrl+S / ⌘S)</p>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => setRenderDialogOpen(true)}
+                disabled={isBusy}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                  isRendering
+                    ? "bg-blue-600/80 hover:bg-blue-600 text-white cursor-pointer"
+                    : "bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+                )}
+              >
+                <Film className="size-4" />
+                {isRendering ? `Rendering... ${jobStatus?.progress ?? 0}%` : "Render"}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>Render video (Ctrl+Shift+R / ⌘⇧R)</p>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => setShortcutsModalOpen(true)}
+                className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                aria-label="Keyboard shortcuts"
+              >
+                <Keyboard className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>Keyboard shortcuts (Ctrl+/ / ⌘/)</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
         <div className="inline-flex items-center rounded-md border border-border bg-muted/30 overflow-hidden">
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs border-r border-border">
@@ -443,6 +500,11 @@ export function TopBar({ previewCanvas }: TopBarProps) {
           projectId={projectId}
         />
       )}
+
+      <ShortcutsModal
+        open={shortcutsModalOpen}
+        onOpenChange={setShortcutsModalOpen}
+      />
     </>
   );
 }

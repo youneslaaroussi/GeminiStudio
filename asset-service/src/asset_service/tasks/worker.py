@@ -93,6 +93,7 @@ class PipelineWorker:
         project_id = payload["project_id"]
         asset_data = payload["asset_data"]
         asset_path = payload.get("asset_path")
+        agent_metadata = payload.get("agent_metadata")
 
         asset = StoredAsset.from_dict(asset_data)
 
@@ -115,7 +116,7 @@ class PipelineWorker:
 
         def run_pipeline_sync():
             """Run async pipeline in a new event loop (runs in thread pool)."""
-            asyncio.run(run_auto_steps(user_id, project_id, asset, asset_path))
+            asyncio.run(run_auto_steps(user_id, project_id, asset, asset_path, agent_metadata))
 
         try:
             # Run entire pipeline in thread pool to avoid blocking event loop

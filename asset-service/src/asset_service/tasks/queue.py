@@ -31,9 +31,18 @@ class TaskQueue:
         asset_id: str,
         asset_data: dict[str, Any],
         asset_path: str,
+        agent_metadata: dict[str, Any] | None = None,
     ) -> str:
         """
         Enqueue a pipeline task for background processing.
+
+        Args:
+            user_id: User ID
+            project_id: Project ID
+            asset_id: Asset ID
+            asset_data: Asset data dict
+            asset_path: Local path to asset file
+            agent_metadata: Optional metadata about requesting agent (threadId, etc.)
 
         Returns the task ID.
         """
@@ -49,6 +58,7 @@ class TaskQueue:
                 "asset_id": asset_id,
                 "asset_data": asset_data,
                 "asset_path": asset_path,
+                "agent_metadata": agent_metadata,
             },
             "status": "pending",
             "created_at": now,

@@ -17,6 +17,8 @@ def mock_settings():
     settings.renderer_base_url = "http://localhost:4000"
     settings.render_event_topic = "test-topic"
     settings.render_event_subscription = "test-sub"
+    settings.pipeline_event_topic = "test-pipeline-topic"
+    settings.pipeline_event_subscription = "test-pipeline-sub"
     return settings
 
 

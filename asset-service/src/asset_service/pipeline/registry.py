@@ -189,6 +189,7 @@ async def run_auto_steps(
     project_id: str,
     asset: StoredAsset,
     asset_path: str,
+    agent_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Run all auto-start steps for an asset.
@@ -198,16 +199,20 @@ async def run_auto_steps(
         project_id: Project ID
         asset: Asset information
         asset_path: Path to the asset file
+        agent_metadata: Optional metadata about the requesting agent (threadId, etc.)
 
     Returns:
         Updated pipeline state
     """
     from ..metadata.ffprobe import determine_asset_type
+    from ..pubsub import publish_pipeline_event
 
     asset_type = AssetType(determine_asset_type(asset.mime_type, asset.name))
     auto_steps = [s for s in get_steps() if s.auto_start]
 
     state = await get_pipeline_state(user_id, project_id, asset.id)
+    steps_run = []
+    failed_steps = []
 
     for step in auto_steps:
         # Skip if not supported for this asset type
@@ -220,6 +225,55 @@ async def run_auto_steps(
             continue
 
         # Run the step
-        state = await run_step(user_id, project_id, asset, asset_path, step.id)
+        try:
+            state = await run_step(user_id, project_id, asset, asset_path, step.id)
+            step_state = next((s for s in state["steps"] if s["id"] == step.id), None)
+            if step_state:
+                steps_run.append({
+                    "id": step.id,
+                    "label": step.label,
+                    "status": step_state.get("status", "unknown"),
+                })
+                if step_state.get("status") == "failed":
+                    failed_steps.append(step.id)
+        except Exception as e:
+            logger.exception(f"Step {step.id} failed during auto-run: {e}")
+            steps_run.append({
+                "id": step.id,
+                "label": step.label,
+                "status": "failed",
+                "error": str(e),
+            })
+            failed_steps.append(step.id)
+
+    # Publish pipeline completion event
+    # Consider it "completed" if at least half of the steps succeeded
+    succeeded_count = sum(1 for s in steps_run if s.get("status") == "succeeded")
+    total_count = len(steps_run)
+    
+    if total_count > 0:
+        # If more than half failed, consider pipeline failed
+        if len(failed_steps) > total_count / 2:
+            event_type = "pipeline.failed"
+        else:
+            event_type = "pipeline.completed"
+    else:
+        # No steps to run (all already done or not applicable)
+        event_type = "pipeline.completed"
+
+    publish_pipeline_event(
+        event_type=event_type,
+        user_id=user_id,
+        project_id=project_id,
+        asset_id=asset.id,
+        asset_name=asset.name,
+        steps_summary=steps_run,
+        metadata={
+            "agent": agent_metadata or {},
+            "succeededCount": succeeded_count,
+            "failedCount": len(failed_steps),
+            "totalCount": total_count,
+        },
+    )
 
     return state

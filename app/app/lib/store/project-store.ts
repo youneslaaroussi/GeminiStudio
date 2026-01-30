@@ -37,6 +37,7 @@ interface ProjectStore {
   isMuted: boolean;
   isLooping: boolean;
   playbackSpeed: number;
+  saveStatus: 'idle' | 'saving' | 'saved';
 
   // Sync manager for Automerge/Firestore integration
   syncManager: ProjectSyncManager | null;
@@ -282,6 +283,7 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
     isMuted: false,
     isLooping: true,
     playbackSpeed: 1,
+    saveStatus: 'idle',
     syncManager: null,
     currentBranch: 'main',
     isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
@@ -1009,11 +1011,24 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
 
       saveProject: () => {
         if (typeof window === 'undefined') return;
-        const { project, projectId } = get();
+        const { project, projectId, saveStatus } = get();
         if (!projectId) return;
-        const snapshot = JSON.stringify(project);
-        localStorage.setItem(`gemini-project-${projectId}`, snapshot);
-        set({ hasUnsavedChanges: false, lastSavedSnapshot: snapshot });
+        // Don't start a new save if already saving
+        if (saveStatus === 'saving') return;
+        
+        set({ saveStatus: 'saving' });
+        
+        // Small delay so user sees the spinner
+        setTimeout(() => {
+          const snapshot = JSON.stringify(project);
+          localStorage.setItem(`gemini-project-${projectId}`, snapshot);
+          set({ hasUnsavedChanges: false, lastSavedSnapshot: snapshot, saveStatus: 'saved' });
+          
+          // Reset to idle after showing "saved" state
+          setTimeout(() => {
+            set({ saveStatus: 'idle' });
+          }, 2000);
+        }, 300);
       },
 
       exportProject: () => {

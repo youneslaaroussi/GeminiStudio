@@ -85,6 +85,13 @@ class Settings(BaseSettings):
         alias="VEO_EVENT_SUBSCRIPTION",
     )
 
+    # Pipeline events (for asset processing completion notifications)
+    pipeline_event_topic: str = Field(default="gemini-pipeline-events", alias="PIPELINE_EVENT_TOPIC")
+    pipeline_event_subscription: str = Field(
+        default="gemini-pipeline-events-sub",
+        alias="PIPELINE_EVENT_SUBSCRIPTION",
+    )
+
     # Banana image generation
     banana_model: str = Field(default="gemini-3-pro-image-preview", alias="BANANA_MODEL")
 

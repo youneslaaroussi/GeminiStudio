@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     app_port: int = Field(default=8081, alias="APP_PORT")
     debug: bool = Field(default=False, alias="DEBUG")
 
+    # Pub/Sub for pipeline events
+    pipeline_event_topic: str = Field(default="gemini-pipeline-events", alias="PIPELINE_EVENT_TOPIC")
+
     @property
     def speech_language_codes_list(self) -> list[str]:
         return [code.strip() for code in self.speech_language_codes.split(",") if code.strip()]

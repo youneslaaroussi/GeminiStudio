@@ -630,7 +630,9 @@ class TelegramProvider(ChatProvider):
 
                 upload_name = custom_filename or file_name
                 files = {"file": (upload_name, file_content, mime_type)}
-                data = {"source": "telegram", "run_pipeline": "true"}
+                # Include thread_id so pipeline can notify when done
+                thread_id = f"telegram-{chat_id}"
+                data = {"source": "telegram", "run_pipeline": "true", "thread_id": thread_id}
 
                 upload_response = await client.post(
                     f"{asset_service_url}/api/assets/{user_id}/{active_project_id}/upload",

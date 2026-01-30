@@ -18,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, GripVertical, Loader2, Wrench, MessageSquare, Mic, X } from "lucide-react";
 import { AssetsPanel } from "./assets";
-import { PreviewPanel } from "./PreviewPanel";
+import { PreviewPanel, type PreviewPanelHandle } from "./PreviewPanel";
 import { TimelinePanel } from "./TimelinePanel";
 import { SettingsPanel } from "./settings";
 import { TopBar } from "./TopBar";
@@ -38,6 +38,25 @@ export function EditorLayout() {
     "save" | "discard" | null
   >(null);
   const [rightPanelTab, setRightPanelTab] = useState<"toolbox" | "chat">("chat");
+  const [renderDialogOpen, setRenderDialogOpen] = useState(false);
+  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const [isPreviewFullscreen, setPreviewFullscreen] = useState(false);
+  const recenterRef = useRef<(() => void) | null>(null);
+  const previewRef = useRef<PreviewPanelHandle | null>(null);
+  const loadRef = useRef<(() => void) | null>(null);
+  const exportRef = useRef<(() => void) | null>(null);
+
+  const handleRecenterReady = useCallback((recenter: () => void) => {
+    recenterRef.current = recenter;
+  }, []);
+
+  const handleLoadReady = useCallback((load: () => void) => {
+    loadRef.current = load;
+  }, []);
+
+  const handleExportReady = useCallback((export_: () => void) => {
+    exportRef.current = export_;
+  }, []);
 
   // Connect to Zustand store
   const isPlaying = useProjectStore((s) => s.isPlaying);
@@ -136,6 +155,7 @@ export function EditorLayout() {
       handler: togglePlay,
       preventDefault: true,
     },
+    // Undo: Ctrl+Z (Windows/Linux) and Cmd+Z (Mac)
     {
       key: 'z',
       ctrlKey: true,
@@ -143,14 +163,134 @@ export function EditorLayout() {
       preventDefault: true,
     },
     {
+      key: 'z',
+      metaKey: true,
+      handler: useProjectStore.getState().undo,
+      preventDefault: true,
+    },
+    // Redo: Ctrl+Shift+Z / Cmd+Shift+Z
+    {
+      key: 'z',
+      ctrlKey: true,
+      shiftKey: true,
+      handler: useProjectStore.getState().redo,
+      preventDefault: true,
+    },
+    {
+      key: 'z',
+      metaKey: true,
+      shiftKey: true,
+      handler: useProjectStore.getState().redo,
+      preventDefault: true,
+    },
+    // Redo: Ctrl+Y (Windows/Linux)
+    {
       key: 'y',
       ctrlKey: true,
       handler: useProjectStore.getState().redo,
       preventDefault: true,
     },
+    // Open/Load: Ctrl+O (Windows/Linux) and Cmd+O (Mac)
+    {
+      key: 'o',
+      ctrlKey: true,
+      handler: () => loadRef.current?.(),
+      preventDefault: true,
+    },
+    {
+      key: 'o',
+      metaKey: true,
+      handler: () => loadRef.current?.(),
+      preventDefault: true,
+    },
+    // Export: Ctrl+E (Windows/Linux) and Cmd+E (Mac)
+    {
+      key: 'e',
+      ctrlKey: true,
+      handler: () => exportRef.current?.(),
+      preventDefault: true,
+    },
+    {
+      key: 'e',
+      metaKey: true,
+      handler: () => exportRef.current?.(),
+      preventDefault: true,
+    },
+    // Save: Ctrl+S (Windows/Linux) and Cmd+S (Mac)
+    {
+      key: 's',
+      ctrlKey: true,
+      handler: () => {
+        useProjectStore.getState().saveProject();
+      },
+      preventDefault: true,
+    },
+    {
+      key: 's',
+      metaKey: true,
+      handler: () => {
+        useProjectStore.getState().saveProject();
+      },
+      preventDefault: true,
+    },
+    // Recenter: 0 (works in normal and fullscreen view)
+    {
+      key: '0',
+      handler: () => {
+        previewRef.current?.recenter();
+      },
+      preventDefault: true,
+    },
+    // Fullscreen preview: F toggles (enter when not fullscreen, exit when fullscreen)
+    {
+      key: 'f',
+      handler: () => {
+        if (isPreviewFullscreen) {
+          previewRef.current?.exitFullscreen();
+        } else {
+          previewRef.current?.enterFullscreen();
+        }
+      },
+      preventDefault: true,
+    },
+    // Escape: exit fullscreen when in fullscreen, else deselect clip
     {
       key: 'Escape',
-      handler: () => useProjectStore.getState().setSelectedClip(null),
+      handler: () => {
+        if (isPreviewFullscreen) {
+          previewRef.current?.exitFullscreen();
+        } else {
+          useProjectStore.getState().setSelectedClip(null);
+        }
+      },
+      preventDefault: true,
+    },
+    // Render: Ctrl+Shift+R / Cmd+Shift+R
+    {
+      key: 'r',
+      ctrlKey: true,
+      shiftKey: true,
+      handler: () => setRenderDialogOpen(true),
+      preventDefault: true,
+    },
+    {
+      key: 'r',
+      metaKey: true,
+      shiftKey: true,
+      handler: () => setRenderDialogOpen(true),
+      preventDefault: true,
+    },
+    // Shortcuts modal: Ctrl+/ or Cmd+/
+    {
+      key: '/',
+      ctrlKey: true,
+      handler: () => setShortcutsModalOpen((prev) => !prev),
+      preventDefault: true,
+    },
+    {
+      key: '/',
+      metaKey: true,
+      handler: () => setShortcutsModalOpen((prev) => !prev),
       preventDefault: true,
     },
   ]);
@@ -249,7 +389,15 @@ export function EditorLayout() {
   return (
     <>
       <div className="flex h-screen w-full flex-col overflow-hidden bg-background">
-        <TopBar previewCanvas={previewCanvas} />
+        <TopBar
+          previewCanvas={previewCanvas}
+          renderDialogOpen={renderDialogOpen}
+          onRenderDialogOpenChange={setRenderDialogOpen}
+          shortcutsModalOpen={shortcutsModalOpen}
+          onShortcutsModalOpenChange={setShortcutsModalOpen}
+          onLoadReady={handleLoadReady}
+          onExportReady={handleExportReady}
+        />
         <div className="flex-1 min-h-0">
           <ResizablePanelGroup direction="horizontal" className="h-full">
             <ResizablePanel defaultSize={78} minSize={60} className="min-w-0">
@@ -270,8 +418,14 @@ export function EditorLayout() {
                     <ResizablePanel defaultSize={60} minSize={30} className="min-w-0">
                       <div className="h-full bg-card min-w-0">
                         <PreviewPanel
+                          ref={previewRef}
                           onPlayerChange={setPlayer}
                           onCanvasReady={setPreviewCanvas}
+                          onRecenterReady={handleRecenterReady}
+                          onFullscreenChange={setPreviewFullscreen}
+                          isPlaying={isPlaying}
+                          onTogglePlay={togglePlay}
+                          onSeek={setCurrentTime}
                           layers={layers}
                           duration={getDuration()}
                           currentTime={currentTime}

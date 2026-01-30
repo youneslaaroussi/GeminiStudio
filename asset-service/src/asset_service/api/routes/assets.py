@@ -74,6 +74,7 @@ async def upload_asset(
     file: UploadFile = File(...),
     source: str = Form(default="api"),
     run_pipeline: bool = Form(default=True),
+    thread_id: str | None = Form(default=None),
 ):
     """
     Upload a new asset.
@@ -164,12 +165,21 @@ async def upload_asset(
     if run_pipeline:
         try:
             queue = await get_task_queue()
+            # Build agent metadata if thread_id provided (for notifications)
+            agent_metadata = None
+            if thread_id:
+                agent_metadata = {
+                    "threadId": thread_id,
+                    "userId": user_id,
+                    "projectId": project_id,
+                }
             await queue.enqueue_pipeline(
                 user_id=user_id,
                 project_id=project_id,
                 asset_id=asset_id,
                 asset_data=saved_asset,
                 asset_path=temp_path or "",
+                agent_metadata=agent_metadata,
             )
             pipeline_started = True
             logger.info(f"Queued pipeline for asset {asset_id}")

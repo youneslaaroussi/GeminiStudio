@@ -1,7 +1,7 @@
 'use client';
 
 import { Player, Stage, Vector2, type Project, type Scene } from '@motion-canvas/core';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { Layer, TimelineClip } from '@/app/types/timeline';
 import type { ProjectTranscription } from '@/app/types/transcription';
 import { useDrag } from '@/app/hooks/use-drag';
@@ -9,6 +9,10 @@ import { SelectionOverlay } from './SelectionOverlay';
 import { useProjectStore } from '@/app/lib/store/project-store';
 import { EditorSkeleton } from '@/app/components/editor/EditorSkeleton';
 import { motion, AnimatePresence } from 'motion/react';
+
+export interface ScenePlayerHandle {
+  recenter: () => void;
+}
 
 interface SceneNode {
   worldToLocal: () => DOMMatrix;
@@ -52,7 +56,7 @@ interface ScenePlayerProps {
   };
 }
 
-export function ScenePlayer({
+export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(function ScenePlayer({
   onPlayerChange,
   onCanvasReady,
   onVariablesUpdated,
@@ -65,7 +69,7 @@ export function ScenePlayer({
   captionSettings,
   textClipSettings,
   sceneConfig,
-}: ScenePlayerProps) {
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState<Stage | null>(null);
@@ -111,6 +115,13 @@ export function ScenePlayer({
   const [zoomToFit, setZoomToFit] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
+
+  // Expose recenter function via ref
+  useImperativeHandle(ref, () => ({
+    recenter: () => {
+      setZoomToFit(true);
+    },
+  }), []);
 
   // Load project from built scene via <script type="module">
   useEffect(() => {
@@ -631,4 +642,4 @@ export function ScenePlayer({
       </AnimatePresence>
     </div>
   );
-}
+});
