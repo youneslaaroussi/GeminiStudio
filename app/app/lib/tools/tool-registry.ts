@@ -7,6 +7,8 @@ import type {
 import type { Project } from "@/app/types/timeline";
 import { captureAssetTool } from "./capture-asset";
 import { captureFacesTool } from "./capture-faces";
+import { generateMusicTool } from "./generate-music";
+import { generateTtsTool } from "./generate-tts";
 import { getAssetMetadataTool } from "./get-asset-metadata";
 import { listAssetsTool } from "./list-assets";
 import { projectHistoryTool } from "./project-history";
@@ -45,6 +47,8 @@ class ToolRegistry {
 export const toolRegistry = new ToolRegistry();
 toolRegistry.register(captureAssetTool);
 toolRegistry.register(captureFacesTool);
+toolRegistry.register(generateMusicTool);
+toolRegistry.register(generateTtsTool);
 toolRegistry.register(getAssetMetadataTool);
 toolRegistry.register(listAssetsTool);
 toolRegistry.register(projectHistoryTool);

@@ -539,7 +539,7 @@ def _extract_media_url(text: str) -> tuple[str | None, str | None]:
     # 2. Raw URL
     if not url:
         raw = re.search(
-            r'(https?://[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?)',
+            r'(https?://[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|m4a|aac|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?)',
             text,
             re.IGNORECASE,
         )
@@ -554,7 +554,7 @@ def _extract_media_url(text: str) -> tuple[str | None, str | None]:
         return url, 'video'
     if lower.endswith('.gif'):
         return url, 'animation'
-    if any(lower.endswith(ext) for ext in ['.mp3', '.wav', '.ogg']):
+    if any(lower.endswith(ext) for ext in ['.mp3', '.wav', '.ogg', '.m4a', '.aac']):
         return url, 'audio'
     if any(lower.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.webp']):
         return url, 'photo'
@@ -608,13 +608,14 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
     
     # Check if message contains a media URL
     media_url, media_type = _extract_media_url(text)
+    logger.debug(f"[TELEGRAM] Media detection: url={media_url[:100] if media_url else None}..., type={media_type}")
     
     async with httpx.AsyncClient() as client:
         if media_url and media_type:
             # Remove markdown [text](url) or raw URL from caption
             import re
             caption = re.sub(r'\[[^\]]*\]\(https?://[^\)]+\)', '', text)
-            caption = re.sub(r'https?://[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?', '', caption, flags=re.IGNORECASE)
+            caption = re.sub(r'https?://[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|m4a|aac|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?', '', caption, flags=re.IGNORECASE)
             caption = re.sub(r'\s+', ' ', caption).strip().strip('.:')
             
             # Convert caption to MarkdownV2
@@ -641,25 +642,28 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
             # Remove None values
             payload = {k: v for k, v in payload.items() if v is not None}
             
-            response = await client.post(endpoint, json=payload, timeout=30.0)
+            logger.info(f"[TELEGRAM] Sending {media_type} to {chat_id}, url_length={len(media_url)}")
+            response = await client.post(endpoint, json=payload, timeout=60.0)  # Longer timeout for media
             if response.status_code == 200:
-                logger.info(f"Sent Telegram {media_type} to {chat_id}")
+                logger.info(f"[TELEGRAM] Sent {media_type} to {chat_id}")
                 return True
             else:
-                logger.warning(f"Failed to send {media_type} with MarkdownV2, trying plain text: {response.text}")
+                logger.warning(f"[TELEGRAM] Failed to send {media_type} (status={response.status_code}): {response.text[:500]}")
                 # Fall back to plain text without parse_mode
                 payload.pop("parse_mode", None)
                 if "caption" in payload and caption:
                     # Use original caption without markdown conversion
                     original_caption = re.sub(r'\[[^\]]*\]\(https?://[^\)]+\)', '', text)
-                    original_caption = re.sub(r'https?://[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?', '', original_caption, flags=re.IGNORECASE)
+                    original_caption = re.sub(r'https?://[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|m4a|aac|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?', '', original_caption, flags=re.IGNORECASE)
                     original_caption = re.sub(r'\s+', ' ', original_caption).strip().strip('.:')
                     payload["caption"] = original_caption[:1024] if original_caption else None
                     payload = {k: v for k, v in payload.items() if v is not None}
-                response = await client.post(endpoint, json=payload, timeout=30.0)
+                logger.info(f"[TELEGRAM] Retrying {media_type} without MarkdownV2")
+                response = await client.post(endpoint, json=payload, timeout=60.0)
                 if response.status_code == 200:
-                    logger.info(f"Sent Telegram {media_type} (plain) to {chat_id}")
+                    logger.info(f"[TELEGRAM] Sent {media_type} (plain) to {chat_id}")
                     return True
+                logger.warning(f"[TELEGRAM] Media send failed again (status={response.status_code}): {response.text[:300]}, falling back to text")
                 # Fall through to text message
         
         # Send as text message with MarkdownV2

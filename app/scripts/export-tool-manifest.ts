@@ -16,6 +16,9 @@ const LANGGRAPH_TOOL_MAP: Record<string, string> = {
   timelineAddClip: "addClipToTimeline",
   timelineDeleteClip: "deleteClipFromTimeline",
   listAssets: "listAssets",
+  generateMusic: "generateMusic",
+  generateSpeech: "generateSpeech",
+  veoGenerate: "generateVeoVideo",
 };
 
 /**
@@ -51,6 +54,18 @@ const LANGGRAPH_ONLY_TOOLS: Array<{
     label: "Delete Clip from Timeline",
     description: "Remove a clip from the timeline by its ID.",
     langgraphName: "deleteClipFromTimeline",
+  },
+  {
+    name: "generateImage",
+    label: "Generate Image",
+    description: "Generate an image using Google's Gemini image model from a text prompt.",
+    langgraphName: "generateImage",
+  },
+  {
+    name: "getAssetMetadata",
+    label: "Get Asset Metadata",
+    description: "Get detailed metadata for an asset including face detection, shot detection, labels, and transcription.",
+    langgraphName: "getAssetMetadata",
   },
 ];
 

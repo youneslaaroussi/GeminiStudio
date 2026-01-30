@@ -88,6 +88,12 @@ class Settings(BaseSettings):
     # Banana image generation
     banana_model: str = Field(default="gemini-3-pro-image-preview", alias="BANANA_MODEL")
 
+    # Lyria music generation
+    lyria_model: str = Field(default="lyria-realtime-exp", alias="LYRIA_MODEL")
+
+    # TTS (Text-to-Speech)
+    tts_model: str = Field(default="gemini-2.5-flash-preview-tts", alias="TTS_MODEL")
+
 
 @lru_cache
 def get_settings() -> Settings:

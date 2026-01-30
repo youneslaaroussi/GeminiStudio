@@ -11,6 +11,8 @@ from .add_clip_tool import addClipToTimeline
 from .delete_clip_tool import deleteClipFromTimeline
 from .docs_tool import search_product_docs
 from .generate_image_tool import generateImage
+from .generate_music_tool import generateMusic
+from .generate_tts_tool import generateSpeech
 from .generate_veo_video_tool import generateVeoVideo
 from .get_asset_metadata_tool import getAssetMetadata
 from .get_project_summary_tool import getProjectSummary
@@ -28,6 +30,8 @@ def get_registered_tools() -> Sequence[BaseTool]:
         addClipToTimeline,
         deleteClipFromTimeline,
         generateImage,
+        generateMusic,
+        generateSpeech,
         generateVeoVideo,
         get_current_time_utc,
         getAssetMetadata,

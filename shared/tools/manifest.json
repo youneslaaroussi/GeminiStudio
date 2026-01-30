@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-01-29T20:04:56.127Z",
+  "generatedAt": "2026-01-30T16:45:40.742Z",
   "tools": {
     "captureAsset": {
       "name": "captureAsset",
@@ -120,6 +120,216 @@
         },
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
+    },
+    "generateMusic": {
+      "name": "generateMusic",
+      "label": "Generate Music (Lyria)",
+      "description": "Generate original music using Google's Lyria AI model. Creates music from a text description including genre, mood, instruments, and tempo.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": true,
+        "langgraphName": "generateMusic"
+      },
+      "fields": [
+        {
+          "name": "projectId",
+          "label": "Project ID",
+          "type": "text",
+          "placeholder": "project_abc123...",
+          "description": "The project to associate this music with.",
+          "required": true
+        },
+        {
+          "name": "prompt",
+          "label": "Music Description",
+          "type": "textarea",
+          "placeholder": "Upbeat electronic dance music with synth leads, driving bassline, 128 BPM, energetic festival vibe...",
+          "description": "Describe the music you want: genre, mood, instruments, tempo, style.",
+          "required": true
+        },
+        {
+          "name": "durationSeconds",
+          "label": "Duration",
+          "type": "select",
+          "options": [
+            {
+              "value": "10",
+              "label": "10 seconds"
+            },
+            {
+              "value": "20",
+              "label": "20 seconds"
+            },
+            {
+              "value": "30",
+              "label": "30 seconds"
+            },
+            {
+              "value": "60",
+              "label": "60 seconds"
+            }
+          ],
+          "defaultValue": "30",
+          "description": "Length of the generated music."
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/generateMusicInput",
+        "definitions": {
+          "generateMusicInput": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "prompt": {
+                "type": "string",
+                "minLength": 5
+              },
+              "durationSeconds": {
+                "type": "string",
+                "enum": [
+                  "10",
+                  "20",
+                  "30",
+                  "60"
+                ],
+                "default": "30"
+              }
+            },
+            "required": [
+              "projectId",
+              "prompt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "generateSpeech": {
+      "name": "generateSpeech",
+      "label": "Generate Speech (TTS)",
+      "description": "Generate natural-sounding speech from text using Google's TTS model. Great for voiceovers, narration, and accessibility.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": true,
+        "langgraphName": "generateSpeech"
+      },
+      "fields": [
+        {
+          "name": "projectId",
+          "label": "Project ID",
+          "type": "text",
+          "placeholder": "project_abc123...",
+          "description": "The project to associate this audio with.",
+          "required": true
+        },
+        {
+          "name": "text",
+          "label": "Text to Speak",
+          "type": "textarea",
+          "placeholder": "Enter the text you want to convert to speech...",
+          "description": "The text to convert to speech (up to 5000 characters).",
+          "required": true
+        },
+        {
+          "name": "voice",
+          "label": "Voice",
+          "type": "select",
+          "options": [
+            {
+              "value": "Puck",
+              "label": "Puck - Upbeat, playful male"
+            },
+            {
+              "value": "Charon",
+              "label": "Charon - Deep, authoritative male"
+            },
+            {
+              "value": "Kore",
+              "label": "Kore - Warm, friendly female"
+            },
+            {
+              "value": "Fenrir",
+              "label": "Fenrir - Bold, energetic male"
+            },
+            {
+              "value": "Aoede",
+              "label": "Aoede - Bright, cheerful female"
+            },
+            {
+              "value": "Leda",
+              "label": "Leda - Calm, soothing female"
+            },
+            {
+              "value": "Orus",
+              "label": "Orus - Clear, professional male"
+            },
+            {
+              "value": "Zephyr",
+              "label": "Zephyr - Soft, gentle"
+            }
+          ],
+          "defaultValue": "Kore",
+          "description": "Choose the voice for the speech."
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/generateSpeechInput",
+        "definitions": {
+          "generateSpeechInput": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "text": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 5000
+              },
+              "voice": {
+                "type": "string",
+                "enum": [
+                  "Puck",
+                  "Charon",
+                  "Kore",
+                  "Fenrir",
+                  "Aoede",
+                  "Leda",
+                  "Orus",
+                  "Zephyr"
+                ],
+                "default": "Kore"
+              }
+            },
+            "required": [
+              "projectId",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "getAssetMetadata": {
+      "name": "getAssetMetadata",
+      "label": "Get Asset Metadata",
+      "description": "Get detailed metadata for an asset including face detection, shot detection, labels, and transcription.",
+      "runLocation": "server",
+      "implementations": {
+        "app": false,
+        "langgraph": true,
+        "langgraphName": "getAssetMetadata"
+      },
+      "fields": [],
+      "inputSchema": null
     },
     "listAssets": {
       "name": "listAssets",
@@ -1186,8 +1396,8 @@
     "veoGenerate": {
       "name": "veoGenerate",
       "label": "Generate Veo Video",
-      "description": "Generate a video using Google Veo 3.1. Returns immediately with operation ID, then notifies when video is ready.",
-      "runLocation": "server",
+      "description": "Generate a video using Google Veo 3. Returns a job ID that can be polled for completion.",
+      "runLocation": "client",
       "implementations": {
         "app": true,
         "langgraph": true,
@@ -1468,93 +1678,6 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
     },
-    "getAssetMetadata": {
-      "name": "getAssetMetadata",
-      "label": "Get Asset Metadata",
-      "description": "Get detailed metadata for an asset including face detection, shot detection, labels, transcription, and more.",
-      "runLocation": "client",
-      "implementations": {
-        "app": true,
-        "langgraph": true,
-        "langgraphName": "getAssetMetadata"
-      },
-      "fields": [
-        {
-          "name": "assetId",
-          "label": "Asset ID",
-          "type": "text",
-          "placeholder": "e.g. asset_123",
-          "description": "The ID of the asset to get metadata for.",
-          "required": true
-        },
-        {
-          "name": "metadataType",
-          "label": "Metadata Type (optional)",
-          "type": "select",
-          "description": "Filter to a specific type of metadata. Leave empty for all available metadata.",
-          "options": [
-            {
-              "value": "",
-              "label": "All metadata"
-            },
-            {
-              "value": "face-detection",
-              "label": "Face Detection"
-            },
-            {
-              "value": "shot-detection",
-              "label": "Shot Detection"
-            },
-            {
-              "value": "label-detection",
-              "label": "Label Detection"
-            },
-            {
-              "value": "person-detection",
-              "label": "Person Detection"
-            },
-            {
-              "value": "transcription",
-              "label": "Transcription"
-            },
-            {
-              "value": "metadata",
-              "label": "File Metadata"
-            }
-          ]
-        }
-      ],
-      "inputSchema": {
-        "$ref": "#/definitions/getAssetMetadataInput",
-        "definitions": {
-          "getAssetMetadataInput": {
-            "type": "object",
-            "properties": {
-              "assetId": {
-                "type": "string",
-                "minLength": 1
-              },
-              "metadataType": {
-                "type": "string",
-                "enum": [
-                  "face-detection",
-                  "shot-detection",
-                  "label-detection",
-                  "person-detection",
-                  "transcription",
-                  "metadata"
-                ]
-              }
-            },
-            "required": [
-              "assetId"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "$schema": "http://json-schema.org/draft-07/schema#"
-      }
-    },
     "getProjectSummary": {
       "name": "getProjectSummary",
       "label": "Get Project Summary",
@@ -1603,6 +1726,19 @@
         "app": false,
         "langgraph": true,
         "langgraphName": "deleteClipFromTimeline"
+      },
+      "fields": [],
+      "inputSchema": null
+    },
+    "generateImage": {
+      "name": "generateImage",
+      "label": "Generate Image",
+      "description": "Generate an image using Google's Gemini image model from a text prompt.",
+      "runLocation": "server",
+      "implementations": {
+        "app": false,
+        "langgraph": true,
+        "langgraphName": "generateImage"
       },
       "fields": [],
       "inputSchema": null
