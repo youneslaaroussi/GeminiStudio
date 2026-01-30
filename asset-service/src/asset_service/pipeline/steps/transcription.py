@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime
+from typing import Any
 
 import httpx
 
@@ -16,9 +17,34 @@ from ...transcription.store import (
     TranscriptionJob,
     save_transcription_job,
     find_latest_job_for_asset,
+    update_transcription_job,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_offset_to_ms(offset: Any) -> int:
+    """Parse a Speech API time offset to milliseconds.
+    
+    Handles formats like "1.5s", "0s", or dict with seconds/nanos.
+    """
+    if isinstance(offset, (int, float)):
+        return int(offset * 1000)
+    if isinstance(offset, str):
+        # Remove 's' suffix and parse as float seconds
+        numeric_str = offset.rstrip('s')
+        try:
+            seconds = float(numeric_str) if numeric_str else 0.0
+            return int(seconds * 1000)
+        except ValueError:
+            return 0
+    if isinstance(offset, dict):
+        seconds = offset.get("seconds", 0)
+        nanos = offset.get("nanos", 0)
+        if isinstance(seconds, str):
+            seconds = float(seconds) if seconds else 0.0
+        return int(seconds * 1000 + nanos / 1_000_000)
+    return 0
 
 
 async def _start_batch_recognize(
@@ -77,6 +103,95 @@ async def _start_batch_recognize(
         return operation_name
 
 
+async def _poll_operation(
+    token: str,
+    operation_name: str,
+    location: str,
+) -> dict[str, Any]:
+    """
+    Poll a Long Running Operation to check its status.
+
+    Returns the operation response with 'done' boolean and 'response'/'error' if complete.
+    """
+    endpoint = "speech.googleapis.com"
+    if location != "global":
+        endpoint = f"{location}-speech.googleapis.com"
+
+    url = f"https://{endpoint}/v2/{operation_name}"
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            url,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            timeout=30.0,
+        )
+
+        if response.status_code != 200:
+            raise RuntimeError(f"Failed to poll operation: {response.text}")
+
+        return response.json()
+
+
+def _parse_transcription_result(operation_response: dict[str, Any]) -> tuple[str, list[dict]]:
+    """
+    Parse the transcription result from a completed operation.
+
+    The response structure for inlineResponseConfig is:
+    response.results[file_uri].inline_result.transcript.results[]
+
+    Each result contains alternatives[] with transcript, confidence, and words[].
+
+    Returns (transcript_text, segments_with_word_timings)
+    """
+    results = operation_response.get("results", {})
+
+    all_segments = []
+    all_text_parts = []
+
+    # Results are keyed by the input file URI
+    for file_uri, file_result in results.items():
+        # Check for inline_result (used with inlineResponseConfig)
+        inline_result = file_result.get("inlineResult", {})
+        transcript_data = inline_result.get("transcript", {})
+
+        # Fallback to deprecated direct transcript field
+        if not transcript_data:
+            transcript_data = file_result.get("transcript", {})
+
+        recognition_results = transcript_data.get("results", [])
+
+        for result in recognition_results:
+            alternatives = result.get("alternatives", [])
+            if not alternatives:
+                continue
+
+            # Use the first (best) alternative
+            best = alternatives[0]
+            transcript_text = best.get("transcript", "")
+            if transcript_text:
+                all_text_parts.append(transcript_text)
+
+            # Extract word timings - one segment per word in { start, speech } format
+            # to match the frontend expected format
+            words = best.get("words", [])
+            for word_info in words:
+                word_text = word_info.get("word", "").strip()
+                if not word_text:
+                    continue
+                start_offset = word_info.get("startOffset", "0s")
+                start_ms = _parse_offset_to_ms(start_offset)
+                all_segments.append({
+                    "start": start_ms,
+                    "speech": word_text,
+                })
+
+    full_transcript = " ".join(all_text_parts)
+    return full_transcript, all_segments
+
+
 @register_step(
     id="transcription",
     label="Transcribe audio/video",
@@ -85,23 +200,139 @@ async def _start_batch_recognize(
     supported_types=[AssetType.AUDIO, AssetType.VIDEO],
 )
 async def transcription_step(context: PipelineContext) -> PipelineResult:
-    """Start a transcription job for the asset."""
-    # Check for existing processing job
+    """Start or poll a transcription job for the asset."""
+    env = get_speech_env()
+
+    # Check for existing job
     existing_job = await find_latest_job_for_asset(
         context.user_id,
         context.project_id,
         context.asset.id,
     )
 
-    if existing_job and existing_job.status == "processing":
-        return PipelineResult(
-            status=StepStatus.WAITING,
-            metadata={
-                "message": "Transcription already running",
-                "jobId": existing_job.id,
-                "createdAt": existing_job.created_at,
-            },
-        )
+    if existing_job:
+        # Job completed successfully
+        if existing_job.status == "completed":
+            return PipelineResult(
+                status=StepStatus.SUCCEEDED,
+                metadata={
+                    "message": "Transcription completed",
+                    "jobId": existing_job.id,
+                    "createdAt": existing_job.created_at,
+                    "transcript": existing_job.transcript,
+                    "segments": existing_job.segments,
+                },
+            )
+
+        # Job failed
+        if existing_job.status == "error":
+            return PipelineResult(
+                status=StepStatus.FAILED,
+                metadata={
+                    "message": "Transcription failed",
+                    "jobId": existing_job.id,
+                    "error": existing_job.error,
+                },
+            )
+
+        # Job still processing - poll the operation to check status
+        if existing_job.status == "processing" and existing_job.operation_name:
+            logger.info(f"Polling transcription operation {existing_job.operation_name}")
+            token = get_speech_access_token()
+
+            try:
+                operation = await _poll_operation(
+                    token=token,
+                    operation_name=existing_job.operation_name,
+                    location=env.location,
+                )
+
+                if operation.get("done"):
+                    # Operation completed - check for error or success
+                    if "error" in operation:
+                        error_msg = operation["error"].get("message", "Unknown error")
+                        logger.error(f"Transcription operation failed: {error_msg}")
+
+                        await update_transcription_job(
+                            context.user_id,
+                            context.project_id,
+                            existing_job.id,
+                            {"status": "error", "error": error_msg},
+                        )
+
+                        return PipelineResult(
+                            status=StepStatus.FAILED,
+                            metadata={
+                                "message": "Transcription failed",
+                                "jobId": existing_job.id,
+                                "error": error_msg,
+                            },
+                        )
+                    else:
+                        # Success - parse results
+                        response = operation.get("response", {})
+
+                        # Debug: log response structure
+                        logger.debug(f"Transcription response keys: {response.keys()}")
+                        for uri, result in response.get("results", {}).items():
+                            logger.debug(f"Result for {uri}: keys={result.keys()}")
+                            if "inlineResult" in result:
+                                logger.debug(f"inlineResult keys: {result['inlineResult'].keys()}")
+
+                        transcript, segments = _parse_transcription_result(response)
+
+                        logger.info(
+                            f"Transcription completed for job {existing_job.id}, "
+                            f"{len(segments)} segments, {len(transcript)} chars"
+                        )
+
+                        await update_transcription_job(
+                            context.user_id,
+                            context.project_id,
+                            existing_job.id,
+                            {
+                                "status": "completed",
+                                "transcript": transcript,
+                                "segments": segments,
+                            },
+                        )
+
+                        return PipelineResult(
+                            status=StepStatus.SUCCEEDED,
+                            metadata={
+                                "message": "Transcription completed",
+                                "jobId": existing_job.id,
+                                "createdAt": existing_job.created_at,
+                                "transcript": transcript,
+                                "segments": segments,
+                            },
+                        )
+                else:
+                    # Still processing
+                    logger.info(f"Transcription operation {existing_job.operation_name} still processing")
+                    return PipelineResult(
+                        status=StepStatus.WAITING,
+                        metadata={
+                            "message": "Transcription in progress",
+                            "jobId": existing_job.id,
+                            "createdAt": existing_job.created_at,
+                        },
+                    )
+
+            except Exception as e:
+                logger.exception(f"Error polling transcription operation: {e}")
+                # Don't fail the step, just keep waiting
+                return PipelineResult(
+                    status=StepStatus.WAITING,
+                    metadata={
+                        "message": "Transcription in progress (poll error)",
+                        "jobId": existing_job.id,
+                        "createdAt": existing_job.created_at,
+                        "pollError": str(e),
+                    },
+                )
+
+    # No existing job - start a new one
 
     # Get GCS URI - either from params or from upload step
     gcs_uri = context.params.get("audioGcsUri")
@@ -113,8 +344,7 @@ async def transcription_step(context: PipelineContext) -> PipelineResult:
     if not gcs_uri:
         raise ValueError("Cloud upload step must complete before transcription")
 
-    # Get speech environment
-    env = get_speech_env()
+    # Get access token
     token = get_speech_access_token()
 
     # Determine language codes

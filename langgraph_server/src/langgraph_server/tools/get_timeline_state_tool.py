@@ -1,4 +1,4 @@
-"""Tool to get a summary of the current project and timeline state."""
+"""Tool to get the current timeline state including layers and clips."""
 
 from __future__ import annotations
 
@@ -9,15 +9,18 @@ from ..firebase import fetch_user_projects
 
 
 @tool
-def getProjectSummary(
+def getTimelineState(
     project_id: str | None = None,
     user_id: str | None = None,
     branch_id: str | None = None,
 ) -> dict:
-    """Return a summary of the current project including name, resolution, fps, layers, and clips.
+    """Get the current state of the project timeline including all layers and clips with their IDs.
 
-    Uses the session's branch when provided, so the summary reflects the timeline
-    state for this conversation's branch (not necessarily main).
+    Returns detailed information about each clip (id, name, type, start, duration, end)
+    which can be used for operations like deleteClipFromTimeline.
+
+    Uses the session's branch when provided, so the state reflects the timeline
+    for this conversation's branch (not necessarily main).
     """
 
     if not user_id:
@@ -73,32 +76,58 @@ def getProjectSummary(
 
     layers = project_data.get("layers", [])
 
-    # Build layer/clip summary
+    # Build layer/clip summary with full clip details
     layer_summaries = []
     total_clips = 0
     total_duration = 0.0
 
     for layer in layers:
+        layer_id = layer.get("id", "unknown")
         layer_name = layer.get("name", "Unnamed Layer")
         layer_type = layer.get("type", "unknown")
         clips = layer.get("clips", [])
         clip_count = len(clips)
         total_clips += clip_count
 
-        # Calculate layer duration (end of last clip)
+        # Build clip details with IDs for operations like delete
+        clip_details = []
         layer_end = 0.0
         for clip in clips:
-            clip_end = clip.get("start", 0) + clip.get("duration", 0)
+            clip_start = clip.get("start", 0)
+            clip_duration = clip.get("duration", 0)
+            clip_speed = clip.get("speed", 1)
+            clip_end = clip_start + clip_duration / clip_speed
             if clip_end > layer_end:
                 layer_end = clip_end
             if clip_end > total_duration:
                 total_duration = clip_end
 
+            clip_info = {
+                "id": clip.get("id"),
+                "name": clip.get("name", "Unnamed"),
+                "type": clip.get("type", "unknown"),
+                "start": round(clip_start, 2),
+                "duration": round(clip_duration, 2),
+                "end": round(clip_end, 2),
+                "speed": clip_speed,
+            }
+            # Include source info if available
+            if clip.get("src"):
+                clip_info["src"] = clip.get("src")
+            if clip.get("assetId"):
+                clip_info["assetId"] = clip.get("assetId")
+            if clip.get("text"):
+                clip_info["text"] = clip.get("text")
+
+            clip_details.append(clip_info)
+
         layer_summaries.append({
+            "id": layer_id,
             "name": layer_name,
             "type": layer_type,
             "clipCount": clip_count,
             "duration": round(layer_end, 2),
+            "clips": clip_details,
         })
 
     # Human-readable output
@@ -113,6 +142,14 @@ def getProjectSummary(
 
     for ls in layer_summaries:
         lines.append(f"  - {ls['name']} ({ls['type']}): {ls['clipCount']} clip{'s' if ls['clipCount'] != 1 else ''}, {ls['duration']}s")
+        # List clip IDs for reference
+        for clip in ls.get("clips", []):
+            clip_name = clip.get("name", "Unnamed")
+            clip_id = clip.get("id", "?")
+            clip_type = clip.get("type", "?")
+            clip_start = clip.get("start", 0)
+            clip_end = clip.get("end", 0)
+            lines.append(f"      • {clip_name} [{clip_type}] id=\"{clip_id}\" ({clip_start}s-{clip_end}s)")
 
     summary_text = "\n".join(lines)
 

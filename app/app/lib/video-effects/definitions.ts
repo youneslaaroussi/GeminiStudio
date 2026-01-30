@@ -104,6 +104,7 @@ const sam2VideoDefinition: VideoEffectDefinition<typeof sam2FormSchema, Sam2Form
         placeholder: "[391,239],[178,320]",
         description:
           "Coordinates for clicks in [x,y] format. One coordinate per click frame.",
+        required: true,
       },
       {
         name: "outputVideo",

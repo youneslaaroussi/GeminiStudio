@@ -39,6 +39,10 @@ import {
   Save,
   Check,
   AlertCircle,
+  Plus,
+  Volume2,
+  VolumeX,
+  Copy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
@@ -125,6 +129,7 @@ export function ChatPanel() {
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
   const [savedSessions, setSavedSessions] = useState<ChatSessionSummary[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [isSessionDropdownOpen, setIsSessionDropdownOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"success" | "error" | null>(null);
@@ -136,11 +141,15 @@ export function ChatPanel() {
   const [isCloudMode, setIsCloudMode] = useState(false);
   const [isCloudProcessing, setIsCloudProcessing] = useState(false);
   const [isListeningToCloud, setIsListeningToCloud] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [isSpeakLoading, setIsSpeakLoading] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const cloudUnsubscribeRef = useRef<(() => void) | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const sessionIdRef = useRef(`chat-${Date.now()}`);
-  const sessionId = sessionIdRef.current;
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [sessionId, setSessionId] = useState(() => `chat-${Date.now()}`);
+  const [initialMessages, setInitialMessages] = useState<TimelineChatMessage[]>([]);
 
   const router = useRouter();
   const { user } = useAuth();
@@ -151,12 +160,16 @@ export function ChatPanel() {
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        body: { mode, id: sessionId },
-        prepareSendMessagesRequest: async ({ headers, body }) => {
+        prepareSendMessagesRequest: async (options) => {
           const auth = (await getAuthHeaders()) as Record<string, string>;
           return {
-            body: body ?? {},
-            headers: { ...auth, ...(headers as Record<string, string>) },
+            body: {
+              messages: options.messages,
+              mode,
+              id: sessionId,
+              ...(options.body ?? {}),
+            },
+            headers: { ...auth, ...((options.headers as Record<string, string>) ?? {}) },
           };
         },
       }),
@@ -168,6 +181,7 @@ export function ChatPanel() {
       transport: chatTransport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
       id: sessionId,
+      messages: initialMessages,
       onError: useCallback(
         (err: Error) => {
           try {
@@ -364,22 +378,36 @@ export function ChatPanel() {
   // Load a specific session
   const handleLoadSession = useCallback(
     async (loadSessionId: string) => {
-      if (!user) return;
+      if (!user || isLoadingSession) return;
       setIsSessionDropdownOpen(false);
+      setIsLoadingSession(true);
       try {
         const session = await loadChatSession(user.uid, loadSessionId);
         if (session) {
-          // Update the session ID reference to the loaded session
-          sessionIdRef.current = session.id;
+          // Format the messages correctly
+          const loadedMessages = (session.messages || []).map((msg) => ({
+            ...msg,
+            id: msg.id || `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            role: msg.role as "user" | "assistant",
+            parts: Array.isArray(msg.parts) ? msg.parts : [],
+          })) as TimelineChatMessage[];
+          
+          // Set initial messages first, then update session ID to trigger hook reinit
+          setInitialMessages(loadedMessages);
+          setSessionId(session.id);
           setMode(session.currentMode);
-          // Load the messages into the chat
-          setMessages(session.messages);
+          toast.success(`Loaded: ${session.name}`);
+        } else {
+          toast.error("Session not found");
         }
       } catch (error) {
         console.error("Failed to load chat session:", error);
+        toast.error("Failed to load session");
+      } finally {
+        setIsLoadingSession(false);
       }
     },
-    [user, setMessages]
+    [user, isLoadingSession]
   );
 
   // Teleport: Save session and send to cloud
@@ -445,6 +473,96 @@ export function ChatPanel() {
     }
   }, [user, messages, handleSaveSession]);
 
+  // Handle speaking a message with TTS
+  const handleSpeak = useCallback(
+    async (messageId: string, text: string) => {
+      // If already speaking this message, stop it
+      if (speakingMessageId === messageId) {
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current = null;
+        }
+        setSpeakingMessageId(null);
+        return;
+      }
+
+      // Stop any currently playing audio
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+
+      setIsSpeakLoading(true);
+      setSpeakingMessageId(messageId);
+
+      try {
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch("/api/speak", {
+          method: "POST",
+          headers: {
+            ...authHeaders,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ text }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to generate speech");
+        }
+
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        audioRef.current = audio;
+
+        audio.onended = () => {
+          setSpeakingMessageId(null);
+          URL.revokeObjectURL(audioUrl);
+          audioRef.current = null;
+        };
+
+        audio.onerror = () => {
+          setSpeakingMessageId(null);
+          URL.revokeObjectURL(audioUrl);
+          audioRef.current = null;
+          toast.error("Failed to play audio");
+        };
+
+        await audio.play();
+      } catch (error) {
+        console.error("Speak failed:", error);
+        toast.error(error instanceof Error ? error.message : "Failed to speak");
+        setSpeakingMessageId(null);
+      } finally {
+        setIsSpeakLoading(false);
+      }
+    },
+    [speakingMessageId]
+  );
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  // Copy message text to clipboard
+  const handleCopy = useCallback(async (messageId: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedMessageId(messageId);
+      toast.success("Copied to clipboard");
+      setTimeout(() => setCopiedMessageId(null), 2000);
+    } catch {
+      toast.error("Failed to copy");
+    }
+  }, []);
+
   // Start listening to Firebase for real-time cloud agent updates
   const startCloudListener = useCallback(
     (userId: string, chatId: string, currentMessageCount: number) => {
@@ -501,6 +619,19 @@ export function ChatPanel() {
     }
     setIsListeningToCloud(false);
   }, []);
+
+  // Start a new chat session
+  const handleNewChat = useCallback(() => {
+    // Clear initial messages and generate new session ID (triggers useChat reinit)
+    setInitialMessages([]);
+    setSessionId(`chat-${Date.now()}`);
+    // Clear pending attachments
+    setPendingAttachments([]);
+    // Clear input
+    setInput("");
+    // Stop any cloud listener
+    stopCloudListener();
+  }, [stopCloudListener]);
 
   // Cleanup cloud listener on unmount
   useEffect(() => {
@@ -689,6 +820,15 @@ export function ChatPanel() {
             const isUser = message.role === "user";
             const metadata = message.metadata as { attachments?: ChatAttachment[] } | undefined;
             const attachments = metadata?.attachments;
+            
+            // Extract text content for TTS
+            const textContent = parts
+              .filter((p): p is { type: "text"; text: string } => p.type === "text" && "text" in p && typeof p.text === "string")
+              .map((p) => p.text)
+              .join("\n");
+            const canSpeak = !isUser && textContent.length > 0;
+            const isSpeaking = speakingMessageId === message.id;
+            
             return (
               <div
                 key={message.id}
@@ -725,6 +865,49 @@ export function ChatPanel() {
                       </div>
                     );
                   })}
+                  {/* Copy and speak buttons for assistant messages */}
+                  {canSpeak && (
+                    <div className="flex justify-end items-center gap-0.5 mt-1.5 -mb-0.5">
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(message.id, textContent)}
+                        className={cn(
+                          "p-1 rounded-md transition-colors",
+                          copiedMessageId === message.id
+                            ? "text-emerald-500 bg-emerald-500/10"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                        )}
+                        title={copiedMessageId === message.id ? "Copied!" : "Copy to clipboard"}
+                      >
+                        {copiedMessageId === message.id ? (
+                          <Check className="size-3.5" />
+                        ) : (
+                          <Copy className="size-3.5" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSpeak(message.id, textContent)}
+                        disabled={isSpeakLoading && !isSpeaking}
+                        className={cn(
+                          "p-1 rounded-md transition-colors",
+                          isSpeaking
+                            ? "text-primary bg-primary/10 hover:bg-primary/20"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                          isSpeakLoading && !isSpeaking && "opacity-50 cursor-not-allowed"
+                        )}
+                        title={isSpeaking ? "Stop speaking" : "Speak this message"}
+                      >
+                        {isSpeakLoading && speakingMessageId === message.id ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : isSpeaking ? (
+                          <VolumeX className="size-3.5" />
+                        ) : (
+                          <Volume2 className="size-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -815,6 +998,15 @@ export function ChatPanel() {
             )}
           </div>
           <div className="flex items-center gap-1">
+            {/* New Chat Button */}
+            <button
+              onClick={handleNewChat}
+              disabled={isBusy}
+              className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors disabled:opacity-50"
+              title="New chat"
+            >
+              <Plus className="size-4" />
+            </button>
             {/* Sessions Dropdown */}
             {user && (
               <div className="relative">
@@ -826,7 +1018,7 @@ export function ChatPanel() {
                   <History className="size-4" />
                 </button>
                 {isSessionDropdownOpen && (
-                  <div className="absolute right-0 top-full mt-1 w-64 rounded-lg border border-border bg-card shadow-lg z-50">
+                  <div className="absolute right-0 bottom-full mb-1 w-64 rounded-lg border border-border bg-card shadow-lg z-50">
                     <div className="p-2 border-b border-border">
                       <p className="text-xs font-medium text-muted-foreground">
                         Saved Sessions
@@ -846,8 +1038,12 @@ export function ChatPanel() {
                         savedSessions.map((session) => (
                           <button
                             key={session.id}
-                            onClick={() => handleLoadSession(session.id)}
-                            className="w-full px-3 py-2 text-left text-xs hover:bg-muted transition-colors"
+                            type="button"
+                            disabled={isLoadingSession}
+                            onClick={() => {
+                              handleLoadSession(session.id);
+                            }}
+                            className="w-full px-3 py-2 text-left text-xs hover:bg-muted transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait"
                           >
                             <p className="font-medium truncate">{session.name}</p>
                             <p className="text-muted-foreground">

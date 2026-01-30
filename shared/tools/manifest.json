@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-01-30T21:46:41.975Z",
+  "generatedAt": "2026-01-30T22:08:05.892Z",
   "tools": {
     "captureAsset": {
       "name": "captureAsset",
@@ -1255,6 +1255,98 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
     },
+    "timelineDeleteClip": {
+      "name": "timelineDeleteClip",
+      "label": "Delete Timeline Clip",
+      "description": "Remove one or more clips from the timeline by their IDs.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": true,
+        "langgraphName": "deleteClipFromTimeline"
+      },
+      "fields": [
+        {
+          "name": "clipIds",
+          "label": "Clip IDs",
+          "type": "json",
+          "placeholder": "[\"clip-abc123\", \"clip-def456\"]",
+          "description": "JSON array of clip IDs to delete",
+          "required": true
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/timelineDeleteClipInput",
+        "definitions": {
+          "timelineDeleteClipInput": {
+            "type": "object",
+            "properties": {
+              "clipIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "description": "List of clip IDs to delete from the timeline"
+              }
+            },
+            "required": [
+              "clipIds"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "getTimelineState": {
+      "name": "getTimelineState",
+      "label": "Get Timeline State",
+      "description": "Get the current state of the project timeline including all layers and clips with their IDs, positions, and properties.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": true,
+        "langgraphName": "getTimelineState"
+      },
+      "fields": [
+        {
+          "name": "includeClipDetails",
+          "label": "Include Clip Details",
+          "type": "select",
+          "options": [
+            {
+              "value": "true",
+              "label": "Yes"
+            },
+            {
+              "value": "false",
+              "label": "No (summary only)"
+            }
+          ],
+          "defaultValue": "true",
+          "description": "Whether to include detailed clip information"
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/getTimelineStateInput",
+        "definitions": {
+          "getTimelineStateInput": {
+            "type": "object",
+            "properties": {
+              "includeClipDetails": {
+                "type": "boolean",
+                "default": true,
+                "description": "Whether to include detailed clip information"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
     "timelineAddTransition": {
       "name": "timelineAddTransition",
       "label": "Add Timeline Transition",
@@ -1833,19 +1925,6 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
     },
-    "getProjectSummary": {
-      "name": "getProjectSummary",
-      "label": "Get Project Summary",
-      "description": "Retrieve a summary of the current project including timeline layers and clips.",
-      "runLocation": "server",
-      "implementations": {
-        "app": false,
-        "langgraph": true,
-        "langgraphName": "getProjectSummary"
-      },
-      "fields": [],
-      "inputSchema": null
-    },
     "listProjectAssets": {
       "name": "listProjectAssets",
       "label": "List Project Assets",
@@ -1868,19 +1947,6 @@
         "app": false,
         "langgraph": true,
         "langgraphName": "renderVideo"
-      },
-      "fields": [],
-      "inputSchema": null
-    },
-    "deleteClipFromTimeline": {
-      "name": "deleteClipFromTimeline",
-      "label": "Delete Clip from Timeline",
-      "description": "Remove a clip from the timeline by its ID.",
-      "runLocation": "server",
-      "implementations": {
-        "app": false,
-        "langgraph": true,
-        "langgraphName": "deleteClipFromTimeline"
       },
       "fields": [],
       "inputSchema": null

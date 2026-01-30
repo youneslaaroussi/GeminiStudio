@@ -11896,6 +11896,27 @@ __decorateClass([
   initial(400),
   signal()
 ], AnimatedCaptions.prototype, "CaptionsFontWeight");
+function parseTimeToMs(time) {
+  if (typeof time === "number") return time;
+  if (typeof time === "string") {
+    const numeric = parseFloat(time.replace(/[^0-9.]/g, ""));
+    return Number.isFinite(numeric) ? numeric * 1e3 : 0;
+  }
+  return 0;
+}
+function normalizeRawSegments(segments) {
+  if (!(segments == null ? void 0 : segments.length)) return [];
+  return segments.flatMap((seg) => {
+    if (typeof seg.start === "number" && seg.speech) {
+      return [{ start: seg.start, speech: seg.speech }];
+    }
+    if (seg.text && seg.startTime) {
+      const startMs = parseTimeToMs(seg.startTime);
+      return [{ start: startMs, speech: seg.text }];
+    }
+    return [];
+  }).filter((s) => s.speech.trim().length > 0);
+}
 const toVector = (transform) => new Vector2(transform.x, transform.y);
 const description = makeScene2D(function* (view) {
   const scene = useScene();
@@ -11919,8 +11940,12 @@ const description = makeScene2D(function* (view) {
   const textClips = layers.filter((layer) => layer.type === "text").flatMap((layer) => layer.clips);
   const imageClips = layers.filter((layer) => layer.type === "image").flatMap((layer) => layer.clips);
   const transcriptionRecords = scene.variables.get("transcriptions", {})();
+  const transcriptionByAssetId = /* @__PURE__ */ new Map();
   const transcriptionByUrl = /* @__PURE__ */ new Map();
   Object.values(transcriptionRecords ?? {}).forEach((record) => {
+    if (record == null ? void 0 : record.assetId) {
+      transcriptionByAssetId.set(record.assetId, record);
+    }
     if (record == null ? void 0 : record.assetUrl) {
       transcriptionByUrl.set(record.assetUrl, record);
     }
@@ -11972,10 +11997,11 @@ const description = makeScene2D(function* (view) {
   };
   const registerCaptionForClip = (clip) => {
     var _a2;
-    if (!clip.src) return;
-    const record = transcriptionByUrl.get(clip.src);
+    const record = (clip.assetId ? transcriptionByAssetId.get(clip.assetId) : void 0) ?? (clip.src ? transcriptionByUrl.get(clip.src) : void 0);
     if (!((_a2 = record == null ? void 0 : record.segments) == null ? void 0 : _a2.length)) return;
-    const normalized = normalizeSegmentsForClip(clip, record.segments);
+    const rawNormalized = normalizeRawSegments(record.segments);
+    if (!rawNormalized.length) return;
+    const normalized = normalizeSegmentsForClip(clip, rawNormalized);
     if (!normalized.length) return;
     const ref = createRef();
     captionRefs.set(clip.id, ref);

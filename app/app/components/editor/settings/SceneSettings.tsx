@@ -23,12 +23,12 @@ export function SceneSettings() {
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <CollapsibleTrigger className="w-full flex items-center justify-between py-2 hover:bg-muted/30 rounded-md px-1 -mx-1 transition-colors">
         <div className="flex items-center gap-2">
-          <Settings2 className="size-4 text-muted-foreground" />
+          <Settings2 className="size-4 shrink-0 text-muted-foreground" />
           <span className="text-sm font-medium">Scene</span>
         </div>
         <ChevronDown
           className={cn(
-            "size-4 text-muted-foreground transition-transform",
+            "size-4 shrink-0 text-muted-foreground transition-transform",
             isOpen && "rotate-180"
           )}
         />

@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { useToolboxStore } from "@/app/lib/store/toolbox-store";
+import { useProjectStore } from "@/app/lib/store/project-store";
+import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 import type { ToolDefinition, ToolOutput } from "./types";
 import type { Project } from "@/app/types/timeline";
 import {
@@ -92,8 +94,24 @@ export const captureFacesTool: ToolDefinition<typeof captureFacesSchema, Project
         };
       }
 
+      // Get project ID
+      const projectId = useProjectStore.getState().projectId;
+      if (!projectId) {
+        return {
+          status: "error",
+          error: "No project loaded.",
+        };
+      }
+
       // Fetch pipeline state for this asset
-      const pipelineResponse = await fetch(`/api/assets/${matchedAsset.id}/pipeline`);
+      const authHeaders = await getAuthHeaders();
+      const pipelineResponse = await fetch(
+        `/api/assets/${matchedAsset.id}/pipeline?projectId=${encodeURIComponent(projectId)}`,
+        {
+          method: "GET",
+          headers: authHeaders,
+        }
+      );
       if (!pipelineResponse.ok) {
         return {
           status: "error",
@@ -101,8 +119,8 @@ export const captureFacesTool: ToolDefinition<typeof captureFacesSchema, Project
         };
       }
 
-      const { pipeline } = await pipelineResponse.json() as { pipeline: { steps: PipelineStep[] } };
-      const faceDetectionStep = pipeline.steps.find((step: PipelineStep) => step.id === "face-detection");
+      const pipelineState = await pipelineResponse.json() as { steps: PipelineStep[] };
+      const faceDetectionStep = pipelineState.steps?.find((step: PipelineStep) => step.id === "face-detection");
 
       if (!faceDetectionStep || faceDetectionStep.status !== "succeeded") {
         return {

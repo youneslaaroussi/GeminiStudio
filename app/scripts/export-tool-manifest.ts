@@ -15,6 +15,7 @@ const __dirname = path.dirname(__filename);
 const LANGGRAPH_TOOL_MAP: Record<string, string> = {
   timelineAddClip: "addClipToTimeline",
   timelineDeleteClip: "deleteClipFromTimeline",
+  getTimelineState: "getTimelineState",
   listAssets: "listAssets",
   generateMusic: "generateMusic",
   generateSpeech: "generateSpeech",
@@ -32,12 +33,6 @@ const LANGGRAPH_ONLY_TOOLS: Array<{
   langgraphName: string;
 }> = [
   {
-    name: "getProjectSummary",
-    label: "Get Project Summary",
-    description: "Retrieve a summary of the current project including timeline layers and clips.",
-    langgraphName: "getProjectSummary",
-  },
-  {
     name: "listProjectAssets",
     label: "List Project Assets",
     description: "List all assets associated with a specific project.",
@@ -48,12 +43,6 @@ const LANGGRAPH_ONLY_TOOLS: Array<{
     label: "Render Video",
     description: "Trigger a video render job for the current project.",
     langgraphName: "renderVideo",
-  },
-  {
-    name: "deleteClipFromTimeline",
-    label: "Delete Clip from Timeline",
-    description: "Remove a clip from the timeline by its ID.",
-    langgraphName: "deleteClipFromTimeline",
   },
   {
     name: "generateImage",

@@ -25,6 +25,31 @@ A standalone service for asset upload, processing, and pipeline management for G
 
 ## Setup
 
+### Prerequisites
+
+#### GCP Resources
+
+The following GCP resources must be created before running the service:
+
+1. **GCS Bucket** for asset storage:
+```bash
+gcloud storage buckets create gs://YOUR_BUCKET_NAME --project=YOUR_PROJECT_ID
+```
+
+2. **Pub/Sub Topic** for pipeline completion events (used by langgraph_server):
+```bash
+gcloud pubsub topics create gemini-pipeline-events --project=YOUR_PROJECT_ID
+gcloud pubsub subscriptions create gemini-pipeline-events-sub \
+  --topic=gemini-pipeline-events \
+  --project=YOUR_PROJECT_ID
+```
+
+3. **Service Account** with the following roles:
+   - `roles/storage.objectAdmin` (GCS)
+   - `roles/datastore.user` (Firestore)
+   - `roles/pubsub.publisher` (Pub/Sub)
+   - `roles/speech.client` (Speech-to-Text, if using transcription)
+
 ### Local Development
 
 1. Install dependencies:
@@ -88,10 +113,12 @@ docker-compose up
 | `ASSET_GCS_BUCKET` | GCS bucket for assets | Yes |
 | `ASSET_SIGNED_URL_TTL_SECONDS` | Signed URL expiration (default: 7 days) | No |
 | `FIREBASE_SERVICE_ACCOUNT_KEY` | Firebase service account | No* |
+| `PIPELINE_EVENT_TOPIC` | Pub/Sub topic for pipeline events (default: gemini-pipeline-events) | No |
 | `SPEECH_PROJECT_ID` | Speech-to-Text project ID | No |
 | `SPEECH_LOCATION` | Speech-to-Text location (default: global) | No |
 | `SPEECH_MODEL` | Speech model (default: chirp_3) | No |
 | `SPEECH_LANGUAGE_CODES` | Comma-separated language codes | No |
+| `REDIS_URL` | Redis URL for task queue (default: redis://localhost:6379/0) | No |
 | `APP_HOST` | Server host (default: 0.0.0.0) | No |
 | `APP_PORT` | Server port (default: 8081) | No |
 | `DEBUG` | Enable debug mode | No |

@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { initAdmin } from "@/app/lib/server/firebase-admin";
 import { getAuth } from "firebase-admin/auth";
-import { isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
 import {
-  listVideoEffectJobsForAsset,
+  isVideoEffectsServiceEnabled,
   startVideoEffectJob,
-} from "@/app/lib/server/video-effects/service";
+  listVideoEffectJobs,
+} from "@/app/lib/server/video-effects-client";
 
 export const runtime = "nodejs";
 
@@ -33,8 +33,8 @@ async function verifyToken(request: NextRequest): Promise<string | null> {
 }
 
 export async function GET(request: NextRequest) {
-  if (!isAssetServiceEnabled()) {
-    return NextResponse.json({ error: "Asset service not configured" }, { status: 503 });
+  if (!isVideoEffectsServiceEnabled()) {
+    return NextResponse.json({ error: "Video effects service not configured" }, { status: 503 });
   }
 
   const userId = await verifyToken(request);
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const jobs = await listVideoEffectJobsForAsset(assetId);
+    const jobs = await listVideoEffectJobs(assetId);
     return NextResponse.json({ jobs });
   } catch (error) {
     console.error("Failed to list video effect jobs", error);
@@ -61,8 +61,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!isAssetServiceEnabled()) {
-    return NextResponse.json({ error: "Asset service not configured" }, { status: 503 });
+  if (!isVideoEffectsServiceEnabled()) {
+    return NextResponse.json({ error: "Video effects service not configured" }, { status: 503 });
   }
 
   const userId = await verifyToken(request);
@@ -74,11 +74,10 @@ export async function POST(request: NextRequest) {
     const json = await request.json();
     const payload = startJobSchema.parse(json);
     const job = await startVideoEffectJob({
-      effectId: payload.effectId,
-      assetId: payload.assetId,
       userId,
       projectId: payload.projectId,
-      origin: request.nextUrl.origin,
+      assetId: payload.assetId,
+      effectId: payload.effectId,
       params: payload.params ?? {},
     });
     return NextResponse.json({ job }, { status: 201 });

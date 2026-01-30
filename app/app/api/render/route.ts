@@ -189,8 +189,65 @@ async function transformClipUrls(
 }
 
 /**
+ * Build transcriptions from pipeline metadata for assets used in the project.
+ * This fetches transcription data at runtime rather than relying on project.transcriptions.
+ */
+async function buildTranscriptionsFromPipeline(
+  project: Project,
+  userId: string,
+  projectId: string,
+  assetUrlMap: Map<string, string>
+): Promise<Record<string, { assetId: string; assetUrl: string; segments?: Array<{ start: number; speech: string }> }>> {
+  // Collect unique assetIds from all clips
+  const assetIds = new Set<string>();
+  for (const layer of project.layers) {
+    for (const clip of layer.clips) {
+      if ("assetId" in clip && clip.assetId) {
+        assetIds.add(clip.assetId);
+      }
+    }
+  }
+
+  const transcriptions: Record<string, { assetId: string; assetUrl: string; segments?: Array<{ start: number; speech: string }> }> = {};
+
+  // Fetch transcription data from pipeline for each asset
+  await Promise.all(
+    Array.from(assetIds).map(async (assetId) => {
+      try {
+        const pipelineState = await getPipelineStateFromService(userId, projectId, assetId);
+        const transcriptionStep = pipelineState.steps.find(
+          (s) => s.id === "transcription" && s.status === "succeeded"
+        );
+        
+        if (!transcriptionStep?.metadata) return;
+        
+        const { segments } = transcriptionStep.metadata as {
+          segments?: Array<{ start: number; speech: string }>;
+        };
+        
+        if (!segments || segments.length === 0) return;
+        
+        // Use signed URL if available, otherwise construct a placeholder
+        const assetUrl = assetUrlMap.get(assetId) || "";
+        
+        transcriptions[assetId] = {
+          assetId,
+          assetUrl,
+          segments,
+        };
+      } catch (error) {
+        // Asset may not have a pipeline or transcription - that's OK
+        console.log(`[Render] No transcription for asset ${assetId}:`, error instanceof Error ? error.message : "unknown");
+      }
+    })
+  );
+
+  return transcriptions;
+}
+
+/**
  * Transform project to use signed GCS URLs for all assets
- * Also updates transcription assetUrls to match transformed clip URLs
+ * Also builds transcriptions from pipeline data at runtime
  */
 async function transformProjectForRenderer(project: Project, userId: string, projectId: string): Promise<Project> {
   // Map to track assetId -> signedUrl for transcription updates
@@ -205,25 +262,13 @@ async function transformProjectForRenderer(project: Project, userId: string, pro
     }))
   );
 
-  // Transform transcription assetUrls to match the new signed URLs
-  let transformedTranscriptions = project.transcriptions;
-  if (project.transcriptions && assetUrlMap.size > 0) {
-    transformedTranscriptions = { ...project.transcriptions };
-    for (const [key, transcription] of Object.entries(transformedTranscriptions)) {
-      const signedUrl = assetUrlMap.get(transcription.assetId);
-      if (signedUrl) {
-        transformedTranscriptions[key] = {
-          ...transcription,
-          assetUrl: signedUrl,
-        };
-      }
-    }
-  }
+  // Build transcriptions from pipeline data at runtime (not from project.transcriptions)
+  const transcriptions = await buildTranscriptionsFromPipeline(project, userId, projectId, assetUrlMap);
 
   return {
     ...project,
     layers: transformedLayers,
-    transcriptions: transformedTranscriptions,
+    transcriptions,
   };
 }
 

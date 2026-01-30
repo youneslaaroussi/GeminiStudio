@@ -73,16 +73,24 @@ export async function GET(
     }
 
     const data = await response.arrayBuffer();
+    const isDownload = searchParams.get("download") === "1";
 
-    // Return with proper content type and CORS headers
+    // Safe filename for Content-Disposition (strip path chars, quote if needed)
+    const safeName = (asset.name || "download").replace(/[\\/"[\]:;|*?<>]/g, "_").trim() || "download";
+
+    const headers: Record<string, string> = {
+      "Content-Type": asset.mimeType || "application/octet-stream",
+      "Content-Length": String(data.byteLength),
+      "Cache-Control": isDownload ? "private, no-cache" : "public, max-age=3600",
+      "Access-Control-Allow-Origin": "*",
+    };
+    if (isDownload) {
+      headers["Content-Disposition"] = `attachment; filename="${safeName.replace(/"/g, '\\"')}"`;
+    }
+
     return new NextResponse(data, {
       status: 200,
-      headers: {
-        "Content-Type": asset.mimeType || "application/octet-stream",
-        "Content-Length": String(data.byteLength),
-        "Cache-Control": "public, max-age=3600",
-        "Access-Control-Allow-Origin": "*",
-      },
+      headers,
     });
   } catch (error) {
     console.error("Failed to proxy asset file:", error);

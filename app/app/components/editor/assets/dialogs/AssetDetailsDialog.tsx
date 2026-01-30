@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { Copy, ExternalLink, Loader2, ChevronDown, ChevronRight, Camera, RotateCw } from "lucide-react";
+import { getAuthToken } from "@/app/lib/hooks/useAuthFetch";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +22,9 @@ interface AssetDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   asset: RemoteAsset | null;
+  projectId: string | null;
   pipelineSteps: PipelineStepState[];
+  pipelineLoading?: boolean;
   transcription?: ProjectTranscription;
   onPipelineRefresh?: () => void;
 }
@@ -30,7 +33,9 @@ export function AssetDetailsDialog({
   open,
   onOpenChange,
   asset,
+  projectId,
   pipelineSteps,
+  pipelineLoading,
   transcription,
   onPipelineRefresh,
 }: AssetDetailsDialogProps) {
@@ -155,18 +160,41 @@ export function AssetDetailsDialog({
           )}
 
           {/* Pipeline Steps */}
-          {pipelineSteps.length > 0 && (
+          {(pipelineSteps.length > 0 || pipelineLoading) && (
             <section className="space-y-3">
               <h4 className="text-sm font-semibold">Pipeline</h4>
               <div className="space-y-2">
-                {pipelineSteps.map((step) => (
-                  <PipelineStepCard
-                    key={step.id}
-                    step={step}
-                    asset={asset}
-                    onRerun={onPipelineRefresh}
-                  />
-                ))}
+                {pipelineLoading ? (
+                  // Loading skeleton
+                  <>
+                    {[1, 2, 3, 4].map((i) => (
+                      <div
+                        key={i}
+                        className="rounded-lg border border-border p-3 animate-pulse"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="size-4 bg-muted rounded" />
+                          <div className="size-2 bg-muted rounded-full" />
+                          <div className="flex-1 space-y-2">
+                            <div className="h-4 bg-muted rounded w-32" />
+                            <div className="h-3 bg-muted rounded w-24" />
+                          </div>
+                          <div className="h-5 bg-muted rounded-full w-16" />
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  pipelineSteps.map((step) => (
+                    <PipelineStepCard
+                      key={step.id}
+                      step={step}
+                      asset={asset}
+                      projectId={projectId}
+                      onRerun={onPipelineRefresh}
+                    />
+                  ))
+                )}
               </div>
             </section>
           )}
@@ -281,10 +309,12 @@ function CopyableCard({
 function PipelineStepCard({
   step,
   asset,
+  projectId,
   onRerun,
 }: {
   step: PipelineStepState;
   asset: RemoteAsset;
+  projectId: string | null;
   onRerun?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -297,11 +327,25 @@ function PipelineStepCard({
     e.stopPropagation();
     if (rerunning) return;
 
+    if (!projectId) {
+      toast.error("Missing project ID");
+      return;
+    }
+
     setRerunning(true);
     try {
-      const response = await fetch(`/api/assets/${asset.id}/pipeline`, {
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error("Not authenticated");
+      }
+
+      const url = `/api/assets/${asset.id}/pipeline?projectId=${encodeURIComponent(projectId)}`;
+      const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
         body: JSON.stringify({ stepId: step.id }),
       });
 
@@ -317,7 +361,7 @@ function PipelineStepCard({
     } finally {
       setRerunning(false);
     }
-  }, [asset.id, step.id, step.label, rerunning, onRerun]);
+  }, [asset.id, projectId, step.id, step.label, rerunning, onRerun]);
 
   const detailsSummary = useMemo(() => {
     if (!step.metadata) return null;
@@ -347,10 +391,14 @@ function PipelineStepCard({
         return personCount ? `${personCount} person(s) detected` : null;
       }
       case "transcription": {
-        const segments = step.metadata.segments as unknown[] | undefined;
+        // New format: segments is array of { start, speech } - one per word
+        const segments = step.metadata.segments as Array<{ start?: number; speech?: string }> | undefined;
         const transcript = step.metadata.transcript as string | undefined;
-        if (segments?.length) return `${segments.length} words`;
-        if (transcript) return `${transcript.split(" ").length} words`;
+        // Each segment is a word in the new format
+        if (segments && segments.length > 0) return `${segments.length} words`;
+        if (transcript && transcript.trim()) return `${transcript.split(" ").length} words`;
+        // Completed but no speech detected
+        if (step.status === "succeeded") return "No speech detected";
         return null;
       }
       case "gemini-analysis": {
@@ -687,8 +735,23 @@ function PipelineStepDetails({
     }
 
     case "transcription": {
-      const segments = metadata.segments as Array<{ start: number; speech: string }> | undefined;
+      const segments = metadata.segments as Array<{
+        start?: number;
+        speech?: string;
+      }> | undefined;
       const transcript = metadata.transcript as string | undefined;
+
+      // Check if transcription completed but found no speech
+      const hasNoSpeech = (!transcript || transcript.trim() === "") && (!segments || segments.length === 0);
+
+      if (hasNoSpeech) {
+        return (
+          <div className="text-xs text-muted-foreground italic py-2">
+            No speech detected in this audio. The file may be silent, contain only music/sounds, or the speech may be too quiet to recognize.
+          </div>
+        );
+      }
+
       return (
         <div className="space-y-2 min-w-0">
           {transcript && (
@@ -701,17 +764,19 @@ function PipelineStepDetails({
           )}
           {segments && segments.length > 0 && (
             <div>
-              <p className="text-xs text-muted-foreground mb-1">{segments.length} word(s) with timestamps</p>
+              <p className="text-xs text-muted-foreground mb-1">{segments.length} word(s)</p>
               <div className="max-h-32 overflow-y-auto space-y-1">
-                {segments.slice(0, 20).map((seg, i) => (
+                {segments.slice(0, 30).map((seg, i) => (
                   <div key={i} className="flex justify-between text-xs bg-muted/30 rounded px-2 py-1">
                     <span>{seg.speech}</span>
-                    <span className="text-muted-foreground">{(seg.start / 1000).toFixed(2)}s</span>
+                    <span className="text-muted-foreground">
+                      {((seg.start ?? 0) / 1000).toFixed(2)}s
+                    </span>
                   </div>
                 ))}
-                {segments.length > 20 && (
+                {segments.length > 30 && (
                   <p className="text-xs text-muted-foreground text-center py-1">
-                    +{segments.length - 20} more words
+                    +{segments.length - 30} more words
                   </p>
                 )}
               </div>

@@ -203,11 +203,12 @@ export const videoEffectsJobStatusTool: ToolDefinition<typeof jobStatusSchema, P
   async run(input) {
     try {
       let job: VideoEffectJob | null = null;
+      // Server-side: use the video effects client
       if (typeof window === "undefined") {
-        const { pollVideoEffectJob } = await import(
-          "@/app/lib/server/video-effects/service"
+        const { getVideoEffectJob } = await import(
+          "@/app/lib/server/video-effects-client"
         );
-        job = await pollVideoEffectJob(input.jobId.trim());
+        job = await getVideoEffectJob(input.jobId.trim());
         if (!job) {
           return {
             status: "error" as const,
@@ -215,6 +216,7 @@ export const videoEffectsJobStatusTool: ToolDefinition<typeof jobStatusSchema, P
           };
         }
       } else {
+        // Client-side: use fetch
         const response = await fetch(
           `/api/video-effects/${encodeURIComponent(input.jobId.trim())}`
         );

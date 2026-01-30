@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initAdmin } from "@/app/lib/server/firebase-admin";
 import { getAuth } from "firebase-admin/auth";
-import { isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
-import { pollVideoEffectJob } from "@/app/lib/server/video-effects/service";
+import {
+  isVideoEffectsServiceEnabled,
+  getVideoEffectJob,
+} from "@/app/lib/server/video-effects-client";
 
 export const runtime = "nodejs";
 
@@ -25,8 +27,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ jobId: string }> }
 ) {
-  if (!isAssetServiceEnabled()) {
-    return NextResponse.json({ error: "Asset service not configured" }, { status: 503 });
+  if (!isVideoEffectsServiceEnabled()) {
+    return NextResponse.json({ error: "Video effects service not configured" }, { status: 503 });
   }
 
   const userId = await verifyToken(request);
@@ -36,7 +38,7 @@ export async function GET(
 
   try {
     const { jobId } = await params;
-    const job = await pollVideoEffectJob(jobId);
+    const job = await getVideoEffectJob(jobId);
     if (!job) {
       return NextResponse.json(
         { error: "Video effect job not found" },

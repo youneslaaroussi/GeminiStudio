@@ -13,6 +13,7 @@ import {
   GripVertical,
   Trash2,
   Pencil,
+  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RemoteAsset, AssetDragPayload } from "@/app/types/assets";
@@ -82,6 +83,7 @@ export function AssetList({
   onRefresh,
 }: AssetListProps) {
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
   const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -111,6 +113,35 @@ export function AssetList({
       }
     },
     [onDelete]
+  );
+
+  const handleDownload = useCallback(
+    async (asset: RemoteAsset) => {
+      setDownloadingIds((prev) => new Set(prev).add(asset.id));
+      try {
+        const base = asset.url;
+        const sep = base.includes("?") ? "&" : "?";
+        const downloadUrl = `${base}${sep}download=1`;
+        const res = await fetch(downloadUrl, { credentials: "include" });
+        if (!res.ok) throw new Error(res.statusText);
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = asset.name || "download";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(objectUrl);
+      } finally {
+        setDownloadingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(asset.id);
+          return next;
+        });
+      }
+    },
+    []
   );
 
   const handleDragStart = useCallback(
@@ -248,16 +279,27 @@ export function AssetList({
             <ContextMenuTrigger asChild>
               <div
                 className={cn(
-                  "group flex items-center gap-2 p-2 cursor-grab hover:bg-muted/50 transition-colors",
+                  "group relative flex items-center gap-2 p-2 cursor-grab hover:bg-muted/50 transition-colors rounded-md",
                   dragOverId === asset.id && "bg-primary/10 ring-1 ring-primary/30"
                 )}
-                draggable
+                draggable={!downloadingIds.has(asset.id)}
                 onDragStart={(e) => handleDragStart(asset, e)}
                 onDragEnd={handleDragEnd}
                 onDragOver={(e) => handleDragOver(e, asset.id)}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, asset.id)}
               >
+                {downloadingIds.has(asset.id) && (
+                  <div className="absolute inset-0 z-10 rounded-md overflow-hidden pointer-events-none" aria-hidden>
+                    <div className="absolute inset-0 bg-background/50" />
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted/50 overflow-hidden">
+                      <div
+                        className="h-full w-1/3 bg-primary/80 rounded-full"
+                        style={{ animation: "asset-shimmer 1s ease-in-out infinite" }}
+                      />
+                    </div>
+                  </div>
+                )}
                 <div
                   data-drag-handle="reorder"
                   className="shrink-0 touch-none cursor-grab active:cursor-grabbing p-1 -m-1"
@@ -415,6 +457,17 @@ export function AssetList({
                         <FileIcon className="size-4 mr-2" />
                         View details
                       </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={downloadingIds.has(asset.id)}
+                        onClick={() => void handleDownload(asset)}
+                      >
+                        {downloadingIds.has(asset.id) ? (
+                          <Loader2 className="size-4 mr-2 animate-spin" />
+                        ) : (
+                          <Download className="size-4 mr-2" />
+                        )}
+                        Download
+                      </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
@@ -465,6 +518,17 @@ export function AssetList({
               <ContextMenuItem onClick={() => onViewDetails(asset.id)}>
                 <FileIcon className="size-4 mr-2" />
                 View details
+              </ContextMenuItem>
+              <ContextMenuItem
+                disabled={downloadingIds.has(asset.id)}
+                onClick={() => void handleDownload(asset)}
+              >
+                {downloadingIds.has(asset.id) ? (
+                  <Loader2 className="size-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="size-4 mr-2" />
+                )}
+                Download
               </ContextMenuItem>
               <ContextMenuSeparator />
               <ContextMenuItem

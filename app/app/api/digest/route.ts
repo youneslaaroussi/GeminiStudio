@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMediaCategory, normalizeGeminiMimeType } from "@/app/lib/server/gemini/multimodal";
+import {
+  uploadFileFromUrl,
+  waitForFileActive,
+  isYouTubeUrl,
+  isGeminiFileUri,
+  GeminiFilesApiError,
+} from "@/app/lib/server/gemini/files-api";
 import { DEFAULT_DIGEST_MODEL } from "@/app/lib/model-ids";
 
 const API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
@@ -18,13 +25,27 @@ interface DigestRequestBody {
   query?: string;
   /** Analysis depth */
   depth?: "quick" | "detailed" | "exhaustive";
+  /** Video clip start offset (e.g. "30s" or "1m30s") */
+  startOffset?: string;
+  /** Video clip end offset (e.g. "60s" or "2m") */
+  endOffset?: string;
+  /** Frames per second for video sampling (default: 1) */
+  fps?: number;
+  /** Media resolution: "low" uses fewer tokens, "high" for more detail */
+  mediaResolution?: "low" | "medium" | "high";
 }
 
+// REST API uses snake_case
 interface GeminiContentPart {
   text?: string;
-  fileData?: {
-    fileUri: string;
-    mimeType: string;
+  file_data?: {
+    file_uri: string;
+    mime_type?: string;
+  };
+  video_metadata?: {
+    start_offset?: string;
+    end_offset?: string;
+    fps?: number;
   };
 }
 
@@ -112,16 +133,70 @@ export async function POST(request: NextRequest) {
 
     const depth = body.depth ?? "detailed";
     const systemPrompt = buildSystemPrompt(category, body.assetName, depth);
+    const isVideo = category === "video";
+
+    // Build video metadata if provided (using snake_case for REST API)
+    const videoMetadata: GeminiContentPart["video_metadata"] = {};
+    if (isVideo) {
+      if (body.startOffset) videoMetadata.start_offset = body.startOffset;
+      if (body.endOffset) videoMetadata.end_offset = body.endOffset;
+      if (body.fps) videoMetadata.fps = body.fps;
+    }
+    const hasVideoMetadata = Object.keys(videoMetadata).length > 0;
+
+    // Determine the file URI to use with Gemini
+    let fileUri: string;
+
+    if (isYouTubeUrl(body.assetUrl)) {
+      // YouTube URLs can be used directly
+      fileUri = body.assetUrl;
+      console.log(`[digest] Using YouTube URL directly`);
+    } else if (isGeminiFileUri(body.assetUrl)) {
+      // Already a Gemini Files API URI
+      fileUri = body.assetUrl;
+      console.log(`[digest] Using existing Gemini Files API URI`);
+    } else if (body.assetUrl.startsWith("http://") || body.assetUrl.startsWith("https://")) {
+      // HTTP(S) URL - need to upload to Files API first
+      console.log(`[digest] Uploading to Gemini Files API from URL...`);
+
+      try {
+        const uploadedFile = await uploadFileFromUrl(body.assetUrl, {
+          mimeType: normalizedMimeType,
+          displayName: body.assetName,
+        });
+
+        // Wait for the file to be processed
+        const activeFile = await waitForFileActive(uploadedFile.name);
+        fileUri = activeFile.uri;
+
+        console.log(`[digest] File uploaded successfully: ${fileUri}`);
+      } catch (err) {
+        if (err instanceof GeminiFilesApiError) {
+          return NextResponse.json(
+            { error: `Failed to upload file: ${err.message}`, details: err.details },
+            { status: err.statusCode }
+          );
+        }
+        throw err;
+      }
+    } else {
+      return NextResponse.json(
+        { error: `Invalid asset URL format. Expected http://, https://, or YouTube URL.` },
+        { status: 400 }
+      );
+    }
 
     // Build the content parts - media first, then text (Gemini best practice)
-    const parts: GeminiContentPart[] = [
-      {
-        fileData: {
-          fileUri: body.assetUrl,
-          mimeType: normalizedMimeType,
-        },
+    const parts: GeminiContentPart[] = [];
+
+    const filePart: GeminiContentPart = {
+      file_data: {
+        file_uri: fileUri,
+        // Note: mime_type is optional when using Files API URIs
       },
-    ];
+    };
+    if (hasVideoMetadata) filePart.video_metadata = videoMetadata;
+    parts.push(filePart);
 
     // Add user query or default analysis request
     const userPrompt = body.query?.trim()
@@ -130,6 +205,38 @@ export async function POST(request: NextRequest) {
 
     parts.push({ text: userPrompt });
 
+    // Build media resolution config (snake_case for REST API)
+    const mediaResolutionMap: Record<string, string> = {
+      low: "MEDIA_RESOLUTION_LOW",
+      medium: "MEDIA_RESOLUTION_MEDIUM",
+      high: "MEDIA_RESOLUTION_HIGH",
+    };
+    const mediaResolution = body.mediaResolution
+      ? mediaResolutionMap[body.mediaResolution]
+      : undefined;
+
+    const generationConfig: Record<string, unknown> = {
+      temperature: 0.2, // Lower temperature for more factual analysis
+      max_output_tokens: depth === "exhaustive" ? 8192 : depth === "detailed" ? 4096 : 1024,
+    };
+
+    // Add media resolution if specified
+    if (mediaResolution) {
+      generationConfig.media_resolution = mediaResolution;
+    }
+
+    const requestBody = {
+      contents: [
+        {
+          role: "user",
+          parts,
+        },
+      ],
+      generation_config: generationConfig,
+    };
+
+    console.log("[digest] Calling generateContent with file_uri:", fileUri);
+
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_ID}:generateContent?key=${API_KEY}`,
       {
@@ -137,26 +244,27 @@ export async function POST(request: NextRequest) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts,
-            },
-          ],
-          generationConfig: {
-            temperature: 0.2, // Lower temperature for more factual analysis
-            maxOutputTokens: depth === "exhaustive" ? 8192 : depth === "detailed" ? 4096 : 1024,
-          },
-        }),
+        body: JSON.stringify(requestBody),
       }
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error("[digest] Gemini API error:", errorText);
+
+      // Try to parse error for more details
+      let errorMessage = `Gemini API error: ${response.status}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.error?.message) {
+          errorMessage = `Gemini API error: ${errorJson.error.message}`;
+        }
+      } catch {
+        // Keep default message
+      }
+
       return NextResponse.json(
-        { error: `Gemini API error: ${response.status}` },
+        { error: errorMessage, details: errorText },
         { status: response.status }
       );
     }

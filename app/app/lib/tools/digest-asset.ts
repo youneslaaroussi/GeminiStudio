@@ -7,6 +7,12 @@ const digestAssetSchema = z.object({
   assetId: z.string().min(1, "Asset ID is required"),
   query: z.string().optional(),
   depth: z.enum(["quick", "detailed", "exhaustive"]).default("detailed"),
+  /** Video clip start offset (e.g. "30s" or "1m30s") */
+  startOffset: z.string().optional(),
+  /** Video clip end offset (e.g. "60s" or "2m") */
+  endOffset: z.string().optional(),
+  /** Media resolution: "low" uses fewer tokens (good for long videos), "high" for more detail */
+  mediaResolution: z.enum(["low", "medium", "high"]).optional(),
 });
 
 export const digestAssetTool: ToolDefinition<typeof digestAssetSchema, Project> = {
@@ -43,6 +49,31 @@ export const digestAssetTool: ToolDefinition<typeof digestAssetSchema, Project> 
       ],
       defaultValue: "detailed",
       description: "How thorough should the analysis be?",
+    },
+    {
+      name: "startOffset",
+      label: "Start Time (optional)",
+      type: "text",
+      placeholder: "e.g. 30s or 1m30s",
+      description: "For videos: Start analyzing from this timestamp.",
+    },
+    {
+      name: "endOffset",
+      label: "End Time (optional)",
+      type: "text",
+      placeholder: "e.g. 60s or 2m",
+      description: "For videos: Stop analyzing at this timestamp.",
+    },
+    {
+      name: "mediaResolution",
+      label: "Resolution (optional)",
+      type: "select",
+      options: [
+        { value: "low", label: "Low (fewer tokens, good for long videos)" },
+        { value: "medium", label: "Medium (balanced)" },
+        { value: "high", label: "High (more detail, more tokens)" },
+      ],
+      description: "Media resolution affects token usage. Low = ~100 tokens/sec, High = ~300 tokens/sec.",
     },
   ],
   async run(input) {
@@ -93,6 +124,10 @@ export const digestAssetTool: ToolDefinition<typeof digestAssetSchema, Project> 
           assetName: asset.name,
           query: input.query?.trim() || undefined,
           depth: input.depth,
+          // Video processing options
+          startOffset: input.startOffset?.trim() || undefined,
+          endOffset: input.endOffset?.trim() || undefined,
+          mediaResolution: input.mediaResolution || undefined,
         }),
       });
 

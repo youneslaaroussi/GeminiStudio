@@ -11,6 +11,12 @@ from ..registry import register_step
 from ..types import AssetType, PipelineContext, PipelineResult, StepStatus
 from ..store import get_pipeline_state
 from ...config import get_settings
+from ...gemini import (
+    upload_file_from_gcs,
+    wait_for_file_active,
+    delete_file,
+    GeminiFilesApiError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -165,61 +171,97 @@ async def _call_gemini_api(
     mime_type: str,
     prompt: str,
     api_key: str,
+    asset_name: str,
     model_id: str = "gemini-3-pro-preview",
 ) -> dict[str, Any]:
-    """Call Gemini API with the asset for analysis."""
-    # Build content parts - media first, then text (Gemini best practice)
-    parts = [
-        {
-            "fileData": {
-                "fileUri": gcs_uri,
-                "mimeType": mime_type,
+    """
+    Call Gemini API with the asset for analysis.
+
+    This uploads the file to the Gemini Files API first, waits for processing,
+    then uses the file URI in the generateContent request.
+    """
+    gemini_file = None
+
+    try:
+        # Step 1: Upload file to Gemini Files API
+        logger.info(f"Uploading {gcs_uri} to Gemini Files API...")
+        gemini_file = await upload_file_from_gcs(
+            gcs_uri=gcs_uri,
+            mime_type=mime_type,
+            display_name=asset_name,
+        )
+        logger.info(f"Uploaded as {gemini_file.name}, waiting for processing...")
+
+        # Step 2: Wait for file to be ready
+        gemini_file = await wait_for_file_active(
+            gemini_file.name,
+            max_wait_seconds=120.0,
+        )
+        logger.info(f"File {gemini_file.name} is ready, calling generateContent...")
+
+        # Step 3: Build request with Gemini Files API URI
+        parts = [
+            {
+                "fileData": {
+                    "fileUri": gemini_file.uri,
+                    "mimeType": mime_type,
+                },
             },
-        },
-        {"text": prompt},
-    ]
+            {"text": prompt},
+        ]
 
-    request_body = {
-        "contents": [{"role": "user", "parts": parts}],
-        "generationConfig": {
-            "temperature": 0.2,  # Lower temperature for factual analysis
-            "maxOutputTokens": 8192,
-        },
-    }
+        request_body = {
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": {
+                "temperature": 0.2,  # Lower temperature for factual analysis
+                "maxOutputTokens": 8192,
+            },
+        }
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
 
-    async with httpx.AsyncClient(timeout=300.0) as client:
-        response = await client.post(
-            url,
-            json=request_body,
-            headers={"Content-Type": "application/json"},
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            response = await client.post(
+                url,
+                json=request_body,
+                headers={"Content-Type": "application/json"},
+            )
+
+            if response.status_code != 200:
+                error_text = response.text
+                logger.error(f"Gemini API error: {response.status_code} - {error_text}")
+                raise RuntimeError(f"Gemini API error: {response.status_code}")
+
+            payload = response.json()
+
+        # Extract analysis text
+        candidates = payload.get("candidates", [])
+        analysis_text = "\n\n".join(
+            part.get("text", "")
+            for candidate in candidates
+            for part in candidate.get("content", {}).get("parts", [])
+            if part.get("text")
         )
 
-        if response.status_code != 200:
-            error_text = response.text
-            logger.error(f"Gemini API error: {response.status_code} - {error_text}")
-            raise RuntimeError(f"Gemini API error: {response.status_code}")
+        usage = payload.get("usageMetadata", {})
 
-        payload = response.json()
+        return {
+            "analysis": analysis_text,
+            "promptTokens": usage.get("promptTokenCount"),
+            "completionTokens": usage.get("candidatesTokenCount"),
+            "totalTokens": usage.get("totalTokenCount"),
+            "geminiFileUri": gemini_file.uri,
+        }
 
-    # Extract analysis text
-    candidates = payload.get("candidates", [])
-    analysis_text = "\n\n".join(
-        part.get("text", "")
-        for candidate in candidates
-        for part in candidate.get("content", {}).get("parts", [])
-        if part.get("text")
-    )
-
-    usage = payload.get("usageMetadata", {})
-
-    return {
-        "analysis": analysis_text,
-        "promptTokens": usage.get("promptTokenCount"),
-        "completionTokens": usage.get("candidatesTokenCount"),
-        "totalTokens": usage.get("totalTokenCount"),
-    }
+    finally:
+        # Clean up: delete the temporary file from Gemini Files API
+        # (files auto-expire after 48h, but good practice to clean up)
+        if gemini_file:
+            try:
+                await delete_file(gemini_file.name)
+                logger.info(f"Cleaned up temporary file {gemini_file.name}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up file {gemini_file.name}: {e}")
 
 
 @register_step(
@@ -262,6 +304,7 @@ async def gemini_analysis_step(context: PipelineContext) -> PipelineResult:
         mime_type=context.asset.mime_type,
         prompt=prompt,
         api_key=settings.gemini_api_key,
+        asset_name=context.asset.name,
         model_id=settings.gemini_model_id,
     )
 

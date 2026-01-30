@@ -136,25 +136,37 @@ export async function loadChatSession(
 
 /**
  * List all chat sessions for a user (summaries only, without full messages)
+ * Filters out Telegram sessions by default (they have IDs starting with "telegram-" or source: "telegram")
  */
 export async function listChatSessions(
   userId: string,
-  maxResults: number = 50
+  maxResults: number = 50,
+  excludeTelegram: boolean = true
 ): Promise<ChatSessionSummary[]> {
   const sessionsRef = collection(db, 'users', userId, 'chatSessions');
   const q = query(sessionsRef, orderBy('_updatedAt', 'desc'), limit(maxResults));
   const snapshot = await getDocs(q);
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: data.id,
-      name: data.name,
-      createdAt: data.createdAt,
-      updatedAt: data.updatedAt,
-      messageCount: data.messages?.length || 0,
-    };
-  });
+  return snapshot.docs
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        id: data.id,
+        name: data.name,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+        messageCount: data.messages?.length || 0,
+        source: data.source as string | undefined,
+      };
+    })
+    .filter((session) => {
+      if (!excludeTelegram) return true;
+      // Filter out Telegram sessions (id starts with "telegram-" or source is "telegram")
+      if (session.id?.startsWith('telegram-')) return false;
+      if (session.source === 'telegram') return false;
+      return true;
+    })
+    .map(({ source, ...rest }) => rest); // Remove source from final output
 }
 
 /**

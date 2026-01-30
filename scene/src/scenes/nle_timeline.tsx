@@ -29,6 +29,7 @@ interface VideoClip {
   scale: Transform;
   focus?: Focus;
   objectFit?: 'contain' | 'cover' | 'fill';
+  assetId?: string;
 }
 
 interface AudioClip {
@@ -43,6 +44,7 @@ interface AudioClip {
   volume: number;
   position: Transform;
   scale: Transform;
+  assetId?: string;
 }
 
 interface TextClip {
@@ -90,10 +92,46 @@ interface Layer {
   clips: TimelineClip[];
 }
 
+// Segment format from backend - can be old format or new format
+interface RawSegment {
+  start?: number;       // New format: milliseconds
+  speech?: string;      // New format: word text
+  text?: string;        // Old format: phrase text  
+  startTime?: string;   // Old format: "1.5s"
+}
+
 interface SceneTranscription {
   assetId: string;
   assetUrl: string;
-  segments?: TranscriptionEntry[];
+  segments?: RawSegment[];
+}
+
+// Helper to convert old format time strings to milliseconds
+function parseTimeToMs(time: string | number | undefined): number {
+  if (typeof time === 'number') return time;
+  if (typeof time === 'string') {
+    const numeric = parseFloat(time.replace(/[^0-9.]/g, ''));
+    return Number.isFinite(numeric) ? numeric * 1000 : 0;
+  }
+  return 0;
+}
+
+// Normalize segments from either old or new format to TranscriptionEntry[]
+function normalizeRawSegments(segments: RawSegment[] | undefined): TranscriptionEntry[] {
+  if (!segments?.length) return [];
+  return segments.flatMap(seg => {
+    // New format: { start, speech }
+    if (typeof seg.start === 'number' && seg.speech) {
+      return [{ start: seg.start, speech: seg.speech }];
+    }
+    // Old format: { text, startTime } - split text into words if needed
+    if (seg.text && seg.startTime) {
+      const startMs = parseTimeToMs(seg.startTime);
+      // For old format, just use the whole text as one segment
+      return [{ start: startMs, speech: seg.text }];
+    }
+    return [];
+  }).filter(s => s.speech.trim().length > 0);
 }
 
 const toVector = (transform: Transform) => new Vector2(transform.x, transform.y);
@@ -144,8 +182,13 @@ export default makeScene2D(function* (view) {
     .flatMap((layer) => layer.clips as ImageClip[]);
 
   const transcriptionRecords = scene.variables.get<Record<string, SceneTranscription>>('transcriptions', {})();
+  // Build lookup maps by both assetId and URL for maximum compatibility
+  const transcriptionByAssetId = new Map<string, SceneTranscription>();
   const transcriptionByUrl = new Map<string, SceneTranscription>();
   Object.values(transcriptionRecords ?? {}).forEach((record) => {
+    if (record?.assetId) {
+      transcriptionByAssetId.set(record.assetId, record);
+    }
     if (record?.assetUrl) {
       transcriptionByUrl.set(record.assetUrl, record);
     }
@@ -220,10 +263,14 @@ export default makeScene2D(function* (view) {
   };
 
   const registerCaptionForClip = (clip: VideoClip | AudioClip) => {
-    if (!clip.src) return;
-    const record = transcriptionByUrl.get(clip.src);
+    // Look up transcription by assetId first (most reliable), then fall back to URL
+    const record = (clip.assetId ? transcriptionByAssetId.get(clip.assetId) : undefined) 
+      ?? (clip.src ? transcriptionByUrl.get(clip.src) : undefined);
     if (!record?.segments?.length) return;
-    const normalized = normalizeSegmentsForClip(clip, record.segments);
+    // Normalize raw segments from either old or new backend format
+    const rawNormalized = normalizeRawSegments(record.segments);
+    if (!rawNormalized.length) return;
+    const normalized = normalizeSegmentsForClip(clip, rawNormalized);
     if (!normalized.length) return;
     const ref = createRef<AnimatedCaptions>();
     captionRefs.set(clip.id, ref);

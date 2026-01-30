@@ -14,6 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 import { SceneSettings } from "./SceneSettings";
 import { TransitionSettings } from "./TransitionSettings";
+import { CollapsibleSection } from "./CollapsibleSection";
 import { CommonClipSettings } from "./clips/CommonClipSettings";
 import { VideoClipSettings } from "./clips/VideoClipSettings";
 import { AudioClipSettings } from "./clips/AudioClipSettings";
@@ -68,33 +69,36 @@ export function SettingsPanel() {
 
           {/* Clip Settings */}
           {selectedClip && (
-            <div className="space-y-3">
-              {/* Clip Header */}
-              <div className="flex items-center gap-2">
-                <div className="size-8 rounded-lg bg-muted flex items-center justify-center">
-                  {CLIP_ICONS[selectedClip.type]}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{selectedClip.name}</p>
-                  <p className="text-xs text-muted-foreground capitalize">
-                    {selectedClip.type} Clip
-                  </p>
-                </div>
-              </div>
-
-              {/* Common Settings */}
-              <div>
+            <div className="space-y-1">
+              {/* Clip Header - Collapsible with Transform */}
+              <CollapsibleSection
+                title={selectedClip.name}
+                header={
+                  <div className="flex items-center gap-2">
+                    <div className="size-7 rounded-md bg-muted flex items-center justify-center">
+                      {CLIP_ICONS[selectedClip.type]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{selectedClip.name}</p>
+                      <p className="text-xs text-muted-foreground capitalize">
+                        {selectedClip.type} Clip
+                      </p>
+                    </div>
+                  </div>
+                }
+              >
+                {/* Transform label inside the card */}
                 <p className="text-xs font-medium text-muted-foreground mb-2">
                   Transform
                 </p>
                 <CommonClipSettings clip={selectedClip} onUpdate={handleUpdate} />
-              </div>
+              </CollapsibleSection>
 
-              {/* Type-specific Settings */}
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-2">
-                  {selectedClip.type.charAt(0).toUpperCase() + selectedClip.type.slice(1)} Properties
-                </p>
+              {/* Type-specific Settings - Collapsible */}
+              <CollapsibleSection
+                title={`${selectedClip.type.charAt(0).toUpperCase() + selectedClip.type.slice(1)} Properties`}
+                icon={CLIP_ICONS[selectedClip.type]}
+              >
                 {selectedClip.type === "video" && (
                   <VideoClipSettings
                     clip={selectedClip as VideoClip}
@@ -119,7 +123,7 @@ export function SettingsPanel() {
                     onUpdate={handleUpdate}
                   />
                 )}
-              </div>
+              </CollapsibleSection>
             </div>
           )}
         </div>

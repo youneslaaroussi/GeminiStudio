@@ -6,7 +6,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -27,9 +27,12 @@ import { ToolboxPanel } from "./ToolboxPanel";
 import { motion, AnimatePresence } from "motion/react";
 import { VoiceChat } from "@/app/components/VoiceChat";
 import { useProjectStore } from "@/app/lib/store/project-store";
+import { useAssetsStore } from "@/app/lib/store/assets-store";
+import { usePipelineStates } from "@/app/lib/hooks/usePipelineStates";
 import { useShortcuts } from "@/app/hooks/use-shortcuts";
 import { usePageReloadBlocker } from "@/app/hooks/use-page-reload-blocker";
 import { CommandMenu } from "./CommandMenu";
+import type { ProjectTranscription } from "@/app/types/transcription";
 
 export function EditorLayout() {
   const [player, setPlayer] = useState<Player | null>(null);
@@ -80,12 +83,51 @@ export function EditorLayout() {
   const playbackSpeed = useProjectStore((s) => s.playbackSpeed);
   const setPlaybackSpeed = useProjectStore((s) => s.setPlaybackSpeed);
   const project = useProjectStore((s) => s.project);
+  const projectId = useProjectStore((s) => s.projectId);
   const layers = project.layers;
   const currentTime = useProjectStore((s) => s.currentTime);
   const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
   const getDuration = useProjectStore((s) => s.getDuration);
   const hasUnsavedChanges = useProjectStore((s) => s.hasUnsavedChanges);
   const saveProject = useProjectStore((s) => s.saveProject);
+
+  // Get assets and pipeline states to build transcriptions at runtime
+  const assets = useAssetsStore((s) => s.assets);
+  const { states: pipelineStates } = usePipelineStates(projectId);
+
+  // Build transcriptions from pipeline metadata at runtime (not stored in project)
+  const transcriptions = useMemo(() => {
+    const result: Record<string, ProjectTranscription> = {};
+    
+    for (const asset of assets) {
+      const steps = pipelineStates[asset.id];
+      if (!steps) continue;
+      
+      const transcriptionStep = steps.find(s => s.id === "transcription" && s.status === "succeeded");
+      if (!transcriptionStep?.metadata) continue;
+      
+      const { transcript, segments } = transcriptionStep.metadata as {
+        transcript?: string;
+        segments?: Array<{ start: number; speech: string }>;
+      };
+      
+      if (!transcript && (!segments || segments.length === 0)) continue;
+      
+      result[asset.id] = {
+        assetId: asset.id,
+        assetName: asset.name,
+        assetUrl: asset.url,
+        transcript: transcript ?? "",
+        segments: segments ?? [],
+        status: "completed",
+        languageCodes: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    
+    return result;
+  }, [assets, pipelineStates]);
 
   const handleReloadBlocked = useCallback(() => {
     setReloadDialogOpen(true);
@@ -528,7 +570,7 @@ export function EditorLayout() {
                           duration={getDuration()}
                           currentTime={currentTime}
                           onTimeUpdate={handleTimeUpdate}
-                          transcriptions={project.transcriptions ?? {}}
+                          transcriptions={transcriptions}
                           transitions={project.transitions ?? {}}
                           captionSettings={project.captionSettings}
                           textClipSettings={project.textClipSettings}

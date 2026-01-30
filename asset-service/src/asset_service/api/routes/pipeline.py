@@ -14,7 +14,8 @@ from ...config import get_settings
 from ...storage.firestore import get_asset
 from ...storage.gcs import download_from_gcs
 from ...pipeline.registry import get_steps, run_step, run_auto_steps
-from ...pipeline.store import get_pipeline_state, get_all_pipeline_states
+from ...pipeline.store import get_pipeline_state, get_all_pipeline_states, update_pipeline_step
+from ...transcription.store import find_latest_job_for_asset
 from ...pipeline.types import StoredAsset
 from ...tasks.queue import get_task_queue
 
@@ -75,10 +76,65 @@ async def list_pipeline_steps():
     ]
 
 
+async def _resolve_waiting_transcription(
+    user_id: str, project_id: str, asset_id: str, step: dict
+) -> dict | None:
+    """
+    Check if a waiting transcription step can be resolved.
+
+    Returns updated step data if resolved, None otherwise.
+    """
+    from datetime import datetime
+
+    job = await find_latest_job_for_asset(user_id, project_id, asset_id)
+    if not job:
+        return None
+
+    now = datetime.utcnow().isoformat() + "Z"
+
+    if job.status == "completed":
+        return {
+            **step,
+            "status": "succeeded",
+            "metadata": {
+                **step.get("metadata", {}),
+                "message": "Transcription completed",
+                "transcript": job.transcript,
+            },
+            "updatedAt": now,
+        }
+    elif job.status == "error":
+        return {
+            **step,
+            "status": "failed",
+            "error": job.error or "Transcription failed",
+            "updatedAt": now,
+        }
+
+    return None
+
+
 @router.get("/{user_id}/{project_id}/{asset_id}", response_model=PipelineStateResponse)
 async def get_asset_pipeline_state(user_id: str, project_id: str, asset_id: str):
     """Get pipeline state for an asset."""
     state = await get_pipeline_state(user_id, project_id, asset_id)
+
+    # Check for waiting transcription steps and resolve if job completed
+    for step in state.get("steps", []):
+        if step.get("id") == "transcription" and step.get("status") == "waiting":
+            resolved = await _resolve_waiting_transcription(
+                user_id, project_id, asset_id, step
+            )
+            if resolved:
+                # Update the step in Firestore
+                state = await update_pipeline_step(
+                    user_id, project_id, asset_id, "transcription", resolved
+                )
+                logger.info(
+                    f"Resolved transcription step for asset {asset_id}: {resolved['status']}"
+                )
+                break
+
     return PipelineStateResponse(
         assetId=state["assetId"],
         steps=[StepStateResponse(**s) for s in state["steps"]],

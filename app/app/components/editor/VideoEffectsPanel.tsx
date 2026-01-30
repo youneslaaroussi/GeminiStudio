@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Sparkles, RefreshCw, PauseCircle, CheckCircle2, XCircle } from "lucide-react";
+import { Sparkles, RefreshCw, PauseCircle, CheckCircle2, XCircle, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import type { VideoClip } from "@/app/types/timeline";
 import {
@@ -10,9 +10,22 @@ import {
 } from "@/app/lib/video-effects/definitions";
 import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { useVideoEffectsStore } from "@/app/lib/store/video-effects-store";
+import { useProjectStore } from "@/app/lib/store/project-store";
 import type { ToolFieldDefinition } from "@/app/lib/tools/types";
 import type { VideoEffectJob } from "@/app/types/video-effects";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
+import {
+  CoordinatePicker,
+  pointsToCoordinateString,
+  parseCoordinateString,
+  type Point,
+} from "@/app/components/ui/CoordinatePicker";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 
 interface VideoEffectsPanelProps {
   clip: VideoClip;
@@ -77,6 +90,7 @@ export function VideoEffectsPanel({ clip }: VideoEffectsPanelProps) {
       [clip.assetId]
     )
   );
+  const projectId = useProjectStore((state) => state.projectId);
   const [selectedEffectId, setSelectedEffectId] = useState(
     videoEffectDefinitions[0]?.id ?? ""
   );
@@ -88,6 +102,7 @@ export function VideoEffectsPanel({ clip }: VideoEffectsPanelProps) {
     () => selectedEffect?.defaultValues ?? {}
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
   const upsertJob = useVideoEffectsStore((state) => state.upsertJob);
   const upsertJobs = useVideoEffectsStore((state) => state.upsertJobs);
   const jobsMap = useVideoEffectsStore((state) => state.jobs);
@@ -223,7 +238,7 @@ export function VideoEffectsPanel({ clip }: VideoEffectsPanelProps) {
   );
 
   const handleSubmit = useCallback(async () => {
-    if (!asset || !selectedEffect || isSubmitting) return;
+    if (!asset || !selectedEffect || isSubmitting || !projectId) return;
     try {
       setIsSubmitting(true);
       const authHeaders = await getAuthHeaders();
@@ -236,6 +251,7 @@ export function VideoEffectsPanel({ clip }: VideoEffectsPanelProps) {
         body: JSON.stringify({
           assetId: asset.id,
           effectId: selectedEffect.id,
+          projectId,
           params: formValues,
         }),
       });
@@ -259,7 +275,7 @@ export function VideoEffectsPanel({ clip }: VideoEffectsPanelProps) {
     } finally {
       setIsSubmitting(false);
     }
-  }, [asset, selectedEffect, isSubmitting, formValues, upsertJob, ensurePolling]);
+  }, [asset, selectedEffect, isSubmitting, projectId, formValues, upsertJob, ensurePolling]);
 
   if (!asset) {
     return (
@@ -278,144 +294,198 @@ export function VideoEffectsPanel({ clip }: VideoEffectsPanelProps) {
   }
 
   return (
-    <div className="space-y-4 rounded-lg border border-border bg-muted/10 p-4">
-      <div className="flex items-center gap-2">
-        <Sparkles className="size-4 text-amber-400" />
-        <div>
-          <p className="text-xs font-semibold text-foreground">Video Effects</p>
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger className="w-full flex items-center justify-between py-2 hover:bg-muted/30 rounded-md px-1 -mx-1 transition-colors">
+        <div className="flex items-center gap-2">
+          <Sparkles className="size-4 shrink-0 text-amber-400" />
+          <span className="text-sm font-medium">AI Video Effects</span>
+        </div>
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 text-muted-foreground transition-transform",
+            isOpen && "rotate-180"
+          )}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="mt-2 space-y-4 rounded-lg border border-border bg-muted/10 p-4">
           <p className="text-xs text-muted-foreground">
-            Run AI-powered treatments on “{asset.name}”.
+            Run AI-powered treatments on "{asset.name}".
           </p>
-        </div>
-      </div>
 
-      <div className="space-y-3">
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">
-            Effect
-          </label>
-          <select
-            value={selectedEffectId}
-            onChange={(event) => setSelectedEffectId(event.target.value)}
-            className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs"
-          >
-            {videoEffectDefinitions.map((definition) => (
-              <option key={definition.id} value={definition.id}>
-                {definition.label}
-              </option>
-            ))}
-          </select>
-          {selectedEffect.description && (
-            <p className="text-[10px] text-muted-foreground">
-              {selectedEffect.description}
-            </p>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 gap-3">
-          {selectedEffect.fields.map((field) => {
-            const value = formValues[field.name];
-            const commonProps = {
-              id: field.name,
-              name: field.name,
-              className:
-                "w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs",
-              value: formatFieldValue(field, value),
-              onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
-                handleInputChange(field, event.target.value),
-            };
-
-            return (
-              <div key={field.name} className="space-y-1">
-                <label className="text-[11px] font-medium text-muted-foreground">
-                  {field.label}
-                </label>
-                {field.type === "textarea" ? (
-                  <textarea
-                    {...commonProps}
-                    rows={3}
-                    placeholder={field.placeholder}
-                  />
-                ) : field.type === "select" ? (
-                  <select {...commonProps}>
-                    {(field.options ?? []).map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    {...commonProps}
-                    type={field.type === "number" ? "number" : "text"}
-                    placeholder={field.placeholder}
-                  />
-                )}
-                {field.description && (
-                  <p className="text-[10px] text-muted-foreground">
-                    {field.description}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-          className="w-full rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isSubmitting ? "Starting…" : "Run Effect"}
-        </button>
-      </div>
-
-      <div>
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-foreground">Recent runs</p>
-          {jobs.length === 0 && (
-            <span className="text-[10px] text-muted-foreground">
-              No jobs yet
-            </span>
-          )}
-        </div>
-        {jobs.length > 0 && (
-          <div className="mt-2 space-y-2">
-            {jobs.map((job) => (
-              <div
-                key={job.id}
-                className="rounded-md border border-border bg-background/80 p-3 text-[11px]"
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                Effect
+              </label>
+              <select
+                value={selectedEffectId}
+                onChange={(event) => setSelectedEffectId(event.target.value)}
+                className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs"
               >
-                <div className="flex items-center gap-2">
-                  <JobStatusIcon status={job.status} />
-                  <div className="flex-1">
-                    <p className="font-medium text-foreground">
-                      {job.effectLabel ?? job.effectId}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {new Date(job.createdAt).toLocaleString()}
-                    </p>
+                {videoEffectDefinitions.map((definition) => (
+                  <option key={definition.id} value={definition.id}>
+                    {definition.label}
+                  </option>
+                ))}
+              </select>
+              {selectedEffect.description && (
+                <p className="text-[10px] text-muted-foreground">
+                  {selectedEffect.description}
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              {selectedEffect.fields.map((field) => {
+                const value = formValues[field.name];
+                const commonProps = {
+                  id: field.name,
+                  name: field.name,
+                  className:
+                    "w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs",
+                  value: formatFieldValue(field, value),
+                  onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+                    handleInputChange(field, event.target.value),
+                };
+
+                // Special handling for clickCoordinates field - use CoordinatePicker
+                const assetPreviewUrl = asset?.signedUrl || asset?.url;
+                if (field.name === "clickCoordinates" && assetPreviewUrl) {
+                  const coordinateString = formatFieldValue(field, value);
+                  const points = parseCoordinateString(coordinateString);
+                  const isVideo = asset.type === "video";
+
+                  return (
+                    <div key={field.name} className="space-y-1">
+                      <label className="text-[11px] font-medium text-muted-foreground">
+                        {field.label}
+                        {field.required && <span className="text-destructive ml-0.5">*</span>}
+                      </label>
+                      <CoordinatePicker
+                        src={assetPreviewUrl}
+                        mediaType={isVideo ? "video" : "image"}
+                        alt={`Select points on ${asset.name}`}
+                        points={points}
+                        onChange={(newPoints: Point[]) => {
+                          const coordString = pointsToCoordinateString(newPoints);
+                          setFormValues((prev) => ({
+                            ...prev,
+                            [field.name]: coordString,
+                          }));
+                        }}
+                        multiple={true}
+                        aspectRatio={asset.width && asset.height ? `${asset.width}/${asset.height}` : "16/9"}
+                      />
+                      {field.description && (
+                        <p className="text-[10px] text-muted-foreground">
+                          {field.description}
+                        </p>
+                      )}
+                      {/* Show raw coordinates for reference */}
+                      {points.length > 0 && (
+                        <p className="text-[10px] font-mono text-muted-foreground/70">
+                          {coordinateString}
+                        </p>
+                      )}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={field.name} className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground">
+                      {field.label}
+                      {field.required && <span className="text-destructive ml-0.5">*</span>}
+                    </label>
+                    {field.type === "textarea" ? (
+                      <textarea
+                        {...commonProps}
+                        rows={3}
+                        placeholder={field.placeholder}
+                      />
+                    ) : field.type === "select" ? (
+                      <select {...commonProps}>
+                        {(field.options ?? []).map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        {...commonProps}
+                        type={field.type === "number" ? "number" : "text"}
+                        placeholder={field.placeholder}
+                      />
+                    )}
+                    {field.description && (
+                      <p className="text-[10px] text-muted-foreground">
+                        {field.description}
+                      </p>
+                    )}
                   </div>
-                  {job.resultAssetUrl && (
-                    <a
-                      href={job.resultAssetUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[10px] font-medium text-primary hover:underline"
-                    >
-                      View
-                    </a>
-                  )}
-                </div>
-                {job.error && (
-                  <p className="mt-2 text-[10px] text-red-400">{job.error}</p>
-                )}
-              </div>
-            ))}
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="w-full rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSubmitting ? "Starting…" : "Run Effect"}
+            </button>
           </div>
-        )}
-      </div>
-    </div>
+
+          <div>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-foreground">Recent runs</p>
+              {jobs.length === 0 && (
+                <span className="text-[10px] text-muted-foreground">
+                  No jobs yet
+                </span>
+              )}
+            </div>
+            {jobs.length > 0 && (
+              <div className="mt-2 space-y-2">
+                {jobs.map((job) => (
+                  <div
+                    key={job.id}
+                    className="rounded-md border border-border bg-background/80 p-3 text-[11px]"
+                  >
+                    <div className="flex items-center gap-2">
+                      <JobStatusIcon status={job.status} />
+                      <div className="flex-1">
+                        <p className="font-medium text-foreground">
+                          {job.effectLabel ?? job.effectId}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {new Date(job.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+                      {job.resultAssetUrl && (
+                        <a
+                          href={job.resultAssetUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] font-medium text-primary hover:underline"
+                        >
+                          View
+                        </a>
+                      )}
+                    </div>
+                    {job.error && (
+                      <p className="mt-2 text-[10px] text-red-400">{job.error}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
