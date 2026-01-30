@@ -696,10 +696,14 @@ def _convert_to_telegram_markdown(text: str) -> str:
         return text
 
 
-async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> bool:
+async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> bool | dict:
     """Send a message to a Telegram chat. Auto-detects and embeds media URLs.
     
     Converts standard Markdown to Telegram MarkdownV2 format before sending.
+    
+    Returns:
+        bool: True if sent successfully, False otherwise (for backwards compatibility)
+        dict: If successful, returns {"success": True, "message_id": <id>} for new code
     """
     import httpx
     import logging
@@ -750,8 +754,10 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
             logger.info(f"[TELEGRAM] Sending {media_type} to {chat_id}, url_length={len(media_url)}")
             response = await client.post(endpoint, json=payload, timeout=60.0)  # Longer timeout for media
             if response.status_code == 200:
-                logger.info(f"[TELEGRAM] Sent {media_type} to {chat_id}")
-                return True
+                result = response.json().get("result", {})
+                message_id = result.get("message_id")
+                logger.info(f"[TELEGRAM] Sent {media_type} to {chat_id}, message_id={message_id}")
+                return {"success": True, "message_id": message_id} if message_id else True
             else:
                 logger.warning(f"[TELEGRAM] Failed to send {media_type} (status={response.status_code}): {response.text[:500]}")
                 # Fall back to plain text without parse_mode
@@ -766,8 +772,10 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
                 logger.info(f"[TELEGRAM] Retrying {media_type} without MarkdownV2")
                 response = await client.post(endpoint, json=payload, timeout=60.0)
                 if response.status_code == 200:
-                    logger.info(f"[TELEGRAM] Sent {media_type} (plain) to {chat_id}")
-                    return True
+                    result = response.json().get("result", {})
+                    message_id = result.get("message_id")
+                    logger.info(f"[TELEGRAM] Sent {media_type} (plain) to {chat_id}, message_id={message_id}")
+                    return {"success": True, "message_id": message_id} if message_id else True
                 logger.warning(f"[TELEGRAM] Media send failed again (status={response.status_code}): {response.text[:300]}, falling back to text")
                 # Fall through to text message
         
@@ -779,8 +787,10 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
             timeout=10.0
         )
         if response.status_code == 200:
-            logger.info(f"Sent Telegram message to {chat_id}")
-            return True
+            result = response.json().get("result", {})
+            message_id = result.get("message_id")
+            logger.info(f"Sent Telegram message to {chat_id}, message_id={message_id}")
+            return {"success": True, "message_id": message_id} if message_id else True
         else:
             # Fallback to plain text if MarkdownV2 fails
             logger.warning(f"MarkdownV2 failed, trying plain text: {response.text}")
@@ -790,8 +800,10 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
                 timeout=10.0
             )
             if response.status_code == 200:
-                logger.info(f"Sent Telegram message (plain) to {chat_id}")
-                return True
+                result = response.json().get("result", {})
+                message_id = result.get("message_id")
+                logger.info(f"Sent Telegram message (plain) to {chat_id}, message_id={message_id}")
+                return {"success": True, "message_id": message_id} if message_id else True
             else:
                 logger.error(f"Failed to send Telegram message: {response.text}")
                 return False
@@ -873,3 +885,55 @@ def fetch_user_projects(
 
     logger.info(f"Found {len(projects)} projects for user")
     return projects
+
+
+def save_message_feedback(
+    user_id: str,
+    provider: str,
+    message_id: str,
+    reaction: str,
+    session_id: str | None = None,
+    settings: Settings | None = None,
+) -> bool:
+    """Save user feedback (emoji reaction) on a bot message to Firestore.
+    
+    Args:
+        user_id: The user ID who reacted
+        provider: The chat provider (e.g., 'telegram')
+        message_id: The bot message ID that was reacted to
+        reaction: The emoji reaction
+        session_id: Optional session ID for context
+        settings: Settings object for Firebase access
+    
+    Returns:
+        True if saved successfully, False otherwise
+    """
+    import logging
+    from datetime import datetime
+    logger = logging.getLogger(__name__)
+
+    if not settings:
+        logger.error("Settings required for save_message_feedback")
+        return False
+
+    db = get_firestore_client(settings)
+
+    try:
+        feedback_data = {
+            "userId": user_id,
+            "provider": provider,
+            "messageId": message_id,
+            "reaction": reaction,
+            "sessionId": session_id,
+            "createdAt": datetime.utcnow().isoformat() + "Z",
+        }
+        
+        # Save to feedback collection
+        feedback_ref = db.collection("messageFeedback").document()
+        feedback_ref.set(feedback_data)
+        
+        logger.info(f"Saved feedback: user={user_id}, provider={provider}, reaction={reaction}, message={message_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to save feedback: {e}")
+        return False

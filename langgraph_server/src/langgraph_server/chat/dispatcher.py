@@ -20,5 +20,16 @@ class ChatDispatcher:
         provider = self.get(provider_name)
         if not provider:
             raise ValueError(f"Provider '{provider_name}' is not registered.")
+        
+        # Check if this is a reaction update (provider-specific)
+        # For now, providers handle reactions in handle_update, but we could add
+        # a separate handle_reaction call here if needed
         responses = await provider.handle_update(payload)
         return list(responses)
+    
+    async def handle_reaction(self, provider_name: str, payload: Any) -> None:
+        """Handle reactions to bot messages."""
+        provider = self.get(provider_name)
+        if not provider:
+            raise ValueError(f"Provider '{provider_name}' is not registered.")
+        await provider.handle_reaction(payload)

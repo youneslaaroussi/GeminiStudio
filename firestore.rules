@@ -88,5 +88,10 @@ service cloud.firestore {
     match /users/{userId}/{document=**} {
       allow read, write: if false;
     }
+
+    // Message feedback - server-side only, no client access
+    match /messageFeedback/{feedbackId} {
+      allow read, write: if false;
+    }
   }
 }

@@ -44,9 +44,11 @@ The server ships with a pluggable chat-provider bridge so external channels can 
        -H 'Content-Type: application/json' \
        -d '{
              "url": "https://your-domain/providers/telegram/webhook",
-             "secret_token": "your-random-secret"
+             "secret_token": "your-random-secret",
+             "allowed_updates": ["message", "edited_message", "message_reaction"]
            }'
      ```
+     **Note:** The `allowed_updates` array must include `"message_reaction"` to receive emoji reaction updates for feedback collection.
    - Telegram will now POST chat updates to `/providers/telegram/webhook`. Each message should contain a phone number; the server looks up the Firebase user by phone and replies with the associated email.
 
 5. **Test**

@@ -20,6 +20,7 @@ from ..firebase import (
     update_chat_session_messages,
     create_project,
     send_telegram_message,
+    save_message_feedback,
 )
 from ..phone import extract_phone_number
 from .base import ChatProvider
@@ -322,6 +323,11 @@ class TelegramProvider(ChatProvider):
         ]
 
     async def handle_update(self, payload: dict) -> Iterable[OutgoingMessage]:
+        # Check if this is a message_reaction update
+        if payload.get("message_reaction"):
+            await self.handle_reaction(payload)
+            return []
+        
         buffered = await self._buffer_media_group(payload)
         if buffered:
             logger.info("[MG] Update buffered for media group, returning early")
@@ -343,13 +349,52 @@ class TelegramProvider(ChatProvider):
     async def dispatch_responses(self, messages: Iterable[OutgoingMessage]) -> None:
         """Send responses via the centralized send_telegram_message (handles MarkdownV2 conversion)."""
         for message in messages:
-            success = await send_telegram_message(
+            result = await send_telegram_message(
                 message.recipient_id,
                 message.text,
                 self.settings,
             )
-            if not success:
+            if not result:
                 logger.warning(f"Failed to send message to {message.recipient_id}")
+            elif isinstance(result, dict) and result.get("message_id"):
+                telegram_message_id = result["message_id"]
+                message.metadata["telegram_message_id"] = telegram_message_id
+                # Store telegram_message_id on the last assistant message in the session
+                await self._link_telegram_message_id(message.recipient_id, telegram_message_id)
+
+    async def _link_telegram_message_id(self, chat_id: str, telegram_message_id: int) -> None:
+        """Link the telegram message_id to the last assistant message in the session."""
+        try:
+            user_info = get_user_by_telegram_chat_id(chat_id, self.settings)
+            if not user_info:
+                return
+            
+            user_id = user_info.get("userId")
+            if not user_id:
+                return
+            
+            session_id = f"telegram-{chat_id}"
+            
+            from ..firebase import get_firestore_client
+            db = get_firestore_client(self.settings)
+            session_ref = db.collection("users").document(user_id).collection("chatSessions").document(session_id)
+            session_doc = session_ref.get()
+            
+            if not session_doc.exists:
+                return
+            
+            session_data = session_doc.to_dict()
+            messages = session_data.get("messages", [])
+            
+            # Find the last assistant message and add telegramMessageId
+            for i in range(len(messages) - 1, -1, -1):
+                if messages[i].get("role") == "assistant":
+                    messages[i]["telegramMessageId"] = telegram_message_id
+                    session_ref.update({"messages": messages})
+                    logger.debug(f"[TELEGRAM] Linked telegram_message_id {telegram_message_id} to message {messages[i].get('id')}")
+                    break
+        except Exception as e:
+            logger.warning(f"[TELEGRAM] Failed to link telegram_message_id: {e}")
 
     async def _build_response(self, message: IncomingMessage) -> str:
         text = (message.text or "").strip()
@@ -461,6 +506,7 @@ class TelegramProvider(ChatProvider):
 
     def _get_welcome_message(self, chat_id: str) -> str:
         """Get welcome message for /start command."""
+        feedback_note = "\n\n💡 Tip: React with an emoji to any bot message to give feedback!"
         user_info = get_user_by_telegram_chat_id(chat_id, self.settings)
         if user_info:
             return (
@@ -470,6 +516,7 @@ class TelegramProvider(ChatProvider):
                 "Commands:\n"
                 "/status - Check your account status\n"
                 "/help - Show available commands"
+                + feedback_note
             )
         return (
             "Welcome to Gemini Studio Bot!\n\n"
@@ -481,6 +528,7 @@ class TelegramProvider(ChatProvider):
             "/link <CODE> - Link your account\n"
             "/status - Check your account status\n"
             "/help - Show available commands"
+            + feedback_note
         )
 
     def _get_status_message(self, chat_id: str) -> str:
@@ -500,6 +548,7 @@ class TelegramProvider(ChatProvider):
     def _get_help_message(self, chat_id: str) -> str:
         """Get help message listing available commands."""
         user_info = get_user_by_telegram_chat_id(chat_id, self.settings)
+        feedback_note = "\n\n💡 Tip: React with an emoji to any bot message to give feedback!"
         base_help = (
             "Gemini Studio Bot Commands:\n\n"
             "/start - Start the bot\n"
@@ -508,17 +557,19 @@ class TelegramProvider(ChatProvider):
         )
         if user_info:
             return (
-                base_help + "\n"
+                base_help + "\n\n"
                 "/project - List and select projects\n"
                 "/newproject <name> - Create a new project\n"
                 "/newchat - Start a fresh conversation\n\n"
-                "Send any message to interact with your active project.\n"
-                "Send photos/videos/voice messages (with or without text): they're uploaded and sent to the agent.\n"
+                "Send any message to interact with your active project.\n\n"
+                "Send photos/videos/voice messages (with or without text): they're uploaded and sent to the agent.\n\n"
                 "Use /upload or /upload <caption> as caption to only upload and get a summary (no agent)."
+                + feedback_note
             )
         return (
-            base_help + "\n"
+            base_help + "\n\n"
             "/link <CODE> - Link your Gemini Studio account"
+            + feedback_note
         )
 
     async def _do_upload(
@@ -804,6 +855,9 @@ class TelegramProvider(ChatProvider):
         # Get current messages
         current_messages = list(session.get("messages", []))
         logger.info("[TELEGRAM] Existing messages in session: %d", len(current_messages))
+        
+        # Track message count for feedback reminders
+        bot_message_count = session.get("botMessageCount", 0)
 
         # Add user message to session
         user_message = {
@@ -990,6 +1044,19 @@ Assets: {len(assets_info)}"""
                 current_messages.append(assistant_message)
                 update_chat_session_messages(user_id, session_id, current_messages, self.settings)
 
+                # Update bot message count and check for feedback reminder
+                bot_message_count += 1
+                from ..firebase import get_firestore_client
+                db = get_firestore_client(self.settings)
+                session_ref = db.collection("users").document(user_id).collection("chatSessions").document(session_id)
+                session_ref.update({"botMessageCount": bot_message_count})
+                
+                # Show feedback reminder every 10 messages (after first message, then every 10th)
+                FEEDBACK_REMINDER_INTERVAL = 10
+                if bot_message_count == 1 or bot_message_count % FEEDBACK_REMINDER_INTERVAL == 0:
+                    reminder = "\n\n💡 React with an emoji to give feedback on this response!"
+                    return last_response + reminder
+
                 return last_response
 
             logger.warning("[TELEGRAM] No response from agent")
@@ -998,3 +1065,83 @@ Assets: {len(assets_info)}"""
         except Exception as e:
             logger.exception("[TELEGRAM] Agent invocation failed: %s", str(e))
             return f"Error: {str(e)}"
+
+    async def handle_reaction(self, payload: dict) -> None:
+        """Handle emoji reactions to bot messages."""
+        import httpx
+        
+        message_reaction = payload.get("message_reaction")
+        if not message_reaction:
+            return
+        
+        chat = message_reaction.get("chat", {})
+        chat_id = str(chat.get("id"))
+        message_id = message_reaction.get("message_id")
+        new_reaction = message_reaction.get("new_reaction", [])
+        
+        if not message_id:
+            return
+        
+        # Get user info first
+        user_info = get_user_by_telegram_chat_id(chat_id, self.settings)
+        if not user_info:
+            logger.debug(f"[TELEGRAM] Reaction from unlinked user {chat_id}, ignoring")
+            return
+        
+        user_id = user_info.get("userId")
+        if not user_id:
+            return
+        
+        # Verify the message is from the bot by fetching it
+        # For private chats, we can be more lenient, but let's verify for accuracy
+        try:
+            async with httpx.AsyncClient() as client:
+                # Get bot info
+                bot_info_response = await client.get(
+                    f"{self.api_base_url}/bot{self.bot_token}/getMe",
+                    timeout=5.0,
+                )
+                if bot_info_response.status_code != 200:
+                    logger.warning("[TELEGRAM] Failed to get bot info for reaction check")
+                    return
+                
+                bot_info = bot_info_response.json().get("result", {})
+                bot_id = bot_info.get("id")
+                
+                # Try to get chat member info to determine chat type
+                # For private chats, reactions are likely to bot messages
+                # For groups/channels, we'd need to track sent message IDs
+                chat_type = chat.get("type", "")
+                is_private = chat_type == "private"
+                
+                # For private chats, assume reactions are to bot messages
+                # For groups, we could track message IDs, but for now we'll save all reactions
+                # and filter in analytics if needed
+                if not is_private:
+                    logger.debug(f"[TELEGRAM] Reaction in {chat_type} chat, saving feedback")
+                
+        except Exception as e:
+            logger.warning(f"[TELEGRAM] Error checking bot message for reaction: {e}")
+            # Continue - we'll save the feedback anyway
+        
+        # Get session for context
+        session = get_or_create_telegram_chat_session(user_id, chat_id, self.settings)
+        session_id = session.get("id")
+        
+        # Process new reactions (user added emojis)
+        for reaction_obj in new_reaction:
+            if isinstance(reaction_obj, dict):
+                emoji = reaction_obj.get("emoji")
+                if emoji:
+                    save_message_feedback(
+                        user_id=user_id,
+                        provider=self.name,
+                        message_id=str(message_id),
+                        reaction=emoji,
+                        session_id=session_id,
+                        settings=self.settings,
+                    )
+                    logger.info(f"[TELEGRAM] Saved feedback: user={user_id}, reaction={emoji}, message={message_id}")
+        
+        # Note: We could also track old_reaction removals, but for feedback purposes,
+        # we mainly care about positive reactions (emojis added)

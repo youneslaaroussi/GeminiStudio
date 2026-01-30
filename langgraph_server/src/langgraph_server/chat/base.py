@@ -26,3 +26,11 @@ class ChatProvider(ABC):
         """Default handling: parse incoming messages and no-op."""
         _ = await self.parse_update(payload)
         return []
+
+    async def handle_reaction(self, payload: Any) -> None:
+        """Handle reactions to bot messages (e.g., emoji reactions).
+        
+        This method should be overridden by providers that support reactions.
+        Default implementation does nothing.
+        """
+        pass
