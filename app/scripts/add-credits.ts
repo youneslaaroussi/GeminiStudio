@@ -1,6 +1,8 @@
 /**
  * CLI script to add R‑Credits to a user's account.
  *
+ * Loads environment from .env (FIREBASE_SERVICE_ACCOUNT_KEY, etc.).
+ *
  * Usage:
  *   pnpm add-credits <user> <amount> [--key path/to/service-account.json]
  *   pnpm add-credits user@example.com 100
@@ -14,6 +16,7 @@
  * Requires Firebase Admin (service account) with Firestore access.
  */
 
+import "dotenv/config";
 import { initAdmin, getAdminAuth } from "../app/lib/server/firebase-admin";
 import { addCredits } from "../app/lib/server/credits";
 

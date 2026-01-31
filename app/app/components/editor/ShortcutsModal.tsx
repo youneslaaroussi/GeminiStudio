@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useAnalytics } from "@/app/lib/hooks/useAnalytics";
 
 const SHORTCUTS: { section: string; items: { action: string; keys: string }[] }[] = [
   {
@@ -33,6 +35,15 @@ const SHORTCUTS: { section: string; items: { action: string; keys: string }[] }[
       { action: "Undo", keys: "Ctrl+Z / ⌘Z" },
       { action: "Redo", keys: "Ctrl+Y or Ctrl+Shift+Z / ⌘Y or ⌘⇧Z" },
       { action: "Deselect clip", keys: "Escape" },
+    ],
+  },
+  {
+    section: "Timeline",
+    items: [
+      { action: "Split clip at playhead", keys: "C" },
+      { action: "Selection tool", keys: "V" },
+      { action: "Hand tool (drag to pan)", keys: "H" },
+      { action: "Open / close voice chat", keys: "M" },
     ],
   },
   {
@@ -69,6 +80,13 @@ interface ShortcutsModalProps {
 }
 
 export function ShortcutsModal({ open, onOpenChange }: ShortcutsModalProps) {
+  const { events: analytics } = useAnalytics();
+
+  useEffect(() => {
+    if (open) analytics.shortcutsOpened();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only track when open becomes true
+  }, [open]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md" showCloseButton={true}>

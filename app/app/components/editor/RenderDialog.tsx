@@ -14,6 +14,7 @@ import { Progress } from "@/components/ui/progress";
 import type { Project } from "@/app/types/timeline";
 import { useRender, type RenderFormat, type RenderQuality } from "@/app/hooks/useRender";
 import { useProjectStore } from "@/app/lib/store/project-store";
+import { useAnalytics } from "@/app/lib/hooks/useAnalytics";
 import { getCreditsForAction } from "@/app/lib/credits-config";
 
 interface RenderDialogProps {
@@ -55,7 +56,7 @@ export function RenderDialog({
     resumeJob,
     clearJob,
   } = useRender();
-
+  const { events: analytics } = useAnalytics();
   const saveProject = useProjectStore((state) => state.saveProject);
   const renderCredits = useMemo(() => getCreditsForAction("render"), []);
 
@@ -73,8 +74,9 @@ export function RenderDialog({
   const handleStartRender = useCallback(async () => {
     // Autosave project before rendering
     saveProject();
+    analytics.renderStarted({ project_id: projectId, format, quality });
     await startRender(project, projectId, { format, quality });
-  }, [startRender, project, projectId, format, quality, saveProject]);
+  }, [startRender, project, projectId, format, quality, saveProject, analytics]);
 
   const handleClose = useCallback(
     (nextOpen: boolean) => {

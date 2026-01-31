@@ -107,7 +107,7 @@ export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, 
   const { isRendering, jobStatus } = useRender();
 
   const handleHome = useCallback(() => {
-    router.push('/');
+    router.push('/app');
   }, [router]);
 
   const handleLogout = useCallback(async () => {
@@ -120,7 +120,7 @@ export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, 
   }, [logout, router]);
 
   const handleAddCredits = useCallback(() => {
-    router.push('/settings?billing=fill');
+    router.push('/settings/billing');
   }, [router]);
 
   const handleRefreshCredits = useCallback(() => {
@@ -524,7 +524,7 @@ export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, 
               Refresh credits
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push("/settings")}>
+            <DropdownMenuItem onClick={() => router.push("/settings/profile")}>
               <Settings className="size-4" />
               Settings
             </DropdownMenuItem>

@@ -143,7 +143,7 @@ export function VideoPanel({ projectId, onJobStarted }: VideoPanelProps) {
             : "Add credits in Settings to continue.",
           action: {
             label: "Add credits",
-            onClick: () => router.push("/settings?billing=fill"),
+            onClick: () => router.push("/settings/billing"),
           },
         });
         return;

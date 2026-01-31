@@ -208,7 +208,8 @@ export const videoEffectsJobStatusTool: ToolDefinition<typeof jobStatusSchema, P
         const { getVideoEffectJob } = await import(
           "@/app/lib/server/video-effects-client"
         );
-        job = await getVideoEffectJob(input.jobId.trim());
+        const fetchedJob = await getVideoEffectJob(input.jobId.trim());
+        job = fetchedJob as VideoEffectJob | null;
         if (!job) {
           return {
             status: "error" as const,

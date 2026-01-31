@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-01-30T22:08:05.892Z",
+  "generatedAt": "2026-01-31T16:35:10.627Z",
   "tools": {
     "captureAsset": {
       "name": "captureAsset",
@@ -1891,6 +1891,40 @@
           ],
           "defaultValue": "detailed",
           "description": "How thorough should the analysis be?"
+        },
+        {
+          "name": "startOffset",
+          "label": "Start Time (optional)",
+          "type": "text",
+          "placeholder": "e.g. 30s or 1m30s",
+          "description": "For videos: Start analyzing from this timestamp."
+        },
+        {
+          "name": "endOffset",
+          "label": "End Time (optional)",
+          "type": "text",
+          "placeholder": "e.g. 60s or 2m",
+          "description": "For videos: Stop analyzing at this timestamp."
+        },
+        {
+          "name": "mediaResolution",
+          "label": "Resolution (optional)",
+          "type": "select",
+          "options": [
+            {
+              "value": "low",
+              "label": "Low (fewer tokens, good for long videos)"
+            },
+            {
+              "value": "medium",
+              "label": "Medium (balanced)"
+            },
+            {
+              "value": "high",
+              "label": "High (more detail, more tokens)"
+            }
+          ],
+          "description": "Media resolution affects token usage. Low = ~100 tokens/sec, High = ~300 tokens/sec."
         }
       ],
       "inputSchema": {
@@ -1914,10 +1948,171 @@
                   "exhaustive"
                 ],
                 "default": "detailed"
+              },
+              "startOffset": {
+                "type": "string"
+              },
+              "endOffset": {
+                "type": "string"
+              },
+              "mediaResolution": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
               }
             },
             "required": [
               "assetId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "applyVideoEffectToClip": {
+      "name": "applyVideoEffectToClip",
+      "label": "Apply Video Effect to Clip",
+      "description": "Apply a video effect (e.g. segmentation) to a clip/asset. Before using: digest the clip (digestAsset or getAssetMetadata) to understand the video content and choose where to place tracking points (click coordinates and frames) for the segmentation effect.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": true,
+        "langgraphName": "applyVideoEffectToClip"
+      },
+      "fields": [
+        {
+          "name": "assetId",
+          "label": "Asset ID",
+          "type": "text",
+          "placeholder": "e.g. asset_abc123",
+          "required": true,
+          "description": "The asset (clip) to apply the effect to."
+        },
+        {
+          "name": "effectId",
+          "label": "Effect",
+          "type": "text",
+          "placeholder": "replicate.meta.sam2-video",
+          "defaultValue": "replicate.meta.sam2-video",
+          "description": "Effect ID; default is segmentation (SAM-2)."
+        },
+        {
+          "name": "clickCoordinates",
+          "label": "Click Coordinates",
+          "type": "textarea",
+          "placeholder": "[391,239],[178,320]",
+          "required": true,
+          "description": "Tracking points as [x,y] pairs. Digest the clip first to choose where to click."
+        },
+        {
+          "name": "clickFrames",
+          "label": "Click Frames",
+          "type": "text",
+          "placeholder": "1,15,30",
+          "defaultValue": "1",
+          "description": "Frame numbers where clicks apply (comma-separated)."
+        },
+        {
+          "name": "clickObjectIds",
+          "label": "Click Object IDs (optional)",
+          "type": "text",
+          "placeholder": "bee_1,bee_2"
+        },
+        {
+          "name": "maskType",
+          "label": "Mask Type",
+          "type": "select",
+          "options": [
+            {
+              "value": "binary",
+              "label": "Binary mask"
+            },
+            {
+              "value": "highlighted",
+              "label": "Highlight objects"
+            }
+          ],
+          "defaultValue": "binary"
+        },
+        {
+          "name": "videoFps",
+          "label": "Output FPS",
+          "type": "number",
+          "defaultValue": "25",
+          "description": "Frames per second for output (1–60)."
+        },
+        {
+          "name": "outputVideo",
+          "label": "Return Video",
+          "type": "select",
+          "options": [
+            {
+              "value": "true",
+              "label": "Yes"
+            },
+            {
+              "value": "false",
+              "label": "No"
+            }
+          ],
+          "defaultValue": "true"
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/applyVideoEffectToClipInput",
+        "definitions": {
+          "applyVideoEffectToClipInput": {
+            "type": "object",
+            "properties": {
+              "assetId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "effectId": {
+                "type": "string",
+                "minLength": 1,
+                "default": "replicate.meta.sam2-video",
+                "description": "Effect to apply; default is segmentation (SAM-2)"
+              },
+              "clickCoordinates": {
+                "type": "string",
+                "description": "Tracking points as [x,y] pairs, e.g. '[391,239],[178,320]'. Digest the clip first to choose coordinates."
+              },
+              "clickFrames": {
+                "type": "string",
+                "default": "1",
+                "description": "Comma-separated frame numbers where clicks apply, e.g. '1,15,30'"
+              },
+              "clickObjectIds": {
+                "type": "string",
+                "default": ""
+              },
+              "maskType": {
+                "type": "string",
+                "enum": [
+                  "binary",
+                  "highlighted"
+                ],
+                "default": "binary"
+              },
+              "videoFps": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 60,
+                "default": 25
+              },
+              "outputVideo": {
+                "type": "boolean",
+                "default": true
+              }
+            },
+            "required": [
+              "assetId",
+              "clickCoordinates"
             ],
             "additionalProperties": false
           }
@@ -1960,6 +2155,19 @@
         "app": false,
         "langgraph": true,
         "langgraphName": "generateImage"
+      },
+      "fields": [],
+      "inputSchema": null
+    },
+    "getVideoEffectJobStatus": {
+      "name": "getVideoEffectJobStatus",
+      "label": "Check Video Effect Job Status",
+      "description": "Check the status of a video effect job started by applyVideoEffectToClip.",
+      "runLocation": "server",
+      "implementations": {
+        "app": false,
+        "langgraph": true,
+        "langgraphName": "getVideoEffectJobStatus"
       },
       "fields": [],
       "inputSchema": null

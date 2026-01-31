@@ -29,6 +29,7 @@ import {
 } from "./video-effects-run";
 import { veoGenerateTool, veoJobStatusTool } from "./veo-generate";
 import { digestAssetTool } from "./digest-asset";
+import { applyVideoEffectToClipTool } from "./apply-video-effect-to-clip";
 
 type AnyToolDefinition = ToolDefinition<any, Project>;
 
@@ -72,6 +73,7 @@ toolRegistry.register(videoEffectsJobStatusTool);
 toolRegistry.register(veoGenerateTool);
 toolRegistry.register(veoJobStatusTool);
 toolRegistry.register(digestAssetTool);
+toolRegistry.register(applyVideoEffectToClipTool);
 
 type ToolInput = Record<string, unknown>;
 

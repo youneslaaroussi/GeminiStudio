@@ -11,6 +11,7 @@ import {
   Volume2,
   ListTodo,
   GitBranch,
+  Circle,
 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { createTextClip, createVideoClip, createAudioClip, createImageClip } from "@/app/types/timeline";
@@ -41,6 +42,7 @@ import { UploadZone } from "./UploadZone";
 import { UploadDialog } from "./dialogs/UploadDialog";
 import { TranscriptDialog } from "./dialogs/TranscriptDialog";
 import { AssetDetailsDialog } from "./dialogs/AssetDetailsDialog";
+import { VidovaModal } from "./dialogs/VidovaModal";
 import { usePipelinePolling } from "@/app/lib/hooks/usePipelinePolling";
 import { usePipelineStates } from "@/app/lib/hooks/usePipelineStates";
 
@@ -182,6 +184,7 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
   // Dialog states (keeping transcript and details as dialogs)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploadInitialFiles, setUploadInitialFiles] = useState<File[]>([]);
+  const [vidovaModalOpen, setVidovaModalOpen] = useState(false);
   const [transcriptDialogAssetId, setTranscriptDialogAssetId] = useState<string | null>(null);
   const [detailsDialogAssetId, setDetailsDialogAssetId] = useState<string | null>(null);
 
@@ -329,9 +332,31 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
               activeTab !== "assets" && "invisible pointer-events-none"
             )}
           >
-            {/* Upload Zone */}
-            <div className="p-3 border-b border-border">
-              <UploadZone onFilesSelected={handleFilesSelected} compact />
+            {/* Upload Zone + Record */}
+            <div className="p-3 border-b border-border flex flex-col gap-2">
+              <div className="flex items-stretch gap-2">
+                <div className="flex-1 min-w-0">
+                  <UploadZone onFilesSelected={handleFilesSelected} compact />
+                </div>
+                <TooltipProvider delayDuration={300}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 h-full gap-1.5 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 hover:border-rose-300 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-400 dark:hover:bg-rose-900/50 dark:hover:text-rose-300"
+                        onClick={() => setVidovaModalOpen(true)}
+                      >
+                        <Circle className="size-3 fill-current" />
+                        <span className="text-xs font-medium">Record</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      Record with Vidova
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
             </div>
 
             {/* Asset List */}
@@ -514,6 +539,8 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
         transcription={detailsDialogTranscription}
         onPipelineRefresh={fetchAssets}
       />
+
+      <VidovaModal open={vidovaModalOpen} onOpenChange={setVidovaModalOpen} />
     </>
   );
 }

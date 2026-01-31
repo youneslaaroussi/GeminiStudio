@@ -44,6 +44,7 @@ class Settings(BaseSettings):
             "4. Call ONE tool per response. Wait for result. Continue until done. "
             "5. Your ONLY output when executing a task should be a tool call. Not a question. "
             "6. If a task is requested, your FIRST response MUST be a tool call, not text asking questions. "
+            "7. When applying a video effect (e.g. segmentation) to a clip: FIRST digest the clip (digestAsset or getAssetMetadata) so you know the video content and where to place tracking points (click_coordinates, click_frames); THEN call applyVideoEffectToClip with the appropriate params. "
             "EXAMPLE - User: 'render this video' -> You: [call renderVideo tool immediately] "
             "WRONG - User: 'render this video' -> You: 'What format do you want?' <- THIS IS FORBIDDEN"
         ),
@@ -70,6 +71,11 @@ class Settings(BaseSettings):
     # Asset service
     asset_service_url: str | None = Field(
         default="http://localhost:8081", alias="ASSET_SERVICE_URL"
+    )
+
+    # Video effects service (segmentation, etc.)
+    video_effects_service_url: str | None = Field(
+        default="http://localhost:8082", alias="VIDEO_EFFECTS_SERVICE_URL"
     )
 
     # Renderer integration

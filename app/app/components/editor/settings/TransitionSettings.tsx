@@ -58,10 +58,14 @@ export function TransitionSettings({ transitionKey }: TransitionSettingsProps) {
           >
             <option value="none">None</option>
             <option value="fade">Fade</option>
+            <option value="cross-dissolve">Cross Dissolve</option>
             <option value="slide-left">Slide Left</option>
             <option value="slide-right">Slide Right</option>
             <option value="slide-up">Slide Up</option>
             <option value="slide-down">Slide Down</option>
+            <option value="zoom">Zoom</option>
+            <option value="blur">Blur</option>
+            <option value="dip-to-black">Dip to Black</option>
           </select>
         </div>
 

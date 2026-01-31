@@ -82,7 +82,7 @@ export interface ImageClip {
 }
 
 export interface ClipTransition {
-  type: 'none' | 'fade' | 'slide-left' | 'slide-right' | 'slide-up' | 'slide-down';
+  type: 'none' | 'fade' | 'slide-left' | 'slide-right' | 'slide-up' | 'slide-down' | 'cross-dissolve' | 'zoom' | 'blur' | 'dip-to-black';
   duration: number;
 }
 

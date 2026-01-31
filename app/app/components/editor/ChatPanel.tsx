@@ -67,6 +67,7 @@ import type {
 import type { Project } from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useAuth } from "@/app/lib/hooks/useAuth";
+import { useAnalytics } from "@/app/lib/hooks/useAnalytics";
 import {
   saveChatSession,
   loadChatSession,
@@ -153,6 +154,7 @@ export function ChatPanel() {
 
   const router = useRouter();
   const { user } = useAuth();
+  const { events: analytics } = useAnalytics();
 
   const chatCredits = useMemo(() => getCreditsForAction("chat"), []);
 
@@ -191,7 +193,7 @@ export function ChatPanel() {
                 description: `Each message uses ${d.required} R‑Credits. Add credits to continue.`,
                 action: {
                   label: "Add credits",
-                  onClick: () => router.push("/settings?billing=fill"),
+                  onClick: () => router.push("/settings/billing"),
                 },
               });
             }
@@ -299,6 +301,7 @@ export function ChatPanel() {
         },
       });
     }
+    analytics.chatMessageSent();
     setInput("");
     setPendingAttachments([]);
   };

@@ -20,6 +20,7 @@ const LANGGRAPH_TOOL_MAP: Record<string, string> = {
   generateMusic: "generateMusic",
   generateSpeech: "generateSpeech",
   veoGenerate: "generateVeoVideo",
+  applyVideoEffectToClip: "applyVideoEffectToClip",
 };
 
 /**
@@ -55,6 +56,12 @@ const LANGGRAPH_ONLY_TOOLS: Array<{
     label: "Get Asset Metadata",
     description: "Get detailed metadata for an asset including face detection, shot detection, labels, and transcription.",
     langgraphName: "getAssetMetadata",
+  },
+  {
+    name: "getVideoEffectJobStatus",
+    label: "Check Video Effect Job Status",
+    description: "Check the status of a video effect job started by applyVideoEffectToClip.",
+    langgraphName: "getVideoEffectJobStatus",
   },
 ];
 

@@ -26,7 +26,7 @@ export function AppHeader({ user, onLogout }: AppHeaderProps) {
   const pathname = usePathname();
 
   const navItems = [
-    { label: "Projects", href: "/", icon: FolderOpen },
+    { label: "Projects", href: "/app", icon: FolderOpen },
   ];
 
   const getInitials = (email: string | null, name: string | null) => {
@@ -42,10 +42,10 @@ export function AppHeader({ user, onLogout }: AppHeaderProps) {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-800 bg-[#0f0f12]/95 backdrop-blur supports-[backdrop-filter]:bg-[#0f0f12]/80">
       <div className="flex h-14 items-center px-6">
-        {/* Logo and Brand */}
-        <div 
+        {/* Logo and Brand: on projects page go to landing; on settings (and elsewhere) go to projects */}
+        <div
           className="flex items-center gap-3 cursor-pointer mr-8"
-          onClick={() => router.push("/")}
+          onClick={() => router.push(pathname === "/app" ? "/" : "/app")}
         >
           <img src="/gemini-logo.png" alt="Gemini" className="size-8" />
           <span className="font-semibold text-white text-lg hidden sm:inline-block">
@@ -108,15 +108,15 @@ export function AppHeader({ user, onLogout }: AppHeaderProps) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-slate-700" />
             <DropdownMenuGroup>
-              <DropdownMenuItem 
-                onClick={() => router.push("/settings")}
+              <DropdownMenuItem
+                onClick={() => router.push("/settings/profile")}
                 className="cursor-pointer text-slate-300 focus:text-white focus:bg-slate-800"
               >
                 <Settings className="mr-2 size-4" />
                 Settings
               </DropdownMenuItem>
-              <DropdownMenuItem 
-                onClick={() => router.push("/settings?billing=fill")}
+              <DropdownMenuItem
+                onClick={() => router.push("/settings/billing")}
                 className="cursor-pointer text-slate-300 focus:text-white focus:bg-slate-800"
               >
                 <CreditCard className="mr-2 size-4" />

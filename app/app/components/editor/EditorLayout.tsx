@@ -37,6 +37,7 @@ import type { ProjectTranscription } from "@/app/types/transcription";
 import type { VideoClip } from "@/app/types/timeline";
 import { getProxiedMediaUrl } from "@/app/components/ui/CoordinatePicker";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 // Wrapper component that gets selected video clip for the Effects tab
 function VideoEffectsPanelWrapper() {
@@ -150,6 +151,8 @@ export function EditorLayout() {
   const getDuration = useProjectStore((s) => s.getDuration);
   const hasUnsavedChanges = useProjectStore((s) => s.hasUnsavedChanges);
   const saveProject = useProjectStore((s) => s.saveProject);
+  const selectedClipId = useProjectStore((s) => s.selectedClipId);
+  const splitClipAtTime = useProjectStore((s) => s.splitClipAtTime);
 
   // Get assets and pipeline states to build transcriptions at runtime
   const assets = useAssetsStore((s) => s.assets);
@@ -492,6 +495,44 @@ export function EditorLayout() {
         }
       },
     },
+    // Timeline: C = split clip at playhead
+    {
+      key: 'c',
+      handler: (e) => {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (selectedClipId) {
+          splitClipAtTime(selectedClipId, currentTime);
+          e.preventDefault();
+        }
+      },
+    },
+    // Timeline: V = Selection tool (Premiere-style)
+    {
+      key: 'v',
+      handler: (e) => {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        setTimelineTool('selection');
+        e.preventDefault();
+      },
+    },
+    // Timeline: H = Hand tool (Premiere-style)
+    {
+      key: 'h',
+      handler: (e) => {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        setTimelineTool('hand');
+        e.preventDefault();
+      },
+    },
+    // M = open / toggle voice chat
+    {
+      key: 'm',
+      handler: (e) => {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        setShowVoiceChat((prev) => !prev);
+        e.preventDefault();
+      },
+    },
   ]);
 
   useEffect(() => {
@@ -508,6 +549,7 @@ export function EditorLayout() {
   }, [player, setIsPlaying, setLooping, setMuted, setPlaybackSpeed]);
 
   const [showVoiceChat, setShowVoiceChat] = useState(false);
+  const [timelineTool, setTimelineTool] = useState<"selection" | "hand">("selection");
   // Position stores left (x) and bottom (distance from viewport bottom)
   const [voiceChatPosition, setVoiceChatPosition] = useState<{ left: number; bottom: number } | null>(null);
   const voiceChatPanelRef = useRef<HTMLDivElement>(null);
@@ -663,17 +705,21 @@ export function EditorLayout() {
                 {/* Bottom: Timeline */}
                 <ResizablePanel defaultSize={40} minSize={20} className="min-w-0">
                   <div className="h-full w-full bg-card border-t border-border overflow-hidden">
-                    <TimelinePanel
-                      hasPlayer={!!player}
-                      playing={isPlaying}
-                      onTogglePlay={togglePlay}
-                      muted={isMuted}
-                      loop={isLooping}
-                      speed={playbackSpeed}
-                      onToggleMute={handleToggleMute}
-                      onToggleLoop={handleToggleLoop}
-                      onSpeedChange={handleSpeedChange}
-                    />
+                    <TooltipProvider delayDuration={300}>
+                      <TimelinePanel
+                        hasPlayer={!!player}
+                        playing={isPlaying}
+                        onTogglePlay={togglePlay}
+                        muted={isMuted}
+                        loop={isLooping}
+                        speed={playbackSpeed}
+                        onToggleMute={handleToggleMute}
+                        onToggleLoop={handleToggleLoop}
+                        onSpeedChange={handleSpeedChange}
+                        timelineTool={timelineTool}
+                        onTimelineToolChange={setTimelineTool}
+                      />
+                    </TooltipProvider>
                   </div>
                 </ResizablePanel>
               </ResizablePanelGroup>

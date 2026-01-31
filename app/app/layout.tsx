@@ -12,6 +12,9 @@ import "@fontsource/poppins/500.css";
 import "@fontsource/poppins/700.css";
 import "@fontsource-variable/jetbrains-mono";
 import { Toaster } from "@/components/ui/sonner";
+import { Copyright } from "@/app/components/Copyright";
+import { CookieNotice } from "@/app/components/CookieNotice";
+import { AnalyticsProvider } from "@/app/lib/analytics/AnalyticsProvider";
 
 export const metadata: Metadata = {
   title: "Gemini Studio",
@@ -34,8 +37,12 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="antialiased bg-background text-foreground">
-        {children}
-        <Toaster />
+        <AnalyticsProvider>
+          {children}
+          <Copyright />
+          <CookieNotice />
+          <Toaster />
+        </AnalyticsProvider>
       </body>
     </html>
   );

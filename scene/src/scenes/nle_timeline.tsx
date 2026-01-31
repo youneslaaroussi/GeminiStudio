@@ -176,6 +176,7 @@ export default makeScene2D(function* (view) {
         const entries = createVideoElements({
           clips: layer.clips as VideoClip[],
           view,
+          transitions: clipTransitions,
         });
         videoEntries.push(...entries);
         break;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Project, TimelineClip } from "@/app/types/timeline";
+import type { ProjectTranscription } from "@/app/types/transcription";
 import { initAdmin } from "@/app/lib/server/firebase-admin";
 import { getAuth } from "firebase-admin/auth";
 import { getPipelineStateFromService, isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
@@ -220,7 +221,7 @@ async function buildTranscriptionsFromPipeline(
   userId: string,
   projectId: string,
   assetUrlMap: Map<string, string>
-): Promise<Record<string, { assetId: string; assetUrl: string; segments?: Array<{ start: number; speech: string }> }>> {
+): Promise<Record<string, ProjectTranscription>> {
   // Collect unique assetIds from all clips
   const assetIds = new Set<string>();
   for (const layer of project.layers) {
@@ -231,7 +232,7 @@ async function buildTranscriptionsFromPipeline(
     }
   }
 
-  const transcriptions: Record<string, { assetId: string; assetUrl: string; segments?: Array<{ start: number; speech: string }> }> = {};
+  const transcriptions: Record<string, ProjectTranscription> = {};
 
   // Fetch transcription data from pipeline for each asset
   await Promise.all(
@@ -241,22 +242,27 @@ async function buildTranscriptionsFromPipeline(
         const transcriptionStep = pipelineState.steps.find(
           (s) => s.id === "transcription" && s.status === "succeeded"
         );
-        
+
         if (!transcriptionStep?.metadata) return;
-        
+
         const { segments } = transcriptionStep.metadata as {
           segments?: Array<{ start: number; speech: string }>;
         };
-        
+
         if (!segments || segments.length === 0) return;
-        
+
         // Use signed URL if available, otherwise construct a placeholder
         const assetUrl = assetUrlMap.get(assetId) || "";
-        
+
         transcriptions[assetId] = {
           assetId,
+          assetName: assetId,
           assetUrl,
           segments,
+          languageCodes: [],
+          status: "completed",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         };
       } catch (error) {
         // Asset may not have a pipeline or transcription - that's OK

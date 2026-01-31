@@ -1,26 +1,72 @@
 import { Video, Node } from '@motion-canvas/2d';
-import { Vector2, createRef, waitFor, all, type ThreadGenerator } from '@motion-canvas/core';
+import { Vector2, createRef, createSignal, waitFor, all, easeOutCubic, easeInCubic, easeInOutCubic, type ThreadGenerator, type SimpleSignal } from '@motion-canvas/core';
 import type { VideoClip, VideoEntry, ClipTransition } from '../types';
 import { toVector } from '../helpers';
 import luminanceToAlpha from '../../shaders/luminanceToAlpha.glsl';
+import blurTransition from '../../shaders/blurTransition.glsl';
+import zoomTransition from '../../shaders/zoomTransition.glsl';
+import crossDissolve from '../../shaders/crossDissolve.glsl';
+
+// Extended entry with shader signals
+interface VideoEntryWithSignals extends VideoEntry {
+  blurSignal?: SimpleSignal<number>;
+  zoomStrengthSignal?: SimpleSignal<number>;
+  zoomDirectionSignal?: SimpleSignal<number>;
+  dissolveSignal?: SimpleSignal<number>;
+}
 
 interface CreateVideoElementsOptions {
   clips: VideoClip[];
   view: Node;
+  transitions?: Map<string, { enter?: ClipTransition; exit?: ClipTransition }>;
 }
 
-export function createVideoElements({ clips, view }: CreateVideoElementsOptions): VideoEntry[] {
-  const entries: VideoEntry[] = [];
+export function createVideoElements({ clips, view, transitions }: CreateVideoElementsOptions): VideoEntryWithSignals[] {
+  const entries: VideoEntryWithSignals[] = [];
 
   for (const clip of clips) {
     const ref = createRef<Video>();
+    const transInfo = transitions?.get(clip.id);
+    const needsBlur = transInfo?.enter?.type === 'blur' || transInfo?.exit?.type === 'blur';
+    const needsZoom = transInfo?.enter?.type === 'zoom' || transInfo?.exit?.type === 'zoom';
+    const needsDissolve = transInfo?.enter?.type === 'cross-dissolve' || transInfo?.exit?.type === 'cross-dissolve';
+
+    // Create signals for shader uniforms
+    const blurSignal = needsBlur ? createSignal(0) : undefined;
+    const zoomStrengthSignal = needsZoom ? createSignal(0) : undefined;
+    const zoomDirectionSignal = needsZoom ? createSignal(1) : undefined;
+    const dissolveSignal = needsDissolve ? createSignal(0) : undefined;
+
+    // Build shader config for transition effects
+    type ShaderConfig = { fragment: string; uniforms: Record<string, SimpleSignal<number>> };
+    let shaders: ShaderConfig | undefined = undefined;
+
+    if (needsBlur && blurSignal) {
+      shaders = {
+        fragment: blurTransition,
+        uniforms: { blurAmount: blurSignal },
+      };
+    } else if (needsZoom && zoomStrengthSignal && zoomDirectionSignal) {
+      shaders = {
+        fragment: zoomTransition,
+        uniforms: {
+          zoomStrength: zoomStrengthSignal,
+          zoomDirection: zoomDirectionSignal,
+        },
+      };
+    } else if (needsDissolve && dissolveSignal) {
+      shaders = {
+        fragment: crossDissolve,
+        uniforms: { dissolveProgress: dissolveSignal },
+      };
+    }
 
     if (clip.maskSrc && clip.maskMode) {
       const maskRef = createRef<Video>();
       const containerRef = createRef<Node>();
       const compositeOp = clip.maskMode === 'include' ? 'source-in' : 'source-out';
 
-      entries.push({ clip, ref, maskRef, containerRef });
+      entries.push({ clip, ref, maskRef, containerRef, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal });
 
       view.add(
         <Node
@@ -50,11 +96,13 @@ export function createVideoElements({ clips, view }: CreateVideoElementsOptions)
             width={1920}
             height={1080}
             compositeOperation={compositeOp}
+            shaders={shaders}
           />
         </Node>
       );
     } else {
-      entries.push({ clip, ref });
+      entries.push({ clip, ref, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal });
+
       view.add(
         <Video
           key={`video-clip-${clip.id}`}
@@ -65,6 +113,7 @@ export function createVideoElements({ clips, view }: CreateVideoElementsOptions)
           opacity={0}
           position={toVector(clip.position)}
           scale={toVector(clip.scale)}
+          shaders={shaders}
         />
       );
     }
@@ -74,7 +123,7 @@ export function createVideoElements({ clips, view }: CreateVideoElementsOptions)
 }
 
 interface PlayVideoOptions {
-  entry: VideoEntry;
+  entry: VideoEntryWithSignals;
   sceneWidth: number;
   sceneHeight: number;
   transitions: Map<string, { enter?: ClipTransition; exit?: ClipTransition }>;
@@ -88,7 +137,7 @@ export function* playVideo({
   transitions,
   captionRunner,
 }: PlayVideoOptions): ThreadGenerator {
-  const { clip, ref: videoRef, maskRef, containerRef } = entry;
+  const { clip, ref: videoRef, maskRef, containerRef, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal } = entry;
   const transInfo = transitions.get(clip.id);
   const enter = transInfo?.enter;
   const exit = transInfo?.exit;
@@ -200,19 +249,48 @@ export function* playVideo({
     positionTarget.position(initialPos);
     scaleTarget.scale(baseScale);
 
-    if (enter && enter.type === 'fade') {
-      opacityTarget.opacity(0);
+    // Set initial state based on enter transition type
+    if (enter) {
+      switch (enter.type) {
+        case 'fade':
+        case 'dip-to-black':
+          opacityTarget.opacity(0);
+          break;
+        case 'cross-dissolve':
+          opacityTarget.opacity(0);
+          dissolveSignal?.(0);
+          break;
+        case 'zoom':
+          opacityTarget.opacity(0);
+          scaleTarget.scale(baseScale.mul(0.3)); // Start smaller
+          zoomStrengthSignal?.(1);
+          zoomDirectionSignal?.(1); // Zoom in
+          break;
+        case 'blur':
+          opacityTarget.opacity(1);
+          blurSignal?.(60); // Start very blurry
+          break;
+        case 'slide-left':
+          opacityTarget.opacity(1);
+          positionTarget.position(new Vector2(initialPos.x + sceneWidth, initialPos.y));
+          break;
+        case 'slide-right':
+          opacityTarget.opacity(1);
+          positionTarget.position(new Vector2(initialPos.x - sceneWidth, initialPos.y));
+          break;
+        case 'slide-up':
+          opacityTarget.opacity(1);
+          positionTarget.position(new Vector2(initialPos.x, initialPos.y + sceneHeight));
+          break;
+        case 'slide-down':
+          opacityTarget.opacity(1);
+          positionTarget.position(new Vector2(initialPos.x, initialPos.y - sceneHeight));
+          break;
+        default:
+          opacityTarget.opacity(1);
+      }
     } else {
       opacityTarget.opacity(1);
-    }
-
-    if (enter && enter.type.startsWith('slide')) {
-      let startPos = initialPos;
-      if (enter.type === 'slide-left') startPos = new Vector2(initialPos.x + sceneWidth, initialPos.y);
-      else if (enter.type === 'slide-right') startPos = new Vector2(initialPos.x - sceneWidth, initialPos.y);
-      else if (enter.type === 'slide-up') startPos = new Vector2(initialPos.x, initialPos.y + sceneHeight);
-      else if (enter.type === 'slide-down') startPos = new Vector2(initialPos.x, initialPos.y - sceneHeight);
-      positionTarget.position(startPos);
     }
 
     video.play();
@@ -222,12 +300,37 @@ export function* playVideo({
 
     // Enter phase
     if (enter) {
-      if (enter.type === 'fade') {
-        yield* opacityTarget.opacity(1, enter.duration);
-      } else if (enter.type.startsWith('slide')) {
-        yield* positionTarget.position(initialPos, enter.duration);
-      } else {
-        yield* waitFor(enter.duration);
+      switch (enter.type) {
+        case 'fade':
+          yield* opacityTarget.opacity(1, enter.duration);
+          break;
+        case 'cross-dissolve':
+          yield* all(
+            opacityTarget.opacity(1, enter.duration, easeInOutCubic),
+            dissolveSignal!(1, enter.duration, easeInOutCubic)
+          );
+          break;
+        case 'zoom':
+          yield* all(
+            opacityTarget.opacity(1, enter.duration * 0.3),
+            scaleTarget.scale(baseScale, enter.duration, easeOutCubic),
+            zoomStrengthSignal!(0, enter.duration, easeOutCubic)
+          );
+          break;
+        case 'blur':
+          yield* blurSignal!(0, enter.duration, easeOutCubic);
+          break;
+        case 'dip-to-black':
+          yield* opacityTarget.opacity(1, enter.duration, easeInCubic);
+          break;
+        case 'slide-left':
+        case 'slide-right':
+        case 'slide-up':
+        case 'slide-down':
+          yield* positionTarget.position(initialPos, enter.duration, easeOutCubic);
+          break;
+        default:
+          yield* waitFor(enter.duration);
       }
     }
 
@@ -239,17 +342,48 @@ export function* playVideo({
 
     // Exit phase
     if (exit) {
-      if (exit.type === 'fade') {
-        yield* opacityTarget.opacity(0, exit.duration);
-      } else if (exit.type.startsWith('slide')) {
-        let endPos = initialPos;
-        if (exit.type === 'slide-left') endPos = new Vector2(initialPos.x - sceneWidth, initialPos.y);
-        else if (exit.type === 'slide-right') endPos = new Vector2(initialPos.x + sceneWidth, initialPos.y);
-        else if (exit.type === 'slide-up') endPos = new Vector2(initialPos.x, initialPos.y - sceneHeight);
-        else if (exit.type === 'slide-down') endPos = new Vector2(initialPos.x, initialPos.y + sceneHeight);
-        yield* positionTarget.position(endPos, exit.duration);
-      } else {
-        yield* waitFor(exit.duration);
+      switch (exit.type) {
+        case 'fade':
+          yield* opacityTarget.opacity(0, exit.duration);
+          break;
+        case 'cross-dissolve':
+          dissolveSignal?.(0); // Reset to start of dissolve
+          yield* all(
+            opacityTarget.opacity(0, exit.duration, easeInOutCubic),
+            dissolveSignal!(1, exit.duration, easeInOutCubic)
+          );
+          break;
+        case 'zoom':
+          zoomDirectionSignal?.(-1); // Zoom out
+          yield* all(
+            scaleTarget.scale(baseScale.mul(1.8), exit.duration, easeInCubic),
+            zoomStrengthSignal!(1, exit.duration, easeInCubic),
+            opacityTarget.opacity(0, exit.duration * 0.7, easeInCubic)
+          );
+          break;
+        case 'blur':
+          yield* all(
+            blurSignal!(60, exit.duration, easeInCubic),
+            opacityTarget.opacity(0, exit.duration * 0.8)
+          );
+          break;
+        case 'dip-to-black':
+          yield* opacityTarget.opacity(0, exit.duration, easeOutCubic);
+          break;
+        case 'slide-left':
+          yield* positionTarget.position(new Vector2(initialPos.x - sceneWidth, initialPos.y), exit.duration, easeInCubic);
+          break;
+        case 'slide-right':
+          yield* positionTarget.position(new Vector2(initialPos.x + sceneWidth, initialPos.y), exit.duration, easeInCubic);
+          break;
+        case 'slide-up':
+          yield* positionTarget.position(new Vector2(initialPos.x, initialPos.y - sceneHeight), exit.duration, easeInCubic);
+          break;
+        case 'slide-down':
+          yield* positionTarget.position(new Vector2(initialPos.x, initialPos.y + sceneHeight), exit.duration, easeInCubic);
+          break;
+        default:
+          yield* waitFor(exit.duration);
       }
     }
 

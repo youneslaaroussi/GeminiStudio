@@ -29,39 +29,77 @@ export function TransitionHandle({
   const endTime = prevClip.start + prevClip.duration / prevClip.speed;
   const position = endTime * zoom;
 
+  // Calculate transition duration width (centered on junction)
+  const transitionWidth = transition ? transition.duration * zoom : 0;
+
   return (
     <div
       className={cn(
-        "absolute top-0 bottom-0 z-20 flex items-center justify-center -translate-x-1/2 w-6 cursor-pointer group",
+        "absolute top-0 bottom-0 z-20 flex items-center justify-center -translate-x-1/2 cursor-pointer group",
         "hover:z-30"
       )}
-      style={{ left: position }}
+      style={{
+        left: position,
+        width: Math.max(24, transitionWidth), // Minimum 24px for interaction
+      }}
       onMouseDown={(e) => {
         e.stopPropagation(); // Prevent timeline seek
         onSelect();
       }}
       data-transition-handle
     >
-      {/* Visual Guide Line */}
-      <div 
+      {/* Transition Duration Overlay - visual representation of the overlap */}
+      {transition && transitionWidth > 0 && (
+        <div
+          className={cn(
+            "absolute top-1 bottom-1 rounded-sm pointer-events-none",
+            selected
+              ? "bg-primary/30 border border-primary/60"
+              : "bg-primary/15 border border-primary/30 group-hover:bg-primary/25"
+          )}
+          style={{
+            width: transitionWidth,
+            left: '50%',
+            transform: 'translateX(-50%)',
+          }}
+        >
+          {/* Diagonal stripes pattern to indicate overlap */}
+          <div
+            className="absolute inset-0 opacity-30"
+            style={{
+              backgroundImage: `repeating-linear-gradient(
+                -45deg,
+                transparent,
+                transparent 3px,
+                currentColor 3px,
+                currentColor 4px
+              )`,
+            }}
+          />
+        </div>
+      )}
+
+      {/* Visual Guide Line - center line at junction */}
+      <div
         className={cn(
-          "absolute w-px h-full transition-all",
-           selected ? "bg-primary" : "bg-transparent group-hover:bg-primary/50"
+          "absolute w-px h-full z-10",
+          selected ? "bg-primary" : "bg-transparent group-hover:bg-primary/50"
         )}
+        style={{ left: '50%', transform: 'translateX(-50%)' }}
       />
-      
+
       {/* Icon Badge */}
       <div className={cn(
-        "relative w-5 h-5 rounded-full flex items-center justify-center shadow-sm border transition-all transform scale-0 group-hover:scale-100",
+        "relative z-20 w-5 h-5 rounded-full flex items-center justify-center shadow-sm border transform scale-0 group-hover:scale-100",
         selected && "scale-100",
-        transition 
+        transition
           ? (selected ? "bg-primary border-primary text-primary-foreground" : "bg-secondary border-primary/20 text-secondary-foreground scale-100")
           : "bg-background border-border"
       )}>
         {transition ? (
           <ArrowLeftRight className="size-2.5" />
         ) : (
-           <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+          <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
         )}
       </div>
     </div>

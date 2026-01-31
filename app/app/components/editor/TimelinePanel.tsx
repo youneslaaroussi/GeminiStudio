@@ -13,6 +13,8 @@ import {
   Volume2,
   VolumeX,
   Repeat,
+  MousePointer2,
+  Hand,
 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { cn } from "@/lib/utils";
@@ -25,6 +27,8 @@ import { TRACK_LABEL_WIDTH } from "../timeline/constants";
 import { createClipFromAsset, hasAssetDragData, readDraggedAsset } from "@/app/lib/assets/drag";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
+export type TimelineTool = "selection" | "hand";
+
 interface TimelinePanelProps {
   hasPlayer: boolean;
   playing: boolean;
@@ -35,6 +39,8 @@ interface TimelinePanelProps {
   onToggleMute: () => void;
   onToggleLoop: () => void;
   onSpeedChange: (speed: number) => void;
+  timelineTool?: TimelineTool;
+  onTimelineToolChange?: (tool: TimelineTool) => void;
 }
 
 export function TimelinePanel({
@@ -47,6 +53,8 @@ export function TimelinePanel({
   onToggleMute,
   onToggleLoop,
   onSpeedChange,
+  timelineTool = "selection",
+  onTimelineToolChange,
 }: TimelinePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -107,6 +115,8 @@ export function TimelinePanel({
   const pointerMoveHandlerRef = useRef<((event: PointerEvent) => void) | null>(null);
   const pointerUpHandlerRef = useRef<((event: PointerEvent) => void) | null>(null);
   const gestureScaleRef = useRef(1);
+  const [isHandPanning, setIsHandPanning] = useState(false);
+  const handPanStartRef = useRef<{ scrollLeft: number; scrollTop: number; clientX: number; clientY: number } | null>(null);
 
   const layerCounts = useMemo(() => {
     return layers.reduce<Record<ClipType, number>>(
@@ -317,6 +327,55 @@ export function TimelinePanel({
     [convertClientXToTime, setCurrentTime]
   );
 
+  const handleHandPanPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      const horizontalScroller = horizontalScrollRef.current;
+      const verticalScroller = scrollContainerRef.current;
+      if (!horizontalScroller && !verticalScroller) return;
+      event.preventDefault();
+      setIsHandPanning(true);
+      handPanStartRef.current = {
+        scrollLeft: horizontalScroller?.scrollLeft ?? 0,
+        scrollTop: verticalScroller?.scrollTop ?? 0,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      };
+      const captureTarget = event.currentTarget;
+      try {
+        captureTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // Ignore
+      }
+      const handlePointerMove = (e: PointerEvent) => {
+        const start = handPanStartRef.current;
+        if (!start) return;
+        const dx = e.clientX - start.clientX;
+        const dy = e.clientY - start.clientY;
+        if (horizontalScroller) {
+          horizontalScroller.scrollLeft = start.scrollLeft - dx;
+        }
+        if (verticalScroller) {
+          verticalScroller.scrollTop = start.scrollTop - dy;
+        }
+      };
+      const handlePointerUp = () => {
+        handPanStartRef.current = null;
+        setIsHandPanning(false);
+        try {
+          captureTarget.releasePointerCapture(event.pointerId);
+        } catch {
+          // Ignore
+        }
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+      };
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp);
+    },
+    []
+  );
+
   const handleTimelinePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       const target = event.target as HTMLElement | null;
@@ -328,9 +387,13 @@ export function TimelinePanel({
       ) {
         return;
       }
-      handleScrubPointerDown(event);
+      if (timelineTool === "hand") {
+        handleHandPanPointerDown(event);
+      } else {
+        handleScrubPointerDown(event);
+      }
     },
-    [handleScrubPointerDown]
+    [handleScrubPointerDown, handleHandPanPointerDown, timelineTool]
   );
 
   const handleTimelineWheel = useCallback(
@@ -504,6 +567,54 @@ export function TimelinePanel({
 
         <div className="flex-1" />
 
+        {/* Timeline tools: Selection (V) / Hand (H) — Premiere-style names */}
+        {onTimelineToolChange && (
+          <div className="flex items-center gap-0.5 rounded-lg bg-muted/50 p-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => onTimelineToolChange("selection")}
+                  className={cn(
+                    "p-1.5 rounded-md transition-colors",
+                    timelineTool === "selection"
+                      ? "bg-background text-foreground"
+                      : "text-muted-foreground hover:bg-background hover:text-foreground"
+                  )}
+                  title="Selection (V)"
+                  aria-pressed={timelineTool === "selection"}
+                >
+                  <MousePointer2 className="size-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p>Selection (V)</p>
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => onTimelineToolChange("hand")}
+                  className={cn(
+                    "p-1.5 rounded-md transition-colors",
+                    timelineTool === "hand"
+                      ? "bg-background text-foreground"
+                      : "text-muted-foreground hover:bg-background hover:text-foreground"
+                  )}
+                  title="Hand (H)"
+                  aria-pressed={timelineTool === "hand"}
+                >
+                  <Hand className="size-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p>Hand (H) — drag to pan timeline</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        )}
+
         {/* Edit Tools */}
         <div className="flex items-center gap-0.5 rounded-lg bg-muted/50 p-0.5">
           <button
@@ -511,7 +622,7 @@ export function TimelinePanel({
             onClick={handleSplit}
             disabled={!selectedClipId}
             className="p-1.5 rounded-md text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-30 disabled:pointer-events-none transition-colors"
-            title="Split clip at playhead"
+            title="Split clip at playhead (C)"
           >
             <Scissors className="size-3.5" />
           </button>
@@ -601,13 +712,16 @@ export function TimelinePanel({
               ref={horizontalScrollRef}
               className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden flex flex-col"
             >
-              <div
-                ref={timelineAreaRef}
-                className="relative touch-none flex flex-col"
-                style={{
-                  width: Math.max(containerWidth - TRACK_LABEL_WIDTH, duration * zoom),
-                }}
-                onPointerDown={handleTimelinePointerDown}
+            <div
+              ref={timelineAreaRef}
+              className={cn(
+                "relative touch-none flex flex-col",
+                timelineTool === "hand" && (isHandPanning ? "cursor-grabbing" : "cursor-grab")
+              )}
+              style={{
+                width: Math.max(containerWidth - TRACK_LABEL_WIDTH, duration * zoom),
+              }}
+              onPointerDown={handleTimelinePointerDown}
                 onDragOver={handleTimelineDragOver}
                 onDrop={handleTimelineDrop}
                 onKeyDown={(e) => {
@@ -643,6 +757,21 @@ export function TimelinePanel({
                     onPointerDown={handleScrubPointerDown}
                   />
                 </div>
+                {/* When Hand tool is active, overlay blocks clip/layer interaction and captures pan */}
+                {timelineTool === "hand" && (
+                  <div
+                    className={cn(
+                      "absolute inset-0 touch-none",
+                      isHandPanning ? "cursor-grabbing" : "cursor-grab"
+                    )}
+                    style={{ pointerEvents: "auto" }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      handleHandPanPointerDown(e);
+                    }}
+                    aria-hidden
+                  />
+                )}
               </div>
             </div>
           </div>

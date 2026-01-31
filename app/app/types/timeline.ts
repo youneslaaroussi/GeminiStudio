@@ -11,7 +11,11 @@ export type TransitionType =
   | 'slide-left'
   | 'slide-right'
   | 'slide-up'
-  | 'slide-down';
+  | 'slide-down'
+  | 'cross-dissolve'
+  | 'zoom'
+  | 'blur'
+  | 'dip-to-black';
 
 export interface CaptionSettings {
   fontFamily: 'Inter Variable' | 'Roboto' | 'Montserrat' | 'Poppins';
@@ -133,6 +137,7 @@ export interface Layer {
   name: string;
   type: ClipType;
   clips: TimelineClip[];
+  hidden?: boolean;
 }
 
 export interface Project {
