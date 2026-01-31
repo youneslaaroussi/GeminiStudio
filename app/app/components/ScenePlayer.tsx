@@ -76,6 +76,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   const [player, setPlayer] = useState<Player | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hasRenderedFirstFrame, setHasRenderedFirstFrame] = useState(false);
   const animationFrameRef = useRef<number | null>(null);
   const latestLayersRef = useRef(layers);
   const latestTranscriptionsRef = useRef(transcriptions);
@@ -418,6 +419,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
       resolutionScale: sceneConfig.renderScale,
     });
 
+    let hasRendered = false;
     playerInstance.onRender.subscribe(async () => {
       const currentScene = playerInstance.playback.currentScene as Scene | null;
       if (!currentScene) return;
@@ -425,6 +427,12 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
       try {
         const previousScene = playerInstance.playback.previousScene as Scene | null;
         await stageInstance.render(currentScene, previousScene ?? null);
+
+        // Mark first frame as rendered
+        if (!hasRendered) {
+          hasRendered = true;
+          setHasRenderedFirstFrame(true);
+        }
       } catch (err) {
         console.error('Render error:', err);
       }
@@ -648,6 +656,19 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
             transition={{ duration: 0.25 }}
           >
             <EditorSkeleton />
+          </motion.div>
+        )}
+        {project && !hasRenderedFirstFrame && !error && (
+          <motion.div
+            className="absolute inset-0 pointer-events-none flex items-center justify-center bg-black/50"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="flex flex-col items-center gap-3">
+              <div className="size-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+              <span className="text-xs text-white/60">Loading preview...</span>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, GripVertical, Loader2, Wrench, MessageSquare, Mic, X } from "lucide-react";
+import { AlertTriangle, GripVertical, Loader2, Wrench, MessageSquare, Mic, X, Sparkles, Video } from "lucide-react";
 import { AssetsPanel } from "./assets";
 import { PreviewPanel, type PreviewPanelHandle } from "./PreviewPanel";
 import { TimelinePanel } from "./TimelinePanel";
@@ -24,6 +24,7 @@ import { SettingsPanel } from "./settings";
 import { TopBar } from "./TopBar";
 import { ChatPanel } from "./ChatPanel";
 import { ToolboxPanel } from "./ToolboxPanel";
+import { VideoEffectsPanel } from "./VideoEffectsPanel";
 import { motion, AnimatePresence } from "motion/react";
 import { VoiceChat } from "@/app/components/VoiceChat";
 import { useProjectStore } from "@/app/lib/store/project-store";
@@ -35,6 +36,44 @@ import { CommandMenu } from "./CommandMenu";
 import type { ProjectTranscription } from "@/app/types/transcription";
 import type { VideoClip } from "@/app/types/timeline";
 import { getProxiedMediaUrl } from "@/app/components/ui/CoordinatePicker";
+import { ScrollArea } from "@/components/ui/scroll-area";
+
+// Wrapper component that gets selected video clip for the Effects tab
+function VideoEffectsPanelWrapper() {
+  const selectedClipId = useProjectStore((s) => s.selectedClipId);
+  const layers = useProjectStore((s) => s.project.layers);
+
+  const selectedVideoClip = useMemo(() => {
+    if (!selectedClipId) return null;
+    for (const layer of layers) {
+      const clip = layer.clips.find((c) => c.id === selectedClipId);
+      if (clip && clip.type === "video") {
+        return clip as VideoClip;
+      }
+    }
+    return null;
+  }, [selectedClipId, layers]);
+
+  if (!selectedVideoClip) {
+    return (
+      <div className="h-full flex items-center justify-center p-4">
+        <div className="text-center text-muted-foreground">
+          <Video className="size-10 mx-auto mb-3 opacity-40" />
+          <p className="text-sm font-medium">No video clip selected</p>
+          <p className="text-xs mt-1">Select a video clip to use AI effects</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <ScrollArea className="h-full">
+      <div className="p-3">
+        <VideoEffectsPanel clip={selectedVideoClip} />
+      </div>
+    </ScrollArea>
+  );
+}
 
 export function EditorLayout() {
   const [player, setPlayer] = useState<Player | null>(null);
@@ -43,7 +82,7 @@ export function EditorLayout() {
   const [pendingReloadAction, setPendingReloadAction] = useState<
     "save" | "discard" | null
   >(null);
-  const [rightPanelTab, setRightPanelTab] = useState<"toolbox" | "chat">("chat");
+  const [rightPanelTab, setRightPanelTab] = useState<"toolbox" | "effects" | "chat">("chat");
   const [renderDialogOpen, setRenderDialogOpen] = useState(false);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
@@ -659,6 +698,17 @@ export function EditorLayout() {
                     Toolbox
                   </button>
                   <button
+                    onClick={() => setRightPanelTab("effects")}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${
+                      rightPanelTab === "effects"
+                        ? "text-foreground border-b-2 border-primary bg-muted/50"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                    }`}
+                  >
+                    <Sparkles className="size-4" />
+                    Effects
+                  </button>
+                  <button
                     onClick={() => setRightPanelTab("chat")}
                     className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${
                       rightPanelTab === "chat"
@@ -670,10 +720,13 @@ export function EditorLayout() {
                     Chat
                   </button>
                 </div>
-                {/* Tab content - both stay mounted, visibility controlled by CSS */}
+                {/* Tab content - all stay mounted, visibility controlled by CSS */}
                 <div className="flex-1 min-h-0 relative">
                   <div className={`absolute inset-0 ${rightPanelTab === "toolbox" ? "visible" : "invisible"}`}>
                     <ToolboxPanel />
+                  </div>
+                  <div className={`absolute inset-0 ${rightPanelTab === "effects" ? "visible" : "invisible"}`}>
+                    <VideoEffectsPanelWrapper />
                   </div>
                   <div className={`absolute inset-0 ${rightPanelTab === "chat" ? "visible" : "invisible"}`}>
                     <ChatPanel />

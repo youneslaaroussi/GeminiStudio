@@ -6,7 +6,6 @@ import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { EditableInput } from "@/app/components/ui/EditableInput";
 import type { VideoClip, MaskMode } from "@/app/types/timeline";
 import { DEFAULT_CAPTION_SETTINGS } from "@/app/types/timeline";
-import { VideoEffectsPanel } from "../../VideoEffectsPanel";
 import {
   toNumber,
   inputClassName,
@@ -15,14 +14,14 @@ import {
   type ClipUpdateHandler,
 } from "../utils";
 import { Button } from "@/components/ui/button";
-import { Settings, Sparkles, Captions, Layers } from "lucide-react";
+import { Settings, Captions, Layers } from "lucide-react";
 
 interface VideoClipSettingsProps {
   clip: VideoClip;
   onUpdate: ClipUpdateHandler;
 }
 
-type TabId = "settings" | "effects" | "captions";
+type TabId = "settings" | "captions";
 
 interface Tab {
   id: TabId;
@@ -32,7 +31,6 @@ interface Tab {
 
 const TABS: Tab[] = [
   { id: "settings", label: "Settings", icon: <Settings className="size-3.5" /> },
-  { id: "effects", label: "Effects", icon: <Sparkles className="size-3.5" /> },
   { id: "captions", label: "Captions", icon: <Captions className="size-3.5" /> },
 ];
 
@@ -280,20 +278,26 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
               )}
 
               {selectedMaskAsset && (
-                <div className="pt-2 border-t border-border">
+                <div className="pt-2 border-t border-border space-y-2">
                   <p className="text-[10px] text-muted-foreground">
                     Using: <span className="text-foreground">{selectedMaskAsset.name}</span>
                   </p>
+                  {/* Mask thumbnail preview */}
+                  <div className="relative rounded-md overflow-hidden bg-black aspect-video">
+                    <video
+                      src={selectedMaskAsset.signedUrl || selectedMaskAsset.url}
+                      className="w-full h-full object-contain"
+                      muted
+                      loop
+                      autoPlay
+                      playsInline
+                    />
+                  </div>
                 </div>
               )}
             </div>
           </div>
         </div>
-      )}
-
-      {/* Effects Tab */}
-      {activeTab === "effects" && (
-        <VideoEffectsPanel clip={clip} />
       )}
 
       {/* Captions Tab */}
