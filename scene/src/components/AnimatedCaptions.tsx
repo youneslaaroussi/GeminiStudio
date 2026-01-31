@@ -23,6 +23,7 @@ export interface AnimatedCaptionsProps extends NodeProps {
   CaptionsDuration: SignalValue<number>;
   TranscriptionData: SignalValue<TranscriptionEntry[]>;
   SceneHeight: SignalValue<number>;
+  SceneWidth: SignalValue<number>;
   CaptionsFontFamily: SignalValue<string>;
   CaptionsFontWeight: SignalValue<number>;
 }
@@ -50,6 +51,10 @@ export class AnimatedCaptions extends Node {
   @initial(0)
   @signal()
   public declare readonly SceneHeight: SimpleSignal<number, this>;
+
+  @initial(0)
+  @signal()
+  public declare readonly SceneWidth: SimpleSignal<number, this>;
 
   @initial('Inter Variable')
   @signal()
@@ -142,7 +147,17 @@ export class AnimatedCaptions extends Node {
   }
 
   public *animate() {
-    const MAX_LENGTH = 50;
+    // Calculate MAX_LENGTH based on aspect ratio
+    // Vertical layouts (portrait) need shorter lines to fit the narrower width
+    const width = this.SceneWidth();
+    const height = this.SceneHeight();
+    const aspectRatio = width > 0 && height > 0 ? width / height : 16 / 9;
+    
+    // For 16:9 (1.78) use 50 chars, for 9:16 (0.56) use ~25 chars
+    // Linear interpolation between these values
+    const MAX_LENGTH = Math.round(
+      Math.max(20, Math.min(50, 25 + (aspectRatio - 0.56) * (50 - 25) / (1.78 - 0.56)))
+    );
 
     const filteredData = this.TranscriptionData().filter(
       entry => entry.speech.trim().length > 0,
@@ -173,22 +188,31 @@ export class AnimatedCaptions extends Node {
       }
     }
 
-    let index = 0;
-    for (const [seconds, shortcut] of captions.entries()) {
+    const captionEntries = Array.from(captions.entries());
+    
+    for (let index = 0; index < captionEntries.length; index++) {
+      const [seconds, shortcut] = captionEntries[index];
+      const prevEntry = captionEntries[index - 1];
+      const nextEntry = captionEntries[index + 1];
+      
       this.CaptionText('*' + Array.from(shortcut.values()).join(' '));
 
-      const prevShortcut = Array.from(captions.entries())[index - 1];
-
-      if (!prevShortcut || seconds - prevShortcut[0] >= this.CaptionsDuration()) {
+      // Fade in if: first group, OR enough time passed since previous group started
+      const shouldFadeIn = !prevEntry || seconds - prevEntry[0] >= this.CaptionsDuration();
+      if (shouldFadeIn) {
         yield* tween(GO_UP, value => {
           this.Opacity(map(0, 1, easeInCubic(value)));
           this.Blur(map(100, 0, easeInCubic(value)));
         });
       }
 
-      index++;
       let prevSeconds = seconds;
-      if (prevShortcut) prevSeconds += GO_UP + GO_DOWN;
+      if (prevEntry && !shouldFadeIn) {
+        // If we didn't fade in, we're continuing from previous group
+        // No need to add transition time offset
+      } else if (prevEntry) {
+        prevSeconds += GO_UP + GO_DOWN;
+      }
 
       let i = 0;
       for (const [startSeconds, caption] of shortcut.entries()) {
@@ -206,16 +230,22 @@ export class AnimatedCaptions extends Node {
         i++;
       }
 
-      if (prevSeconds < this.CaptionsDuration() + seconds) {
-        yield* waitFor(
-          this.CaptionsDuration() - prevSeconds + seconds - GO_DOWN - GO_UP,
-        );
-      }
+      // Check if next group is close - if so, don't fade out
+      const shouldFadeOut = !nextEntry || nextEntry[0] - seconds >= this.CaptionsDuration();
+      
+      if (shouldFadeOut) {
+        // Wait for remaining duration before fading out
+        if (prevSeconds < this.CaptionsDuration() + seconds) {
+          yield* waitFor(
+            this.CaptionsDuration() - prevSeconds + seconds - GO_DOWN - GO_UP,
+          );
+        }
 
-      yield* tween(GO_DOWN, value => {
-        this.Opacity(map(1, 0, easeOutCubic(value)));
-        this.Blur(map(0, 100, easeOutCubic(value)));
-      });
+        yield* tween(GO_DOWN, value => {
+          this.Opacity(map(1, 0, easeOutCubic(value)));
+          this.Blur(map(0, 100, easeOutCubic(value)));
+        });
+      }
     }
   }
 }

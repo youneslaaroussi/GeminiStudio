@@ -74,3 +74,17 @@ export async function getAdminAuth() {
   await initAdmin();
   return getAuth();
 }
+
+/**
+ * Verify that a user owns a specific project.
+ * Returns true if the project exists under the user's collection.
+ */
+export async function verifyProjectOwnership(
+  userId: string,
+  projectId: string
+): Promise<boolean> {
+  const db = await getAdminFirestore();
+  const projectRef = db.doc(`users/${userId}/projects/${projectId}`);
+  const projectDoc = await projectRef.get();
+  return projectDoc.exists;
+}

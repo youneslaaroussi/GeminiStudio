@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -123,9 +124,9 @@ async def person_detection_step(context: PipelineContext) -> PipelineResult:
         video_context=video_context,
     )
 
-    # Execute
+    # Execute in thread pool to avoid blocking the event loop
     operation = client.annotate_video(request=request)
-    result = operation.result(timeout=600)
+    result = await asyncio.to_thread(operation.result, 600)
 
     # Parse results
     people = []

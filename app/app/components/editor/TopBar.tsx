@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Save, Upload, Check, Loader2, Film, LogOut, Plus, RefreshCw, Settings, CreditCard, Keyboard } from "lucide-react";
+import { Save, Upload, Check, Loader2, Film, LogOut, Plus, RefreshCw, Settings, CreditCard, Keyboard, Command } from "lucide-react";
 import { BranchSelector } from "./BranchSelector";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useProjectsListStore } from "@/app/lib/store/projects-list-store";
@@ -68,6 +68,7 @@ interface TopBarProps {
   onLoadReady?: (handler: () => void) => void;
   onExportReady?: (handler: () => void) => void;
   onRefreshReady?: (handler: () => void) => void;
+  onOpenCommandMenu?: () => void;
 }
 
 function userInitials(user: { displayName?: string | null; email?: string | null }): string {
@@ -81,7 +82,7 @@ function userInitials(user: { displayName?: string | null; email?: string | null
   return "?";
 }
 
-export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, onRenderDialogOpenChange, shortcutsModalOpen: shortcutsModalOpenProp, onShortcutsModalOpenChange, onLoadReady, onExportReady, onRefreshReady }: TopBarProps) {
+export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, onRenderDialogOpenChange, shortcutsModalOpen: shortcutsModalOpenProp, onShortcutsModalOpenChange, onLoadReady, onExportReady, onRefreshReady, onOpenCommandMenu }: TopBarProps) {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { credits, refresh, loading: creditsLoading } = useCredits(user?.uid);
@@ -440,6 +441,23 @@ export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, 
               <p>Render video (Ctrl+Shift+R / ⌘⇧R)</p>
             </TooltipContent>
           </Tooltip>
+          {onOpenCommandMenu && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onOpenCommandMenu}
+                  className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  aria-label="Command menu"
+                >
+                  <Command className="size-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>Command menu (Ctrl+K / ⌘K)</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <button

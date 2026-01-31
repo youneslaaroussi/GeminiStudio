@@ -34,19 +34,6 @@ class TaskQueue:
         asset_path: str,
         agent_metadata: dict[str, Any] | None = None,
     ) -> str:
-        """
-        Enqueue a pipeline task for background processing.
-
-        Args:
-            user_id: User ID
-            project_id: Project ID
-            asset_id: Asset ID
-            asset_data: Asset data dict
-            asset_path: Local path to asset file
-            agent_metadata: Optional metadata about requesting agent (threadId, etc.)
-
-        Returns the task ID.
-        """
         task_id = str(uuid.uuid4())
         now = datetime.utcnow().isoformat() + "Z"
 
@@ -78,6 +65,49 @@ class TaskQueue:
         logger.info(f"Enqueued pipeline task {task_id} for asset {asset_id}")
         return task_id
 
+    async def enqueue_transcode(
+        self,
+        user_id: str,
+        project_id: str,
+        asset_id: str,
+        asset_data: dict[str, Any],
+        params: dict[str, Any],
+        trigger_pipeline_after: bool = False,
+        agent_metadata: dict[str, Any] | None = None,
+    ) -> str:
+        task_id = str(uuid.uuid4())
+        now = datetime.utcnow().isoformat() + "Z"
+
+        task = {
+            "id": task_id,
+            "type": "transcode",
+            "payload": {
+                "user_id": user_id,
+                "project_id": project_id,
+                "asset_id": asset_id,
+                "asset_data": asset_data,
+                "params": params,
+                "trigger_pipeline_after": trigger_pipeline_after,
+                "agent_metadata": agent_metadata,
+            },
+            "status": "pending",
+            "created_at": now,
+        }
+
+        await self.redis.set(
+            f"{TASK_STATUS_PREFIX}{task_id}",
+            json.dumps({"status": "pending", "created_at": now}),
+            ex=60 * 60 * 24,
+        )
+
+        await self.redis.lpush(PIPELINE_QUEUE, json.dumps(task))
+
+        logger.info(
+            f"Enqueued transcode task {task_id} for asset {asset_id}"
+            + (" (pipeline after)" if trigger_pipeline_after else "")
+        )
+        return task_id
+
     async def enqueue_step(
         self,
         user_id: str,
@@ -85,6 +115,7 @@ class TaskQueue:
         asset_id: str,
         asset_data: dict[str, Any],
         step_id: str,
+        asset_path: str = "",
         params: dict[str, Any] | None = None,
     ) -> str:
         """
@@ -103,6 +134,7 @@ class TaskQueue:
                 "project_id": project_id,
                 "asset_id": asset_id,
                 "asset_data": asset_data,
+                "asset_path": asset_path,
                 "step_id": step_id,
                 "params": params or {},
             },

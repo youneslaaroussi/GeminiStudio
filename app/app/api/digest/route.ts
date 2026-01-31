@@ -8,6 +8,7 @@ import {
   GeminiFilesApiError,
 } from "@/app/lib/server/gemini/files-api";
 import { DEFAULT_DIGEST_MODEL } from "@/app/lib/model-ids";
+import { verifyAuth } from "@/app/lib/server/auth";
 
 const API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 const MODEL_ID = process.env.DIGEST_MODEL_ID || DEFAULT_DIGEST_MODEL;
@@ -103,6 +104,12 @@ Cover these aspects as relevant:
 }
 
 export async function POST(request: NextRequest) {
+  // Require authentication
+  const userId = await verifyAuth(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   if (!API_KEY) {
     return NextResponse.json(
       { error: "GOOGLE_GENERATIVE_AI_API_KEY is not configured" },

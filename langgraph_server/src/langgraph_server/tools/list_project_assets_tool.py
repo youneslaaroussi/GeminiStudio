@@ -8,6 +8,7 @@ import httpx
 from langchain_core.tools import tool
 
 from ..config import get_settings
+from ..hmac_auth import get_asset_service_headers
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,9 @@ def listProjectAssets(
     endpoint = f"{settings.asset_service_url.rstrip('/')}/api/assets/{user_id}/{project_id}"
 
     try:
-        response = httpx.get(endpoint, timeout=15.0)
+        # Sign request for asset service authentication
+        headers = get_asset_service_headers("")
+        response = httpx.get(endpoint, headers=headers, timeout=15.0)
     except httpx.HTTPError as exc:
         logger.warning("Failed to contact asset service: %s", exc)
         return {

@@ -122,6 +122,7 @@ export default makeScene2D(function* (view) {
         key={`captions-${clip.id}`}
         ref={ref}
         SceneHeight={height}
+        SceneWidth={width}
         y={height / 2 - captionSettings.distanceFromBottom}
         CaptionsSize={1.1}
         CaptionsDuration={3}

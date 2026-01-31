@@ -12,7 +12,8 @@
     "build:headless": "tsx scripts/build-headless.ts",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "test": "vitest"
+    "test": "vitest",
+    "drain-queue": "tsx scripts/drain-queue.ts"
   },
   "dependencies": {
     "@google-cloud/pubsub": "^5.2.2",

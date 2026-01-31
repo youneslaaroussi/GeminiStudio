@@ -11,7 +11,9 @@ from typing import Any
 
 from ..config import get_settings
 from ..pipeline.registry import run_auto_steps, run_step
+from ..pipeline.steps.transcode import run_transcode_for_asset
 from ..pipeline.types import StoredAsset
+from ..storage.firestore import get_asset
 from ..storage.gcs import download_from_gcs
 from .queue import TaskQueue, get_task_queue
 
@@ -123,6 +125,8 @@ class PipelineWorker:
 
             if task_type == "pipeline":
                 await self._process_pipeline_task(payload)
+            elif task_type == "transcode":
+                await self._process_transcode_task(payload)
             elif task_type == "step":
                 await self._process_step_task(payload)
             else:
@@ -174,8 +178,9 @@ class PipelineWorker:
             raise asyncio.CancelledError("Shutdown in progress")
 
         try:
-            # Run pipeline directly in current event loop (no nested asyncio.run)
-            await run_auto_steps(user_id, project_id, asset, asset_path, agent_metadata)
+            await run_auto_steps(
+                user_id, project_id, asset, asset_path, agent_metadata
+            )
         finally:
             # Clean up temp file
             if temp_path and os.path.exists(temp_path):
@@ -217,6 +222,32 @@ class PipelineWorker:
         finally:
             if temp_path and os.path.exists(temp_path):
                 os.unlink(temp_path)
+
+    async def _process_transcode_task(self, payload: dict[str, Any]) -> None:
+        """Process an on-demand transcode task."""
+        user_id = payload["user_id"]
+        project_id = payload["project_id"]
+        asset_id = payload["asset_id"]
+        params = payload.get("params", {})
+        trigger_pipeline_after = payload.get("trigger_pipeline_after", False)
+
+        from ..pipeline.types import StepStatus
+
+        result = await run_transcode_for_asset(user_id, project_id, asset_id, params)
+
+        if trigger_pipeline_after and result.status == StepStatus.SUCCEEDED:
+            settings = get_settings()
+            fresh_asset = await asyncio.to_thread(get_asset, user_id, project_id, asset_id, settings)
+            if fresh_asset:
+                await self.queue.enqueue_pipeline(
+                    user_id=user_id,
+                    project_id=project_id,
+                    asset_id=asset_id,
+                    asset_data=fresh_asset,
+                    asset_path="",
+                    agent_metadata=payload.get("agent_metadata"),
+                )
+                logger.info(f"Queued pipeline for asset {asset_id} after transcode")
 
 
 _worker: PipelineWorker | None = None

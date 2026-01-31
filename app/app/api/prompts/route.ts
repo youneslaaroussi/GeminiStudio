@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_PROMPT_MODEL } from "@/app/lib/model-ids";
+import { verifyAuth } from "@/app/lib/server/auth";
 
 const API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 const MODEL_ID = process.env.PROMPT_MODEL_ID || DEFAULT_PROMPT_MODEL;
@@ -51,6 +52,12 @@ function extractJsonCandidate(text?: string) {
 }
 
 export async function POST(request: NextRequest) {
+  // Require authentication
+  const userId = await verifyAuth(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   if (!API_KEY) {
     return NextResponse.json({ error: "GOOGLE_GENERATIVE_AI_API_KEY is not configured" }, { status: 500 });
   }

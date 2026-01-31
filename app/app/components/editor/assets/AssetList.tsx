@@ -14,7 +14,9 @@ import {
   Trash2,
   Pencil,
   Download,
+  Check,
 } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import type { RemoteAsset, AssetDragPayload } from "@/app/types/assets";
 import { ASSET_DRAG_DATA_MIME } from "@/app/types/assets";
@@ -35,6 +37,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { formatBytes, formatDuration } from "./utils";
 
 const ASSET_REORDER_MIME = "application/x-gemini-asset-reorder";
@@ -53,7 +63,10 @@ interface AssetListProps {
   onRename: (assetId: string, name: string) => Promise<boolean>;
   onReorder: (orderedIds: string[]) => Promise<boolean>;
   onDelete: (assetId: string) => Promise<boolean>;
+  onDeleteMany?: (assetIds: string[]) => Promise<void>;
   onRefresh: () => void;
+  /** Asset IDs currently transcoding (locked, no drag, shimmer overlay) */
+  transcodingAssetIds?: ReadonlySet<string>;
 }
 
 function AssetIcon({ type }: { type: RemoteAsset["type"] }) {
@@ -80,16 +93,21 @@ export function AssetList({
   onRename,
   onReorder,
   onDelete,
+  onDeleteMany,
   onRefresh,
+  transcodingAssetIds = new Set<string>(),
 }: AssetListProps) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
   const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
+  const [deleteConfirmIds, setDeleteConfirmIds] = useState<string[] | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const dragFromReorderHandleRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (editingAssetId) {
@@ -98,6 +116,17 @@ export function AssetList({
       editInputRef.current?.select();
     }
   }, [editingAssetId, assets]);
+
+  useEffect(() => {
+    const assetIds = new Set(assets.map((a) => a.id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of next) {
+        if (!assetIds.has(id)) next.delete(id);
+      }
+      return next;
+    });
+  }, [assets]);
 
   const handleDelete = useCallback(
     async (assetId: string) => {
@@ -164,8 +193,8 @@ export function AssetList({
           url: asset.url,
           type: asset.type,
           duration: resolveAssetDuration(asset),
-          width: assetMeta?.width,
-          height: assetMeta?.height,
+          width: asset.width ?? assetMeta?.width,
+          height: asset.height ?? assetMeta?.height,
         };
         event.dataTransfer.setData(ASSET_DRAG_DATA_MIME, JSON.stringify(payload));
         event.dataTransfer.effectAllowed = "copy";
@@ -225,6 +254,110 @@ export function AssetList({
     [editingName, onRename]
   );
 
+  const toggleSelect = useCallback((assetId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(assetId)) next.delete(assetId);
+      else next.add(assetId);
+      return next;
+    });
+  }, []);
+
+  const allSelected = assets.length > 0 && selectedIds.size === assets.length;
+  const someSelected = selectedIds.size > 0;
+
+  const handleSelectAll = useCallback(() => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(assets.map((a) => a.id)));
+    }
+  }, [allSelected, assets]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const active = document.activeElement as HTMLElement | null;
+      const inList = containerRef.current?.contains(active);
+
+      if (e.key === "Escape") {
+        if (inList && !editingAssetId && someSelected) {
+          e.preventDefault();
+          handleClearSelection();
+        }
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "a") {
+        const isInput = active && ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName);
+        if (inList && !isInput && assets.length > 0 && !allSelected) {
+          e.preventDefault();
+          setSelectedIds(new Set(assets.map((a) => a.id)));
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editingAssetId, someSelected, allSelected, assets, handleClearSelection]);
+
+  const handleDeleteSelected = useCallback(async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    if (onDeleteMany) {
+      setDeletingIds((prev) => new Set([...prev, ...ids]));
+      setSelectedIds(new Set());
+      try {
+        await onDeleteMany(ids);
+      } finally {
+        setDeletingIds((prev) => {
+          const next = new Set(prev);
+          ids.forEach((id) => next.delete(id));
+          return next;
+        });
+      }
+    } else {
+      for (const id of ids) {
+        await handleDelete(id);
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    }
+  }, [selectedIds, onDeleteMany, handleDelete]);
+
+  const handleOpenDeleteConfirm = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    setDeleteConfirmIds([...selectedIds]);
+  }, [selectedIds]);
+
+  const handleConfirmDeleteMany = useCallback(async () => {
+    const ids = deleteConfirmIds ?? [];
+    if (ids.length === 0) return;
+    setDeleteConfirmIds(null);
+    setDeletingIds((prev) => new Set([...prev, ...ids]));
+    setSelectedIds(new Set());
+    try {
+      if (onDeleteMany) {
+        await onDeleteMany(ids);
+      } else {
+        for (const id of ids) {
+          await handleDelete(id);
+        }
+      }
+    } finally {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+    }
+  }, [deleteConfirmIds, onDeleteMany, handleDelete]);
+
   // Full-screen loader only on initial load (no assets yet)
   if (isLoading && assets.length === 0) {
     return (
@@ -257,8 +390,68 @@ export function AssetList({
     );
   }
 
+  const pendingDeleteCount = deleteConfirmIds?.length ?? 0;
+
   return (
-    <div className="divide-y divide-border">
+    <>
+    <div
+      ref={containerRef}
+      className="divide-y divide-border outline-none"
+      tabIndex={-1}
+      onClick={(e) => {
+        const t = e.target as HTMLElement;
+        if (
+          t.closest("button, input, textarea, select") ||
+          t.closest("[data-drag-handle]")
+        )
+          return;
+        containerRef.current?.focus();
+      }}
+    >
+      {/* Multiselect toolbar */}
+      {assets.length > 0 && (
+        <div className="flex items-center gap-2 px-2 py-1.5 border-b border-border bg-muted/30">
+          <button
+            type="button"
+            onClick={handleSelectAll}
+            className={cn(
+              "flex items-center justify-center size-5 rounded border shrink-0 transition-colors",
+              allSelected
+                ? "bg-primary border-primary text-primary-foreground"
+                : someSelected
+                  ? "bg-primary/50 border-primary/50 text-primary-foreground"
+                  : "border-muted-foreground/50 hover:border-muted-foreground"
+            )}
+            title={allSelected ? "Deselect all" : "Select all"}
+          >
+            {allSelected && <Check className="size-3" />}
+            {someSelected && !allSelected && (
+              <div className="size-1.5 bg-primary-foreground rounded-sm" />
+            )}
+          </button>
+          {someSelected && (
+            <>
+              <span className="text-xs text-muted-foreground">
+                {selectedIds.size} selected
+              </span>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={handleOpenDeleteConfirm}
+                disabled={[...selectedIds].some((id) => deletingIds.has(id))}
+              >
+                {[...selectedIds].some((id) => deletingIds.has(id)) ? (
+                  <Loader2 className="size-3 animate-spin mr-1" />
+                ) : (
+                  <Trash2 className="size-3 mr-1" />
+                )}
+                Delete
+              </Button>
+            </>
+          )}
+        </div>
+      )}
       {error && assets.length > 0 && (
         <div className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs text-destructive bg-destructive/10">
           <span className="truncate">{error}</span>
@@ -273,23 +466,36 @@ export function AssetList({
         const isTranscribing = transcription?.status === "processing" || transcription?.status === "pending";
         const hasTranscript = transcription?.status === "completed";
         const duration = resolveAssetDuration(asset);
+        const isTranscoding = transcodingAssetIds.has(asset.id);
 
         return (
           <ContextMenu key={asset.id}>
             <ContextMenuTrigger asChild>
               <div
                 className={cn(
-                  "group relative flex items-center gap-2 p-2 cursor-grab hover:bg-muted/50 transition-colors rounded-md",
+                  "group relative flex items-center gap-2 p-2 hover:bg-muted/50 transition-colors rounded-md",
+                  isTranscoding ? "cursor-not-allowed opacity-90" : "cursor-grab",
                   dragOverId === asset.id && "bg-primary/10 ring-1 ring-primary/30"
                 )}
-                draggable={!downloadingIds.has(asset.id)}
+                draggable={!downloadingIds.has(asset.id) && !deletingIds.has(asset.id) && !isTranscoding}
+                onClick={
+                  someSelected
+                    ? (e) => {
+                        if (
+                          !(e.target as HTMLElement).closest("button, [data-drag-handle], input")
+                        ) {
+                          toggleSelect(asset.id);
+                        }
+                      }
+                    : undefined
+                }
                 onDragStart={(e) => handleDragStart(asset, e)}
                 onDragEnd={handleDragEnd}
                 onDragOver={(e) => handleDragOver(e, asset.id)}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, asset.id)}
               >
-                {downloadingIds.has(asset.id) && (
+                {(downloadingIds.has(asset.id) || deletingIds.has(asset.id) || isTranscoding) && (
                   <div className="absolute inset-0 z-10 rounded-md overflow-hidden pointer-events-none" aria-hidden>
                     <div className="absolute inset-0 bg-background/50" />
                     <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted/50 overflow-hidden">
@@ -313,6 +519,26 @@ export function AssetList({
                 >
                   <GripVertical className="size-3.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
+
+                {/* Select checkbox */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSelect(asset.id);
+                  }}
+                  className={cn(
+                    "flex items-center justify-center size-5 rounded border shrink-0 transition-colors",
+                    selectedIds.has(asset.id)
+                      ? "bg-primary border-primary text-primary-foreground"
+                      : "border-muted-foreground/50 hover:border-muted-foreground",
+                    someSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                  )}
+                  title={selectedIds.has(asset.id) ? "Deselect" : "Select"}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  {selectedIds.has(asset.id) && <Check className="size-3" />}
+                </button>
 
                 {/* Thumbnail / Icon */}
                 <div className="size-10 rounded-md bg-muted flex items-center justify-center shrink-0 overflow-hidden">
@@ -363,7 +589,24 @@ export function AssetList({
                       onDragStart={(e) => e.stopPropagation()}
                     />
                   ) : (
-                    <p className="text-sm font-medium truncate">{asset.name}</p>
+                    <div className="relative overflow-hidden">
+                      <AnimatePresence mode="wait">
+                        <motion.p
+                          key={asset.description ? "description" : "name"}
+                          className="text-sm font-medium line-clamp-3 break-words"
+                          title={asset.name}
+                          initial={{ opacity: 0, filter: "blur(8px)", y: 4 }}
+                          animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
+                          exit={{ opacity: 0, filter: "blur(8px)", y: -4 }}
+                          transition={{
+                            duration: 0.4,
+                            ease: [0.4, 0, 0.2, 1],
+                          }}
+                        >
+                          {asset.description || asset.name}
+                        </motion.p>
+                      </AnimatePresence>
+                    </div>
                   )}
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <span className="uppercase">{asset.type}</span>
@@ -403,6 +646,7 @@ export function AssetList({
                     variant="ghost"
                     size="sm"
                     className="h-7 px-2 text-xs"
+                    disabled={isTranscoding}
                     onClick={(e) => {
                       e.stopPropagation();
                       onAddToTimeline(asset);
@@ -432,7 +676,10 @@ export function AssetList({
                         <Pencil className="size-4 mr-2" />
                         Rename
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onAddToTimeline(asset)}>
+                      <DropdownMenuItem
+                        disabled={isTranscoding}
+                        onClick={() => onAddToTimeline(asset)}
+                      >
                         <Plus className="size-4 mr-2" />
                         Add to timeline
                       </DropdownMenuItem>
@@ -496,7 +743,10 @@ export function AssetList({
                 <Pencil className="size-4 mr-2" />
                 Rename
               </ContextMenuItem>
-              <ContextMenuItem onClick={() => onAddToTimeline(asset)}>
+              <ContextMenuItem
+                disabled={isTranscoding}
+                onClick={() => onAddToTimeline(asset)}
+              >
                 <Plus className="size-4 mr-2" />
                 Add to timeline
               </ContextMenuItem>
@@ -548,5 +798,29 @@ export function AssetList({
         );
       })}
     </div>
+
+    {/* Destructive action: delete selected assets confirmation */}
+    <Dialog
+      open={deleteConfirmIds !== null}
+      onOpenChange={(open) => !open && setDeleteConfirmIds(null)}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-destructive">Delete assets</DialogTitle>
+          <DialogDescription>
+            Are you sure you want to delete {pendingDeleteCount} asset{pendingDeleteCount !== 1 ? "s" : ""}? This action cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={() => setDeleteConfirmIds(null)}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={() => void handleConfirmDeleteMany()}>
+            Delete {pendingDeleteCount} asset{pendingDeleteCount !== 1 ? "s" : ""}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

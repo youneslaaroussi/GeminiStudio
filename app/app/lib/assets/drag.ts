@@ -32,19 +32,21 @@ export function assetMatchesLayer(assetType: AssetType, layerType: ClipType) {
 }
 
 export function createClipFromAsset(payload: AssetDragPayload, start: number): TimelineClip {
-  const duration =
+  const sourceDuration =
     typeof payload.duration === "number" && payload.duration > 0
       ? payload.duration
-      : DEFAULT_ASSET_DURATIONS[payload.type] ?? 5;
+      : undefined;
+  const duration = sourceDuration ?? DEFAULT_ASSET_DURATIONS[payload.type] ?? 5;
   const name = payload.name || "Uploaded Asset";
   const options = {
     assetId: payload.id,
     width: payload.width,
     height: payload.height,
+    sourceDuration,
   };
   switch (payload.type) {
     case "audio":
-      return createAudioClip(payload.url, name, start, duration, { assetId: payload.id });
+      return createAudioClip(payload.url, name, start, duration, { assetId: payload.id, sourceDuration });
     case "image":
       return createImageClip(payload.url, name, start, duration, options);
     case "video":

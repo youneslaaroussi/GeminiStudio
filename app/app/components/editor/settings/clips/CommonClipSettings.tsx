@@ -1,7 +1,7 @@
 "use client";
 
 import { EditableInput } from "@/app/components/ui/EditableInput";
-import type { TimelineClip } from "@/app/types/timeline";
+import type { TimelineClip, VideoClip, AudioClip } from "@/app/types/timeline";
 import {
   toNumber,
   inputClassName,
@@ -16,6 +16,16 @@ interface CommonClipSettingsProps {
 }
 
 export function CommonClipSettings({ clip, onUpdate }: CommonClipSettingsProps) {
+  // Get source duration for video/audio clips
+  const sourceDuration = (clip.type === "video" || clip.type === "audio")
+    ? (clip as VideoClip | AudioClip).sourceDuration
+    : undefined;
+
+  // Calculate max allowed duration based on current offset and source duration
+  const maxDuration = sourceDuration != null 
+    ? Math.max(0.1, sourceDuration - clip.offset) 
+    : undefined;
+
   return (
     <div className={cardClassName}>
       {/* Name */}
@@ -51,11 +61,17 @@ export function CommonClipSettings({ clip, onUpdate }: CommonClipSettingsProps) 
             value={clip.duration}
             step="0.1"
             min="0.1"
+            max={maxDuration}
             className={inputClassName}
             onValueCommit={(val) => {
               const next = toNumber(val);
               if (next === null) return;
-              onUpdate({ duration: Math.max(0.1, next) });
+              let clamped = Math.max(0.1, next);
+              // For video/audio, don't allow duration + offset to exceed source
+              if (maxDuration != null) {
+                clamped = Math.min(clamped, maxDuration);
+              }
+              onUpdate({ duration: clamped });
             }}
           />
         </div>
@@ -69,11 +85,23 @@ export function CommonClipSettings({ clip, onUpdate }: CommonClipSettingsProps) 
             value={clip.offset}
             step="0.1"
             min="0"
+            max={sourceDuration != null ? Math.max(0, sourceDuration - 0.1) : undefined}
             className={inputClassName}
             onValueCommit={(val) => {
               const next = toNumber(val);
               if (next === null) return;
-              onUpdate({ offset: Math.max(0, next) });
+              let clamped = Math.max(0, next);
+              // For video/audio, don't allow offset to exceed source - min duration
+              if (sourceDuration != null) {
+                clamped = Math.min(clamped, Math.max(0, sourceDuration - 0.1));
+                // Also clamp duration if needed
+                const newMaxDuration = sourceDuration - clamped;
+                if (clip.duration > newMaxDuration) {
+                  onUpdate({ offset: clamped, duration: Math.max(0.1, newMaxDuration) });
+                  return;
+                }
+              }
+              onUpdate({ offset: clamped });
             }}
           />
         </div>

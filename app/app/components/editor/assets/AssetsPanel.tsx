@@ -91,8 +91,11 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
     renameAsset,
     reorderAssets,
     deleteAsset,
+    deleteAssets,
     resolveAssetDuration,
     startTranscription,
+    transcodingAssetIds,
+    markAssetsTranscoding,
   } = useAssets();
 
   // Pipeline states for all assets (for Jobs tab)
@@ -203,13 +206,16 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
     setUploadDialogOpen(true);
   }, []);
 
-  // Handle upload complete
   const handleUploadComplete = useCallback(
-    (newAssets: RemoteAsset[]) => {
+    (newAssets: RemoteAsset[], options?: { transcodeStarted?: boolean; convertStarted?: boolean }) => {
       addAssets(newAssets);
+      // Mark assets as processing if transcode or convert started
+      if ((options?.transcodeStarted || options?.convertStarted) && newAssets.length > 0) {
+        markAssetsTranscoding(newAssets.map((a) => a.id));
+      }
       void fetchAssets();
     },
-    [addAssets, fetchAssets]
+    [addAssets, fetchAssets, markAssetsTranscoding]
   );
 
   // Handle generated asset
@@ -230,16 +236,21 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
       const name = asset.name || "Asset";
       const start = getDuration();
       const assetMetadata = metadata[asset.id];
+      // For video/audio, use the resolved duration as the source duration
+      const sourceDuration = (asset.type === "video" || asset.type === "audio" || asset.type === "other") 
+        ? duration 
+        : undefined;
       const clipOptions = {
         assetId: asset.id,
         width: asset.width ?? assetMetadata?.width,
         height: asset.height ?? assetMetadata?.height,
+        sourceDuration,
       };
 
       if (asset.type === "video" || asset.type === "other") {
         addClip(createVideoClip(asset.url, name, start, duration, clipOptions));
       } else if (asset.type === "audio") {
-        addClip(createAudioClip(asset.url, name, start, duration, clipOptions));
+        addClip(createAudioClip(asset.url, name, start, duration, { assetId: asset.id, sourceDuration }));
       } else {
         addClip(createImageClip(asset.url, name, start, duration, clipOptions));
       }
@@ -389,7 +400,9 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
                   onRename={renameAsset}
                   onReorder={reorderAssets}
                   onDelete={deleteAsset}
+                  onDeleteMany={deleteAssets}
                   onRefresh={fetchAssets}
+                  transcodingAssetIds={transcodingAssetIds}
                 />
               </ScrollArea>
             </div>

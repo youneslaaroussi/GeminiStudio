@@ -5,25 +5,16 @@ import {
   reorderAssetsFromService,
   type AssetServiceAsset,
 } from "@/app/lib/server/asset-service-client";
-import { initAdmin } from "@/app/lib/server/firebase-admin";
-import { getAuth } from "firebase-admin/auth";
+import { verifyBearerToken } from "@/app/lib/server/auth";
 
 export const runtime = "nodejs";
 
-async function verifyToken(request: NextRequest): Promise<string | null> {
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  try {
-    await initAdmin();
-    const decoded = await getAuth().verifyIdToken(authHeader.slice(7));
-    return decoded.uid;
-  } catch {
-    return null;
-  }
-}
-
-function toRemoteAsset(asset: AssetServiceAsset, projectId: string, userId: string): RemoteAsset {
-  const proxyUrl = `/api/assets/${asset.id}/file?projectId=${projectId}&userId=${userId}`;
+/**
+ * Convert asset service response to RemoteAsset format.
+ * Note: userId is NOT included in proxy URL - auth is via session cookie.
+ */
+function toRemoteAsset(asset: AssetServiceAsset, projectId: string): RemoteAsset {
+  const proxyUrl = `/api/assets/${asset.id}/file?projectId=${projectId}`;
   return {
     id: asset.id,
     name: asset.name,
@@ -48,7 +39,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const userId = await verifyToken(request);
+  const userId = await verifyBearerToken(request);
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -71,7 +62,7 @@ export async function POST(request: NextRequest) {
   try {
     const assets = await reorderAssetsFromService(userId, projectId, assetIds);
     return NextResponse.json({
-      assets: assets.map((a) => toRemoteAsset(a, projectId, userId)),
+      assets: assets.map((a) => toRemoteAsset(a, projectId)),
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes("not found")) {

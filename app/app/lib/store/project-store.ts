@@ -51,6 +51,8 @@ interface ProjectStore {
   reorderLayers: (fromIndex: number, toIndex: number) => void;
   updateClip: (id: string, updates: Partial<TimelineClip>) => void;
   deleteClip: (id: string) => void;
+  removeClipsByAssetId: (assetId: string) => void;
+  removeClipsByAssetIds: (assetIds: string[]) => void;
   moveClipToLayer: (clipId: string, targetLayerId: string) => void;
   setCurrentTime: (time: number) => void;
   setSelectedClip: (id: string | null) => void;
@@ -600,6 +602,79 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
               layers,
             },
             selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,
+          };
+        });
+      },
+
+      removeClipsByAssetId: (assetId: string) => {
+        applySyncedChange((state) => {
+          let hasChanges = false;
+          let newSelectedClipId = state.selectedClipId;
+
+          const layers = state.project.layers.map((layer) => {
+            const filteredClips = layer.clips.filter((clip) => {
+              const shouldRemove = clip.assetId === assetId;
+              if (shouldRemove) {
+                hasChanges = true;
+                if (clip.id === state.selectedClipId) {
+                  newSelectedClipId = null;
+                }
+              }
+              return !shouldRemove;
+            });
+
+            if (filteredClips.length !== layer.clips.length) {
+              return { ...layer, clips: filteredClips };
+            }
+            return layer;
+          });
+
+          if (!hasChanges) return null;
+
+          return {
+            project: {
+              ...state.project,
+              layers,
+            },
+            selectedClipId: newSelectedClipId,
+          };
+        });
+      },
+
+      removeClipsByAssetIds: (assetIds: string[]) => {
+        if (assetIds.length === 0) return;
+        const assetIdSet = new Set(assetIds);
+
+        applySyncedChange((state) => {
+          let hasChanges = false;
+          let newSelectedClipId = state.selectedClipId;
+
+          const layers = state.project.layers.map((layer) => {
+            const filteredClips = layer.clips.filter((clip) => {
+              const shouldRemove = clip.assetId && assetIdSet.has(clip.assetId);
+              if (shouldRemove) {
+                hasChanges = true;
+                if (clip.id === state.selectedClipId) {
+                  newSelectedClipId = null;
+                }
+              }
+              return !shouldRemove;
+            });
+
+            if (filteredClips.length !== layer.clips.length) {
+              return { ...layer, clips: filteredClips };
+            }
+            return layer;
+          });
+
+          if (!hasChanges) return null;
+
+          return {
+            project: {
+              ...state.project,
+              layers,
+            },
+            selectedClipId: newSelectedClipId,
           };
         });
       },

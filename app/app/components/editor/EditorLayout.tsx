@@ -636,6 +636,7 @@ export function EditorLayout() {
           onRenderDialogOpenChange={setRenderDialogOpen}
           shortcutsModalOpen={shortcutsModalOpen}
           onShortcutsModalOpenChange={setShortcutsModalOpen}
+          onOpenCommandMenu={() => setCommandMenuOpen(true)}
           onLoadReady={handleLoadReady}
           onExportReady={handleExportReady}
           onRefreshReady={handleRefreshReady}

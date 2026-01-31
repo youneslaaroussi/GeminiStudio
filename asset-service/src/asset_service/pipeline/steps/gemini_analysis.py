@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import mimetypes
 from typing import Any
 
 import httpx
@@ -19,6 +20,91 @@ from ...gemini import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# Common media MIME types that Gemini supports
+SUPPORTED_MIME_TYPES = {
+    # Video
+    "video/mp4", "video/mpeg", "video/mov", "video/avi", "video/x-flv",
+    "video/mpg", "video/webm", "video/wmv", "video/3gpp", "video/quicktime",
+    # Audio
+    "audio/wav", "audio/mp3", "audio/mpeg", "audio/aiff", "audio/aac",
+    "audio/ogg", "audio/flac", "audio/x-wav", "audio/x-m4a", "audio/mp4",
+    # Image
+    "image/png", "image/jpeg", "image/webp", "image/heic", "image/heif",
+    "image/gif", "image/bmp", "image/tiff",
+}
+
+# Extension to MIME type mapping for common media files
+EXTENSION_MIME_MAP = {
+    # Video
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".avi": "video/x-msvideo",
+    ".mkv": "video/x-matroska",
+    ".webm": "video/webm",
+    ".wmv": "video/x-ms-wmv",
+    ".flv": "video/x-flv",
+    ".m4v": "video/mp4",
+    ".mpeg": "video/mpeg",
+    ".mpg": "video/mpeg",
+    ".3gp": "video/3gpp",
+    ".3gpp": "video/3gpp",
+    # Audio
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".aac": "audio/aac",
+    ".m4a": "audio/mp4",
+    ".flac": "audio/flac",
+    ".ogg": "audio/ogg",
+    ".wma": "audio/x-ms-wma",
+    ".aiff": "audio/aiff",
+    ".aif": "audio/aiff",
+    # Image
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+    ".heic": "image/heic",
+    ".heif": "image/heif",
+    ".tiff": "image/tiff",
+    ".tif": "image/tiff",
+}
+
+
+def _resolve_mime_type(mime_type: str, filename: str) -> str:
+    """
+    Resolve the correct MIME type for a file.
+    
+    If the MIME type is generic (application/octet-stream), try to infer
+    from the file extension. Falls back to the original if we can't determine.
+    """
+    # If MIME type looks valid, use it
+    if mime_type and mime_type != "application/octet-stream":
+        return mime_type
+    
+    # Try to get MIME type from extension
+    if filename:
+        # Get extension (lowercase)
+        ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        
+        # Check our mapping first
+        if ext in EXTENSION_MIME_MAP:
+            resolved = EXTENSION_MIME_MAP[ext]
+            logger.info(f"Resolved MIME type from extension {ext}: {resolved}")
+            return resolved
+        
+        # Fall back to mimetypes module
+        guessed, _ = mimetypes.guess_type(filename)
+        if guessed:
+            logger.info(f"Guessed MIME type for {filename}: {guessed}")
+            return guessed
+    
+    # Return original if we can't resolve
+    logger.warning(f"Could not resolve MIME type for {filename}, using: {mime_type}")
+    return mime_type
 
 
 def _get_media_category(mime_type: str) -> str:
@@ -290,18 +376,21 @@ async def gemini_analysis_step(context: PipelineContext) -> PipelineResult:
     if not gcs_uri:
         raise ValueError("Cloud upload step must complete before Gemini analysis")
 
+    # Resolve MIME type (handle application/octet-stream)
+    resolved_mime_type = _resolve_mime_type(context.asset.mime_type, context.asset.name)
+    
     # Determine media category
-    category = _get_media_category(context.asset.mime_type)
+    category = _get_media_category(resolved_mime_type)
 
     # Build analysis prompt
     prompt = _build_analysis_prompt(category, context.asset.name)
 
     # Call Gemini API
-    logger.info(f"Starting Gemini analysis for asset {context.asset.id} ({category})")
+    logger.info(f"Starting Gemini analysis for asset {context.asset.id} ({category}, mime: {resolved_mime_type})")
 
     result = await _call_gemini_api(
         gcs_uri=gcs_uri,
-        mime_type=context.asset.mime_type,
+        mime_type=resolved_mime_type,
         prompt=prompt,
         api_key=settings.gemini_api_key,
         asset_name=context.asset.name,

@@ -24,34 +24,71 @@ interface ClipAudioEntry {
   volume: number;
 }
 
+// Allowed domains for media sources
+const ALLOWED_MEDIA_DOMAINS = [
+  'storage.googleapis.com',
+  'storage.cloud.google.com',
+  'localhost',
+  '127.0.0.1',
+];
+
+const isAllowedMediaUrl = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    return ALLOWED_MEDIA_DOMAINS.some(domain =>
+      parsed.hostname === domain || parsed.hostname.endsWith('.' + domain)
+    );
+  } catch {
+    return false;
+  }
+};
+
 const resolveMediaSource = (src: string, baseUrl?: string): string | null => {
   if (!src) return null;
+
+  // SECURITY: Block file:// URLs - could access local filesystem
   if (src.startsWith('file://')) {
-    try {
-      return fileURLToPath(src);
-    } catch (err) {
-      logger.warn({ err, src }, 'Failed to convert file URL to path');
-      return null;
-    }
+    logger.warn({ src }, 'Blocked file:// URL for security');
+    return null;
   }
 
-  if (/^https?:\/\//i.test(src)) {
+  // SECURITY: Block absolute paths - could access sensitive files
+  if (isAbsolute(src) && !src.startsWith('/tmp/')) {
+    logger.warn({ src }, 'Blocked absolute path outside /tmp for security');
+    return null;
+  }
+
+  // Allow absolute paths within /tmp (our safe directory)
+  if (isAbsolute(src) && src.startsWith('/tmp/')) {
     return src;
   }
 
+  // For HTTP(S) URLs, validate domain
+  if (/^https?:\/\//i.test(src)) {
+    if (!isAllowedMediaUrl(src)) {
+      logger.warn({ src }, 'Blocked URL from non-allowed domain');
+      return null;
+    }
+    return src;
+  }
+
+  // For relative paths, must have a validated baseUrl
   if (baseUrl) {
     try {
-      return new URL(src, baseUrl).toString();
+      const resolved = new URL(src, baseUrl).toString();
+      if (!isAllowedMediaUrl(resolved)) {
+        logger.warn({ src, baseUrl, resolved }, 'Resolved URL from non-allowed domain');
+        return null;
+      }
+      return resolved;
     } catch (err) {
       logger.warn({ err, src, baseUrl }, 'Failed to resolve media source with baseUrl');
     }
   }
 
-  if (isAbsolute(src)) {
-    return src;
-  }
-
-  return pathResolve(process.cwd(), src);
+  // Don't resolve relative paths without a safe baseUrl
+  logger.warn({ src }, 'Cannot resolve relative path without baseUrl');
+  return null;
 };
 
 const sourceHasAudioStream = async (source: string): Promise<boolean> =>

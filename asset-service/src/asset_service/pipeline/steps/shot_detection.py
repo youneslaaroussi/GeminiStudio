@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from google.cloud import videointelligence_v1 as videointelligence
@@ -71,9 +72,9 @@ async def shot_detection_step(context: PipelineContext) -> PipelineResult:
         features=[videointelligence.Feature.SHOT_CHANGE_DETECTION],
     )
 
-    # Execute
+    # Execute in thread pool to avoid blocking the event loop
     operation = client.annotate_video(request=request)
-    result = operation.result(timeout=600)
+    result = await asyncio.to_thread(operation.result, 600)
 
     # Parse results
     shots = []

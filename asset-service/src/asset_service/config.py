@@ -36,6 +36,18 @@ class Settings(BaseSettings):
     speech_gcs_bucket: str | None = Field(default=None, alias="SPEECH_GCS_BUCKET")
     speech_service_account_key: str | None = Field(default=None, alias="SPEECH_SERVICE_ACCOUNT_KEY")
 
+    # Transcoder API
+    transcoder_project_id: str | None = Field(default=None, alias="TRANSCODER_PROJECT_ID")
+    transcoder_location: str = Field(default="us-central1", alias="TRANSCODER_LOCATION")
+    transcoder_service_account_key: str | None = Field(default=None, alias="TRANSCODER_SERVICE_ACCOUNT_KEY")
+    
+    # Default transcode preset (used when transcode is enabled without specific options)
+    default_transcode_preset: str = Field(default="preset/web-hd", alias="DEFAULT_TRANSCODE_PRESET")
+
+    # CloudConvert API (for image/document conversion)
+    cloudconvert_api_key: str | None = Field(default=None, alias="CLOUDCONVERT_API_KEY")
+    cloudconvert_sandbox: bool = Field(default=False, alias="CLOUDCONVERT_SANDBOX")
+
     # Redis
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
 
@@ -46,6 +58,10 @@ class Settings(BaseSettings):
 
     # Pub/Sub for pipeline events
     pipeline_event_topic: str = Field(default="gemini-pipeline-events", alias="PIPELINE_EVENT_TOPIC")
+
+    # HMAC authentication (shared secret with Next.js app and LangGraph server)
+    # If not set, HMAC verification is disabled (dev mode)
+    shared_secret: str | None = Field(default=None, alias="SHARED_SECRET")
 
     @property
     def speech_language_codes_list(self) -> list[str]:
@@ -58,6 +74,10 @@ class Settings(BaseSettings):
     @property
     def effective_speech_bucket(self) -> str:
         return self.speech_gcs_bucket or self.asset_gcs_bucket
+
+    @property
+    def effective_transcoder_project_id(self) -> str:
+        return self.transcoder_project_id or self.google_project_id
 
 
 @lru_cache

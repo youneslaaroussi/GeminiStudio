@@ -2,10 +2,10 @@
  * Asset file proxy route.
  *
  * Proxies asset files from GCS to avoid CORS issues.
- * GET /api/assets/[assetId]/file?projectId=xxx&userId=xxx
+ * GET /api/assets/[assetId]/file?projectId=xxx
  *
- * Note: Auth is relaxed here since this is just proxying already-signed GCS URLs.
- * The userId + projectId + assetId combination provides access control.
+ * Authentication: Session cookie or Bearer token required.
+ * User ID is extracted from authentication, not from query params.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -13,8 +13,10 @@ import {
   isAssetServiceEnabled,
   getAssetFromService,
 } from "@/app/lib/server/asset-service-client";
+import { verifyAuth } from "@/app/lib/server/auth";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET(
   request: NextRequest,
@@ -27,20 +29,22 @@ export async function GET(
     );
   }
 
+  // Verify authentication (session cookie or bearer token)
+  const userId = await verifyAuth(request);
+  if (!userId) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
   const { assetId } = await params;
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get("projectId");
-  const userId = searchParams.get("userId");
 
   if (!projectId) {
     return NextResponse.json(
       { error: "projectId is required" },
-      { status: 400 }
-    );
-  }
-  if (!userId) {
-    return NextResponse.json(
-      { error: "userId is required" },
       { status: 400 }
     );
   }
@@ -52,7 +56,7 @@ export async function GET(
   }
 
   try {
-    // Get asset info including signed URL
+    // Get asset info including signed URL - userId comes from auth, not query params
     const asset = await getAssetFromService(userId, projectId, assetId);
 
     if (!asset.signedUrl) {
@@ -62,8 +66,8 @@ export async function GET(
       );
     }
 
-    // Fetch the file from GCS
-    const response = await fetch(asset.signedUrl);
+    // Fetch the file from GCS (no cache: asset can change after transcode)
+    const response = await fetch(asset.signedUrl, { cache: "no-store" });
 
     if (!response.ok) {
       return NextResponse.json(
@@ -78,10 +82,12 @@ export async function GET(
     // Safe filename for Content-Disposition (strip path chars, quote if needed)
     const safeName = (asset.name || "download").replace(/[\\/"[\]:;|*?<>]/g, "_").trim() || "download";
 
+    // Do not cache: asset can be updated (e.g. transcode MOV→MP4), so preview must always get current file
     const headers: Record<string, string> = {
       "Content-Type": asset.mimeType || "application/octet-stream",
       "Content-Length": String(data.byteLength),
-      "Cache-Control": isDownload ? "private, no-cache" : "public, max-age=3600",
+      "Cache-Control": "private, no-store, must-revalidate",
+      Pragma: "no-cache",
       "Access-Control-Allow-Origin": "*",
     };
     if (isDownload) {

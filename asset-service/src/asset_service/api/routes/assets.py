@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import logging
+import mimetypes
 import os
 import tempfile
 import uuid
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, Path, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Path, Request, UploadFile
 from pydantic import BaseModel
 
 # Path segment for asset ID. Reorder is not ambiguous: POST .../reorder is defined before .../{asset_id}.
@@ -52,6 +55,7 @@ class AssetResponse(BaseModel):
     duration: float | None = None
     source: str = "api"
     sortOrder: int | None = None
+    description: str | None = None  # AI-generated short description
 
 
 class ReorderBody(BaseModel):
@@ -65,16 +69,25 @@ class UploadResponse(BaseModel):
 
     asset: AssetResponse
     pipelineStarted: bool = False
+    transcodeStarted: bool = False
 
 
 @router.post("/{user_id}/{project_id}/upload", response_model=UploadResponse)
 async def upload_asset(
+    request: Request,
     user_id: str,
     project_id: str,
     file: UploadFile = File(...),
     source: str = Form(default="api"),
     run_pipeline: bool = Form(default=True),
     thread_id: str | None = Form(default=None),
+    # Transcode options (JSON string or individual fields)
+    transcode_options: str | None = Form(default=None, alias="transcodeOptions"),
+    transcode_preset: str | None = Form(default=None, alias="transcodePreset"),
+    transcode_format: str | None = Form(default=None, alias="transcodeFormat"),
+    transcode_video_bitrate: int | None = Form(default=None, alias="transcodeVideoBitrate"),
+    transcode_width: int | None = Form(default=None, alias="transcodeWidth"),
+    transcode_height: int | None = Form(default=None, alias="transcodeHeight"),
 ):
     """
     Upload a new asset.
@@ -93,9 +106,23 @@ async def upload_asset(
     content = await file.read()
     file_size = len(content)
 
+    # Verify file hash if HMAC auth is enabled (hash was signed by client)
+    expected_hash = getattr(request.state, "expected_file_hash", None)
+    if expected_hash:
+        actual_hash = hashlib.sha256(content).hexdigest()
+        if not hmac.compare_digest(expected_hash, actual_hash):
+            raise HTTPException(status_code=401, detail="File hash mismatch")
+
     # Get filename and mime type
     original_filename = file.filename or f"asset-{asset_id}"
     mime_type = file.content_type or "application/octet-stream"
+    
+    # If MIME type is generic, try to infer from filename extension
+    if mime_type == "application/octet-stream" and original_filename:
+        guessed_type, _ = mimetypes.guess_type(original_filename)
+        if guessed_type:
+            logger.info(f"Resolved MIME type from extension: {guessed_type} (was {mime_type})")
+            mime_type = guessed_type
 
     # Determine asset type
     asset_type = determine_asset_type(mime_type, original_filename)
@@ -111,8 +138,8 @@ async def upload_asset(
             tmp.write(content)
             temp_path = tmp.name
 
-        # Extract metadata
-        extracted = extract_metadata(temp_path)
+        # Extract metadata (run in thread pool to avoid blocking)
+        extracted = await asyncio.to_thread(extract_metadata, temp_path)
         if extracted.width:
             metadata["width"] = extracted.width
         if extracted.height:
@@ -134,9 +161,10 @@ async def upload_asset(
         logger.warning(f"Failed to extract metadata: {e}")
 
     # Upload to GCS immediately (so we have a signed URL right away)
+    # Run blocking GCS operations in thread pool
     object_name = f"{user_id}/{project_id}/assets/{asset_id}/{original_filename}"
-    gcs_result = upload_to_gcs(content, object_name, mime_type, settings)
-    signed_url = create_signed_url(object_name, settings=settings)
+    gcs_result = await asyncio.to_thread(upload_to_gcs, content, object_name, mime_type, settings)
+    signed_url = await asyncio.to_thread(create_signed_url, object_name, settings=settings)
 
     # Create asset data with GCS info
     now = datetime.utcnow().isoformat() + "Z"
@@ -157,22 +185,76 @@ async def upload_asset(
         **metadata,
     }
 
-    # Save to Firestore
-    saved_asset = save_asset(user_id, project_id, asset_data, settings)
+    saved_asset = await asyncio.to_thread(save_asset, user_id, project_id, asset_data, settings)
 
-    # Queue pipeline for background processing (non-blocking)
+    import json as _json
+
+    parsed_transcode_opts: dict[str, Any] = {}
+    if transcode_options:
+        try:
+            parsed_transcode_opts = _json.loads(transcode_options)
+        except _json.JSONDecodeError:
+            logger.warning(f"Invalid transcode_options JSON: {transcode_options}")
+    elif transcode_preset or transcode_format or transcode_video_bitrate:
+        if transcode_preset:
+            parsed_transcode_opts["preset"] = transcode_preset
+        if transcode_format:
+            parsed_transcode_opts["outputFormat"] = transcode_format
+        if transcode_video_bitrate:
+            parsed_transcode_opts["videoBitrate"] = transcode_video_bitrate
+        if transcode_width:
+            parsed_transcode_opts["width"] = transcode_width
+        if transcode_height:
+            parsed_transcode_opts["height"] = transcode_height
+
+    def _is_unsupported_video_format(mime: str, filename: str) -> bool:
+        if mime in ("video/quicktime", "video/x-msvideo"):
+            return True
+        ext = (filename or "").lower().split(".")[-1]
+        return ext in ("mov", "avi", "qt")
+
+    transcode_started = False
     pipeline_started = False
-    if run_pipeline:
+    need_transcode_then_pipeline = (
+        asset_type == "video"
+        and run_pipeline
+        and (
+            _is_unsupported_video_format(mime_type, original_filename)
+            or parsed_transcode_opts
+        )
+    )
+
+    if need_transcode_then_pipeline:
+        transcode_params = parsed_transcode_opts or {"preset": "preset/web-hd"}
         try:
             queue = await get_task_queue()
-            # Build agent metadata if thread_id provided (for notifications)
-            agent_metadata = None
-            if thread_id:
-                agent_metadata = {
-                    "threadId": thread_id,
-                    "userId": user_id,
-                    "projectId": project_id,
-                }
+            agent_metadata = (
+                {"threadId": thread_id, "userId": user_id, "projectId": project_id}
+                if thread_id
+                else None
+            )
+            await queue.enqueue_transcode(
+                user_id=user_id,
+                project_id=project_id,
+                asset_id=asset_id,
+                asset_data=saved_asset,
+                params=transcode_params,
+                trigger_pipeline_after=True,
+                agent_metadata=agent_metadata,
+            )
+            transcode_started = True
+            pipeline_started = True
+            logger.info(f"Queued transcode then pipeline for asset {asset_id}")
+        except Exception as e:
+            logger.error(f"Failed to queue transcode: {e}")
+    elif run_pipeline:
+        try:
+            queue = await get_task_queue()
+            agent_metadata = (
+                {"threadId": thread_id, "userId": user_id, "projectId": project_id}
+                if thread_id
+                else None
+            )
             await queue.enqueue_pipeline(
                 user_id=user_id,
                 project_id=project_id,
@@ -185,16 +267,14 @@ async def upload_asset(
             logger.info(f"Queued pipeline for asset {asset_id}")
         except Exception as e:
             logger.error(f"Failed to queue pipeline: {e}")
-            # Don't fail the upload if queuing fails
 
-    # Note: temp file cleanup happens in the worker after pipeline completes
-    # If pipeline not requested, clean up now
-    if not run_pipeline and temp_path and os.path.exists(temp_path):
+    if (need_transcode_then_pipeline or not run_pipeline) and temp_path and os.path.exists(temp_path):
         os.unlink(temp_path)
 
     return UploadResponse(
         asset=AssetResponse(**saved_asset),
         pipelineStarted=pipeline_started,
+        transcodeStarted=transcode_started,
     )
 
 
@@ -293,7 +373,8 @@ async def update_asset_by_id(
     for field in protected_fields:
         updates.pop(field, None)
 
-    updated = update_asset(user_id, project_id, asset_id, updates, settings)
+    # Run blocking Firestore call in thread pool
+    updated = await asyncio.to_thread(update_asset, user_id, project_id, asset_id, updates, settings)
     if not updated:
         raise HTTPException(status_code=404, detail="Asset not found")
 
@@ -307,20 +388,121 @@ async def delete_asset_by_id(
     """Delete an asset."""
     settings = get_settings()
 
-    # Get asset first to get GCS URI
-    asset = get_asset(user_id, project_id, asset_id, settings)
+    # Get asset first to get GCS URI (run in thread pool)
+    asset = await asyncio.to_thread(get_asset, user_id, project_id, asset_id, settings)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
-    # Delete from GCS
+    # Delete from GCS (run in thread pool)
     gcs_uri = asset.get("gcsUri")
     if gcs_uri:
         try:
-            delete_from_gcs(gcs_uri, settings)
+            await asyncio.to_thread(delete_from_gcs, gcs_uri, settings)
         except Exception as e:
             logger.warning(f"Failed to delete from GCS: {e}")
 
-    # Delete from Firestore
-    delete_asset(user_id, project_id, asset_id, settings)
+    # Delete from Firestore (run in thread pool)
+    await asyncio.to_thread(delete_asset, user_id, project_id, asset_id, settings)
 
     return {"deleted": True, "assetId": asset_id}
+
+
+class TranscodeRequest(BaseModel):
+    preset: str | None = None
+    outputFormat: str | None = None
+    videoCodec: str | None = None
+    videoBitrate: int | None = None
+    width: int | None = None
+    height: int | None = None
+    frameRate: float | None = None
+    audioCodec: str | None = None
+    audioBitrate: int | None = None
+    sampleRate: int | None = None
+    channels: int | None = None
+    triggerPipelineAfter: bool = False
+
+
+class TranscodeResponse(BaseModel):
+    """Response for transcode request."""
+
+    queued: bool
+    jobId: str | None = None
+    message: str
+
+
+@router.post("/{user_id}/{project_id}/{asset_id}/transcode", response_model=TranscodeResponse)
+async def transcode_asset(
+    user_id: str,
+    project_id: str,
+    asset_id: str = ASSET_ID_PATH,
+    body: TranscodeRequest = ...,
+):
+    """
+    Start a transcode job for an existing asset.
+
+    The job runs in the background. Poll the pipeline state to check progress.
+    """
+    settings = get_settings()
+
+    # Get asset
+    asset = await asyncio.to_thread(get_asset, user_id, project_id, asset_id, settings)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    # Check if it's a video
+    if asset.get("type") != "video":
+        raise HTTPException(status_code=400, detail="Only video assets can be transcoded")
+
+    # Check if GCS URI exists
+    gcs_uri = asset.get("gcsUri")
+    if not gcs_uri:
+        raise HTTPException(status_code=400, detail="Asset must be uploaded to cloud storage")
+
+    # Build transcode params
+    transcode_params: dict[str, Any] = {}
+    if body.preset:
+        transcode_params["preset"] = body.preset
+    if body.outputFormat:
+        transcode_params["outputFormat"] = body.outputFormat
+    if body.videoCodec:
+        transcode_params["videoCodec"] = body.videoCodec
+    if body.videoBitrate:
+        transcode_params["videoBitrate"] = body.videoBitrate
+    if body.width:
+        transcode_params["width"] = body.width
+    if body.height:
+        transcode_params["height"] = body.height
+    if body.frameRate:
+        transcode_params["frameRate"] = body.frameRate
+    if body.audioCodec:
+        transcode_params["audioCodec"] = body.audioCodec
+    if body.audioBitrate:
+        transcode_params["audioBitrate"] = body.audioBitrate
+    if body.sampleRate:
+        transcode_params["sampleRate"] = body.sampleRate
+    if body.channels:
+        transcode_params["channels"] = body.channels
+
+    if not transcode_params:
+        transcode_params["preset"] = "preset/web-hd"
+
+    try:
+        queue = await get_task_queue()
+        task_id = await queue.enqueue_transcode(
+            user_id=user_id,
+            project_id=project_id,
+            asset_id=asset_id,
+            asset_data=asset,
+            params=transcode_params,
+            trigger_pipeline_after=body.triggerPipelineAfter,
+        )
+        logger.info(f"Queued transcode for asset {asset_id}: task {task_id}")
+
+        return TranscodeResponse(
+            queued=True,
+            jobId=task_id,
+            message=f"Transcode job queued (pipeline_after={body.triggerPipelineAfter})",
+        )
+    except Exception as e:
+        logger.exception(f"Failed to queue transcode: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to queue transcode: {e}")

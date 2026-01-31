@@ -2,7 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter, useSearchParams, useParams } from "next/navigation";
-import { updateProfile } from "firebase/auth";
+import Link from "next/link";
+import {
+  updateProfile,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+  deleteUser,
+} from "firebase/auth";
 import {
   MessageCircle,
   Copy,
@@ -11,6 +18,9 @@ import {
   Unlink,
   RefreshCw,
   AlertCircle,
+  Eye,
+  EyeOff,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,11 +63,36 @@ function ProfileSection() {
   const [profileName, setProfileName] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
 
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  // Account deletion state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [billing, setBilling] = useState<BillingData>({ credits: 0 });
+
   useEffect(() => {
     if (user) {
       setProfileName(user.displayName || "");
     }
-  }, [user?.uid, user?.displayName]);
+  }, [user]);
+
+  // Load billing data for subscription check
+  useEffect(() => {
+    if (!user) return;
+    const unsub = subscribeToBilling(user.uid, setBilling);
+    return () => unsub();
+  }, [user]);
 
   const handleSaveName = async () => {
     if (!user || !auth.currentUser) return;
@@ -75,62 +110,370 @@ function ProfileSection() {
     }
   };
 
+  const handleChangePassword = async () => {
+    if (!user || !auth.currentUser || !user.email) return;
+
+    setPasswordError(null);
+
+    // Validation
+    if (!currentPassword) {
+      setPasswordError("Current password is required");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPasswordError("New password must be at least 8 characters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      // Reauthenticate first
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(auth.currentUser, credential);
+
+      // Update password
+      await updatePassword(auth.currentUser, newPassword);
+
+      // Clear form
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast.success("Password updated successfully");
+    } catch (error) {
+      console.error("Failed to change password:", error);
+      const firebaseError = error as { code?: string };
+      if (firebaseError.code === "auth/wrong-password") {
+        setPasswordError("Current password is incorrect");
+      } else if (firebaseError.code === "auth/weak-password") {
+        setPasswordError("New password is too weak");
+      } else {
+        setPasswordError("Failed to change password. Please try again.");
+      }
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const hasActiveSubscription =
+    billing.tier &&
+    billing.subscriptionStatus === "active" &&
+    !billing.cancelAtPeriodEnd;
+
+  const handleDeleteAccount = async () => {
+    if (!user || !auth.currentUser || !user.email) return;
+
+    if (deleteConfirmText !== "DELETE") {
+      setDeleteError('Please type "DELETE" to confirm');
+      return;
+    }
+
+    if (!deletePassword) {
+      setDeleteError("Password is required to delete your account");
+      return;
+    }
+
+    setDeleteError(null);
+    setIsDeleting(true);
+
+    try {
+      // Reauthenticate first
+      const credential = EmailAuthProvider.credential(user.email, deletePassword);
+      await reauthenticateWithCredential(auth.currentUser, credential);
+
+      // Get the ID token for the API call
+      const idToken = await auth.currentUser.getIdToken();
+
+      // Call the deletion API
+      const response = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to delete account");
+      }
+
+      // Delete the Firebase Auth user on the client side
+      await deleteUser(auth.currentUser);
+
+      toast.success("Account deleted successfully");
+      // User will be logged out automatically
+    } catch (error) {
+      console.error("Failed to delete account:", error);
+      const firebaseError = error as { code?: string; message?: string };
+      if (firebaseError.code === "auth/wrong-password") {
+        setDeleteError("Password is incorrect");
+      } else {
+        setDeleteError(firebaseError.message || "Failed to delete account. Please try again.");
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (!user) return null;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-white">Profile</h2>
-        <p className="text-sm text-slate-400 mt-1">
-          Manage your account information
-        </p>
-      </div>
-
+    <>
       <div className="space-y-6">
-        {/* Display Name */}
-        <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
-          <label className="block text-sm font-medium text-white mb-1">
-            Display name
-          </label>
-          <p className="text-sm text-slate-400 mb-4">
-            This is the name that will be displayed across the app.
+        <div>
+          <h2 className="text-xl font-semibold text-white">Profile</h2>
+          <p className="text-sm text-slate-400 mt-1">
+            Manage your account information
           </p>
-          <div className="flex gap-3">
-            <Input
-              value={profileName}
-              onChange={(e) => setProfileName(e.target.value)}
-              placeholder="Your name"
-              className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 max-w-sm"
-            />
+        </div>
+
+        <div className="space-y-6">
+          {/* Display Name */}
+          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
+            <label className="block text-sm font-medium text-white mb-1">
+              Display name
+            </label>
+            <p className="text-sm text-slate-400 mb-4">
+              This is the name that will be displayed across the app.
+            </p>
+            <div className="flex gap-3">
+              <Input
+                value={profileName}
+                onChange={(e) => setProfileName(e.target.value)}
+                placeholder="Your name"
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 max-w-sm"
+              />
+              <Button
+                onClick={handleSaveName}
+                disabled={isSavingName}
+                className="bg-white text-black hover:bg-slate-100"
+              >
+                {isSavingName ? <Loader2 className="size-4 animate-spin" /> : "Save"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Email */}
+          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
+            <label className="block text-sm font-medium text-white mb-1">
+              Email address
+            </label>
+            <p className="text-sm text-slate-400 mb-4">
+              Your email address is used for login and notifications.
+            </p>
+            <div className="flex items-center gap-3">
+              <Input
+                value={user.email || ""}
+                disabled
+                className="bg-slate-800/50 border-slate-700 text-slate-400 max-w-sm"
+              />
+              <span className="text-xs text-slate-500">Cannot be changed</span>
+            </div>
+          </div>
+
+          {/* Change Password */}
+          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
+            <label className="block text-sm font-medium text-white mb-1">
+              Change password
+            </label>
+            <p className="text-sm text-slate-400 mb-4">
+              Update your password to keep your account secure.
+            </p>
+
+            {passwordError && (
+              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                <p className="text-sm text-red-400">{passwordError}</p>
+              </div>
+            )}
+
+            <div className="space-y-3 max-w-sm">
+              <div className="relative">
+                <Input
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Current password"
+                  className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                >
+                  {showCurrentPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+
+              <div className="relative">
+                <Input
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="New password"
+                  className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                >
+                  {showNewPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+
+              <div className="relative">
+                <Input
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                >
+                  {showConfirmPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+
+              <Button
+                onClick={handleChangePassword}
+                disabled={isChangingPassword || !currentPassword || !newPassword || !confirmPassword}
+                className="bg-white text-black hover:bg-slate-100"
+              >
+                {isChangingPassword ? (
+                  <Loader2 className="size-4 animate-spin mr-2" />
+                ) : null}
+                Update password
+              </Button>
+            </div>
+          </div>
+
+          {/* Delete Account */}
+          <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-6">
+            <label className="block text-sm font-medium text-red-400 mb-1">
+              Delete account
+            </label>
+            <p className="text-sm text-slate-400 mb-4">
+              Permanently delete your account and all associated data. This action cannot be undone.
+            </p>
             <Button
-              onClick={handleSaveName}
-              disabled={isSavingName}
-              className="bg-white text-black hover:bg-slate-100"
+              onClick={() => setDeleteDialogOpen(true)}
+              variant="outline"
+              className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
             >
-              {isSavingName ? <Loader2 className="size-4 animate-spin" /> : "Save"}
+              <Trash2 className="size-4 mr-2" />
+              Delete account
             </Button>
           </div>
         </div>
-
-        {/* Email */}
-        <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
-          <label className="block text-sm font-medium text-white mb-1">
-            Email address
-          </label>
-          <p className="text-sm text-slate-400 mb-4">
-            Your email address is used for login and notifications.
-          </p>
-          <div className="flex items-center gap-3">
-            <Input
-              value={user.email || ""}
-              disabled
-              className="bg-slate-800/50 border-slate-700 text-slate-400 max-w-sm"
-            />
-            <span className="text-xs text-slate-500">Cannot be changed</span>
-          </div>
-        </div>
       </div>
-    </div>
+
+      {/* Delete Account Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-400">Delete account</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              This will permanently delete your account and all your data including:
+            </DialogDescription>
+          </DialogHeader>
+
+          <ul className="text-sm text-slate-300 list-disc list-inside space-y-1 my-2">
+            <li>All your projects</li>
+            <li>All uploaded assets (images, videos, audio)</li>
+            <li>Your subscription and credits</li>
+            <li>All integrations (Telegram, etc.)</li>
+          </ul>
+
+          {hasActiveSubscription && (
+            <div className="flex gap-3 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4">
+              <AlertCircle className="size-5 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-amber-200">Active subscription detected</p>
+                <p className="text-sm text-amber-300/90 mt-1">
+                  Please cancel your subscription in the{" "}
+                  <Link href="/settings/billing" className="underline">
+                    Billing settings
+                  </Link>{" "}
+                  before deleting your account.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!hasActiveSubscription && (
+            <>
+              {deleteError && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                  <p className="text-sm text-red-400">{deleteError}</p>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Type <span className="font-mono text-red-400">DELETE</span> to confirm
+                  </label>
+                  <Input
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder="DELETE"
+                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Enter your password
+                  </label>
+                  <Input
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    placeholder="Your password"
+                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setDeleteDialogOpen(false);
+                      setDeleteConfirmText("");
+                      setDeletePassword("");
+                      setDeleteError(null);
+                    }}
+                    className="flex-1 border-slate-700 text-slate-300 hover:bg-slate-800"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleDeleteAccount}
+                    disabled={isDeleting || deleteConfirmText !== "DELETE" || !deletePassword}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    {isDeleting ? (
+                      <Loader2 className="size-4 animate-spin mr-2" />
+                    ) : (
+                      <Trash2 className="size-4 mr-2" />
+                    )}
+                    Delete account
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

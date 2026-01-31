@@ -11,6 +11,7 @@ from typing import Callable, Iterable, Optional
 import httpx
 
 from ..config import Settings
+from ..gemini_files import upload_file as upload_to_gemini
 from ..firebase import (
     lookup_email_by_phone,
     verify_telegram_link_code,
@@ -285,16 +286,17 @@ class TelegramProvider(ChatProvider):
             text = head + "\n" + "\n".join(lines)
             await self.dispatch_responses([OutgoingMessage(provider=self.name, recipient_id=chat_id, text=text)])
         else:
-            inline_media: list[tuple[bytes, str]] = []
+            # inline_media: list of (bytes, mime_type, upload_result_dict)
+            inline_media: list[tuple[bytes, str, dict | None]] = []
             for fi, _cap, _cid in items:
-                err, content, mime, _res = await self._do_upload(user_info, chat_id, fi)
+                err, content, mime, res = await self._do_upload(user_info, chat_id, fi)
                 if err:
                     await self.dispatch_responses([
                         OutgoingMessage(provider=self.name, recipient_id=chat_id, text=err)
                     ])
                     return
                 if content and mime:
-                    inline_media.append((content, mime))
+                    inline_media.append((content, mime, res))
             reply = await self._invoke_agent(user_info, chat_id, (caption or "").strip(), inline_media=inline_media or None)
             await self.dispatch_responses([OutgoingMessage(provider=self.name, recipient_id=chat_id, text=reply)])
 
@@ -572,6 +574,92 @@ class TelegramProvider(ChatProvider):
             + feedback_note
         )
 
+    async def _wait_for_transcoded_file(
+        self,
+        user_id: str,
+        project_id: str,
+        asset_id: str,
+        timeout: float = 120.0,
+        poll_interval: float = 3.0,
+    ) -> tuple[bytes | None, str | None]:
+        """
+        Wait for transcode to complete and fetch the transcoded file.
+        
+        Returns (file_bytes, mime_type) or (None, None) if failed/timeout.
+        """
+        from ..firebase import get_firestore_client
+        
+        db = get_firestore_client(self.settings)
+        jobs_ref = (
+            db.collection("users")
+            .document(user_id)
+            .collection("projects")
+            .document(project_id)
+            .collection("transcodeJobs")
+        )
+        
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            # Find the latest transcode job for this asset
+            query = (
+                jobs_ref.where("assetId", "==", asset_id)
+                .order_by("createdAt", direction="DESCENDING")
+                .limit(1)
+            )
+            docs = list(query.stream())
+            
+            if not docs:
+                logger.warning("[TELEGRAM] No transcode job found for asset %s", asset_id)
+                await asyncio.sleep(poll_interval)
+                continue
+            
+            job_data = docs[0].to_dict()
+            status = job_data.get("status", "pending")
+            
+            if status == "completed":
+                # Get the transcoded file URL
+                signed_url = job_data.get("outputSignedUrl")
+                if not signed_url:
+                    logger.error("[TELEGRAM] Transcode completed but no outputSignedUrl")
+                    return None, None
+                
+                # Download the transcoded file
+                logger.info("[TELEGRAM] Transcode completed, downloading transcoded file")
+                try:
+                    async with httpx.AsyncClient() as client:
+                        response = await client.get(signed_url, timeout=120.0)
+                        response.raise_for_status()
+                        file_bytes = response.content
+                        mime_type = response.headers.get("content-type", "video/mp4")
+                        logger.info(
+                            "[TELEGRAM] Downloaded transcoded file: %d bytes, %s",
+                            len(file_bytes),
+                            mime_type,
+                        )
+                        return file_bytes, mime_type
+                except Exception as e:
+                    logger.exception("[TELEGRAM] Failed to download transcoded file: %s", e)
+                    return None, None
+            
+            elif status == "error":
+                error_msg = job_data.get("error", "Unknown error")
+                logger.error("[TELEGRAM] Transcode failed: %s", error_msg)
+                return None, None
+            
+            else:
+                # Still processing
+                elapsed = time.time() - start_time
+                logger.info(
+                    "[TELEGRAM] Waiting for transcode (status=%s, elapsed=%.1fs)",
+                    status,
+                    elapsed,
+                )
+                await asyncio.sleep(poll_interval)
+        
+        logger.warning("[TELEGRAM] Transcode timeout after %.1fs", timeout)
+        return None, None
+
     async def _do_upload(
         self,
         user_info: dict,
@@ -632,12 +720,28 @@ class TelegramProvider(ChatProvider):
                 files = {"file": (upload_name, file_content, mime_type)}
                 # Include thread_id so pipeline can notify when done
                 thread_id = f"telegram-{chat_id}"
-                data = {"source": "telegram", "run_pipeline": "true", "thread_id": thread_id}
+                data: dict[str, str] = {
+                    "source": "telegram",
+                    "run_pipeline": "true",
+                    "thread_id": thread_id,
+                }
 
+                is_video = mime_type.startswith("video/") or file_info.get("type") in ("video", "video_note")
+                if is_video and self.settings.transcode_enabled:
+                    import json
+                    transcode_opts = {"preset": self.settings.transcode_preset}
+                    data["transcodeOptions"] = json.dumps(transcode_opts)
+                    logger.info(f"[TELEGRAM] Adding transcode options for video: {transcode_opts}")
+
+                # Sign request for asset service authentication with file hash
+                from ..hmac_auth import get_asset_service_upload_headers
+                auth_headers = get_asset_service_upload_headers(file_content)
+                
                 upload_response = await client.post(
                     f"{asset_service_url}/api/assets/{user_id}/{active_project_id}/upload",
                     files=files,
                     data=data,
+                    headers=auth_headers,
                     timeout=300.0,
                 )
                 upload_response.raise_for_status()
@@ -687,10 +791,10 @@ class TelegramProvider(ChatProvider):
         self, user_info: dict, chat_id: str, file_info: dict, user_text: str
     ) -> str:
         """Upload asset silently (no feedback), then feed media + text to the agent (multimodal)."""
-        err, file_content, mime_type, _result = await self._do_upload(user_info, chat_id, file_info)
+        err, file_content, mime_type, result = await self._do_upload(user_info, chat_id, file_info)
         if err:
             return err
-        inline_media = [(file_content, mime_type)] if file_content and mime_type else None
+        inline_media = [(file_content, mime_type, result)] if file_content and mime_type else None
         return await self._invoke_agent(user_info, chat_id, user_text, inline_media=inline_media)
 
     def _handle_newchat_command(self, user_info: dict, chat_id: str) -> str:
@@ -818,10 +922,10 @@ class TelegramProvider(ChatProvider):
         chat_id: str,
         text: str,
         *,
-        inline_media: list[tuple[bytes, str]] | None = None,
+        inline_media: list[tuple[bytes, str, dict | None]] | None = None,
     ) -> str:
         """Invoke the agent with the user's message and return the response.
-        inline_media: optional list of (bytes, mime_type) for the current turn (multimodal).
+        inline_media: optional list of (bytes, mime_type, asset_result) for the current turn (multimodal).
         """
         import base64
         import time
@@ -873,6 +977,9 @@ class TelegramProvider(ChatProvider):
         # Update Firebase with user message
         update_chat_session_messages(user_id, session_id, current_messages, self.settings)
 
+        # Get active project from session (needed for transcode lookup)
+        session_project_id = session.get("activeProjectId")
+
         # Convert to LangChain messages (last user message may have inline_media for multimodal)
         langchain_messages = []
         for i, msg in enumerate(current_messages):
@@ -886,14 +993,68 @@ class TelegramProvider(ChatProvider):
             if role == "user":
                 is_last_user = i == len(current_messages) - 1
                 if is_last_user and inline_media:
-                    # Multimodal: text + image/video/audio as data URLs for Gemini
+                    # Multimodal: upload media to Gemini File API and reference by URI
                     parts: list = [{"type": "text", "text": text or "(no text)"}]
-                    for data, mime in inline_media:
+                    for data, mime, asset_result in inline_media:
                         if mime.startswith("image/") or mime.startswith("video/") or mime.startswith("audio/"):
-                            b64 = base64.b64encode(data).decode("utf-8")
-                            parts.append(
-                                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
-                            )
+                            try:
+                                file_bytes = data
+                                file_mime = mime
+                                
+                                # For videos with transcode, wait for and use transcoded file
+                                is_video = mime.startswith("video/")
+                                transcode_started = asset_result and asset_result.get("transcodeStarted", False)
+                                
+                                if is_video and transcode_started:
+                                    asset_data = asset_result.get("asset", {})
+                                    asset_id = asset_data.get("id")
+                                    if asset_id:
+                                        logger.info(
+                                            "[TELEGRAM] Video transcode started, waiting for transcoded file (asset_id=%s)",
+                                            asset_id,
+                                        )
+                                        transcoded_bytes, transcoded_mime = await self._wait_for_transcoded_file(
+                                            user_id=user_id,
+                                            project_id=session_project_id,
+                                            asset_id=asset_id,
+                                            timeout=180.0,  # 3 minutes for transcode
+                                        )
+                                        if transcoded_bytes and transcoded_mime:
+                                            logger.info(
+                                                "[TELEGRAM] Using transcoded file: %d bytes, %s",
+                                                len(transcoded_bytes),
+                                                transcoded_mime,
+                                            )
+                                            file_bytes = transcoded_bytes
+                                            file_mime = transcoded_mime
+                                        else:
+                                            logger.warning("[TELEGRAM] Transcode failed, cannot process video")
+                                            parts.append({
+                                                "type": "text",
+                                                "text": "\n[Note: Video transcoding failed. Please try again or upload a different format.]",
+                                            })
+                                            continue
+                                
+                                # Upload to Gemini File API
+                                logger.info("[TELEGRAM] Uploading media to Gemini File API (%d bytes, %s)", len(file_bytes), file_mime)
+                                uploaded = await upload_to_gemini(
+                                    file_bytes,
+                                    file_mime,
+                                    display_name=f"telegram-{chat_id}-{int(time.time())}",
+                                    settings=self.settings,
+                                )
+                                logger.info("[TELEGRAM] Uploaded to Gemini: %s", uploaded.uri)
+                                parts.append({
+                                    "type": "file",
+                                    "file_id": uploaded.uri,
+                                    "mime_type": file_mime,
+                                })
+                            except Exception as e:
+                                logger.exception("[TELEGRAM] Failed to upload media to Gemini File API: %s", e)
+                                parts.append({
+                                    "type": "text",
+                                    "text": f"\n[Note: A {mime} file was attached but could not be processed. Error: {e}]",
+                                })
                     langchain_messages.append(HumanMessage(content=parts))
                 else:
                     langchain_messages.append(HumanMessage(content=content))
@@ -999,7 +1160,8 @@ Assets: {len(assets_info)}"""
             last_response = None
             tool_calls_made = []
             
-            for event in graph.stream({"messages": langchain_messages}, config=config, stream_mode="values", context=agent_context):
+            # Use async streaming to avoid blocking the event loop
+            async for event in graph.astream({"messages": langchain_messages}, config=config, stream_mode="values", context=agent_context):
                 messages = event.get("messages", [])
                 if not messages:
                     continue

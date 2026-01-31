@@ -17,6 +17,7 @@ from langchain_core.tools import tool
 
 from ..config import Settings, get_settings
 from ..credits import deduct_credits, get_credits_for_action, InsufficientCreditsError
+from ..hmac_auth import get_asset_service_upload_headers
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,9 @@ def _upload_to_asset_service(
         files = {"file": (filename, image_bytes, content_type)}
         data = {"source": "banana", "run_pipeline": "true"}
         
-        response = httpx.post(endpoint, files=files, data=data, timeout=60.0)
+        # Sign request for asset service authentication with file hash
+        headers = get_asset_service_upload_headers(image_bytes)
+        response = httpx.post(endpoint, files=files, data=data, headers=headers, timeout=60.0)
         
         if response.status_code not in (200, 201):
             logger.error("[BANANA] Asset service upload failed: %s - %s", response.status_code, response.text[:200])

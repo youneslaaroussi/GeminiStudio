@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { resolveClientToolResult } from "@/app/lib/server/tools/client-tool-bridge";
 import { logger } from "@/app/lib/server/logger";
+import { verifyAuth } from "@/app/lib/server/auth";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,13 @@ const callbackSchema = z.object({
   ]),
 });
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  // Require authentication
+  const userId = await verifyAuth(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const json = await request.json().catch(() => null);
   const parsed = callbackSchema.safeParse(json);
   if (!parsed.success) {

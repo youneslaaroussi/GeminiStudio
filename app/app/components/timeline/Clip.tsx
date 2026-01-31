@@ -176,12 +176,16 @@ export function Clip({ clip, layerId }: ClipProps) {
         } else if (action === "resize-left") {
           // Resize from left: adjust start, offset, and duration
           const maxDelta = dragStartRef.current.duration / clip.speed - 0.1;
+          // For video/audio clips, don't allow offset to go below 0
           const minDelta = -dragStartRef.current.start;
-          const clampedDelta = Math.max(minDelta, Math.min(maxDelta, deltaTime));
+          // Additional constraint: offset cannot go below 0
+          const minDeltaForOffset = -dragStartRef.current.offset / clip.speed;
+          const effectiveMinDelta = Math.max(minDelta, minDeltaForOffset);
+          const clampedDelta = Math.max(effectiveMinDelta, Math.min(maxDelta, deltaTime));
           const newStart = dragStartRef.current.start + clampedDelta;
           const snappedStart = snapTime(newStart);
           const snappedDelta = Math.max(
-            minDelta,
+            effectiveMinDelta,
             Math.min(maxDelta, snappedStart - dragStartRef.current.start)
           );
           const durationChange = snappedDelta * clip.speed;
@@ -195,20 +199,37 @@ export function Clip({ clip, layerId }: ClipProps) {
         } else if (action === "resize-right") {
           // Resize from right: adjust duration using snapped end time
           const durationChange = deltaTime * clip.speed;
-          const tentativeDuration = Math.max(
+          let tentativeDuration = Math.max(
             0.1,
             dragStartRef.current.duration + durationChange
           );
+          
+          // For video/audio clips with sourceDuration, don't allow stretching beyond source
+          const sourceDuration = (clip.type === "video" || clip.type === "audio") 
+            ? (clip as VideoClip | AudioClip).sourceDuration 
+            : undefined;
+          if (sourceDuration != null) {
+            const maxDuration = sourceDuration - dragStartRef.current.offset;
+            tentativeDuration = Math.min(tentativeDuration, maxDuration);
+          }
+          
           const tentativeEnd =
             dragStartRef.current.start + tentativeDuration / clip.speed;
           const snappedEnd = Math.max(
             dragStartRef.current.start + 0.1 / clip.speed,
             snapTime(tentativeEnd)
           );
-          const snappedDuration = Math.max(
+          let snappedDuration = Math.max(
             0.1,
             (snappedEnd - dragStartRef.current.start) * clip.speed
           );
+          
+          // Re-apply source duration constraint after snapping
+          if (sourceDuration != null) {
+            const maxDuration = sourceDuration - dragStartRef.current.offset;
+            snappedDuration = Math.min(snappedDuration, maxDuration);
+          }
+          
           updateClip(clip.id, { duration: snappedDuration });
         }
       };

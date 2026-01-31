@@ -70,12 +70,14 @@ const addClipSchema = z.discriminatedUnion("type", [
     src: mediaSrcSchema,
     width: z.number().positive().optional(),
     height: z.number().positive().optional(),
+    sourceDuration: z.number().positive().optional(),
     focus: focusSchema.optional(),
     objectFit: z.enum(["contain", "cover", "fill"]).optional(),
   }),
   baseClipSchema.extend({
     type: z.literal("audio"),
     src: mediaSrcSchema,
+    sourceDuration: z.number().positive().optional(),
     volume: z
       .number()
       .min(0, "Volume must be between 0 and 1")
@@ -282,6 +284,7 @@ export const timelineAddClipTool: ToolDefinition<
             assetId: input.assetId,
             width: input.width,
             height: input.height,
+            sourceDuration: input.sourceDuration,
           }
         );
         applyCommonOverrides(clip, input);
@@ -299,7 +302,7 @@ export const timelineAddClipTool: ToolDefinition<
           baseName || "Audio Clip",
           input.start,
           input.duration,
-          { assetId: input.assetId }
+          { assetId: input.assetId, sourceDuration: input.sourceDuration }
         );
         applyCommonOverrides(clip, input);
         if (input.volume !== undefined) {

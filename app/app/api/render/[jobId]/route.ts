@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createV4SignedUrl } from "@/app/lib/server/gcs-signed-url";
+import { verifyAuth } from "@/app/lib/server/auth";
+import { verifyProjectOwnership } from "@/app/lib/server/firebase-admin";
 
 const RENDERER_API_URL = process.env.RENDERER_API_URL || "http://localhost:4000";
 const GCS_BUCKET = process.env.ASSET_GCS_BUCKET;
@@ -21,6 +23,12 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ jobId: string }> }
 ) {
+  // Require authentication
+  const userId = await verifyAuth(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { jobId } = await params;
 
@@ -47,13 +55,27 @@ export async function GET(
 
     const jobStatus = (await rendererResponse.json()) as RendererJobStatus;
 
-    // If completed and has GCS path, generate download URL
+    // If completed and has GCS path, validate ownership and generate download URL
     let downloadUrl: string | undefined;
     if (jobStatus.state === "completed" && jobStatus.returnValue?.gcsPath && GCS_BUCKET) {
       // Extract object name from gcsPath (format: gs://bucket/path)
       const gcsMatch = jobStatus.returnValue.gcsPath.match(/^gs:\/\/[^/]+\/(.+)$/);
       if (gcsMatch) {
         const objectName = gcsMatch[1];
+
+        // SECURITY: Validate that the render output belongs to a project the user owns
+        // Renders are stored at: renders/{projectId}/{filename}
+        const pathMatch = objectName.match(/^renders\/([^/]+)\//);
+        if (!pathMatch) {
+          return NextResponse.json({ error: "Invalid render path" }, { status: 403 });
+        }
+
+        const projectId = pathMatch[1];
+        const ownsProject = await verifyProjectOwnership(userId, projectId);
+        if (!ownsProject) {
+          return NextResponse.json({ error: "Access denied" }, { status: 403 });
+        }
+
         downloadUrl = createV4SignedUrl({
           bucket: GCS_BUCKET,
           objectName,

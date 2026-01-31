@@ -7,6 +7,7 @@ import { getPipelineStateFromService, isAssetServiceEnabled } from "@/app/lib/se
 import { createV4SignedUrl } from "@/app/lib/server/gcs-signed-url";
 import { deductCredits } from "@/app/lib/server/credits";
 import { getCreditsForAction } from "@/app/lib/credits-config";
+import { signRendererRequest, isRendererSigningEnabled } from "@/app/lib/server/hmac";
 
 const RENDERER_API_URL = process.env.RENDERER_API_URL || "http://localhost:4000";
 const GCS_BUCKET = process.env.ASSET_GCS_BUCKET;
@@ -394,12 +395,24 @@ export async function POST(request: NextRequest) {
       },
     };
 
+    // Sign the request for renderer authentication
+    const rendererBody = JSON.stringify(rendererPayload);
+    const rendererTimestamp = Date.now();
+    const rendererHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    // Add HMAC signature if signing is enabled
+    if (isRendererSigningEnabled()) {
+      const signature = signRendererRequest(rendererBody, rendererTimestamp);
+      rendererHeaders["X-Signature"] = signature;
+      rendererHeaders["X-Timestamp"] = rendererTimestamp.toString();
+    }
+
     const rendererResponse = await fetch(`${RENDERER_API_URL}/renders`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(rendererPayload),
+      headers: rendererHeaders,
+      body: rendererBody,
     });
 
     if (!rendererResponse.ok) {

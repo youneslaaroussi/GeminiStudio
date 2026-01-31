@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     asset_service_url: str | None = Field(
         default="http://localhost:8081", alias="ASSET_SERVICE_URL"
     )
+    asset_service_shared_secret: str = Field(default="", alias="ASSET_SERVICE_SHARED_SECRET")
 
     # Video effects service (segmentation, etc.)
     video_effects_service_url: str | None = Field(
@@ -80,6 +81,7 @@ class Settings(BaseSettings):
 
     # Renderer integration
     renderer_base_url: str = Field(default="http://localhost:4000", alias="RENDERER_BASE_URL")
+    renderer_shared_secret: str = Field(default="", alias="RENDERER_SHARED_SECRET")
     render_event_topic: str = Field(default="gemini-render-events", alias="RENDER_EVENT_TOPIC")
     render_event_subscription: str = Field(
         default="gemini-render-events-sub",
@@ -109,6 +111,9 @@ class Settings(BaseSettings):
 
     # TTS (Text-to-Speech)
     tts_model: str = Field(default="gemini-2.5-flash-preview-tts", alias="TTS_MODEL")
+
+    transcode_enabled: bool = Field(default=True, alias="TRANSCODE_ENABLED")
+    transcode_preset: str = Field(default="preset/web-hd", alias="TRANSCODE_PRESET")
 
 
 @lru_cache

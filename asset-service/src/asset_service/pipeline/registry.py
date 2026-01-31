@@ -17,6 +17,7 @@ from .types import (
     StoredAsset,
 )
 from .store import get_pipeline_state, update_pipeline_step
+from ..config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,19 @@ logger = logging.getLogger(__name__)
 MAX_PIPELINE_WAIT_SECONDS = 300
 # Interval between polling waiting steps
 POLL_INTERVAL_SECONDS = 5
+
+PARALLEL_STEP_IDS = {
+    "shot-detection",
+    "face-detection",
+    "person-detection",
+    "label-detection",
+}
+
+EARLY_STEP_IDS = {
+    "cloud-upload",
+    "metadata",
+    "image-convert",
+}
 
 
 @dataclass
@@ -200,18 +214,8 @@ async def run_auto_steps(
     """
     Run all auto-start steps for an asset.
 
-    This function runs all auto-start steps and polls any that return WAITING
-    status until they complete or timeout.
-
-    Args:
-        user_id: User ID
-        project_id: Project ID
-        asset: Asset information
-        asset_path: Path to the asset file
-        agent_metadata: Optional metadata about the requesting agent (threadId, etc.)
-
-    Returns:
-        Updated pipeline state
+    Pipeline order: early steps (cloud-upload, metadata), then Gemini analysis,
+    then Video Intelligence steps in parallel.
     """
     from ..metadata.ffprobe import determine_asset_type
     from ..pubsub import publish_pipeline_event
@@ -224,47 +228,94 @@ async def run_auto_steps(
         s for s in auto_steps
         if not s.supported_types or asset_type in s.supported_types
     ]
+    
+    logger.info(f"Pipeline for asset {asset.id} (type={asset_type.value}): applicable steps = {[s.id for s in applicable_steps]}")
 
     state = await get_pipeline_state(user_id, project_id, asset.id)
     steps_run = []
     failed_steps = []
 
-    # Import shutdown check
     from ..tasks.worker import is_shutting_down
 
-    # First pass: run all steps
-    for step in applicable_steps:
-        # Check for shutdown signal
+    early_steps = [s for s in applicable_steps if s.id in EARLY_STEP_IDS]
+    # Middle steps run sequentially (like gemini-analysis)
+    middle_steps = [s for s in applicable_steps if s.id not in PARALLEL_STEP_IDS and s.id not in EARLY_STEP_IDS]
+    # Parallel steps run last
+    parallel_steps = [s for s in applicable_steps if s.id in PARALLEL_STEP_IDS]
+    
+    # Combine sequential steps in order
+    sequential_steps = early_steps + middle_steps
+
+    # Helper to run a single step and track results
+    async def execute_step(step: StepDefinition) -> dict[str, Any] | None:
+        """Execute a step and return its result info."""
         if is_shutting_down():
-            logger.info("Pipeline interrupted due to shutdown during step execution")
-            break
+            return None
 
         # Check current status
-        current = next((s for s in state["steps"] if s["id"] == step.id), None)
+        current_state = await get_pipeline_state(user_id, project_id, asset.id)
+        current = next((s for s in current_state["steps"] if s["id"] == step.id), None)
         if current and current.get("status") in ("succeeded", "running"):
-            continue
+            return None
 
-        # Run the step
         try:
-            state = await run_step(user_id, project_id, asset, asset_path, step.id)
-            step_state = next((s for s in state["steps"] if s["id"] == step.id), None)
+            # Use the (possibly refreshed) asset
+            result_state = await run_step(user_id, project_id, asset, asset_path, step.id)
+            step_state = next((s for s in result_state["steps"] if s["id"] == step.id), None)
             if step_state:
-                steps_run.append({
+                return {
                     "id": step.id,
                     "label": step.label,
                     "status": step_state.get("status", "unknown"),
-                })
-                if step_state.get("status") == "failed":
-                    failed_steps.append(step.id)
+                }
         except Exception as e:
             logger.exception(f"Step {step.id} failed during auto-run: {e}")
-            steps_run.append({
+            return {
                 "id": step.id,
                 "label": step.label,
                 "status": "failed",
                 "error": str(e),
-            })
-            failed_steps.append(step.id)
+            }
+        return None
+
+    # First pass: run sequential steps (early steps like cloud-upload, then analysis steps)
+    for step in sequential_steps:
+        if is_shutting_down():
+            logger.info("Pipeline interrupted due to shutdown during step execution")
+            break
+
+        result = await execute_step(step)
+        if result:
+            steps_run.append(result)
+            if result.get("status") == "failed":
+                failed_steps.append(step.id)
+
+    # Second pass: run parallel steps concurrently (video analysis steps)
+    if parallel_steps and not is_shutting_down():
+        logger.info(f"Running {len(parallel_steps)} video analysis steps in parallel")
+        parallel_results = await asyncio.gather(
+            *[execute_step(step) for step in parallel_steps],
+            return_exceptions=True,
+        )
+
+        for i, result in enumerate(parallel_results):
+            step = parallel_steps[i]
+            if isinstance(result, Exception):
+                logger.exception(f"Step {step.id} raised exception: {result}")
+                steps_run.append({
+                    "id": step.id,
+                    "label": step.label,
+                    "status": "failed",
+                    "error": str(result),
+                })
+                failed_steps.append(step.id)
+            elif result:
+                steps_run.append(result)
+                if result.get("status") == "failed":
+                    failed_steps.append(step.id)
+
+    # Refresh state after all steps
+    state = await get_pipeline_state(user_id, project_id, asset.id)
 
     # Second pass: poll waiting steps until they complete or timeout
     elapsed_seconds = 0

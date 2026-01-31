@@ -254,6 +254,27 @@ export const timelineUpdateClipTool: ToolDefinition<
       };
     }
 
+    // For video/audio clips, enforce source duration constraint
+    if (clip.type === "video" || clip.type === "audio") {
+      const typedClip = clip as VideoClip | AudioClip;
+      const sourceDuration = typedClip.sourceDuration;
+      if (sourceDuration != null) {
+        const newOffset = updates.offset ?? clip.offset;
+        const newDuration = updates.duration ?? clip.duration;
+        if (newOffset + newDuration > sourceDuration) {
+          // Clamp duration to not exceed source
+          const maxDuration = Math.max(0.1, sourceDuration - newOffset);
+          if (newDuration > maxDuration) {
+            updates.duration = maxDuration;
+          }
+        }
+        // Also ensure offset doesn't exceed source - min duration
+        if (newOffset > sourceDuration - 0.1) {
+          updates.offset = Math.max(0, sourceDuration - 0.1);
+        }
+      }
+    }
+
     store.updateClip(input.clipId, updates as Partial<TimelineClip>);
 
     const updatedClip = useProjectStore

@@ -7,7 +7,9 @@ import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 const veoGenerateSchema = z.object({
   projectId: z.string().min(1, "Project ID is required"),
   prompt: z.string().min(1, "Prompt is required"),
-  durationSeconds: z.enum(["4", "6", "8"]).default("8").transform(Number) as unknown as z.ZodNumber,
+  durationSeconds: z.coerce.number().refine((n) => [4, 6, 8].includes(n), {
+    message: "Duration must be 4, 6, or 8 seconds",
+  }).default(8),
   aspectRatio: z.enum(["16:9", "9:16"]).default("16:9"),
   resolution: z.enum(["720p", "1080p", "4k"]).default("720p"),
   generateAudio: z.boolean().default(true),

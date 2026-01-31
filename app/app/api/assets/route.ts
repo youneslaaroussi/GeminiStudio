@@ -5,9 +5,9 @@ import {
   uploadToAssetService,
   listAssetsFromService,
   type AssetServiceAsset,
+  type TranscodeOptions,
 } from "@/app/lib/server/asset-service-client";
-import { initAdmin } from "@/app/lib/server/firebase-admin";
-import { getAuth } from "firebase-admin/auth";
+import { verifyBearerToken } from "@/app/lib/server/auth";
 import { deductCredits, getBilling } from "@/app/lib/server/credits";
 import {
   getUploadActionFromMimeType,
@@ -17,33 +17,13 @@ import {
 export const runtime = "nodejs";
 
 /**
- * Verify Firebase ID token and return user ID.
- */
-async function verifyToken(request: NextRequest): Promise<string | null> {
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-
-  try {
-    await initAdmin();
-    const decoded = await getAuth().verifyIdToken(token);
-    return decoded.uid;
-  } catch (error) {
-    console.error("Token verification failed:", error);
-    return null;
-  }
-}
-
-/**
  * Convert asset service response to RemoteAsset format.
  * Uses proxy URL to avoid CORS issues with GCS signed URLs.
+ * Note: userId is NOT included in proxy URL - auth is via session cookie.
  */
-function toRemoteAsset(asset: AssetServiceAsset, projectId: string, userId: string): RemoteAsset {
-  // Use proxy URL to avoid CORS issues
-  const proxyUrl = `/api/assets/${asset.id}/file?projectId=${projectId}&userId=${userId}`;
+function toRemoteAsset(asset: AssetServiceAsset, projectId: string): RemoteAsset {
+  // Use proxy URL to avoid CORS issues (auth via session cookie, not query param)
+  const proxyUrl = `/api/assets/${asset.id}/file?projectId=${projectId}`;
 
   return {
     id: asset.id,
@@ -58,6 +38,7 @@ function toRemoteAsset(asset: AssetServiceAsset, projectId: string, userId: stri
     duration: asset.duration,
     gcsUri: asset.gcsUri,
     signedUrl: asset.signedUrl,
+    description: asset.description,
   };
 }
 
@@ -69,7 +50,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const userId = await verifyToken(request);
+  const userId = await verifyBearerToken(request);
   if (!userId) {
     return NextResponse.json(
       { error: "Unauthorized. Include Authorization: Bearer <token>" },
@@ -89,7 +70,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const assets = await listAssetsFromService(userId, projectId);
-    return NextResponse.json({ assets: assets.map((a) => toRemoteAsset(a, projectId, userId)) });
+    return NextResponse.json({ assets: assets.map((a) => toRemoteAsset(a, projectId)) });
   } catch (error) {
     console.error("Failed to list assets:", error);
     return NextResponse.json(
@@ -107,7 +88,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const userId = await verifyToken(request);
+  const userId = await verifyBearerToken(request);
   if (!userId) {
     return NextResponse.json(
       { error: "Unauthorized. Include Authorization: Bearer <token>" },
@@ -118,6 +99,7 @@ export async function POST(request: NextRequest) {
   const formData = await request.formData();
   const files = formData.getAll("files").filter((entry): entry is File => entry instanceof File);
   const projectId = formData.get("projectId");
+  const transcodeOptionsRaw = formData.get("transcodeOptions");
 
   if (files.length === 0) {
     return NextResponse.json({ error: "No files provided" }, { status: 400 });
@@ -125,6 +107,16 @@ export async function POST(request: NextRequest) {
 
   if (!projectId || typeof projectId !== "string") {
     return NextResponse.json({ error: "projectId is required" }, { status: 400 });
+  }
+
+  // Parse transcode options if provided
+  let transcodeOptions: TranscodeOptions | undefined;
+  if (transcodeOptionsRaw && typeof transcodeOptionsRaw === "string") {
+    try {
+      transcodeOptions = JSON.parse(transcodeOptionsRaw);
+    } catch (e) {
+      console.warn("Failed to parse transcodeOptions:", e);
+    }
   }
 
   // Calculate total credits needed for all files
@@ -175,16 +167,49 @@ export async function POST(request: NextRequest) {
 
   const uploaded: RemoteAsset[] = [];
 
+  // Video extensions to check (browsers often send wrong MIME types)
+  const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.wmv', '.flv', '.m4v', '.mpeg', '.mpg', '.3gp'];
+  
+  // HEIC/HEIF extensions that need conversion
+  const heicExtensions = ['.heic', '.heif'];
+
   try {
+    let transcodeStarted = false;
+    let convertStarted = false;
     for (const file of files) {
+      // Check if video by MIME type OR file extension (browsers often send wrong MIME types for .MOV etc)
+      const ext = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+      const isVideo = file.type.startsWith("video/") || videoExtensions.includes(ext);
+      
+      // Check if HEIC/HEIF image that needs conversion
+      const isHeic = file.type.startsWith("image/heic") || 
+                     file.type.startsWith("image/heif") || 
+                     heicExtensions.includes(ext);
+      
+      if (isVideo && transcodeOptions) {
+        console.log(`[upload] Video detected: ${file.name} (type: ${file.type}, ext: ${ext}), forwarding transcode options`);
+      }
+      
+      if (isHeic) {
+        console.log(`[upload] HEIC/HEIF detected: ${file.name} (type: ${file.type}, ext: ${ext}), will convert to PNG`);
+        convertStarted = true;
+      }
+      
       const result = await uploadToAssetService(userId, projectId, file, {
         source: "web",
         runPipeline: true,
+        transcodeOptions: isVideo ? transcodeOptions : undefined,
       });
-      uploaded.push(toRemoteAsset(result.asset, projectId, userId));
+      uploaded.push(toRemoteAsset(result.asset, projectId));
+      if (result.transcodeStarted) {
+        transcodeStarted = true;
+      }
     }
 
-    return NextResponse.json({ assets: uploaded, creditsUsed: totalCreditsNeeded }, { status: 201 });
+    return NextResponse.json(
+      { assets: uploaded, creditsUsed: totalCreditsNeeded, transcodeStarted, convertStarted },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Failed to upload to asset service:", error);
     // Note: Credits already deducted - could add refund logic here if needed

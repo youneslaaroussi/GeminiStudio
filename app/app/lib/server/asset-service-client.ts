@@ -3,7 +3,46 @@
  * Used to forward asset uploads and pipeline operations.
  */
 
+import { createHash, createHmac } from "crypto";
+
 const ASSET_SERVICE_URL = process.env.ASSET_SERVICE_URL || "http://localhost:8081";
+const SHARED_SECRET = process.env.ASSET_SERVICE_SHARED_SECRET;
+
+/**
+ * Generate HMAC authentication headers for asset service requests.
+ * If ASSET_SERVICE_SHARED_SECRET is not set, returns empty headers (dev mode).
+ */
+function getAuthHeaders(body: string = ""): Record<string, string> {
+  if (!SHARED_SECRET) {
+    return {};
+  }
+  const timestamp = Date.now();
+  const payload = `${timestamp}.${body}`;
+  const signature = createHmac("sha256", SHARED_SECRET).update(payload).digest("hex");
+  return {
+    "X-Signature": signature,
+    "X-Timestamp": timestamp.toString(),
+  };
+}
+
+/**
+ * Generate HMAC authentication headers for file upload requests.
+ * Includes a hash of the file content for integrity verification.
+ */
+function getUploadAuthHeaders(fileBytes: Buffer): Record<string, string> {
+  if (!SHARED_SECRET) {
+    return {};
+  }
+  const bodyHash = createHash("sha256").update(fileBytes).digest("hex");
+  const timestamp = Date.now();
+  const payload = `${timestamp}.${bodyHash}`;
+  const signature = createHmac("sha256", SHARED_SECRET).update(payload).digest("hex");
+  return {
+    "X-Signature": signature,
+    "X-Timestamp": timestamp.toString(),
+    "X-Body-Hash": bodyHash,
+  };
+}
 
 export interface AssetServiceAsset {
   id: string;
@@ -21,11 +60,27 @@ export interface AssetServiceAsset {
   duration?: number;
   source?: string;
   sortOrder?: number;
+  description?: string; // AI-generated short description
 }
 
 export interface UploadResponse {
   asset: AssetServiceAsset;
   pipelineStarted: boolean;
+  transcodeStarted?: boolean;
+}
+
+export interface TranscodeOptions {
+  preset?: string; // e.g., "preset/web-hd", "preset/web-sd"
+  outputFormat?: string; // "mp4", "hls", "dash"
+  videoCodec?: string; // "h264", "h265", "vp9"
+  videoBitrate?: number; // bps
+  width?: number;
+  height?: number;
+  frameRate?: number;
+  audioCodec?: string; // "aac", "mp3", "opus"
+  audioBitrate?: number; // bps
+  sampleRate?: number;
+  channels?: number;
 }
 
 export interface PipelineStepState {
@@ -61,17 +116,27 @@ export async function uploadToAssetService(
   options: {
     source?: string;
     runPipeline?: boolean;
+    transcodeOptions?: TranscodeOptions;
   } = {}
 ): Promise<UploadResponse> {
+  // Read file bytes for hash computation
+  const fileBytes = Buffer.from(await file.arrayBuffer());
+  
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append("file", new Blob([fileBytes], { type: file.type }), file.name);
   formData.append("source", options.source || "web");
   formData.append("run_pipeline", options.runPipeline !== false ? "true" : "false");
+
+  // Add transcode options if provided
+  if (options.transcodeOptions) {
+    formData.append("transcodeOptions", JSON.stringify(options.transcodeOptions));
+  }
 
   const response = await fetch(
     `${ASSET_SERVICE_URL}/api/assets/${userId}/${projectId}/upload`,
     {
       method: "POST",
+      headers: getUploadAuthHeaders(fileBytes),
       body: formData,
     }
   );
@@ -93,7 +158,7 @@ export async function listAssetsFromService(
 ): Promise<AssetServiceAsset[]> {
   const response = await fetch(
     `${ASSET_SERVICE_URL}/api/assets/${userId}/${projectId}`,
-    { method: "GET" }
+    { method: "GET", headers: getAuthHeaders("") }
   );
 
   if (!response.ok) {
@@ -113,7 +178,7 @@ export async function getAssetFromService(
 ): Promise<AssetServiceAsset> {
   const response = await fetch(
     `${ASSET_SERVICE_URL}/api/assets/${userId}/${projectId}/${assetId}`,
-    { method: "GET" }
+    { method: "GET", cache: "no-store", headers: getAuthHeaders("") }
   );
 
   if (!response.ok) {
@@ -135,12 +200,13 @@ export async function updateAssetFromService(
   assetId: string,
   updates: { name?: string; sortOrder?: number }
 ): Promise<AssetServiceAsset> {
+  const body = JSON.stringify(updates);
   const response = await fetch(
     `${ASSET_SERVICE_URL}/api/assets/${userId}/${projectId}/${assetId}`,
     {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
+      headers: { "Content-Type": "application/json", ...getAuthHeaders(body) },
+      body,
     }
   );
 
@@ -162,12 +228,13 @@ export async function reorderAssetsFromService(
   projectId: string,
   assetIds: string[]
 ): Promise<AssetServiceAsset[]> {
+  const body = JSON.stringify({ assetIds });
   const response = await fetch(
     `${ASSET_SERVICE_URL}/api/assets/${userId}/${projectId}/reorder`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assetIds }),
+      headers: { "Content-Type": "application/json", ...getAuthHeaders(body) },
+      body,
     }
   );
 
@@ -189,7 +256,7 @@ export async function deleteAssetFromService(
 ): Promise<void> {
   const response = await fetch(
     `${ASSET_SERVICE_URL}/api/assets/${userId}/${projectId}/${assetId}`,
-    { method: "DELETE" }
+    { method: "DELETE", headers: getAuthHeaders("") }
   );
 
   if (!response.ok && response.status !== 404) {
@@ -207,7 +274,7 @@ export async function getPipelineStateFromService(
 ): Promise<PipelineState> {
   const response = await fetch(
     `${ASSET_SERVICE_URL}/api/pipeline/${userId}/${projectId}/${assetId}`,
-    { method: "GET" }
+    { method: "GET", headers: getAuthHeaders("") }
   );
 
   if (!response.ok) {
@@ -226,7 +293,7 @@ export async function listPipelineStatesFromService(
 ): Promise<PipelineState[]> {
   const response = await fetch(
     `${ASSET_SERVICE_URL}/api/pipeline/${userId}/${projectId}`,
-    { method: "GET" }
+    { method: "GET", headers: getAuthHeaders("") }
   );
 
   if (!response.ok) {
@@ -254,12 +321,13 @@ export async function runPipelineStepOnService(
   stepId: string,
   params: Record<string, unknown> = {}
 ): Promise<QueuedTaskResponse> {
+  const body = JSON.stringify({ params });
   const response = await fetch(
     `${ASSET_SERVICE_URL}/api/pipeline/${userId}/${projectId}/${assetId}/${stepId}`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ params }),
+      headers: { "Content-Type": "application/json", ...getAuthHeaders(body) },
+      body,
     }
   );
 
@@ -281,12 +349,113 @@ export async function runAutoPipelineOnService(
 ): Promise<QueuedTaskResponse> {
   const response = await fetch(
     `${ASSET_SERVICE_URL}/api/pipeline/${userId}/${projectId}/${assetId}/auto`,
-    { method: "POST" }
+    { method: "POST", headers: getAuthHeaders("") }
   );
 
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`Asset service auto pipeline failed: ${response.status} - ${text}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Response from user deletion.
+ */
+export interface DeleteUserResponse {
+  projectsDeleted: number;
+  assetsDeleted: number;
+  gcsObjectsDeleted: number;
+}
+
+/**
+ * Delete all assets and data for a user.
+ * This is used when deleting a user account.
+ */
+export async function deleteUserFromAssetService(
+  userId: string
+): Promise<DeleteUserResponse> {
+  const response = await fetch(
+    `${ASSET_SERVICE_URL}/api/users/${userId}`,
+    { method: "DELETE", headers: getAuthHeaders("") }
+  );
+
+  if (!response.ok && response.status !== 404) {
+    const text = await response.text();
+    throw new Error(`Asset service user deletion failed: ${response.status} - ${text}`);
+  }
+
+  if (response.status === 404) {
+    // User had no data in asset service
+    return { projectsDeleted: 0, assetsDeleted: 0, gcsObjectsDeleted: 0 };
+  }
+
+  return response.json();
+}
+
+/**
+ * Delete all assets for a specific project.
+ */
+export async function deleteProjectFromAssetService(
+  userId: string,
+  projectId: string
+): Promise<{ assetsDeleted: number; gcsObjectsDeleted: number }> {
+  const response = await fetch(
+    `${ASSET_SERVICE_URL}/api/assets/${userId}/${projectId}`,
+    { method: "DELETE", headers: getAuthHeaders("") }
+  );
+
+  if (!response.ok && response.status !== 404) {
+    const text = await response.text();
+    throw new Error(`Asset service project deletion failed: ${response.status} - ${text}`);
+  }
+
+  if (response.status === 404) {
+    return { assetsDeleted: 0, gcsObjectsDeleted: 0 };
+  }
+
+  return response.json();
+}
+
+/**
+ * Response from starting a transcode job.
+ */
+export interface TranscodeResponse {
+  queued: boolean;
+  jobId?: string;
+  message: string;
+}
+
+/**
+ * Start a transcode job for an existing asset.
+ */
+export async function transcodeAsset(
+  userId: string,
+  projectId: string,
+  assetId: string,
+  options: TranscodeOptions
+): Promise<TranscodeResponse> {
+  const body = JSON.stringify(options);
+  const response = await fetch(
+    `${ASSET_SERVICE_URL}/api/assets/${userId}/${projectId}/${assetId}/transcode`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders(body) },
+      body,
+    }
+  );
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error("Asset not found");
+    }
+    if (response.status === 400) {
+      const data = await response.json();
+      throw new Error(data.detail || "Cannot transcode this asset");
+    }
+    const text = await response.text();
+    throw new Error(`Transcode request failed: ${response.status} - ${text}`);
   }
 
   return response.json();

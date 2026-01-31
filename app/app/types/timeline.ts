@@ -101,6 +101,7 @@ export interface VideoClip extends BaseClip {
   src: string;        // External URL
   width?: number;     // Width in pixels
   height?: number;    // Height in pixels
+  sourceDuration?: number;  // Total duration of source media (seconds)
   focus?: Focus;
   objectFit?: ObjectFit;
   // Mask compositing properties
@@ -113,6 +114,7 @@ export interface AudioClip extends BaseClip {
   type: 'audio';
   src: string;        // External URL
   volume: number;     // 0-1
+  sourceDuration?: number;  // Total duration of source media (seconds)
 }
 
 export interface TextClip extends BaseClip {
@@ -223,7 +225,7 @@ export function createVideoClip(
   name: string,
   start: number,
   duration: number,
-  options?: { assetId?: string; width?: number; height?: number }
+  options?: { assetId?: string; width?: number; height?: number; sourceDuration?: number }
 ): VideoClip {
   return {
     id: crypto.randomUUID(),
@@ -239,6 +241,7 @@ export function createVideoClip(
     assetId: options?.assetId,
     width: options?.width,
     height: options?.height,
+    sourceDuration: options?.sourceDuration,
   };
 }
 
@@ -248,7 +251,7 @@ export function createAudioClip(
   name: string,
   start: number,
   duration: number,
-  options?: { assetId?: string }
+  options?: { assetId?: string; sourceDuration?: number }
 ): AudioClip {
   return {
     id: crypto.randomUUID(),
@@ -263,6 +266,7 @@ export function createAudioClip(
     position: { x: 0, y: 0 },
     scale: { x: 1, y: 1 },
     assetId: options?.assetId,
+    sourceDuration: options?.sourceDuration,
   };
 }
 

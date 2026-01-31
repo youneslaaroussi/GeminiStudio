@@ -24,6 +24,8 @@ def build_model(settings: Settings) -> ChatGoogleGenerativeAI:
         model=settings.gemini_model,
         api_key=settings.google_api_key,
         convert_system_message_to_human=True,
+        timeout=60,  # 60 second timeout per request
+        max_retries=2,  # Only retry twice (3 total attempts) to avoid blocking server
     )
 
 
@@ -35,9 +37,9 @@ def create_graph(settings: Settings | None = None):
     model_with_tools = model.bind_tools(tools)
     system_message = SystemMessage(content=resolved_settings.system_prompt)
 
-    def call_model(state: MessagesState, config: RunnableConfig):
+    async def call_model(state: MessagesState, config: RunnableConfig):
         messages = [system_message] + list(state["messages"])
-        response = model_with_tools.invoke(messages, config=config)
+        response = await model_with_tools.ainvoke(messages, config=config)
         return {"messages": [response]}
 
     def call_tool(state: MessagesState, config: RunnableConfig):
@@ -69,11 +71,13 @@ def create_graph(settings: Settings | None = None):
             else:
                 try:
                     args = dict(tool_call.get("args") or {})
-                    if project_id and "project_id" not in args:
+                    # SECURITY: Always override user_id/project_id/branch_id from trusted context
+                    # Never trust values provided by the LLM (could be prompt injection)
+                    if project_id:
                         args["project_id"] = project_id
-                    if user_id and "user_id" not in args:
+                    if user_id:
                         args["user_id"] = user_id
-                    if branch_id and "branch_id" not in args:
+                    if branch_id:
                         args["branch_id"] = branch_id
                     
                     logger.info("[AGENT] Tool args (with context): %s", str(args)[:500])

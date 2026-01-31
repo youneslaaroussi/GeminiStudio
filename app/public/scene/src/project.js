@@ -11813,7 +11813,12 @@ class AnimatedCaptions extends Node {
   }
   *animate() {
     var _a2;
-    const MAX_LENGTH = 50;
+    const width = this.SceneWidth();
+    const height = this.SceneHeight();
+    const aspectRatio = width > 0 && height > 0 ? width / height : 16 / 9;
+    const MAX_LENGTH = Math.round(
+      Math.max(20, Math.min(50, 25 + (aspectRatio - 0.56) * (50 - 25) / (1.78 - 0.56)))
+    );
     const filteredData = this.TranscriptionData().filter(
       (entry) => entry.speech.trim().length > 0
     );
@@ -11835,19 +11840,24 @@ class AnimatedCaptions extends Node {
         captions.set(currSeconds, /* @__PURE__ */ new Map());
       }
     }
-    let index = 0;
-    for (const [seconds, shortcut] of captions.entries()) {
+    const captionEntries = Array.from(captions.entries());
+    for (let index = 0; index < captionEntries.length; index++) {
+      const [seconds, shortcut] = captionEntries[index];
+      const prevEntry = captionEntries[index - 1];
+      const nextEntry = captionEntries[index + 1];
       this.CaptionText("*" + Array.from(shortcut.values()).join(" "));
-      const prevShortcut = Array.from(captions.entries())[index - 1];
-      if (!prevShortcut || seconds - prevShortcut[0] >= this.CaptionsDuration()) {
+      const shouldFadeIn = !prevEntry || seconds - prevEntry[0] >= this.CaptionsDuration();
+      if (shouldFadeIn) {
         yield* tween(GO_UP, (value) => {
           this.Opacity(map(0, 1, easeInCubic(value)));
           this.Blur(map(100, 0, easeInCubic(value)));
         });
       }
-      index++;
       let prevSeconds = seconds;
-      if (prevShortcut) prevSeconds += GO_UP + GO_DOWN;
+      if (prevEntry && !shouldFadeIn) ;
+      else if (prevEntry) {
+        prevSeconds += GO_UP + GO_DOWN;
+      }
       let i = 0;
       for (const [startSeconds, caption] of shortcut.entries()) {
         const text = Array.from(shortcut.values()).slice(0, i).join(" ") + ` ${caption}*` + Array.from(shortcut.values()).slice(i + 1).join(" ");
@@ -11856,15 +11866,18 @@ class AnimatedCaptions extends Node {
         prevSeconds = startSeconds;
         i++;
       }
-      if (prevSeconds < this.CaptionsDuration() + seconds) {
-        yield* waitFor(
-          this.CaptionsDuration() - prevSeconds + seconds - GO_DOWN - GO_UP
-        );
+      const shouldFadeOut = !nextEntry || nextEntry[0] - seconds >= this.CaptionsDuration();
+      if (shouldFadeOut) {
+        if (prevSeconds < this.CaptionsDuration() + seconds) {
+          yield* waitFor(
+            this.CaptionsDuration() - prevSeconds + seconds - GO_DOWN - GO_UP
+          );
+        }
+        yield* tween(GO_DOWN, (value) => {
+          this.Opacity(map(1, 0, easeOutCubic(value)));
+          this.Blur(map(0, 100, easeOutCubic(value)));
+        });
       }
-      yield* tween(GO_DOWN, (value) => {
-        this.Opacity(map(1, 0, easeOutCubic(value)));
-        this.Blur(map(0, 100, easeOutCubic(value)));
-      });
     }
   }
 }
@@ -11888,6 +11901,10 @@ __decorateClass([
   initial(0),
   signal()
 ], AnimatedCaptions.prototype, "SceneHeight");
+__decorateClass([
+  initial(0),
+  signal()
+], AnimatedCaptions.prototype, "SceneWidth");
 __decorateClass([
   initial("Inter Variable"),
   signal()
@@ -12647,6 +12664,7 @@ const description = makeScene2D(function* (view) {
         {
           ref,
           SceneHeight: height,
+          SceneWidth: width,
           y: height / 2 - captionSettings.distanceFromBottom,
           CaptionsSize: 1.1,
           CaptionsDuration: 3,

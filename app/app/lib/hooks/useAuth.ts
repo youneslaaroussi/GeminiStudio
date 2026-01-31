@@ -22,9 +22,23 @@ export function useAuth() {
     // Listen for auth state changes
     const unsubscribe = onAuthStateChanged(
       auth,
-      (user) => {
+      async (user) => {
         setUser(user);
         setLoading(false);
+
+        // Set session cookie for authenticated requests (video/img tags)
+        if (user) {
+          try {
+            const idToken = await user.getIdToken();
+            await fetch('/api/auth/session', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ idToken }),
+            });
+          } catch (err) {
+            console.error('Failed to set session cookie:', err);
+          }
+        }
       },
       (error) => {
         setError(error.message);
@@ -62,6 +76,8 @@ export function useAuth() {
   const logout = async () => {
     try {
       setError(null);
+      // Clear session cookie first
+      await fetch('/api/auth/session', { method: 'DELETE' }).catch(() => {});
       await signOut(auth);
       setUser(null);
     } catch (err: any) {

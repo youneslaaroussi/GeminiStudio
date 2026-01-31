@@ -77,7 +77,7 @@ def healthcheck() -> HealthResponse:
 
 
 @router.post("/invoke", response_model=InvokeResponse)
-def invoke(
+async def invoke(
     payload: InvokeRequest,
     settings: Settings = Depends(get_settings),
 ):
@@ -90,7 +90,7 @@ def invoke(
 
     inputs = {"messages": _as_langchain_messages(payload.messages)}
     try:
-        result = graph.invoke(inputs, config=config)
+        result = await graph.ainvoke(inputs, config=config)
     except Exception as exc:  # pragma: no cover - fastapi handles formatting
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
@@ -100,7 +100,7 @@ def invoke(
 
 
 @router.post("/teleport", response_model=TeleportResponse)
-def teleport(
+async def teleport(
     payload: TeleportRequest,
     settings: Settings = Depends(get_settings),
 ):
@@ -441,7 +441,7 @@ Media Assets in Project ({len(assets_info)}):
             if telegram_chat_id:
                 await send_telegram_message(telegram_chat_id, text, settings)
 
-        def write_message_to_firebase(text: str):
+        async def write_message_to_firebase(text: str):
             """Write an intermediate message to Firebase for real-time updates."""
             if not text or not session.get("userId"):
                 return
@@ -463,9 +463,8 @@ Media Assets in Project ({len(assets_info)}):
 
             # Also send to Telegram if user has it linked
             if telegram_chat_id:
-                import asyncio
                 try:
-                    asyncio.get_event_loop().run_until_complete(send_to_telegram_async(text))
+                    await send_to_telegram_async(text)
                     console.print(f"[dim]Sent to Telegram: {telegram_chat_id}[/dim]")
                 except Exception as e:
                     console.print(f"[yellow]Failed to send to Telegram: {e}[/yellow]")
@@ -478,7 +477,7 @@ Media Assets in Project ({len(assets_info)}):
             "project_id": first_project_id,
             "branch_id": branch_id,
         }
-        for event in graph.stream({"messages": langchain_messages}, config=config, stream_mode="values", context=agent_context):
+        async for event in graph.astream({"messages": langchain_messages}, config=config, stream_mode="values", context=agent_context):
             messages = event.get("messages", [])
             if not messages:
                 continue
@@ -496,7 +495,7 @@ Media Assets in Project ({len(assets_info)}):
                     if text:
                         console.print(f"[green]AI:[/green] {text[:200]}{'...' if len(text) > 200 else ''}")
                         # Write intermediate response to Firebase
-                        write_message_to_firebase(text)
+                        await write_message_to_firebase(text)
                         last_response = text
 
             elif isinstance(last_msg, ToolMessage):

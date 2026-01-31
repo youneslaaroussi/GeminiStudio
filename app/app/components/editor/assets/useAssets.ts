@@ -7,12 +7,16 @@ import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { toast } from "sonner";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
+import { extractMetadataFromUrl } from "@/app/lib/media/mediabunny";
+
+const TRANSCODE_POLL_MS = 2500;
 
 export function useAssets() {
   const [assets, setAssets] = useState<RemoteAsset[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [assetDurations, setAssetDurations] = useState<Record<string, number>>({});
+  const [transcodingAssetIds, setTranscodingAssetIds] = useState<Set<string>>(new Set());
 
   const publishAssets = useAssetsStore((state) => state.setAssets);
   const upsertAssetMetadata = useAssetsStore((state) => state.upsertMetadata);
@@ -23,9 +27,9 @@ export function useAssets() {
   const assetsRef = useRef<RemoteAsset[]>([]);
   const previousAssetsRef = useRef<RemoteAsset[] | null>(null);
 
-  const fetchAssets = useCallback(async () => {
+  const fetchAssets = useCallback(async (silent = false) => {
     if (!projectId) return;
-    setIsLoading(true);
+    if (!silent) setIsLoading(true);
     setError(null);
     try {
       const url = new URL("/api/assets", window.location.origin);
@@ -40,14 +44,59 @@ export function useAssets() {
         throw new Error("Failed to load assets");
       }
       const data = (await response.json()) as { assets: RemoteAsset[] };
-      setAssets(data.assets ?? []);
+      const list = data.assets ?? [];
+      setAssets((prev) => {
+        const prevMap = new Map(prev.map((a) => [a.id, a]));
+        return list.map((serverAsset) => {
+          const existing = prevMap.get(serverAsset.id);
+          if (existing) {
+            return {
+              ...serverAsset,
+              description: serverAsset.description || existing.description,
+            };
+          }
+          return serverAsset;
+        });
+      });
+      setTranscodingAssetIds((prev) => {
+        if (prev.size === 0) return prev;
+        const next = new Set(prev);
+        prev.forEach((id) => {
+          const asset = list.find((a) => a.id === id);
+          if (!asset) return;
+          const name = asset.name?.toLowerCase() ?? "";
+          // Video transcode complete: name ends with .mp4
+          // Image convert complete: name ends with .png or mimeType changed to png
+          const isTranscodeComplete = name.endsWith(".mp4");
+          const isConvertComplete = name.endsWith(".png") || asset.mimeType === "image/png";
+          if (isTranscodeComplete || isConvertComplete) {
+            next.delete(id);
+          }
+        });
+        return next;
+      });
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : "Could not load assets");
+      if (!silent) setError(err instanceof Error ? err.message : "Could not load assets");
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, [projectId]);
+
+  const markAssetsTranscoding = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    setTranscodingAssetIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (transcodingAssetIds.size === 0) return;
+    const t = setInterval(() => void fetchAssets(true), TRANSCODE_POLL_MS);
+    return () => clearInterval(t);
+  }, [transcodingAssetIds.size, fetchAssets]);
 
   const addAssets = useCallback((newAssets: RemoteAsset[]) => {
     setAssets((prev) => [...newAssets, ...prev]);
@@ -129,7 +178,20 @@ export function useAssets() {
         }
         const data = (await response.json()) as { assets: RemoteAsset[] };
         previousAssetsRef.current = null;
-        setAssets(data.assets ?? []);
+        // Merge server response with existing assets to preserve local fields like description
+        setAssets((prev) => {
+          const prevMap = new Map(prev.map((a) => [a.id, a]));
+          return (data.assets ?? []).map((serverAsset) => {
+            const existing = prevMap.get(serverAsset.id);
+            if (existing) {
+              return {
+                ...serverAsset,
+                description: serverAsset.description || existing.description,
+              };
+            }
+            return serverAsset;
+          });
+        });
         return true;
       } catch (err) {
         console.error("Failed to reorder assets", err);
@@ -145,6 +207,9 @@ export function useAssets() {
     },
     [projectId]
   );
+
+  const removeClipsByAssetId = useProjectStore((s) => s.removeClipsByAssetId);
+  const removeClipsByAssetIds = useProjectStore((s) => s.removeClipsByAssetIds);
 
   const deleteAsset = useCallback(
     async (assetId: string): Promise<boolean> => {
@@ -165,6 +230,8 @@ export function useAssets() {
           throw new Error(data.error || "Failed to delete asset");
         }
         setAssets((prev) => prev.filter((a) => a.id !== assetId));
+        // Remove all clips that reference this asset from the timeline
+        removeClipsByAssetId(assetId);
         toast.success("Asset deleted");
         return true;
       } catch (err) {
@@ -175,7 +242,65 @@ export function useAssets() {
         return false;
       }
     },
-    [projectId]
+    [projectId, removeClipsByAssetId]
+  );
+
+  const deleteAssets = useCallback(
+    async (assetIds: string[]): Promise<void> => {
+      if (!projectId) {
+        toast.error("No project selected");
+        return;
+      }
+      if (assetIds.length === 0) return;
+      const ids = [...assetIds];
+      const toRestore = assets.filter((a) => ids.includes(a.id));
+      setAssets((prev) => prev.filter((a) => !ids.includes(a.id)));
+      try {
+        const authHeaders = await getAuthHeaders();
+        const results = await Promise.allSettled(
+          ids.map(async (assetId) => {
+            const url = new URL(`/api/assets/${assetId}`, window.location.origin);
+            url.searchParams.set("projectId", projectId);
+            const response = await fetch(url.toString(), {
+              method: "DELETE",
+              headers: authHeaders,
+            });
+            if (!response.ok) {
+              const data = (await response.json()) as { error?: string };
+              throw new Error(data.error || "Failed to delete asset");
+            }
+          })
+        );
+        const failedIndices = results
+          .map((r, i) => (r.status === "rejected" ? i : -1))
+          .filter((i) => i >= 0);
+        if (failedIndices.length > 0) {
+          const failedIds = new Set(failedIndices.map((i) => ids[i]));
+          const restored = toRestore.filter((a) => failedIds.has(a.id));
+          setAssets((prev) => [...prev, ...restored]);
+          // Remove clips for successfully deleted assets
+          const successfulIds = ids.filter((id) => !failedIds.has(id));
+          if (successfulIds.length > 0) {
+            removeClipsByAssetIds(successfulIds);
+          }
+          toast.error("Failed to delete some assets", {
+            description: `${failedIndices.length} of ${ids.length} could not be deleted`,
+          });
+        } else {
+          // Remove all clips that reference the deleted assets from the timeline
+          removeClipsByAssetIds(ids);
+          toast.success(
+            ids.length === 1 ? "Asset deleted" : `${ids.length} assets deleted`
+          );
+        }
+      } catch (err) {
+        setAssets((prev) => [...prev, ...toRestore]);
+        toast.error("Failed to delete assets", {
+          description: err instanceof Error ? err.message : "Unknown error",
+        });
+      }
+    },
+    [projectId, assets, removeClipsByAssetIds]
   );
 
   const resolveAssetDuration = useCallback(
@@ -252,7 +377,7 @@ export function useAssets() {
 
   useEffect(() => {
     let cancelled = false;
-    const mediaElements: Array<HTMLMediaElement | HTMLImageElement> = [];
+    const abortController = new AbortController();
 
     const assetsMissingMetadata = assets.filter((asset) => {
       if (assetDurations[asset.id] != null) return false;
@@ -270,103 +395,77 @@ export function useAssets() {
       return true;
     });
 
-    assetsMissingMetadata.forEach((asset) => {
-      const defaultDuration =
-        DEFAULT_ASSET_DURATIONS[asset.type] ?? DEFAULT_ASSET_DURATIONS.other;
-      const hasServerDimensions = asset.width != null && asset.height != null;
+    // Process assets using mediabunny for metadata extraction
+    const processAssets = async () => {
+      for (const asset of assetsMissingMetadata) {
+        if (cancelled) break;
 
-      if (asset.type === "image") {
-        setAssetDurations((prev) => {
-          if (prev[asset.id] != null) return prev;
-          return { ...prev, [asset.id]: defaultDuration };
-        });
-        upsertAssetMetadata(asset.id, { duration: defaultDuration });
+        const defaultDuration =
+          DEFAULT_ASSET_DURATIONS[asset.type] ?? DEFAULT_ASSET_DURATIONS.other;
+        const hasServerDimensions = asset.width != null && asset.height != null;
 
-        if (hasServerDimensions) {
-          upsertAssetMetadata(asset.id, {
-            width: asset.width,
-            height: asset.height,
+        // For images, use default duration and only extract dimensions if needed
+        if (asset.type === "image") {
+          setAssetDurations((prev) => {
+            if (prev[asset.id] != null) return prev;
+            return { ...prev, [asset.id]: defaultDuration };
           });
-          return;
+          upsertAssetMetadata(asset.id, { duration: defaultDuration });
+
+          if (hasServerDimensions) {
+            upsertAssetMetadata(asset.id, {
+              width: asset.width,
+              height: asset.height,
+            });
+            continue;
+          }
         }
 
-        const img = new Image();
-        img.src = asset.url;
-        img.onload = () => {
-          if (cancelled) return;
-          const width = img.naturalWidth;
-          const height = img.naturalHeight;
-          upsertAssetMetadata(asset.id, {
-            duration: defaultDuration,
-            width,
-            height,
+        try {
+          // Use mediabunny to extract metadata
+          const mediaType = asset.type === "other" ? "video" : asset.type;
+          const metadata = await extractMetadataFromUrl(asset.url, mediaType);
+          
+          if (cancelled) break;
+
+          const duration =
+            metadata.duration != null && metadata.duration > 0
+              ? metadata.duration
+              : defaultDuration;
+
+          setAssetDurations((prev) => {
+            if (prev[asset.id] && prev[asset.id] === duration) return prev;
+            return { ...prev, [asset.id]: duration };
           });
-          void persistMetadataToServer(asset.id, { width, height, duration: defaultDuration });
-          img.remove();
-        };
-        img.onerror = () => img.remove();
-        mediaElements.push(img);
-        return;
+
+          const width = metadata.width;
+          const height = metadata.height;
+
+          upsertAssetMetadata(asset.id, { duration, width, height });
+
+          // Persist to server if we extracted new information
+          if (!hasServerDimensions && (width || height || duration !== defaultDuration)) {
+            void persistMetadataToServer(asset.id, { width, height, duration });
+          }
+        } catch (err) {
+          if (cancelled) break;
+          console.warn(`Failed to extract metadata for asset ${asset.id}:`, err);
+          
+          // Fall back to default duration on error
+          setAssetDurations((prev) => {
+            if (prev[asset.id] != null) return prev;
+            return { ...prev, [asset.id]: defaultDuration };
+          });
+          upsertAssetMetadata(asset.id, { duration: defaultDuration });
+        }
       }
+    };
 
-      const media =
-        asset.type === "audio"
-          ? document.createElement("audio")
-          : document.createElement("video");
-      media.preload = "metadata";
-      media.src = asset.url;
-      media.onloadedmetadata = () => {
-        if (cancelled) return;
-        const duration =
-          Number.isFinite(media.duration) && media.duration > 0
-            ? media.duration
-            : defaultDuration;
-        setAssetDurations((prev) => {
-          if (prev[asset.id] && prev[asset.id] === duration) return prev;
-          return { ...prev, [asset.id]: duration };
-        });
-
-        const width =
-          asset.type === "video" && media instanceof HTMLVideoElement
-            ? media.videoWidth || undefined
-            : undefined;
-        const height =
-          asset.type === "video" && media instanceof HTMLVideoElement
-            ? media.videoHeight || undefined
-            : undefined;
-
-        upsertAssetMetadata(asset.id, { duration, width, height });
-
-        if (!hasServerDimensions && (width || height || duration !== defaultDuration)) {
-          void persistMetadataToServer(asset.id, { width, height, duration });
-        }
-
-        media.remove();
-      };
-      media.onerror = () => {
-        if (cancelled) return;
-        setAssetDurations((prev) => {
-          if (prev[asset.id] != null) return prev;
-          return { ...prev, [asset.id]: defaultDuration };
-        });
-        upsertAssetMetadata(asset.id, { duration: defaultDuration });
-        media.remove();
-      };
-      mediaElements.push(media);
-    });
+    void processAssets();
 
     return () => {
       cancelled = true;
-      mediaElements.forEach((media) => {
-        if (media instanceof HTMLImageElement) {
-          media.onload = null;
-          media.onerror = null;
-        } else {
-          media.onloadedmetadata = null;
-          media.onerror = null;
-        }
-        media.remove();
-      });
+      abortController.abort();
     };
   }, [assets, assetDurations, upsertAssetMetadata, persistMetadataToServer]);
 
@@ -382,7 +481,10 @@ export function useAssets() {
     renameAsset,
     reorderAssets,
     deleteAsset,
+    deleteAssets,
     resolveAssetDuration,
     startTranscription,
+    transcodingAssetIds,
+    markAssetsTranscoding,
   };
 }

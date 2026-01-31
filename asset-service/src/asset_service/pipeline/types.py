@@ -36,13 +36,19 @@ class StoredAsset:
     file_name: str
     mime_type: str
     size: int
-    uploaded_at: str
+    uploaded_at: str = ""
     gcs_uri: str | None = None
+    object_name: str | None = None
     signed_url: str | None = None
     width: int | None = None
     height: int | None = None
     duration: float | None = None
     source: str = "api"
+    # Transcode-related fields
+    transcoded: bool = False
+    original_gcs_uri: str | None = None
+    original_object_name: str | None = None
+    original_signed_url: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> StoredAsset:
@@ -55,16 +61,21 @@ class StoredAsset:
             size=data.get("size", 0),
             uploaded_at=data.get("uploadedAt", data.get("uploaded_at", "")),
             gcs_uri=data.get("gcsUri", data.get("gcs_uri")),
+            object_name=data.get("objectName", data.get("object_name")),
             signed_url=data.get("signedUrl", data.get("signed_url")),
             width=data.get("width"),
             height=data.get("height"),
             duration=data.get("duration"),
             source=data.get("source", "api"),
+            transcoded=data.get("transcoded", False),
+            original_gcs_uri=data.get("originalGcsUri", data.get("original_gcs_uri")),
+            original_object_name=data.get("originalObjectName", data.get("original_object_name")),
+            original_signed_url=data.get("originalSignedUrl", data.get("original_signed_url")),
         )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary (camelCase for Firestore compatibility)."""
-        return {
+        result = {
             "id": self.id,
             "name": self.name,
             "fileName": self.file_name,
@@ -72,12 +83,21 @@ class StoredAsset:
             "size": self.size,
             "uploadedAt": self.uploaded_at,
             "gcsUri": self.gcs_uri,
+            "objectName": self.object_name,
             "signedUrl": self.signed_url,
             "width": self.width,
             "height": self.height,
             "duration": self.duration,
             "source": self.source,
+            "transcoded": self.transcoded,
         }
+        if self.original_gcs_uri:
+            result["originalGcsUri"] = self.original_gcs_uri
+        if self.original_object_name:
+            result["originalObjectName"] = self.original_object_name
+        if self.original_signed_url:
+            result["originalSignedUrl"] = self.original_signed_url
+        return result
 
 
 @dataclass
