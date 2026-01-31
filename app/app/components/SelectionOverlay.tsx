@@ -35,6 +35,8 @@ interface SelectionOverlayProps {
   transform: { zoom: number; x: number; y: number };
   containerSize: { width: number; height: number };
   renderScale: number;
+  /** Called when user releases after dragging (so the scene can skip hitbox selection on that release) */
+  onDragEnd?: () => void;
 }
 
 interface ScreenRect {
@@ -58,6 +60,7 @@ export function SelectionOverlay({
   transform,
   containerSize,
   renderScale,
+  onDragEnd,
 }: SelectionOverlayProps) {
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
   const layers = useProjectStore((s) => s.project.layers);
@@ -367,6 +370,8 @@ export function SelectionOverlay({
   );
 
   const handleMouseUp = useCallback(() => {
+    // Notify parent to skip hitbox selection on this release (avoids selecting whatever is under cursor)
+    if (isDragging) onDragEnd?.();
     setIsDragging(false);
     setIsResizing(null);
     
@@ -376,7 +381,7 @@ export function SelectionOverlay({
       setOptimisticRect(null);
       optimisticTimeoutRef.current = null;
     }, OPTIMISTIC_TIMEOUT_MS);
-  }, []);
+  }, [onDragEnd]);
 
   useEffect(() => {
     if (!isDragging && !isResizing) return;

@@ -1,1 +1,1 @@
-export const TRACK_LABEL_WIDTH = 160;
+export const TRACK_LABEL_WIDTH = 220;

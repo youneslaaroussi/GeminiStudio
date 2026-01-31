@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Sparkles, RefreshCw, PauseCircle, CheckCircle2, XCircle, ChevronDown } from "lucide-react";
+import { Sparkles, RefreshCw, PauseCircle, CheckCircle2, XCircle, ChevronDown, Layers } from "lucide-react";
 import { toast } from "sonner";
-import type { VideoClip } from "@/app/types/timeline";
+import type { VideoClip, Layer } from "@/app/types/timeline";
 import {
   videoEffectDefinitions,
   getVideoEffectDefinition,
@@ -277,6 +277,86 @@ export function VideoEffectsPanel({ clip }: VideoEffectsPanelProps) {
     }
   }, [asset, selectedEffect, isSubmitting, projectId, formValues, upsertJob, ensurePolling]);
 
+  // Get store actions for updating clip and managing layers
+  const updateClip = useProjectStore((state) => state.updateClip);
+  const addLayer = useProjectStore((state) => state.addLayer);
+  const reorderLayers = useProjectStore((state) => state.reorderLayers);
+  const layers = useProjectStore((state) => state.project.layers);
+
+  /**
+   * Apply a mask to the current clip:
+   * 1. Update current clip to foreground (include mask)
+   * 2. Create a background layer below with the same clip but exclude mask
+   */
+  const handleApplyMask = useCallback(
+    (job: VideoEffectJob) => {
+      if (!clip || !job.resultAssetId || !job.resultAssetUrl) {
+        toast.error("Cannot apply mask", { description: "Missing mask asset data" });
+        return;
+      }
+
+      // Check if this is a SAM-2 binary mask job
+      const isSam2Job = job.effectId?.includes("sam2");
+      if (!isSam2Job) {
+        toast.error("Cannot apply mask", { description: "Only SAM-2 masks can be applied" });
+        return;
+      }
+
+      try {
+        // Find which layer contains this clip
+        const currentLayerIndex = layers.findIndex((l) =>
+          l.clips.some((c) => c.id === clip.id)
+        );
+
+        // Update the current clip to become the foreground (masked) version
+        const baseName = clip.name.replace(/ \((Foreground|Background)\)$/, "");
+        updateClip(clip.id, {
+          name: `${baseName} (Foreground)`,
+          maskAssetId: job.resultAssetId,
+          maskSrc: job.resultAssetUrl,
+          maskMode: "include",
+        });
+
+        // Create background clip with same properties but exclude mask
+        const backgroundClip: VideoClip = {
+          ...clip,
+          id: crypto.randomUUID(),
+          name: `${baseName} (Background)`,
+          maskAssetId: job.resultAssetId,
+          maskSrc: job.resultAssetUrl,
+          maskMode: "exclude",
+        };
+
+        // Create background layer
+        const backgroundLayer: Layer = {
+          id: crypto.randomUUID(),
+          name: "Background",
+          type: "video",
+          clips: [backgroundClip],
+        };
+
+        // Add background layer (goes to end)
+        addLayer(backgroundLayer);
+
+        // Move it below the current clip's layer
+        // New layer is at index layers.length, move it to currentLayerIndex
+        if (currentLayerIndex !== -1) {
+          reorderLayers(layers.length, currentLayerIndex);
+        }
+
+        toast.success("Mask applied!", {
+          description: "Foreground updated, background layer added below.",
+        });
+      } catch (error) {
+        console.error("Failed to apply mask:", error);
+        toast.error("Failed to apply mask", {
+          description: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    },
+    [clip, updateClip, addLayer, reorderLayers, layers]
+  );
+
   if (!asset) {
     return (
       <div className="rounded-md border border-dashed border-border bg-muted/20 p-4 text-xs text-muted-foreground">
@@ -439,45 +519,59 @@ export function VideoEffectsPanel({ clip }: VideoEffectsPanelProps) {
             </button>
           </div>
 
-          <div>
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-foreground">Recent runs</p>
-              {jobs.length === 0 && (
-                <span className="text-[10px] text-muted-foreground">
-                  No jobs yet
-                </span>
-              )}
-            </div>
-            {jobs.length > 0 && (
-              <div className="mt-2 space-y-2">
+          {/* Recent Runs */}
+          <div className="space-y-2">
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+              History
+            </p>
+            {jobs.length === 0 ? (
+              <p className="text-xs text-muted-foreground/60 py-2">
+                No effects run yet
+              </p>
+            ) : (
+              <div className="space-y-1.5">
                 {jobs.map((job) => (
                   <div
                     key={job.id}
-                    className="rounded-md border border-border bg-background/80 p-3 text-[11px]"
+                    className="group flex items-center gap-3 rounded-lg bg-background/60 px-3 py-2.5 hover:bg-background/80 transition-colors"
                   >
-                    <div className="flex items-center gap-2">
-                      <JobStatusIcon status={job.status} />
-                      <div className="flex-1">
-                        <p className="font-medium text-foreground">
-                          {job.effectLabel ?? job.effectId}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {new Date(job.createdAt).toLocaleString()}
-                        </p>
-                      </div>
-                      {job.resultAssetUrl && (
+                    <JobStatusIcon status={job.status} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-foreground truncate">
+                        {job.effectLabel ?? job.effectId}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {new Date(job.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                    {job.resultAssetUrl && (
+                      <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
                         <a
                           href={job.resultAssetUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-[10px] font-medium text-primary hover:underline"
+                          className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                         >
-                          View
+                          Preview
                         </a>
-                      )}
-                    </div>
+                        {job.status === "completed" && job.effectId?.includes("sam2") && (
+                          <>
+                            <span className="text-border">·</span>
+                            <button
+                              type="button"
+                              onClick={() => handleApplyMask(job)}
+                              className="text-[10px] font-medium text-primary hover:text-primary/80 transition-colors"
+                            >
+                              Apply
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
                     {job.error && (
-                      <p className="mt-2 text-[10px] text-red-400">{job.error}</p>
+                      <p className="text-[10px] text-red-400 truncate max-w-[120px]" title={job.error}>
+                        {job.error}
+                      </p>
                     )}
                   </div>
                 ))}

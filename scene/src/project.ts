@@ -3,6 +3,7 @@ import nle_timeline from './scenes/nle_timeline?scene';
 
 export default makeProject({
   name: 'gemini-studio-scene',
+  experimentalFeatures: true,
   scenes: [nle_timeline],
   variables: {
     layers: [] as Array<{

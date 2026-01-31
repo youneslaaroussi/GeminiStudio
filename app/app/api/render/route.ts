@@ -168,6 +168,7 @@ async function getAssetSignedUrl(userId: string, projectId: string, assetId: str
 /**
  * Transform clip URLs from local to signed GCS URLs
  * Returns the transformed clip and optionally the assetId -> signedUrl mapping
+ * For video clips with masks, also resolves maskAssetId to maskSrc
  */
 async function transformClipUrls(
   clip: TimelineClip,
@@ -179,7 +180,29 @@ async function transformClipUrls(
     return clip;
   }
 
+  // Transform main asset URL
   const signedUrl = await getAssetSignedUrl(userId, projectId, clip.assetId);
+  
+  // Handle video clips with masks separately to satisfy TypeScript
+  if (clip.type === 'video') {
+    let videoClip = signedUrl ? { ...clip, src: signedUrl } : clip;
+    if (signedUrl) {
+      urlMap.set(clip.assetId, signedUrl);
+    }
+    
+    // Resolve maskAssetId to maskSrc for masked video clips
+    if (clip.maskAssetId) {
+      const maskSignedUrl = await getAssetSignedUrl(userId, projectId, clip.maskAssetId);
+      if (maskSignedUrl) {
+        urlMap.set(clip.maskAssetId, maskSignedUrl);
+        videoClip = { ...videoClip, maskSrc: maskSignedUrl };
+      }
+    }
+    
+    return videoClip;
+  }
+
+  // Non-video clips
   if (signedUrl) {
     urlMap.set(clip.assetId, signedUrl);
     return { ...clip, src: signedUrl };

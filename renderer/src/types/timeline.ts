@@ -48,6 +48,8 @@ export interface BaseClip {
   assetId?: string;
 }
 
+export type MaskMode = 'include' | 'exclude';
+
 export interface VideoClip extends BaseClip {
   type: 'video';
   src: string;
@@ -55,6 +57,10 @@ export interface VideoClip extends BaseClip {
   height?: number;
   focus?: Focus;
   objectFit?: ObjectFit;
+  // Mask compositing properties
+  maskAssetId?: string;   // Reference to mask asset (binary video)
+  maskSrc?: string;       // Resolved URL for mask video
+  maskMode?: MaskMode;    // 'include' = source-in, 'exclude' = source-out
 }
 
 export interface AudioClip extends BaseClip {

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useProjectStore } from "@/app/lib/store/project-store";
+import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { EditableInput } from "@/app/components/ui/EditableInput";
-import type { VideoClip } from "@/app/types/timeline";
+import type { VideoClip, MaskMode } from "@/app/types/timeline";
 import { DEFAULT_CAPTION_SETTINGS } from "@/app/types/timeline";
 import { VideoEffectsPanel } from "../../VideoEffectsPanel";
 import {
@@ -14,7 +15,7 @@ import {
   type ClipUpdateHandler,
 } from "../utils";
 import { Button } from "@/components/ui/button";
-import { Settings, Sparkles, Captions } from "lucide-react";
+import { Settings, Sparkles, Captions, Layers } from "lucide-react";
 
 interface VideoClipSettingsProps {
   clip: VideoClip;
@@ -39,8 +40,22 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("settings");
   const project = useProjectStore((s) => s.project);
   const updateProjectSettings = useProjectStore((s) => s.updateProjectSettings);
+  const assets = useAssetsStore((s) => s.assets);
 
   const captionSettings = project.captionSettings ?? DEFAULT_CAPTION_SETTINGS;
+
+  // Get video assets that could be used as masks (exclude the current clip's asset)
+  const videoAssets = useMemo(() => {
+    return assets.filter(
+      (asset) => asset.type === "video" && asset.id !== clip.assetId
+    );
+  }, [assets, clip.assetId]);
+
+  // Find the currently selected mask asset
+  const selectedMaskAsset = useMemo(() => {
+    if (!clip.maskAssetId) return null;
+    return assets.find((a) => a.id === clip.maskAssetId) ?? null;
+  }, [assets, clip.maskAssetId]);
 
   return (
     <div className="space-y-3">
@@ -195,6 +210,83 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Mask Settings */}
+          <div className={cardClassName}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Layers className="size-3.5 text-amber-400" />
+                <span className="text-xs font-medium">Mask</span>
+              </div>
+              {clip.maskAssetId && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs text-destructive"
+                  onClick={() => onUpdate({ maskAssetId: undefined, maskSrc: undefined, maskMode: undefined })}
+                >
+                  Remove
+                </Button>
+              )}
+            </div>
+
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Apply a binary mask video to show/hide parts of this clip.
+            </p>
+
+            <div className="space-y-2 pt-2">
+              <div>
+                <label className={labelClassName}>Mask Asset</label>
+                <select
+                  value={clip.maskAssetId ?? ""}
+                  onChange={(e) => {
+                    const assetId = e.target.value || undefined;
+                    const asset = assetId ? assets.find((a) => a.id === assetId) : null;
+                    onUpdate({
+                      maskAssetId: assetId,
+                      maskSrc: asset?.signedUrl || asset?.url || undefined,
+                      maskMode: assetId ? (clip.maskMode ?? "include") : undefined,
+                    });
+                  }}
+                  className={inputClassName}
+                >
+                  <option value="">None</option>
+                  {videoAssets.map((asset) => (
+                    <option key={asset.id} value={asset.id}>
+                      {asset.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {clip.maskAssetId && (
+                <div>
+                  <label className={labelClassName}>Mask Mode</label>
+                  <select
+                    value={clip.maskMode ?? "include"}
+                    onChange={(e) => onUpdate({ maskMode: e.target.value as MaskMode })}
+                    className={inputClassName}
+                  >
+                    <option value="include">Include (show only masked area)</option>
+                    <option value="exclude">Exclude (hide masked area)</option>
+                  </select>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {clip.maskMode === "exclude"
+                      ? "White areas in the mask will be hidden."
+                      : "White areas in the mask will be visible."}
+                  </p>
+                </div>
+              )}
+
+              {selectedMaskAsset && (
+                <div className="pt-2 border-t border-border">
+                  <p className="text-[10px] text-muted-foreground">
+                    Using: <span className="text-foreground">{selectedMaskAsset.name}</span>
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

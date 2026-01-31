@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useRef, useState } from "react";
-import { Video, Music, Type, Image as ImageIcon, Trash2, GripVertical } from "lucide-react";
+import { Video, Music, Type, Image as ImageIcon, Trash2, GripVertical, Eye, EyeOff } from "lucide-react";
 import type { Layer } from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { Clip } from "./Clip";
@@ -65,7 +65,9 @@ export function LayerTrackLabel({
   dropPosition,
 }: LayerTrackLabelProps) {
   const deleteLayer = useProjectStore((s) => s.deleteLayer);
+  const setLayerHidden = useProjectStore((s) => s.setLayerHidden);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const isHidden = layer.hidden === true;
 
   const handleOpenDeleteDialog = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -121,7 +123,10 @@ export function LayerTrackLabel({
   return (
     <>
       <div
-        className="relative flex items-stretch border-b border-border transition-colors"
+        className={cn(
+          "relative flex items-stretch border-b border-border transition-colors transition-opacity",
+          isHidden && "opacity-50"
+        )}
         data-layer-id={layer.id}
         onDragOver={handleLayerDragOver}
         onDrop={handleLayerDrop}
@@ -137,30 +142,43 @@ export function LayerTrackLabel({
           className="flex shrink-0 items-center justify-between gap-1 bg-muted/30 px-2 py-2"
           style={{ width: labelWidth }}
         >
-          <div className="flex items-center gap-1.5">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
             <div
               draggable
               onDragStart={handleLayerDragStart}
               onDragEnd={onDragEnd}
-              className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              className="shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground transition-colors"
               title="Drag to reorder"
             >
               <GripVertical className="size-3.5" />
             </div>
             {typeIcon[layer.type]}
-            <div className="flex flex-col">
-              <span className="text-xs font-medium text-muted-foreground">{layer.name}</span>
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+              <span className="truncate text-xs font-medium text-muted-foreground" title={layer.name}>{layer.name}</span>
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground/70">{layer.type}</span>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleOpenDeleteDialog}
-            className="rounded-sm p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
-            title="Delete layer"
-          >
-            <Trash2 className="size-3" />
-          </button>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setLayerHidden(layer.id, !isHidden);
+              }}
+              className="rounded-sm p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              title={isHidden ? "Show layer" : "Hide layer"}
+            >
+              {isHidden ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenDeleteDialog}
+              className="rounded-sm p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
+              title="Delete layer"
+            >
+              <Trash2 className="size-3" />
+            </button>
+          </div>
         </div>
       </div>
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
@@ -250,12 +268,15 @@ export function LayerTrackBody({ layer, trackWidth }: LayerTrackBodyProps) {
 
   const sortedClips = [...layer.clips].sort((a, b) => a.start - b.start);
 
+  const isHidden = layer.hidden === true;
+
   return (
     <div
       ref={trackRef}
       className={cn(
-        "relative h-12 border-b border-border bg-muted/10 transition-colors",
-        isDragOver && "bg-muted/20 ring-2 ring-primary/40 ring-inset"
+        "relative h-12 border-b border-border bg-muted/10 transition-colors transition-opacity",
+        isDragOver && "bg-muted/20 ring-2 ring-primary/40 ring-inset",
+        isHidden && "opacity-50"
       )}
       style={{ width: trackWidth }}
       data-layer-id={layer.id}
@@ -425,19 +446,19 @@ export function LayerTrack({ layer, layerIndex, width, labelWidth, onDragStart, 
           className="sticky left-0 z-10 flex shrink-0 items-center justify-between gap-1 border-r border-border bg-muted/30 px-2 py-2 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]"
           style={{ width: labelWidth }}
         >
-          <div className="flex items-center gap-1.5">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
             <div
               draggable
               onDragStart={handleLayerDragStart}
               onDragEnd={handleLayerDragEnd}
-              className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              className="shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground transition-colors"
               title="Drag to reorder"
             >
               <GripVertical className="size-3.5" />
             </div>
             {typeIcon[layer.type]}
-            <div className="flex flex-col">
-              <span className="text-xs font-medium text-muted-foreground">
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+              <span className="truncate text-xs font-medium text-muted-foreground" title={layer.name}>
                 {layer.name}
               </span>
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
@@ -448,7 +469,7 @@ export function LayerTrack({ layer, layerIndex, width, labelWidth, onDragStart, 
           <button
             type="button"
             onClick={handleOpenDeleteDialog}
-            className="rounded-sm p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
+            className="shrink-0 rounded-sm p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
             title="Delete layer"
           >
             <Trash2 className="size-3" />

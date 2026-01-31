@@ -45,6 +45,7 @@ interface ProjectStore {
   isOnline: boolean;
 
   addLayer: (layer: Layer) => void;
+  setLayerHidden: (layerId: string, hidden: boolean) => void;
   addClip: (clip: TimelineClip, layerId?: string) => void;
   deleteLayer: (layerId: string) => void;
   reorderLayers: (fromIndex: number, toIndex: number) => void;
@@ -108,6 +109,7 @@ export const createLayerTemplate = (type: ClipType, name?: string): Layer => ({
   name: name ?? `${type.charAt(0).toUpperCase() + type.slice(1)} Layer`,
   type,
   clips: [],
+  hidden: false,
 });
 
 const findClipLocation = (project: Project, clipId: string) => {
@@ -416,6 +418,19 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
             layers: [...state.project.layers, layer],
           },
         }));
+      },
+
+      setLayerHidden: (layerId, hidden) => {
+        applySyncedChange((state) => {
+          const index = state.project.layers.findIndex((l) => l.id === layerId);
+          if (index === -1) return null;
+          const layers = state.project.layers.map((l, i) =>
+            i === index ? { ...l, hidden } : l
+          );
+          return {
+            project: { ...state.project, layers },
+          };
+        });
       },
 
       deleteLayer: (layerId: string) => {

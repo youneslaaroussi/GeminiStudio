@@ -11,7 +11,7 @@ const replicateVersionSam2 =
 const sam2FormSchema = z.object({
   maskType: z
     .enum(["highlighted", "binary"])
-    .default("highlighted")
+    .default("binary")
     .describe("Controls whether the selected object is highlighted or isolated."),
   videoFps: z
     .number()

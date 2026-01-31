@@ -86,6 +86,9 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   
   const setSelectedClip = useProjectStore((s) => s.setSelectedClip);
 
+  // Skip hitbox/selection on the next click when user just released from dragging the selection overlay
+  const skipNextSceneClickRef = useRef(false);
+
   useEffect(() => {
     latestLayersRef.current = layers;
   }, [layers]);
@@ -242,6 +245,11 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   const handleSceneClick = useCallback(
     (e: React.MouseEvent) => {
       if (!player || !containerRef.current) return;
+      // Don't run hitbox logic when we just released from dragging the selection overlay
+      if (skipNextSceneClickRef.current) {
+        skipNextSceneClickRef.current = false;
+        return;
+      }
       // Don't handle if shift is held (that's for panning)
       if (e.shiftKey) return;
 
@@ -623,6 +631,9 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
                 transform={transform}
                 containerSize={containerSize}
                 renderScale={sceneConfig.renderScale}
+                onDragEnd={() => {
+                  skipNextSceneClickRef.current = true;
+                }}
               />
             )}
           </div>

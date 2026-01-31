@@ -33,6 +33,8 @@ import { useShortcuts } from "@/app/hooks/use-shortcuts";
 import { usePageReloadBlocker } from "@/app/hooks/use-page-reload-blocker";
 import { CommandMenu } from "./CommandMenu";
 import type { ProjectTranscription } from "@/app/types/transcription";
+import type { VideoClip } from "@/app/types/timeline";
+import { getProxiedMediaUrl } from "@/app/components/ui/CoordinatePicker";
 
 export function EditorLayout() {
   const [player, setPlayer] = useState<Player | null>(null);
@@ -85,6 +87,25 @@ export function EditorLayout() {
   const project = useProjectStore((s) => s.project);
   const projectId = useProjectStore((s) => s.projectId);
   const layers = project.layers;
+  const visibleLayers = useMemo(() => layers.filter((l) => !l.hidden), [layers]);
+
+  // Proxy maskSrc URLs to avoid CORS issues with WebGL shaders in preview
+  const layersWithProxiedMasks = useMemo(() => {
+    return visibleLayers.map(layer => {
+      if (layer.type !== 'video') return layer;
+      return {
+        ...layer,
+        clips: layer.clips.map(clip => {
+          const videoClip = clip as VideoClip;
+          if (!videoClip.maskSrc) return clip;
+          return {
+            ...clip,
+            maskSrc: getProxiedMediaUrl(videoClip.maskSrc),
+          };
+        }),
+      };
+    });
+  }, [visibleLayers]);
   const currentTime = useProjectStore((s) => s.currentTime);
   const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
   const getDuration = useProjectStore((s) => s.getDuration);
@@ -566,7 +587,7 @@ export function EditorLayout() {
                           isPlaying={isPlaying}
                           onTogglePlay={togglePlay}
                           onSeek={setCurrentTime}
-                          layers={layers}
+                          layers={layersWithProxiedMasks}
                           duration={getDuration()}
                           currentTime={currentTime}
                           onTimeUpdate={handleTimeUpdate}

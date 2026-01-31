@@ -158,7 +158,7 @@ SAM2_VIDEO_DEFINITION = VideoEffectDefinition(
         ),
     ],
     default_values={
-        "maskType": "highlighted",
+        "maskType": "binary",
         "videoFps": 25,
         "clickFrames": "1",
         "clickObjectIds": "",
