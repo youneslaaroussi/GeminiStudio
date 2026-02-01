@@ -7,7 +7,7 @@ import { auth } from '@/app/lib/server/firebase';
 import Image from 'next/image';
 
 /**
- * Magic link demo page for hackathon judges.
+ * Magic link demo page for reviewers.
  * Auto-authenticates and redirects to the demo project.
  *
  * Usage: /demo?token=YOUR_SECRET

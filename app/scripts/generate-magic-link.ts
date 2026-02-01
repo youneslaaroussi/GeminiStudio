@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * Generate magic link credentials for hackathon judges.
+ * Generate magic link credentials for demo reviewers.
  * 
  * Usage:
  *   npx tsx scripts/generate-magic-link.ts judge@example.com [projectId]
@@ -60,8 +60,8 @@ async function main() {
     console.error('Usage: npx tsx scripts/generate-magic-link.ts <email> [projectId]');
     console.error('');
     console.error('Examples:');
-    console.error('  npx tsx scripts/generate-magic-link.ts judge@hackathon.com');
-    console.error('  npx tsx scripts/generate-magic-link.ts judge@hackathon.com abc123-project-id');
+    console.error('  npx tsx scripts/generate-magic-link.ts reviewer@example.com');
+    console.error('  npx tsx scripts/generate-magic-link.ts reviewer@example.com abc123-project-id');
     process.exit(1);
   }
 
@@ -90,7 +90,7 @@ async function main() {
       const newUser = await auth.createUser({
         email,
         emailVerified: true,
-        displayName: 'Hackathon Judge',
+        displayName: 'Demo Reviewer',
       });
       userId = newUser.uid;
       console.log(`\nCreated new Firebase user: ${userId}`);

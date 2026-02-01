@@ -103,33 +103,21 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">10. Hackathon Competition</h2>
-            <p className="text-slate-300 leading-relaxed mb-4">
-              This version of GeminiStudio is submitted to the Google DeepMind Gemini 3 Hackathon competition. By using GeminiStudio during the hackathon period, you acknowledge that:
-            </p>
-            <ul className="list-disc list-inside text-slate-300 space-y-2 mt-3">
-              <li>You consent to the collection and use of your project data for judging purposes</li>
-              <li>Your generated content may be evaluated by hackathon judges</li>
-              <li>The hackathon competition rules apply as outlined at Devpost</li>
-            </ul>
-          </section>
-
-          <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">11. Governing Law</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">10. Governing Law</h2>
             <p className="text-slate-300 leading-relaxed">
               These terms and conditions are governed by and construed in accordance with the laws of California, United States, and you irrevocably submit to the exclusive jurisdiction of the courts located in California.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">12. Changes to Terms</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">11. Changes to Terms</h2>
             <p className="text-slate-300 leading-relaxed">
               GeminiStudio may revise these terms of service at any time without notice. By using this Service, you are agreeing to be bound by the then current version of these terms of service.
             </p>
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">13. Contact</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">12. Contact</h2>
             <p className="text-slate-300 leading-relaxed">
               If you have any questions about these Terms of Service, please contact Younes Laaroussi at: hello@youneslaaroussi.ca
             </p>

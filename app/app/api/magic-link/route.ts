@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminAuth } from '@/app/lib/server/firebase-admin';
 
 /**
- * Magic link API for hackathon demo access.
- * Generates a Firebase custom token for demo/judge users.
+ * Magic link API for demo access.
+ * Generates a Firebase custom token for demo users.
  * 
  * Usage: GET /api/magic-link?token=YOUR_SECRET
  */
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     
     // Create a custom token for the demo user
     // Using a fixed UID for the demo account so all judges share the same session
-    const demoUserId = process.env.DEMO_USER_ID || 'hackathon-demo-user';
+    const demoUserId = process.env.DEMO_USER_ID || 'demo-user';
     const customToken = await auth.createCustomToken(demoUserId, {
       isDemo: true,
       role: 'judge',
