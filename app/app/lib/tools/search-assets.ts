@@ -4,7 +4,7 @@ import type { Project } from "@/app/types/timeline";
 
 const searchAssetsSchema = z.object({
   query: z.string().min(1).describe("Search query - can be natural language like 'sunset beach' or 'person talking'"),
-  type: z.enum(["video", "audio", "image", "other", ""]).optional().describe("Filter by asset type"),
+  type: z.enum(["all", "video", "audio", "image", "other"]).optional().describe("Filter by asset type"),
   limit: z.number().min(1).max(50).optional().default(10).describe("Maximum number of results"),
 });
 

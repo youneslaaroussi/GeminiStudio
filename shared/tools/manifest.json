@@ -2185,7 +2185,7 @@
               },
               "type": {
                 "type": "string",
-                "enum": ["", "video", "audio", "image", "other"],
+                "enum": ["all", "video", "audio", "image", "other"],
                 "description": "Filter by asset type"
               },
               "limit": {
