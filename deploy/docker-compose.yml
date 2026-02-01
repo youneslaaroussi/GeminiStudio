@@ -16,7 +16,8 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
-      - frontend
+      frontend:
+        condition: service_healthy
     networks:
       - gemini-network
 
