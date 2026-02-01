@@ -3,7 +3,7 @@ name = "langgraph-server"
 version = "0.1.0"
 description = "LangGraph-based agent service configured for Google Cloud Run deployment."
 authors = ["Younes Laaroussi <hello@youneslaaroussi.ca>"]
-license = "MIT"
+license = "Elastic-2.0"
 readme = "README.md"
 packages = [
   { include = "langgraph_server", from = "src" }
