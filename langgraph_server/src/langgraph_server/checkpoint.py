@@ -58,55 +58,64 @@ class GCSCheckpointSaver(BaseCheckpointSaver):
         self,
         config: RunnableConfig,
         checkpoint: Checkpoint,
-        /,
-        *,
-        metadata: Mapping[str, Any] | None = None,
-    ) -> None:
+        metadata: CheckpointMetadata,
+        new_versions: Mapping[str, str | int],
+    ) -> RunnableConfig:
         data = {
             "checkpoint": checkpoint,
             "metadata": metadata or {},
+            "new_versions": dict(new_versions) if new_versions else {},
             "written_at": datetime.now(timezone.utc).isoformat(),
         }
         payload = self.serializer.dumps(data)
         blob = self.bucket.blob(self._checkpoint_path(config, checkpoint["id"]))
         blob.upload_from_string(payload)
+        # Return updated config with checkpoint_id
+        return {
+            "configurable": {
+                **(config.get("configurable") or {}),
+                "checkpoint_id": checkpoint["id"],
+            }
+        }
 
     async def aput(
         self,
         config: RunnableConfig,
         checkpoint: Checkpoint,
-        /,
-        *,
-        metadata: Mapping[str, Any] | None = None,
-    ) -> None:
-        self.put(config, checkpoint, metadata=metadata)
+        metadata: CheckpointMetadata,
+        new_versions: Mapping[str, str | int],
+    ) -> RunnableConfig:
+        return self.put(config, checkpoint, metadata, new_versions)
 
     def put_writes(
         self,
         config: RunnableConfig,
-        writes: Sequence[PendingWrite],
-        /,
-        *,
-        checkpoint: Checkpoint,
+        writes: Sequence[tuple[str, Any]],
+        task_id: str,
+        task_path: str = "",
     ) -> None:
+        # Get checkpoint_id from config if available
+        configurable = config.get("configurable") or {}
+        checkpoint_id = configurable.get("checkpoint_id") or task_id
         data = {
             "writes": list(writes),
-            "checkpoint_id": checkpoint["id"],
+            "task_id": task_id,
+            "task_path": task_path,
+            "checkpoint_id": checkpoint_id,
             "written_at": datetime.now(timezone.utc).isoformat(),
         }
         payload = self.serializer.dumps(data)
-        blob = self.bucket.blob(self._writes_path(config, checkpoint["id"]))
+        blob = self.bucket.blob(self._writes_path(config, checkpoint_id))
         blob.upload_from_string(payload)
 
     async def aput_writes(
         self,
         config: RunnableConfig,
-        writes: Sequence[PendingWrite],
-        /,
-        *,
-        checkpoint: Checkpoint,
+        writes: Sequence[tuple[str, Any]],
+        task_id: str,
+        task_path: str = "",
     ) -> None:
-        self.put_writes(config, writes, checkpoint=checkpoint)
+        self.put_writes(config, writes, task_id, task_path)
 
     def get_tuple(
         self,
