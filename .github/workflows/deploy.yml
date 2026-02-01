@@ -113,6 +113,10 @@ jobs:
               # CloudConvert (optional)
               echo "CLOUDCONVERT_API_KEY=$(gcloud secrets versions access latest --secret=cloudconvert-api-key 2>/dev/null || echo '')" >> .env
               
+              # Telegram (optional)
+              echo "TELEGRAM_BOT_TOKEN=$(gcloud secrets versions access latest --secret=telegram-bot-token 2>/dev/null || echo '')" >> .env
+              echo "TELEGRAM_WEBHOOK_SECRET=$(gcloud secrets versions access latest --secret=telegram-webhook-secret 2>/dev/null || echo '')" >> .env
+              
               # Deploy services
               sudo docker compose up -d --build
               

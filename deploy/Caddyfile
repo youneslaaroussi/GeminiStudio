@@ -15,6 +15,11 @@
         reverse_proxy langgraph-server:8080
     }
 
+    # Telegram webhook
+    handle /providers/telegram/* {
+        reverse_proxy langgraph-server:8080
+    }
+
     # Health check endpoint
     handle /health {
         respond "OK" 200
