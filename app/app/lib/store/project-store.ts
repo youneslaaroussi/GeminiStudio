@@ -417,7 +417,7 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
         applySyncedChange((state) => ({
           project: {
             ...state.project,
-            layers: [...state.project.layers, layer],
+            layers: [layer, ...state.project.layers],
           },
         }));
       },
@@ -538,7 +538,7 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
               project: {
                 ...state.project,
                 ...resolutionUpdate,
-                layers: [...layers, newLayer],
+                layers: [newLayer, ...layers],
               },
             };
           }

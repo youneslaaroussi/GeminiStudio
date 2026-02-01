@@ -335,13 +335,12 @@ export function VideoEffectsPanel({ clip }: VideoEffectsPanelProps) {
           clips: [backgroundClip],
         };
 
-        // Add background layer (goes to end)
+        // Add background layer (addLayer now prepends; we then move it below current clip)
         addLayer(backgroundLayer);
 
-        // Move it below the current clip's layer
-        // New layer is at index layers.length, move it to currentLayerIndex
+        // Move it below the current clip's layer (new layer is at index 0)
         if (currentLayerIndex !== -1) {
-          reorderLayers(layers.length, currentLayerIndex);
+          reorderLayers(0, currentLayerIndex);
         }
 
         toast.success("Mask applied!", {
