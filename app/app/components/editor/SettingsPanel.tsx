@@ -134,25 +134,6 @@ export function SettingsPanel() {
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
-              <label className="text-xs text-muted-foreground">
-                Render Scale
-              </label>
-              <input
-                type="range"
-                min={0.5}
-                max={2}
-                step={0.1}
-                value={project.renderScale}
-                onChange={(e) =>
-                  updateProjectSettings({ renderScale: Number(e.target.value) })
-                }
-                className="w-full"
-              />
-              <span className="text-xs font-mono text-muted-foreground">
-                {project.renderScale.toFixed(1)}x
-              </span>
-            </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">
                 Background

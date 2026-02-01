@@ -71,40 +71,22 @@ export function SceneSettings() {
             </div>
           </div>
 
-          {/* FPS & Scale */}
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className={labelClassName}>Frame Rate</label>
-              <select
-                value={project.fps}
-                onChange={(e) =>
-                  updateProjectSettings({ fps: Number(e.target.value) })
-                }
-                className={inputClassName}
-              >
-                {[24, 25, 30, 50, 60].map((fps) => (
-                  <option key={fps} value={fps}>
-                    {fps} fps
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelClassName}>
-                Scale ({project.renderScale.toFixed(1)}x)
-              </label>
-              <input
-                type="range"
-                min={0.5}
-                max={2}
-                step={0.1}
-                value={project.renderScale}
-                onChange={(e) =>
-                  updateProjectSettings({ renderScale: Number(e.target.value) })
-                }
-                className="w-full h-8"
-              />
-            </div>
+          {/* Frame Rate */}
+          <div>
+            <label className={labelClassName}>Frame Rate</label>
+            <select
+              value={project.fps}
+              onChange={(e) =>
+                updateProjectSettings({ fps: Number(e.target.value) })
+              }
+              className={inputClassName}
+            >
+              {[24, 25, 30, 50, 60].map((fps) => (
+                <option key={fps} value={fps}>
+                  {fps} fps
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Background */}

@@ -267,8 +267,8 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
       const cssY = (clickY - h / 2 - transform.y) / transform.zoom + h / 2;
 
       // Convert CSS to render coordinates
-      const renderX = cssX * sceneConfig.renderScale;
-      const renderY = cssY * sceneConfig.renderScale;
+      const renderX = cssX;
+      const renderY = cssY;
 
       const scene = player.playback.currentScene as SceneGraph | null;
       if (!scene?.getNode) return;
@@ -341,7 +341,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
         setSelectedClip(null);
       }
     },
-    [player, containerSize, transform, sceneConfig.renderScale, currentTime, layers, setSelectedClip]
+    [player, containerSize, transform, currentTime, layers, setSelectedClip]
   );
 
   // Handle Wheel
@@ -416,7 +416,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
       size: initialSize,
       range: [0, duration * PREVIEW_FPS], // Convert to frames
       fps: PREVIEW_FPS,
-      resolutionScale: sceneConfig.renderScale,
+      resolutionScale: 1,
     });
 
     let hasRendered = false;
@@ -440,7 +440,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
 
     stageInstance.configure({
       size: initialSize,
-      resolutionScale: sceneConfig.renderScale,
+      resolutionScale: 1,
       background: sceneConfig.background,
     });
 
@@ -510,7 +510,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
     if (!stage || !player) return;
     stage.configure({
       size: new Vector2(sceneConfig.resolution.width, sceneConfig.resolution.height),
-      resolutionScale: sceneConfig.renderScale,
+      resolutionScale: 1,
       background: sceneConfig.background,
     });
     if (stage.finalBuffer) {
@@ -523,7 +523,6 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
     player,
     sceneConfig.resolution.width,
     sceneConfig.resolution.height,
-    sceneConfig.renderScale,
     sceneConfig.background,
   ]);
 
@@ -638,7 +637,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
                 player={player}
                 transform={transform}
                 containerSize={containerSize}
-                renderScale={sceneConfig.renderScale}
+                renderScale={1}
                 onDragEnd={() => {
                   skipNextSceneClickRef.current = true;
                 }}
