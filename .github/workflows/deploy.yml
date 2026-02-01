@@ -120,24 +120,3 @@ jobs:
               sudo docker compose ps
             '
 
-      - name: Health check
-        run: |
-          # Wait for services to start
-          echo "Waiting 90s for services to initialize..."
-          sleep 90
-          
-          # Show container status (informational, don't fail on this)
-          echo "Checking container status..."
-          gcloud compute ssh ${{ env.INSTANCE_NAME }} \
-            --zone=${{ env.ZONE }} \
-            --project=${{ env.PROJECT_ID }} \
-            --command='cd /opt/gemini-studio/deploy && sudo docker compose ps' || true
-          
-          # Quick health check - just verify Caddy is responding
-          echo ""
-          echo "Checking if site is accessible..."
-          curl -sf --max-time 10 -k "https://geminivideo.studio/health" && echo "Site is UP!" || echo "Site may still be starting..."
-          
-          echo ""
-          echo "Deployment complete!"
-          echo "Your app is at: https://geminivideo.studio"
