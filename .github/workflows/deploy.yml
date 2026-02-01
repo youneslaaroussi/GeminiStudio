@@ -117,7 +117,7 @@ jobs:
           echo "Asset service: OK"
           
           echo "Checking LangGraph..."
-          curl -sf --retry 5 --retry-delay 15 --retry-all-errors "http://$IP:8080/health" || { echo "LangGraph: FAILED"; exit 1; }
+          curl -sf --retry 5 --retry-delay 15 --retry-all-errors "http://$IP:8080/healthz" || { echo "LangGraph: FAILED"; exit 1; }
           echo "LangGraph: OK"
           
           echo "Checking Renderer..."
