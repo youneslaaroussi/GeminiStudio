@@ -109,8 +109,58 @@ jobs:
               sudo docker compose ps
             '
 
-      - name: Show deployment status
+      - name: Health check
         run: |
-          echo "Deployment triggered. Services are building on VM."
-          echo "Check status: gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml ps'"
-          echo "Your app: https://geminivideo.studio"
+          # Wait for services to start (LangGraph takes longer due to Rust deps)
+          echo "Waiting 120s for services to initialize..."
+          sleep 120
+          
+          # Health check via SSH - use Docker's built-in health status
+          gcloud compute ssh ${{ env.INSTANCE_NAME }} \
+            --zone=${{ env.ZONE }} \
+            --project=${{ env.PROJECT_ID }} \
+            --command='
+              echo "Checking container health status..."
+              cd /opt/gemini-studio/deploy
+              
+              # Show all container statuses
+              sudo docker compose ps
+              
+              # Check for unhealthy containers
+              UNHEALTHY=$(sudo docker compose ps --format json | grep -c "unhealthy" || true)
+              if [ "$UNHEALTHY" -gt 0 ]; then
+                echo "Found unhealthy containers!"
+                sudo docker compose ps | grep unhealthy
+                echo ""
+                echo "Checking logs for unhealthy services..."
+                sudo docker compose logs --tail=20
+                exit 1
+              fi
+              
+              # Verify critical services are healthy
+              for svc in asset-service langgraph-server renderer frontend; do
+                STATUS=$(sudo docker compose ps $svc --format "{{.Health}}" 2>/dev/null || echo "unknown")
+                if [ "$STATUS" = "healthy" ]; then
+                  echo "$svc: OK (healthy)"
+                elif [ "$STATUS" = "starting" ]; then
+                  echo "$svc: STARTING (may need more time)"
+                else
+                  echo "$svc: $STATUS"
+                fi
+              done
+              
+              echo ""
+              echo "Container health check complete!"
+            '
+          
+          # Check Caddy logs for SSL issues
+          echo "Checking Caddy status..."
+          gcloud compute ssh ${{ env.INSTANCE_NAME }} \
+            --zone=${{ env.ZONE }} \
+            --project=${{ env.PROJECT_ID }} \
+            --command='sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml logs caddy --tail=20'
+          
+          echo ""
+          echo "Deployment complete!"
+          echo "Your app should be at: https://geminivideo.studio"
+          echo "(SSL may take a few minutes to provision)"

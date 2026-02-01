@@ -1,7 +1,7 @@
 # Caddy reverse proxy configuration
 # Automatically provisions SSL from Let's Encrypt
 
-{$DOMAIN:localhost} {
+{$DOMAIN:localhost}, www.{$DOMAIN:localhost} {
     # Frontend - Next.js
     reverse_proxy frontend:3000
 
