@@ -49,7 +49,24 @@ services:
       - GOOGLE_GENERATIVE_AI_API_KEY=${GEMINI_API_KEY}
       - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
       - ASSET_GCS_BUCKET=${ASSET_GCS_BUCKET}
-      - FIREBASE_SERVICE_ACCOUNT_KEY=/app/secrets/service-account.json
+      # Service accounts
+      - FIREBASE_SERVICE_ACCOUNT_KEY=/app/secrets/firebase-service-account.json
+      - GOOGLE_SERVICE_ACCOUNT_KEY=/app/secrets/google-service-account.json
+      - VEO_SERVICE_ACCOUNT_KEY=/app/secrets/google-service-account.json
+      - SPEECH_SERVICE_ACCOUNT_KEY=/app/secrets/google-service-account.json
+      # Veo configuration
+      - VEO_PROJECT_ID=${GOOGLE_PROJECT_ID}
+      - VEO_LOCATION=${VEO_LOCATION:-us-central1}
+      - VEO_MODEL_ID=${VEO_MODEL_ID:-veo-3.0-generate-001}
+      # Speech configuration
+      - SPEECH_PROJECT_ID=${GOOGLE_PROJECT_ID}
+      - SPEECH_LOCATION=${SPEECH_LOCATION:-us}
+      - SPEECH_MODEL=${SPEECH_MODEL:-chirp_3}
+      - SPEECH_LANGUAGE_CODES=${SPEECH_LANGUAGE_CODES:-en-US}
+      - SPEECH_GCS_BUCKET=${ASSET_GCS_BUCKET}
+      # Shared secrets
+      - RENDERER_SHARED_SECRET=${RENDERER_SHARED_SECRET:-}
+      - ASSET_SERVICE_SHARED_SECRET=${ASSET_SERVICE_SHARED_SECRET:-}
     volumes:
       - ./secrets:/app/secrets:ro
     healthcheck:

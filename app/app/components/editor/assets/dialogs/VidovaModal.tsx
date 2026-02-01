@@ -19,7 +19,7 @@ const VIDOVA_ATF_EMBED_ID = "0b9c9b43-bafb-4327-b928-698ca6e7772b";
 const VIDOVA_BASE_URL =
   typeof process !== "undefined" && process.env.NEXT_PUBLIC_VIDOVA_URL
     ? process.env.NEXT_PUBLIC_VIDOVA_URL.replace(/\/$/, "")
-    : "https://vidova.com";
+    : "https://vidova.ai";
 
 function embedUrl(id: string, options?: { muted?: boolean; autoplay?: boolean; loop?: boolean; controls?: boolean }) {
   const params = new URLSearchParams();
