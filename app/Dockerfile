@@ -52,10 +52,13 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Copy standalone build (includes server + required node_modules)
+# In a monorepo, standalone output preserves workspace structure
+# Copy the entire standalone folder first
 COPY --from=base --chown=nextjs:nodejs /app/app/.next/standalone ./
-COPY --from=base --chown=nextjs:nodejs /app/app/.next/static ./.next/static
-COPY --from=base --chown=nextjs:nodejs /app/app/public ./public
+
+# Copy static files to the app subdirectory (monorepo structure)
+COPY --from=base --chown=nextjs:nodejs /app/app/.next/static ./app/.next/static
+COPY --from=base --chown=nextjs:nodejs /app/app/public ./app/public
 
 USER nextjs
 
@@ -65,5 +68,5 @@ ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 
-# Standalone server is at server.js
-CMD ["node", "server.js"]
+# In monorepo, server.js is in the app subdirectory
+CMD ["node", "app/server.js"]
