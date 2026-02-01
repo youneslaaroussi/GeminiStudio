@@ -58,10 +58,42 @@ Deploy all GeminiStudio backend services on a single GCE VM with Docker Compose.
    ```
 
 4. **Service Account** JSON file with required roles:
-   - Storage Admin
-   - Firestore User
-   - Pub/Sub Publisher
-   - Secret Manager Secret Accessor
+   - `roles/compute.instanceAdmin.v1` - SSH access to VMs (required for CI/CD)
+   - `roles/iam.serviceAccountUser` - Act as VM service account (required for SSH)
+   - `roles/storage.admin` - GCS bucket access
+   - `roles/datastore.user` - Firestore access
+   - `roles/pubsub.publisher` - Pub/Sub publishing
+   - `roles/secretmanager.secretAccessor` - Read secrets
+
+   Grant these roles to your service account:
+   ```bash
+   SA_EMAIL="your-service-account@your-project.iam.gserviceaccount.com"
+   PROJECT_ID="your-project-id"
+
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:$SA_EMAIL" \
+     --role="roles/compute.instanceAdmin.v1"
+
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:$SA_EMAIL" \
+     --role="roles/iam.serviceAccountUser"
+
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:$SA_EMAIL" \
+     --role="roles/storage.admin"
+
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:$SA_EMAIL" \
+     --role="roles/datastore.user"
+
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:$SA_EMAIL" \
+     --role="roles/pubsub.publisher"
+
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:$SA_EMAIL" \
+     --role="roles/secretmanager.secretAccessor"
+   ```
 
 ## Quick Start
 
