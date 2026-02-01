@@ -28,6 +28,21 @@ export default makeProject({
         opacity?: number;
         width?: number;
         height?: number;
+        focus?: { x: number; y: number; width: number; height: number; padding: number };
+        objectFit?: 'contain' | 'cover' | 'fill';
+        effect?: string;
+        maskAssetId?: string;
+        maskSrc?: string;
+        maskMode?: 'include' | 'exclude';
+        colorGrading?: {
+          exposure: number;
+          contrast: number;
+          saturation: number;
+          temperature: number;
+          tint: number;
+          highlights: number;
+          shadows: number;
+        };
       }>;
     }>,
     // Total timeline duration

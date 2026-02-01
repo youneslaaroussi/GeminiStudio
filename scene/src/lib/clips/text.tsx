@@ -1,6 +1,7 @@
 import { Txt, Node } from '@motion-canvas/2d';
 import { createRef, waitFor, type ThreadGenerator } from '@motion-canvas/core';
 import type { TextClip, TextEntry, TextClipSettings } from '../types';
+import { getEffectShaderConfig } from '../effectShaders';
 
 interface CreateTextElementsOptions {
   clips: TextClip[];
@@ -15,6 +16,7 @@ export function createTextElements({ clips, view, settings }: CreateTextElements
     const ref = createRef<Txt>();
     const fontSize = clip.fontSize ?? settings.defaultFontSize ?? 48;
     const fill = clip.fill ?? settings.defaultFill ?? '#ffffff';
+    const effectShaders = getEffectShaderConfig(clip.effect);
 
     entries.push({ clip, ref });
 
@@ -31,6 +33,7 @@ export function createTextElements({ clips, view, settings }: CreateTextElements
         y={clip.position.y}
         scale={clip.scale}
         opacity={0}
+        shaders={effectShaders}
       />
     );
   }

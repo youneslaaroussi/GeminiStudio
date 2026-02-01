@@ -79,6 +79,37 @@ export interface Focus {
 
 export type ObjectFit = 'contain' | 'cover' | 'fill';
 
+/** Color grading settings for video/image clips */
+export interface ColorGradingSettings {
+  // Basic corrections (-100 to 100 unless noted)
+  exposure: number;      // -2 to 2
+  contrast: number;      // -100 to 100
+  saturation: number;    // -100 to 100
+  temperature: number;   // -100 (cool) to 100 (warm)
+  tint: number;          // -100 (green) to 100 (magenta)
+  highlights: number;    // -100 to 100
+  shadows: number;       // -100 to 100
+}
+
+export const DEFAULT_COLOR_GRADING: ColorGradingSettings = {
+  exposure: 0,
+  contrast: 0,
+  saturation: 0,
+  temperature: 0,
+  tint: 0,
+  highlights: 0,
+  shadows: 0,
+};
+
+/** Visual effect applied to a clip (glitch, ripple, etc.) */
+export type VisualEffectType =
+  | 'none'
+  | 'glitch'
+  | 'ripple'
+  | 'vhs'
+  | 'pixelate'
+  | 'chromatic';
+
 export interface BaseClip {
   id: string;
   name: string;        // Display name
@@ -108,6 +139,10 @@ export interface VideoClip extends BaseClip {
   maskAssetId?: string;   // Reference to mask asset (binary video)
   maskSrc?: string;       // Resolved URL for mask video (populated at render time)
   maskMode?: MaskMode;    // 'include' = show only masked area, 'exclude' = show everything except masked area
+  /** Optional visual effect (glitch, ripple, vhs, etc.) */
+  effect?: VisualEffectType;
+  /** Color grading settings */
+  colorGrading?: ColorGradingSettings;
 }
 
 export interface AudioClip extends BaseClip {
@@ -123,6 +158,8 @@ export interface TextClip extends BaseClip {
   fontSize?: number;  // Font size in pixels
   fill?: string;      // Text color
   opacity?: number;   // Opacity 0-1
+  /** Optional visual effect (glitch, ripple, vhs, etc.) */
+  effect?: VisualEffectType;
 }
 
 export interface ImageClip extends BaseClip {
@@ -130,6 +167,10 @@ export interface ImageClip extends BaseClip {
   src: string;        // External URL
   width?: number;     // Width in pixels
   height?: number;    // Height in pixels
+  /** Optional visual effect (glitch, ripple, vhs, etc.) */
+  effect?: VisualEffectType;
+  /** Color grading settings */
+  colorGrading?: ColorGradingSettings;
 }
 
 export type TimelineClip = VideoClip | AudioClip | TextClip | ImageClip;

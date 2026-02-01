@@ -1,6 +1,7 @@
 import { Img, Node } from '@motion-canvas/2d';
 import { createRef, waitFor, type ThreadGenerator } from '@motion-canvas/core';
 import type { ImageClip, ImageEntry } from '../types';
+import { getEffectShaderConfig, getColorGradingShaderConfig } from '../effectShaders';
 
 interface CreateImageElementsOptions {
   clips: ImageClip[];
@@ -14,10 +15,12 @@ export function createImageElements({ clips, view }: CreateImageElementsOptions)
     const ref = createRef<Img>();
     const imgWidth = clip.width ?? 1920;
     const imgHeight = clip.height ?? 1080;
+    const effectShaders = getEffectShaderConfig(clip.effect);
+    const colorGradingConfig = getColorGradingShaderConfig(clip.colorGrading);
 
     entries.push({ clip, ref });
 
-    view.add(
+    const imageElement = (
       <Img
         key={`image-clip-${clip.id}`}
         ref={ref}
@@ -28,8 +31,27 @@ export function createImageElements({ clips, view }: CreateImageElementsOptions)
         y={clip.position.y}
         scale={clip.scale}
         opacity={0}
+        shaders={effectShaders}
       />
     );
+
+    // Wrap in color grading node if needed
+    if (colorGradingConfig) {
+      view.add(
+        <Node
+          key={`color-grading-${clip.id}`}
+          cache
+          shaders={{
+            fragment: colorGradingConfig.fragment,
+            uniforms: colorGradingConfig.uniforms,
+          }}
+        >
+          {imageElement}
+        </Node>
+      );
+    } else {
+      view.add(imageElement);
+    }
   }
 
   return entries;

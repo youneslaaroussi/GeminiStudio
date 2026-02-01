@@ -188,7 +188,7 @@ services:
       - GOOGLE_CLOUD_STORAGE_BUCKET=${CHECKPOINT_GCS_BUCKET:-${ASSET_GCS_BUCKET}}
       - ASSET_SERVICE_URL=http://asset-service:8081
       - ASSET_SERVICE_HMAC_SECRET=${ASSET_SERVICE_HMAC_SECRET:-}
-      - RENDERER_API_URL=http://renderer:4000
+      - RENDERER_BASE_URL=http://renderer:4000
       - VIDEO_EFFECTS_SERVICE_URL=http://video-effects-service:8082
       - PIPELINE_EVENT_TOPIC=${PIPELINE_EVENT_TOPIC:-gemini-pipeline-events}
       - RENDER_EVENT_TOPIC=${RENDER_EVENT_TOPIC:-gemini-render-events}

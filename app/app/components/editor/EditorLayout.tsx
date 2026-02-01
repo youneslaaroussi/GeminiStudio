@@ -22,6 +22,7 @@ import { PreviewPanel, type PreviewPanelHandle } from "./PreviewPanel";
 import { TimelinePanel } from "./TimelinePanel";
 import { SettingsPanel } from "./settings";
 import { TopBar } from "./TopBar";
+import { type EditorLayoutPreset, LAYOUT_PRESETS } from "./LayoutSelector";
 import { ChatPanel } from "./ChatPanel";
 import { ToolboxPanel } from "./ToolboxPanel";
 import { VideoEffectsPanel } from "./VideoEffectsPanel";
@@ -88,6 +89,16 @@ export function EditorLayout() {
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   const [isPreviewFullscreen, setPreviewFullscreen] = useState(false);
+  const [currentLayout, setCurrentLayout] = useState<EditorLayoutPreset>("agentic");
+  const layoutConfig = LAYOUT_PRESETS[currentLayout];
+
+  const handleLayoutChange = useCallback((layout: EditorLayoutPreset) => {
+    setCurrentLayout(layout);
+    const config = LAYOUT_PRESETS[layout];
+    if (config.defaultRightTab) {
+      setRightPanelTab(config.defaultRightTab);
+    }
+  }, []);
   const recenterRef = useRef<(() => void) | null>(null);
   const previewRef = useRef<PreviewPanelHandle | null>(null);
   const loadRef = useRef<(() => void) | null>(null);
@@ -640,16 +651,18 @@ export function EditorLayout() {
           onLoadReady={handleLoadReady}
           onExportReady={handleExportReady}
           onRefreshReady={handleRefreshReady}
+          currentLayout={currentLayout}
+          onLayoutChange={handleLayoutChange}
         />
         <div className="flex-1 min-h-0">
-          <ResizablePanelGroup direction="horizontal" className="h-full">
-            <ResizablePanel defaultSize={78} minSize={60} className="min-w-0">
-              <ResizablePanelGroup direction="vertical" className="h-full">
+          <ResizablePanelGroup key={`layout-h-${currentLayout}`} direction="horizontal" className="h-full">
+            <ResizablePanel defaultSize={layoutConfig.mainPanelSize} minSize={60} className="min-w-0">
+              <ResizablePanelGroup key={`layout-v-${currentLayout}`} direction="vertical" className="h-full">
                 {/* Top Area: Assets | Preview | Settings */}
-                <ResizablePanel defaultSize={60} minSize={30}>
-                  <ResizablePanelGroup direction="horizontal" className="h-full">
+                <ResizablePanel defaultSize={layoutConfig.topAreaSize} minSize={30}>
+                  <ResizablePanelGroup key={`layout-top-${currentLayout}`} direction="horizontal" className="h-full">
                     {/* Left: Assets */}
-                    <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
+                    <ResizablePanel defaultSize={layoutConfig.assetsPanelSize} minSize={15} maxSize={30}>
                       <div className="h-full bg-card border-r border-border min-w-0">
                         <AssetsPanel onSetAssetTabReady={handleAssetTabReady} />
                       </div>
@@ -658,7 +671,7 @@ export function EditorLayout() {
                     <ResizableHandle withHandle />
 
                     {/* Center: Preview */}
-                    <ResizablePanel defaultSize={60} minSize={30} className="min-w-0">
+                    <ResizablePanel defaultSize={layoutConfig.previewPanelSize} minSize={30} className="min-w-0">
                       <div className="h-full bg-card min-w-0">
                         <PreviewPanel
                           ref={previewRef}
@@ -689,7 +702,7 @@ export function EditorLayout() {
                     <ResizableHandle withHandle />
 
                     {/* Settings */}
-                    <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
+                    <ResizablePanel defaultSize={layoutConfig.settingsPanelSize} minSize={15} maxSize={30}>
                       <div className="h-full bg-card border-l border-border min-w-[260px]">
                         <SettingsPanel />
                       </div>
@@ -704,7 +717,7 @@ export function EditorLayout() {
                 />
 
                 {/* Bottom: Timeline */}
-                <ResizablePanel defaultSize={40} minSize={20} className="min-w-0">
+                <ResizablePanel defaultSize={layoutConfig.timelineSize} minSize={20} className="min-w-0">
                   <div className="h-full w-full bg-card border-t border-border overflow-hidden">
                     <TooltipProvider delayDuration={300}>
                       <TimelinePanel
@@ -726,61 +739,65 @@ export function EditorLayout() {
               </ResizablePanelGroup>
             </ResizablePanel>
 
-            <ResizableHandle withHandle />
+            {layoutConfig.showRightPanel && (
+              <>
+                <ResizableHandle withHandle />
 
-            {/* Persistent Rightmost Toolbox + Chat (tabbed, both stay mounted) */}
-            <ResizablePanel defaultSize={22} minSize={15} maxSize={40}>
-              <div className="h-full bg-card border-l border-border min-w-[260px] flex flex-col">
-                {/* Tab buttons */}
-                <div className="flex border-b border-border shrink-0">
-                  <button
-                    onClick={() => setRightPanelTab("toolbox")}
-                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${
-                      rightPanelTab === "toolbox"
-                        ? "text-foreground border-b-2 border-primary bg-muted/50"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-                    }`}
-                  >
-                    <Wrench className="size-4" />
-                    Toolbox
-                  </button>
-                  <button
-                    onClick={() => setRightPanelTab("effects")}
-                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${
-                      rightPanelTab === "effects"
-                        ? "text-foreground border-b-2 border-primary bg-muted/50"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-                    }`}
-                  >
-                    <Sparkles className="size-4" />
-                    Effects
-                  </button>
-                  <button
-                    onClick={() => setRightPanelTab("chat")}
-                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${
-                      rightPanelTab === "chat"
-                        ? "text-foreground border-b-2 border-primary bg-muted/50"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-                    }`}
-                  >
-                    <MessageSquare className="size-4" />
-                    Chat
-                  </button>
-                </div>
-                {/* Tab content - all stay mounted, visibility controlled by CSS */}
-                <div className="flex-1 min-h-0 relative">
-                  <div className={`absolute inset-0 ${rightPanelTab === "toolbox" ? "visible" : "invisible"}`}>
-                    <ToolboxPanel />
+                {/* Persistent Rightmost Toolbox + Chat (tabbed, both stay mounted) */}
+                <ResizablePanel defaultSize={layoutConfig.rightPanelSize} minSize={15} maxSize={40}>
+                  <div className="h-full bg-card border-l border-border min-w-[260px] flex flex-col">
+                    {/* Tab buttons */}
+                    <div className="flex border-b border-border shrink-0">
+                      <button
+                        onClick={() => setRightPanelTab("toolbox")}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${
+                          rightPanelTab === "toolbox"
+                            ? "text-foreground border-b-2 border-primary bg-muted/50"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                        }`}
+                      >
+                        <Wrench className="size-4" />
+                        Toolbox
+                      </button>
+                      <button
+                        onClick={() => setRightPanelTab("effects")}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${
+                          rightPanelTab === "effects"
+                            ? "text-foreground border-b-2 border-primary bg-muted/50"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                        }`}
+                      >
+                        <Sparkles className="size-4" />
+                        Video Effects
+                      </button>
+                      <button
+                        onClick={() => setRightPanelTab("chat")}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${
+                          rightPanelTab === "chat"
+                            ? "text-foreground border-b-2 border-primary bg-muted/50"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                        }`}
+                      >
+                        <MessageSquare className="size-4" />
+                        Chat
+                      </button>
+                    </div>
+                    {/* Tab content - all stay mounted, visibility controlled by CSS */}
+                    <div className="flex-1 min-h-0 relative">
+                      <div className={`absolute inset-0 ${rightPanelTab === "toolbox" ? "visible" : "invisible"}`}>
+                        <ToolboxPanel />
+                      </div>
+                      <div className={`absolute inset-0 ${rightPanelTab === "effects" ? "visible" : "invisible"}`}>
+                        <VideoEffectsPanelWrapper />
+                      </div>
+                      <div className={`absolute inset-0 ${rightPanelTab === "chat" ? "visible" : "invisible"}`}>
+                        <ChatPanel />
+                      </div>
+                    </div>
                   </div>
-                  <div className={`absolute inset-0 ${rightPanelTab === "effects" ? "visible" : "invisible"}`}>
-                    <VideoEffectsPanelWrapper />
-                  </div>
-                  <div className={`absolute inset-0 ${rightPanelTab === "chat" ? "visible" : "invisible"}`}>
-                    <ChatPanel />
-                  </div>
-                </div>
-              </div>
-            </ResizablePanel>
+                </ResizablePanel>
+              </>
+            )}
           </ResizablePanelGroup>
         </div>
 

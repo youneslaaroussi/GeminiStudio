@@ -14,6 +14,13 @@ export interface CaptionSettings {
   distanceFromBottom: number;
 }
 
+export interface TextClipSettings {
+  fontFamily: CaptionSettings['fontFamily'];
+  fontWeight: CaptionSettings['fontWeight'];
+  defaultFontSize: number;
+  defaultFill: string;
+}
+
 export interface ClipTransition {
   type: TransitionType;
   duration: number;
@@ -35,6 +42,26 @@ export interface Focus {
 }
 
 export type ObjectFit = 'contain' | 'cover' | 'fill';
+
+/** Color grading settings for video/image clips */
+export interface ColorGradingSettings {
+  exposure: number;
+  contrast: number;
+  saturation: number;
+  temperature: number;
+  tint: number;
+  highlights: number;
+  shadows: number;
+}
+
+/** Visual effect applied to a clip (glitch, ripple, etc.) */
+export type VisualEffectType =
+  | 'none'
+  | 'glitch'
+  | 'ripple'
+  | 'vhs'
+  | 'pixelate'
+  | 'chromatic';
 
 export interface BaseClip {
   id: string;
@@ -61,6 +88,10 @@ export interface VideoClip extends BaseClip {
   maskAssetId?: string;   // Reference to mask asset (binary video)
   maskSrc?: string;       // Resolved URL for mask video
   maskMode?: MaskMode;    // 'include' = source-in, 'exclude' = source-out
+  /** Optional visual effect (glitch, ripple, vhs, etc.) */
+  effect?: VisualEffectType;
+  /** Color grading settings */
+  colorGrading?: ColorGradingSettings;
 }
 
 export interface AudioClip extends BaseClip {
@@ -75,6 +106,8 @@ export interface TextClip extends BaseClip {
   fontSize?: number;
   fill?: string;
   opacity?: number;
+  /** Optional visual effect (glitch, ripple, vhs, etc.) */
+  effect?: VisualEffectType;
 }
 
 export interface ImageClip extends BaseClip {
@@ -82,6 +115,10 @@ export interface ImageClip extends BaseClip {
   src: string;
   width?: number;
   height?: number;
+  /** Optional visual effect (glitch, ripple, vhs, etc.) */
+  effect?: VisualEffectType;
+  /** Color grading settings */
+  colorGrading?: ColorGradingSettings;
 }
 
 export type TimelineClip = VideoClip | AudioClip | TextClip | ImageClip;
@@ -110,4 +147,5 @@ export interface Project {
   transcriptions?: Record<string, ProjectTranscription>;
   transitions?: Record<TransitionKey, ClipTransition>;
   captionSettings?: CaptionSettings;
+  textClipSettings?: TextClipSettings;
 }

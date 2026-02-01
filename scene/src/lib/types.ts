@@ -16,6 +16,26 @@ export interface Focus {
 
 export type MaskMode = 'include' | 'exclude';
 
+/** Visual effect applied to a clip (glitch, ripple, etc.) */
+export type VisualEffectType =
+  | 'none'
+  | 'glitch'
+  | 'ripple'
+  | 'vhs'
+  | 'pixelate'
+  | 'chromatic';
+
+/** Color grading settings for video/image clips */
+export interface ColorGradingSettings {
+  exposure: number;      // -2 to 2
+  contrast: number;      // -100 to 100
+  saturation: number;    // -100 to 100
+  temperature: number;   // -100 to 100
+  tint: number;          // -100 to 100
+  highlights: number;    // -100 to 100
+  shadows: number;       // -100 to 100
+}
+
 export interface VideoClip {
   id: string;
   type: 'video';
@@ -33,6 +53,10 @@ export interface VideoClip {
   maskAssetId?: string;
   maskSrc?: string;
   maskMode?: MaskMode;
+  /** Optional visual effect (glitch, ripple, vhs, etc.) */
+  effect?: VisualEffectType;
+  /** Color grading settings */
+  colorGrading?: ColorGradingSettings;
 }
 
 export interface AudioClip {
@@ -64,6 +88,8 @@ export interface TextClip {
   opacity?: number;
   position: Transform;
   scale: Transform;
+  /** Optional visual effect (glitch, ripple, vhs, etc.) */
+  effect?: VisualEffectType;
 }
 
 export interface ImageClip {
@@ -79,6 +105,10 @@ export interface ImageClip {
   height?: number;
   position: Transform;
   scale: Transform;
+  /** Optional visual effect (glitch, ripple, vhs, etc.) */
+  effect?: VisualEffectType;
+  /** Color grading settings */
+  colorGrading?: ColorGradingSettings;
 }
 
 export interface ClipTransition {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import equal from "fast-deep-equal";
 import { getAuthHeaders } from "./useAuthFetch";
 import type { PipelineStepState } from "@/app/types/pipeline";
 
@@ -41,6 +42,7 @@ export function usePipelineStates(
   const [error, setError] = useState<string | null>(null);
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const prevStatesRef = useRef<Record<string, PipelineStepState[]> | null>(null);
 
   const fetchStates = useCallback(async () => {
     if (!projectId) return;
@@ -71,7 +73,16 @@ export function usePipelineStates(
         statesMap[state.assetId] = state.steps;
       }
 
-      setStates(statesMap);
+      const prev = prevStatesRef.current;
+      const deepChanged = prev === null ? true : !equal(prev, statesMap);
+      if (prev !== null) {
+        console.log("[usePipelineStates] poll: config deep changed =", deepChanged);
+      }
+      prevStatesRef.current = statesMap;
+
+      if (deepChanged) {
+        setStates(statesMap);
+      }
     } catch (err) {
       console.error("Pipeline states fetch error:", err);
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -109,6 +120,7 @@ export function usePipelineStates(
   useEffect(() => {
     setStates({});
     setError(null);
+    prevStatesRef.current = null;
   }, [projectId]);
 
   return {

@@ -102,6 +102,7 @@ const normalizeQuality = (quality?: string): string => {
 };
 
 const buildVariables = (job: RenderJobData, computedDuration: number) => {
+  // Pass layers as-is so all clip properties (effect, colorGrading, mask*, focus, etc.) reach the scene
   const layers = job.variables?.layers ?? job.project.layers;
   const duration =
     job.variables?.duration ??
@@ -121,6 +122,13 @@ const buildVariables = (job: RenderJobData, computedDuration: number) => {
         fontFamily: 'Inter Variable',
         fontWeight: 400,
         distanceFromBottom: 140,
+      },
+    textClipSettings:
+      job.variables?.textClipSettings ?? job.project.textClipSettings ?? {
+        fontFamily: 'Inter Variable',
+        fontWeight: 400,
+        defaultFontSize: 48,
+        defaultFill: '#ffffff',
       },
   };
 };

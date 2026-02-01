@@ -11938,6 +11938,373 @@ function normalizeRawSegments(segments) {
 function makeTransitionKey(from, to) {
   return `${from}->${to}`;
 }
+const glitchShader = `#version 300 es
+precision highp float;
+
+in vec2 screenUV;
+in vec2 sourceUV;
+in vec2 destinationUV;
+
+out vec4 outColor;
+
+uniform float time;
+uniform float deltaTime;
+uniform float framerate;
+uniform int frame;
+uniform vec2 resolution;
+uniform sampler2D sourceTexture;
+uniform sampler2D destinationTexture;
+uniform mat4 sourceMatrix;
+uniform mat4 destinationMatrix;
+
+uniform float intensity; // 0.0 to 1.0
+
+float random(vec2 st) {
+  return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+}
+
+void main() {
+  vec2 uv = sourceUV;
+
+  float glitchBlock = floor(uv.y * 20.0);
+  float glitchTime = floor(time * 10.0);
+
+  float blockRand = random(vec2(glitchBlock, glitchTime));
+  if (blockRand > 0.9 - intensity * 0.4) {
+    uv.x += (random(vec2(glitchTime, glitchBlock)) - 0.5) * 0.1 * intensity;
+  }
+
+  float splitAmount = 0.01 * intensity;
+  vec4 rChannel = texture(sourceTexture, uv + vec2(splitAmount, 0.0));
+  vec4 gChannel = texture(sourceTexture, uv);
+  vec4 bChannel = texture(sourceTexture, uv - vec2(splitAmount, 0.0));
+
+  vec4 color = vec4(rChannel.r, gChannel.g, bChannel.b, gChannel.a);
+
+  float scanline = sin(uv.y * resolution.y * 2.0) * 0.04 * intensity;
+  color.rgb += scanline;
+
+  if (random(vec2(time, uv.y)) > 0.95 - intensity * 0.1) {
+    color.rgb *= 0.5 + random(vec2(time)) * 0.5;
+  }
+
+  outColor = color;
+}
+
+
+//# sourceURL=src/shaders/glitch.glsl`;
+const waveDistortionShader = `#version 300 es
+precision highp float;
+
+in vec2 screenUV;
+in vec2 sourceUV;
+in vec2 destinationUV;
+
+out vec4 outColor;
+
+uniform float time;
+uniform float deltaTime;
+uniform float framerate;
+uniform int frame;
+uniform vec2 resolution;
+uniform sampler2D sourceTexture;
+uniform sampler2D destinationTexture;
+uniform mat4 sourceMatrix;
+uniform mat4 destinationMatrix;
+
+uniform float amplitude; // 0.0 to 0.1
+uniform float frequency; // 1.0 to 20.0
+uniform float speed;     // 0.5 to 5.0
+
+void main() {
+  vec2 uv = sourceUV;
+
+  float wave = sin(uv.y * frequency + time * speed) * amplitude;
+  uv.x += wave;
+
+  float vWave = sin(uv.x * frequency * 0.5 + time * speed * 0.7) * amplitude * 0.5;
+  uv.y += vWave;
+
+  outColor = texture(sourceTexture, uv);
+}
+
+
+//# sourceURL=src/shaders/waveDistortion.glsl`;
+const vhsEffectShader = `#version 300 es
+precision highp float;
+
+in vec2 screenUV;
+in vec2 sourceUV;
+in vec2 destinationUV;
+
+out vec4 outColor;
+
+uniform float time;
+uniform float deltaTime;
+uniform float framerate;
+uniform int frame;
+uniform vec2 resolution;
+uniform sampler2D sourceTexture;
+uniform sampler2D destinationTexture;
+uniform mat4 sourceMatrix;
+uniform mat4 destinationMatrix;
+
+uniform float intensity; // 0.0 to 1.0
+
+float random(vec2 co) {
+  return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+void main() {
+  vec2 uv = sourceUV;
+
+  float wobble = sin(uv.y * 10.0 + time * 2.0) * 0.003 * intensity;
+  uv.x += wobble;
+
+  float syncLine = step(0.98, random(vec2(time * 0.5, floor(uv.y * 100.0))));
+  uv.x += syncLine * 0.05 * intensity;
+
+  vec4 color;
+  color.r = texture(sourceTexture, uv + vec2(0.002 * intensity, 0.0)).r;
+  color.g = texture(sourceTexture, uv).g;
+  color.b = texture(sourceTexture, uv - vec2(0.002 * intensity, 0.0)).b;
+  color.a = texture(sourceTexture, uv).a;
+
+  float scanline = sin(uv.y * resolution.y * 1.5) * 0.05;
+  color.rgb -= scanline * intensity;
+
+  color.rgb = mix(color.rgb, vec3(dot(color.rgb, vec3(0.299, 0.587, 0.114))), 0.1 * intensity);
+
+  color.r *= 1.0 + 0.05 * intensity;
+  color.b *= 1.0 - 0.05 * intensity;
+
+  float noise = random(uv + time) * 0.08 * intensity;
+  color.rgb += noise;
+
+  float trackingBar = step(0.995, random(vec2(0.0, floor(time * 3.0))));
+  float barPos = random(vec2(floor(time * 3.0), 0.0));
+  if (abs(uv.y - barPos) < 0.05) {
+    color.rgb *= 0.7 * trackingBar * intensity + (1.0 - trackingBar);
+  }
+
+  outColor = color;
+}
+
+
+//# sourceURL=src/shaders/vhsEffect.glsl`;
+const pixelateShader = `#version 300 es
+precision highp float;
+
+in vec2 screenUV;
+in vec2 sourceUV;
+in vec2 destinationUV;
+
+out vec4 outColor;
+
+uniform float time;
+uniform float deltaTime;
+uniform float framerate;
+uniform int frame;
+uniform vec2 resolution;
+uniform sampler2D sourceTexture;
+uniform sampler2D destinationTexture;
+uniform mat4 sourceMatrix;
+uniform mat4 destinationMatrix;
+
+uniform float pixelSize; // Size of pixels (1.0 to 100.0)
+
+void main() {
+  vec2 pixelUV = pixelSize / resolution;
+  vec2 uv = floor(sourceUV / pixelUV) * pixelUV;
+  outColor = texture(sourceTexture, uv);
+}
+
+
+//# sourceURL=src/shaders/pixelate.glsl`;
+const chromaticAberrationShader = `#version 300 es
+precision highp float;
+
+in vec2 screenUV;
+in vec2 sourceUV;
+in vec2 destinationUV;
+
+out vec4 outColor;
+
+uniform float time;
+uniform float deltaTime;
+uniform float framerate;
+uniform int frame;
+uniform vec2 resolution;
+uniform sampler2D sourceTexture;
+uniform sampler2D destinationTexture;
+uniform mat4 sourceMatrix;
+uniform mat4 destinationMatrix;
+
+uniform float amount;      // 0.0 to 1.0
+uniform float directionX;  // X component of direction
+uniform float directionY;  // Y component of direction
+
+void main() {
+  vec2 uv = sourceUV;
+
+  vec2 offset = (uv - 0.5) * amount * 0.02;
+  vec2 dirOffset = vec2(directionX, directionY) * amount * 0.01;
+
+  float r = texture(sourceTexture, uv + offset + dirOffset).r;
+  float g = texture(sourceTexture, uv).g;
+  float b = texture(sourceTexture, uv - offset - dirOffset).b;
+  float a = texture(sourceTexture, uv).a;
+
+  outColor = vec4(r, g, b, a);
+}
+
+
+//# sourceURL=src/shaders/chromaticAberration.glsl`;
+const colorGradingShader = `#version 300 es
+precision highp float;
+
+in vec2 screenUV;
+in vec2 sourceUV;
+in vec2 destinationUV;
+
+out vec4 outColor;
+
+uniform float time;
+uniform float deltaTime;
+uniform float framerate;
+uniform int frame;
+uniform vec2 resolution;
+uniform sampler2D sourceTexture;
+uniform sampler2D destinationTexture;
+uniform mat4 sourceMatrix;
+uniform mat4 destinationMatrix;
+
+// Basic corrections
+uniform float exposure;     // -2 to 2
+uniform float contrast;     // -1 to 1 (normalized from -100 to 100)
+uniform float saturation;   // 0 to 2 (1 = normal, normalized from -100 to 100)
+uniform float temperature;  // -1 to 1 (normalized from -100 to 100)
+uniform float tint;         // -1 to 1 (normalized from -100 to 100)
+uniform float highlights;   // -1 to 1 (normalized from -100 to 100)
+uniform float shadows;      // -1 to 1 (normalized from -100 to 100)
+
+// Convert to linear space for more accurate color operations
+vec3 srgbToLinear(vec3 srgb) {
+  return pow(srgb, vec3(2.2));
+}
+
+vec3 linearToSrgb(vec3 linear) {
+  return pow(linear, vec3(1.0 / 2.2));
+}
+
+void main() {
+  vec4 color = texture(sourceTexture, sourceUV);
+  vec3 rgb = color.rgb;
+
+  // Convert to linear for more accurate processing
+  rgb = srgbToLinear(rgb);
+
+  // Exposure (multiply in linear space)
+  rgb *= pow(2.0, exposure);
+
+  // Shadows/Highlights adjustment
+  float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+  // Shadows affect dark areas (weight by inverse luminance)
+  rgb += shadows * 0.3 * (1.0 - smoothstep(0.0, 0.5, luma));
+  // Highlights affect bright areas (weight by luminance)
+  rgb += highlights * 0.3 * smoothstep(0.5, 1.0, luma);
+
+  // Convert back to sRGB for perceptual adjustments
+  rgb = linearToSrgb(rgb);
+
+  // Contrast (S-curve around midpoint)
+  rgb = (rgb - 0.5) * (1.0 + contrast) + 0.5;
+
+  // Saturation (lerp to luminance)
+  float lumaPerceptual = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+  rgb = mix(vec3(lumaPerceptual), rgb, saturation);
+
+  // Temperature (warm = +red -blue, cool = -red +blue)
+  // Using a more subtle approach with color balance
+  rgb.r += temperature * 0.1;
+  rgb.b -= temperature * 0.1;
+  // Slight green adjustment to maintain balance
+  rgb.g += temperature * 0.02;
+
+  // Tint (green/magenta shift)
+  rgb.g += tint * 0.1;
+  rgb.r -= tint * 0.03;
+  rgb.b -= tint * 0.03;
+
+  // Clamp to valid range
+  rgb = clamp(rgb, 0.0, 1.0);
+
+  outColor = vec4(rgb, color.a);
+}
+
+
+//# sourceURL=src/shaders/colorGrading.glsl`;
+function getColorGradingShaderConfig(settings2) {
+  if (!settings2) return void 0;
+  const isDefault = settings2.exposure === 0 && settings2.contrast === 0 && settings2.saturation === 0 && settings2.temperature === 0 && settings2.tint === 0 && settings2.highlights === 0 && settings2.shadows === 0;
+  if (isDefault) return void 0;
+  return {
+    fragment: colorGradingShader,
+    uniforms: {
+      // Exposure stays as-is (-2 to 2)
+      exposure: createSignal(settings2.exposure),
+      // Convert -100 to 100 -> -1 to 1
+      contrast: createSignal(settings2.contrast / 100),
+      // Convert -100 to 100 -> 0 to 2 (with 0 = 1)
+      saturation: createSignal(1 + settings2.saturation / 100),
+      // Convert -100 to 100 -> -1 to 1
+      temperature: createSignal(settings2.temperature / 100),
+      tint: createSignal(settings2.tint / 100),
+      highlights: createSignal(settings2.highlights / 100),
+      shadows: createSignal(settings2.shadows / 100)
+    }
+  };
+}
+function getEffectShaderConfig(effect) {
+  if (!effect || effect === "none") return void 0;
+  switch (effect) {
+    case "glitch":
+      return {
+        fragment: glitchShader,
+        uniforms: { intensity: createSignal(0.6) }
+      };
+    case "ripple":
+      return {
+        fragment: waveDistortionShader,
+        uniforms: {
+          amplitude: createSignal(0.03),
+          frequency: createSignal(10),
+          speed: createSignal(2)
+        }
+      };
+    case "vhs":
+      return {
+        fragment: vhsEffectShader,
+        uniforms: { intensity: createSignal(0.6) }
+      };
+    case "pixelate":
+      return {
+        fragment: pixelateShader,
+        uniforms: { pixelSize: createSignal(25) }
+      };
+    case "chromatic":
+      return {
+        fragment: chromaticAberrationShader,
+        uniforms: {
+          amount: createSignal(0.5),
+          directionX: createSignal(1),
+          directionY: createSignal(0.5)
+        }
+      };
+    default:
+      return void 0;
+  }
+}
 const luminanceToAlpha = `#version 300 es
 precision highp float;
 
@@ -12124,91 +12491,129 @@ function createVideoElements({ clips, view, transitions }) {
     const zoomStrengthSignal = needsZoom ? createSignal(0) : void 0;
     const zoomDirectionSignal = needsZoom ? createSignal(1) : void 0;
     const dissolveSignal = needsDissolve ? createSignal(0) : void 0;
-    let shaders = void 0;
-    if (needsBlur && blurSignal) {
-      shaders = {
-        fragment: blurTransition,
-        uniforms: { blurAmount: blurSignal }
-      };
-    } else if (needsZoom && zoomStrengthSignal && zoomDirectionSignal) {
-      shaders = {
-        fragment: zoomTransition,
-        uniforms: {
-          zoomStrength: zoomStrengthSignal,
-          zoomDirection: zoomDirectionSignal
-        }
-      };
-    } else if (needsDissolve && dissolveSignal) {
-      shaders = {
-        fragment: crossDissolve,
-        uniforms: { dissolveProgress: dissolveSignal }
-      };
+    let shaders = getEffectShaderConfig(clip.effect);
+    if (!shaders) {
+      if (needsBlur && blurSignal) {
+        shaders = {
+          fragment: blurTransition,
+          uniforms: { blurAmount: blurSignal }
+        };
+      } else if (needsZoom && zoomStrengthSignal && zoomDirectionSignal) {
+        shaders = {
+          fragment: zoomTransition,
+          uniforms: {
+            zoomStrength: zoomStrengthSignal,
+            zoomDirection: zoomDirectionSignal
+          }
+        };
+      } else if (needsDissolve && dissolveSignal) {
+        shaders = {
+          fragment: crossDissolve,
+          uniforms: { dissolveProgress: dissolveSignal }
+        };
+      }
     }
+    const colorGradingConfig = getColorGradingShaderConfig(clip.colorGrading);
+    const colorGradingContainerRef = colorGradingConfig ? createRef() : void 0;
     if (clip.maskSrc && clip.maskMode) {
       const maskRef = createRef();
       const containerRef = createRef();
       const compositeOp = clip.maskMode === "include" ? "source-in" : "source-out";
-      entries.push({ clip, ref, maskRef, containerRef, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal });
-      view.add(
-        /* @__PURE__ */ jsx(
-          Node,
-          {
-            ref: containerRef,
-            cache: true,
-            position: toVector(clip.position),
-            scale: toVector(clip.scale),
-            opacity: 0,
-            children: [
-              /* @__PURE__ */ jsx(
-                Video,
-                {
-                  ref: maskRef,
-                  src: clip.maskSrc,
-                  width: 1920,
-                  height: 1080,
-                  cache: true,
-                  shaders: {
-                    fragment: luminanceToAlpha,
-                    uniforms: {}
-                  }
-                },
-                `mask-${clip.id}`
-              ),
-              /* @__PURE__ */ jsx(
-                Video,
-                {
-                  ref,
-                  src: clip.src,
-                  width: 1920,
-                  height: 1080,
-                  compositeOperation: compositeOp,
-                  shaders
-                },
-                `video-clip-${clip.id}`
-              )
-            ]
-          },
-          `masked-container-${clip.id}`
-        )
+      entries.push({ clip, ref, maskRef, containerRef, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal, colorGradingContainerRef });
+      const maskedContent = /* @__PURE__ */ jsx(
+        Node,
+        {
+          ref: containerRef,
+          cache: true,
+          position: toVector(clip.position),
+          scale: toVector(clip.scale),
+          opacity: 0,
+          children: [
+            /* @__PURE__ */ jsx(
+              Video,
+              {
+                ref: maskRef,
+                src: clip.maskSrc,
+                width: 1920,
+                height: 1080,
+                cache: true,
+                shaders: {
+                  fragment: luminanceToAlpha,
+                  uniforms: {}
+                }
+              },
+              `mask-${clip.id}`
+            ),
+            /* @__PURE__ */ jsx(
+              Video,
+              {
+                ref,
+                src: clip.src,
+                width: 1920,
+                height: 1080,
+                compositeOperation: compositeOp,
+                shaders
+              },
+              `video-clip-${clip.id}`
+            )
+          ]
+        },
+        `masked-container-${clip.id}`
       );
+      if (colorGradingConfig && colorGradingContainerRef) {
+        view.add(
+          /* @__PURE__ */ jsx(
+            Node,
+            {
+              ref: colorGradingContainerRef,
+              cache: true,
+              shaders: {
+                fragment: colorGradingConfig.fragment,
+                uniforms: colorGradingConfig.uniforms
+              },
+              children: maskedContent
+            },
+            `color-grading-${clip.id}`
+          )
+        );
+      } else {
+        view.add(maskedContent);
+      }
     } else {
-      entries.push({ clip, ref, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal });
-      view.add(
-        /* @__PURE__ */ jsx(
-          Video,
-          {
-            ref,
-            src: clip.src,
-            width: 1920,
-            height: 1080,
-            opacity: 0,
-            position: toVector(clip.position),
-            scale: toVector(clip.scale),
-            shaders
-          },
-          `video-clip-${clip.id}`
-        )
+      entries.push({ clip, ref, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal, colorGradingContainerRef });
+      const videoElement = /* @__PURE__ */ jsx(
+        Video,
+        {
+          ref,
+          src: clip.src,
+          width: 1920,
+          height: 1080,
+          opacity: 0,
+          position: toVector(clip.position),
+          scale: toVector(clip.scale),
+          shaders
+        },
+        `video-clip-${clip.id}`
       );
+      if (colorGradingConfig && colorGradingContainerRef) {
+        view.add(
+          /* @__PURE__ */ jsx(
+            Node,
+            {
+              ref: colorGradingContainerRef,
+              cache: true,
+              shaders: {
+                fragment: colorGradingConfig.fragment,
+                uniforms: colorGradingConfig.uniforms
+              },
+              children: videoElement
+            },
+            `color-grading-${clip.id}`
+          )
+        );
+      } else {
+        view.add(videoElement);
+      }
     }
   }
   return entries;
@@ -12455,6 +12860,7 @@ function createTextElements({ clips, view, settings: settings2 }) {
     const ref = createRef();
     const fontSize = clip.fontSize ?? settings2.defaultFontSize ?? 48;
     const fill = clip.fill ?? settings2.defaultFill ?? "#ffffff";
+    const effectShaders = getEffectShaderConfig(clip.effect);
     entries.push({ clip, ref });
     view.add(
       /* @__PURE__ */ jsx(
@@ -12469,7 +12875,8 @@ function createTextElements({ clips, view, settings: settings2 }) {
           x: clip.position.x,
           y: clip.position.y,
           scale: clip.scale,
-          opacity: 0
+          opacity: 0,
+          shaders: effectShaders
         },
         `text-clip-${clip.id}`
       )
@@ -12498,23 +12905,42 @@ function createImageElements({ clips, view }) {
     const ref = createRef();
     const imgWidth = clip.width ?? 1920;
     const imgHeight = clip.height ?? 1080;
+    const effectShaders = getEffectShaderConfig(clip.effect);
+    const colorGradingConfig = getColorGradingShaderConfig(clip.colorGrading);
     entries.push({ clip, ref });
-    view.add(
-      /* @__PURE__ */ jsx(
-        Img,
-        {
-          ref,
-          src: clip.src,
-          width: imgWidth,
-          height: imgHeight,
-          x: clip.position.x,
-          y: clip.position.y,
-          scale: clip.scale,
-          opacity: 0
-        },
-        `image-clip-${clip.id}`
-      )
+    const imageElement = /* @__PURE__ */ jsx(
+      Img,
+      {
+        ref,
+        src: clip.src,
+        width: imgWidth,
+        height: imgHeight,
+        x: clip.position.x,
+        y: clip.position.y,
+        scale: clip.scale,
+        opacity: 0,
+        shaders: effectShaders
+      },
+      `image-clip-${clip.id}`
     );
+    if (colorGradingConfig) {
+      view.add(
+        /* @__PURE__ */ jsx(
+          Node,
+          {
+            cache: true,
+            shaders: {
+              fragment: colorGradingConfig.fragment,
+              uniforms: colorGradingConfig.uniforms
+            },
+            children: imageElement
+          },
+          `color-grading-${clip.id}`
+        )
+      );
+    } else {
+      view.add(imageElement);
+    }
   }
   return entries;
 }

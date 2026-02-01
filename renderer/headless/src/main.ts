@@ -12,6 +12,8 @@ interface HeadlessJobPayload {
     duration: number;
     transitions: Record<string, unknown>;
     transcriptions: Record<string, ProjectTranscription>;
+    captionSettings?: unknown;
+    textClipSettings?: unknown;
   };
   output: {
     filePath: string;

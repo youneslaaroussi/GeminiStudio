@@ -2,6 +2,7 @@ import { Video, Node } from '@motion-canvas/2d';
 import { Vector2, createRef, createSignal, waitFor, all, easeOutCubic, easeInCubic, easeInOutCubic, type ThreadGenerator, type SimpleSignal } from '@motion-canvas/core';
 import type { VideoClip, VideoEntry, ClipTransition } from '../types';
 import { toVector } from '../helpers';
+import { getEffectShaderConfig, getColorGradingShaderConfig } from '../effectShaders';
 import luminanceToAlpha from '../../shaders/luminanceToAlpha.glsl';
 import blurTransition from '../../shaders/blurTransition.glsl';
 import zoomTransition from '../../shaders/zoomTransition.glsl';
@@ -13,6 +14,7 @@ interface VideoEntryWithSignals extends VideoEntry {
   zoomStrengthSignal?: SimpleSignal<number>;
   zoomDirectionSignal?: SimpleSignal<number>;
   dissolveSignal?: SimpleSignal<number>;
+  colorGradingContainerRef?: ReturnType<typeof createRef<Node>>;
 }
 
 interface CreateVideoElementsOptions {
@@ -37,38 +39,44 @@ export function createVideoElements({ clips, view, transitions }: CreateVideoEle
     const zoomDirectionSignal = needsZoom ? createSignal(1) : undefined;
     const dissolveSignal = needsDissolve ? createSignal(0) : undefined;
 
-    // Build shader config for transition effects
+    // Build shader config: visual effect takes precedence over transition
     type ShaderConfig = { fragment: string; uniforms: Record<string, SimpleSignal<number>> };
-    let shaders: ShaderConfig | undefined = undefined;
+    let shaders: ShaderConfig | undefined = getEffectShaderConfig(clip.effect);
 
-    if (needsBlur && blurSignal) {
-      shaders = {
-        fragment: blurTransition,
-        uniforms: { blurAmount: blurSignal },
-      };
-    } else if (needsZoom && zoomStrengthSignal && zoomDirectionSignal) {
-      shaders = {
-        fragment: zoomTransition,
-        uniforms: {
-          zoomStrength: zoomStrengthSignal,
-          zoomDirection: zoomDirectionSignal,
-        },
-      };
-    } else if (needsDissolve && dissolveSignal) {
-      shaders = {
-        fragment: crossDissolve,
-        uniforms: { dissolveProgress: dissolveSignal },
-      };
+    if (!shaders) {
+      if (needsBlur && blurSignal) {
+        shaders = {
+          fragment: blurTransition,
+          uniforms: { blurAmount: blurSignal },
+        };
+      } else if (needsZoom && zoomStrengthSignal && zoomDirectionSignal) {
+        shaders = {
+          fragment: zoomTransition,
+          uniforms: {
+            zoomStrength: zoomStrengthSignal,
+            zoomDirection: zoomDirectionSignal,
+          },
+        };
+      } else if (needsDissolve && dissolveSignal) {
+        shaders = {
+          fragment: crossDissolve,
+          uniforms: { dissolveProgress: dissolveSignal },
+        };
+      }
     }
+
+    // Check if color grading is needed
+    const colorGradingConfig = getColorGradingShaderConfig(clip.colorGrading);
+    const colorGradingContainerRef = colorGradingConfig ? createRef<Node>() : undefined;
 
     if (clip.maskSrc && clip.maskMode) {
       const maskRef = createRef<Video>();
       const containerRef = createRef<Node>();
       const compositeOp = clip.maskMode === 'include' ? 'source-in' : 'source-out';
 
-      entries.push({ clip, ref, maskRef, containerRef, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal });
+      entries.push({ clip, ref, maskRef, containerRef, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal, colorGradingContainerRef });
 
-      view.add(
+      const maskedContent = (
         <Node
           key={`masked-container-${clip.id}`}
           ref={containerRef}
@@ -100,10 +108,29 @@ export function createVideoElements({ clips, view, transitions }: CreateVideoEle
           />
         </Node>
       );
-    } else {
-      entries.push({ clip, ref, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal });
 
-      view.add(
+      // Wrap in color grading node if needed
+      if (colorGradingConfig && colorGradingContainerRef) {
+        view.add(
+          <Node
+            key={`color-grading-${clip.id}`}
+            ref={colorGradingContainerRef}
+            cache
+            shaders={{
+              fragment: colorGradingConfig.fragment,
+              uniforms: colorGradingConfig.uniforms,
+            }}
+          >
+            {maskedContent}
+          </Node>
+        );
+      } else {
+        view.add(maskedContent);
+      }
+    } else {
+      entries.push({ clip, ref, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal, colorGradingContainerRef });
+
+      const videoElement = (
         <Video
           key={`video-clip-${clip.id}`}
           ref={ref}
@@ -116,6 +143,25 @@ export function createVideoElements({ clips, view, transitions }: CreateVideoEle
           shaders={shaders}
         />
       );
+
+      // Wrap in color grading node if needed
+      if (colorGradingConfig && colorGradingContainerRef) {
+        view.add(
+          <Node
+            key={`color-grading-${clip.id}`}
+            ref={colorGradingContainerRef}
+            cache
+            shaders={{
+              fragment: colorGradingConfig.fragment,
+              uniforms: colorGradingConfig.uniforms,
+            }}
+          >
+            {videoElement}
+          </Node>
+        );
+      } else {
+        view.add(videoElement);
+      }
     }
   }
 

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save, Upload, Check, Loader2, Film, LogOut, Plus, RefreshCw, Settings, CreditCard, Keyboard, Command } from "lucide-react";
+import { FiEdit2 } from "react-icons/fi";
+import { LayoutSelector, type EditorLayoutPreset } from "./LayoutSelector";
 import { BranchSelector } from "./BranchSelector";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useProjectsListStore } from "@/app/lib/store/projects-list-store";
@@ -69,6 +71,8 @@ interface TopBarProps {
   onExportReady?: (handler: () => void) => void;
   onRefreshReady?: (handler: () => void) => void;
   onOpenCommandMenu?: () => void;
+  currentLayout?: EditorLayoutPreset;
+  onLayoutChange?: (layout: EditorLayoutPreset) => void;
 }
 
 function userInitials(user: { displayName?: string | null; email?: string | null }): string {
@@ -82,7 +86,7 @@ function userInitials(user: { displayName?: string | null; email?: string | null
   return "?";
 }
 
-export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, onRenderDialogOpenChange, shortcutsModalOpen: shortcutsModalOpenProp, onShortcutsModalOpenChange, onLoadReady, onExportReady, onRefreshReady, onOpenCommandMenu }: TopBarProps) {
+export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, onRenderDialogOpenChange, shortcutsModalOpen: shortcutsModalOpenProp, onShortcutsModalOpenChange, onLoadReady, onExportReady, onRefreshReady, onOpenCommandMenu, currentLayout = "editing", onLayoutChange }: TopBarProps) {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { credits, refresh, loading: creditsLoading } = useCredits(user?.uid);
@@ -339,19 +343,21 @@ export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, 
             </>
           )}
         <div className="flex items-baseline gap-2">
-          <EditableInput
-            value={project.name}
-            onValueCommit={(val) => {
-              const newName = val || "Untitled Project";
-              updateProjectSettings({ name: newName });
-              // Also update projects list metadata to keep in sync
-              if (projectId) {
-                const userId = useProjectsListStore.getState().userId;
-                updateListProject(projectId, { name: newName }, userId ?? undefined);
-              }
-            }}
-            className="text-sm font-semibold text-foreground bg-transparent border border-transparent focus:border-border rounded px-1 py-0.5 min-w-[120px]"
-          />
+          <div className="flex items-center gap-1.5 border-b border-muted-foreground/50 focus-within:border-muted-foreground pb-0.5 -mb-px transition-colors">
+            <FiEdit2 className="size-3.5 text-muted-foreground shrink-0" aria-hidden />
+            <EditableInput
+              value={project.name}
+              onValueCommit={(val) => {
+                const newName = val || "Untitled Project";
+                updateProjectSettings({ name: newName });
+                if (projectId) {
+                  const userId = useProjectsListStore.getState().userId;
+                  updateListProject(projectId, { name: newName }, userId ?? undefined);
+                }
+              }}
+              className="text-sm font-medium text-foreground bg-transparent border-0 outline-none focus:font-bold rounded px-0 py-0 min-w-[120px] placeholder:text-muted-foreground"
+            />
+          </div>
           <span className="text-xs text-muted-foreground">
             {project.resolution.width}×{project.resolution.height} @ {project.fps}
             fps
@@ -473,6 +479,9 @@ export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, 
               <p>Keyboard shortcuts (Ctrl+/ / ⌘/)</p>
             </TooltipContent>
           </Tooltip>
+          {onLayoutChange && (
+            <LayoutSelector currentLayout={currentLayout} onLayoutChange={onLayoutChange} />
+          )}
         </TooltipProvider>
 
         <div className="inline-flex items-center rounded-md border border-border bg-muted/30 overflow-hidden">
