@@ -86,7 +86,7 @@ function userInitials(user: { displayName?: string | null; email?: string | null
   return "?";
 }
 
-export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, onRenderDialogOpenChange, shortcutsModalOpen: shortcutsModalOpenProp, onShortcutsModalOpenChange, onLoadReady, onExportReady, onRefreshReady, onOpenCommandMenu, currentLayout = "editing", onLayoutChange }: TopBarProps) {
+export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, onRenderDialogOpenChange, shortcutsModalOpen: shortcutsModalOpenProp, onShortcutsModalOpenChange, onLoadReady, onExportReady, onRefreshReady, onOpenCommandMenu, currentLayout = "agentic", onLayoutChange }: TopBarProps) {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { credits, refresh, loading: creditsLoading } = useCredits(user?.uid);
