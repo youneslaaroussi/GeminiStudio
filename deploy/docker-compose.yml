@@ -101,7 +101,7 @@ services:
     # No public ports - only accessible via internal network
     environment:
       - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/service-account.json
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/google-service-account.json
       - ASSET_GCS_BUCKET=${ASSET_GCS_BUCKET}
       - ASSET_SIGNED_URL_TTL_SECONDS=${ASSET_SIGNED_URL_TTL_SECONDS:-604800}
       - SPEECH_PROJECT_ID=${GOOGLE_PROJECT_ID}
@@ -146,7 +146,7 @@ services:
       - REPLICATE_API_TOKEN=${REPLICATE_API_TOKEN}
       - ASSET_SERVICE_URL=http://asset-service:8081
       - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/service-account.json
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/google-service-account.json
       - REDIS_URL=redis://redis:6379/1
       - DEBUG=${DEBUG:-false}
       - APP_HOST=0.0.0.0
@@ -176,7 +176,7 @@ services:
     # No public ports - only accessible via internal network
     environment:
       - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/service-account.json
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/google-service-account.json
       - GOOGLE_API_KEY=${GEMINI_API_KEY}
       - GOOGLE_GENERATIVE_AI_API_KEY=${GEMINI_API_KEY}
       - GOOGLE_CLOUD_STORAGE_BUCKET=${CHECKPOINT_GCS_BUCKET:-${ASSET_GCS_BUCKET}}
@@ -220,7 +220,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - RENDERER_HEADLESS=true
       - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/service-account.json
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/google-service-account.json
       - RENDERER_EVENT_TOPIC=${RENDER_EVENT_TOPIC:-gemini-render-events}
       - RENDERER_TASK_TIMEOUT_MS=${RENDERER_TASK_TIMEOUT_MS:-600000}
     volumes:
@@ -247,7 +247,7 @@ services:
     restart: unless-stopped
     # No public ports - only accessible via internal network
     environment:
-      - FIREBASE_SERVICE_ACCOUNT_KEY=/app/secrets/service-account.json
+      - FIREBASE_SERVICE_ACCOUNT_KEY=/app/secrets/firebase-service-account.json
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_CREDITS_WEBHOOK_SECRET=${STRIPE_CREDITS_WEBHOOK_SECRET:-}
       - STRIPE_PRICE_STARTER=${STRIPE_PRICE_STARTER:-}
