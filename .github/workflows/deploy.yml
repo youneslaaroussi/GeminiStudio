@@ -78,8 +78,15 @@ jobs:
           echo "Checking services at $IP..."
           
           # Wait for services to start
-          sleep 30
+          sleep 60
           
-          # Check health endpoints
-          curl -sf "http://$IP:8081/health" && echo "Asset service: OK" || echo "Asset service: FAILED"
-          curl -sf "http://$IP:8080/health" && echo "LangGraph: OK" || echo "LangGraph: FAILED"
+          # Check health endpoints - fail job if any service is unhealthy
+          echo "Checking Asset service..."
+          curl -sf --retry 3 --retry-delay 10 "http://$IP:8081/health" || { echo "Asset service: FAILED"; exit 1; }
+          echo "Asset service: OK"
+          
+          echo "Checking LangGraph..."
+          curl -sf --retry 3 --retry-delay 10 "http://$IP:8080/health" || { echo "LangGraph: FAILED"; exit 1; }
+          echo "LangGraph: OK"
+          
+          echo "All services healthy!"
