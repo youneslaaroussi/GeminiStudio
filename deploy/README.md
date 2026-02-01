@@ -112,20 +112,49 @@ Deploy all GeminiStudio backend services on a single GCE VM with Docker Compose.
 
 ```bash
 # Required: Gemini API key
-gcloud secrets create gemini-api-key \
-  --data-file=- <<< "your-gemini-api-key"
-
-# Optional: Stripe (if using billing)
-gcloud secrets create stripe-secret-key \
-  --data-file=- <<< "sk_xxx"
+echo -n "your-gemini-api-key" | gcloud secrets create gemini-api-key --data-file=-
 
 # Optional: Replicate (if using video effects)
-gcloud secrets create replicate-api-token \
-  --data-file=- <<< "r8_xxx"
+echo -n "r8_xxx" | gcloud secrets create replicate-api-token --data-file=-
 
 # Optional: Algolia (if using search)
-gcloud secrets create algolia-admin-key \
-  --data-file=- <<< "xxx"
+echo -n "xxx" | gcloud secrets create algolia-admin-key --data-file=-
+```
+
+### 1b. Stripe Setup (if using billing)
+
+**Add Stripe secrets:**
+
+```bash
+# Stripe secret key (sk_live_... for production, sk_test_... for testing)
+echo -n "sk_live_xxx" | gcloud secrets create stripe-secret-key --data-file=-
+
+# Stripe price IDs (create products in Stripe Dashboard first)
+echo -n "price_xxx" | gcloud secrets create stripe-price-starter --data-file=-
+echo -n "price_xxx" | gcloud secrets create stripe-price-pro --data-file=-
+echo -n "price_xxx" | gcloud secrets create stripe-price-enterprise --data-file=-
+```
+
+**Create Stripe webhook:**
+
+1. Go to [Stripe Dashboard → Webhooks](https://dashboard.stripe.com/webhooks)
+2. Click **"Add endpoint"**
+3. Set endpoint URL: `https://geminivideo.studio/credits/webhook`
+4. Set API version: Use your **account's default version** (visible in Stripe Dashboard → Developers → API version)
+5. Select events:
+   - `checkout.session.completed`
+   - `customer.subscription.created`
+   - `customer.subscription.updated`
+   - `customer.subscription.deleted`
+   - `invoice.paid`
+   - `invoice.payment_failed`
+6. Click **"Add endpoint"**
+7. Copy the **Signing secret** (starts with `whsec_`)
+
+**Add webhook secret:**
+
+```bash
+echo -n "whsec_xxx" | gcloud secrets create stripe-webhook-secret --data-file=-
 ```
 
 ### 2. Configure Terraform

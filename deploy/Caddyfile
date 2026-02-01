@@ -2,11 +2,18 @@
 # Automatically provisions SSL from Let's Encrypt
 
 {$DOMAIN:localhost}, www.{$DOMAIN:localhost} {
-    # Frontend - Next.js
-    reverse_proxy frontend:3000
+    # Billing service API (for Stripe webhooks)
+    handle /credits/* {
+        reverse_proxy billing-service:3100
+    }
 
     # Health check endpoint
     handle /health {
         respond "OK" 200
+    }
+
+    # Frontend - Next.js (catch-all, must be last)
+    handle {
+        reverse_proxy frontend:3000
     }
 }
