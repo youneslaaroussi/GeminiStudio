@@ -15,33 +15,25 @@ output "ssh_command" {
   value       = "gcloud compute ssh ${google_compute_instance.gemini_studio.name} --zone=${var.zone} --project=${var.project_id}"
 }
 
-output "copy_env_command" {
-  description = "Command to copy generated.env to the VM"
-  value       = "gcloud compute scp ${path.module}/../generated.env ${google_compute_instance.gemini_studio.name}:/opt/gemini-studio/deploy/.env --zone=${var.zone} --project=${var.project_id}"
+output "public_url" {
+  description = "Public URL for the application"
+  value       = "https://geminivideo.studio"
 }
 
-output "service_urls" {
-  description = "URLs for each service"
-  value = {
-    langgraph_server      = "http://${google_compute_address.gemini_studio.address}:8080"
-    asset_service         = "http://${google_compute_address.gemini_studio.address}:8081"
-    video_effects_service = "http://${google_compute_address.gemini_studio.address}:8082"
-    renderer              = "http://${google_compute_address.gemini_studio.address}:4000"
-    billing_service       = "http://${google_compute_address.gemini_studio.address}:3100"
-  }
-}
-
-output "frontend_env_vars" {
-  description = "Environment variables to set in your frontend (Vercel, etc.)"
+output "architecture_note" {
+  description = "Architecture overview"
   value       = <<-EOT
     
-    Add these to your frontend environment (Vercel Dashboard > Settings > Environment Variables):
-    
-    ASSET_SERVICE_URL=http://${google_compute_address.gemini_studio.address}:8081
-    VIDEO_EFFECTS_SERVICE_URL=http://${google_compute_address.gemini_studio.address}:8082
-    RENDERER_API_URL=http://${google_compute_address.gemini_studio.address}:4000
-    NEXT_PUBLIC_LANGGRAPH_URL=http://${google_compute_address.gemini_studio.address}:8080
-    NEXT_PUBLIC_BILLING_SERVICE_URL=http://${google_compute_address.gemini_studio.address}:3100
+    Network Architecture:
+    - Public: Caddy reverse proxy (ports 80/443) at https://geminivideo.studio
+    - Internal only (via Docker network):
+      - Frontend (Next.js) on port 3000
+      - Asset Service on port 8081
+      - Video Effects on port 8082
+      - LangGraph on port 8080
+      - Renderer on port 4000
+      - Billing on port 3100
+      - Redis on port 6379
     
   EOT
 }
@@ -62,10 +54,12 @@ output "next_steps" {
     
     Infrastructure created! Next steps:
     
-    1. Copy the generated .env file to the VM:
-       ${format("gcloud compute scp %s/../generated.env %s:/opt/gemini-studio/deploy/.env --zone=%s --project=%s", path.module, google_compute_instance.gemini_studio.name, var.zone, var.project_id)}
+    1. Ensure secrets are in Secret Manager:
+       gcloud secrets versions access latest --secret=gemini-api-key
+       gcloud secrets versions access latest --secret=stripe-secret-key
+       gcloud secrets versions access latest --secret=replicate-api-token
     
-    2. Copy your service account JSON to the VM:
+    2. Copy service account JSON to VM:
        gcloud compute scp /path/to/service-account.json ${google_compute_instance.gemini_studio.name}:/opt/gemini-studio/deploy/secrets/service-account.json --zone=${var.zone} --project=${var.project_id}
     
     3. Add GitHub secret for CI/CD:
@@ -76,7 +70,7 @@ output "next_steps" {
     4. Push to main branch to trigger deployment:
        git push origin main
     
-    5. Update your frontend environment with the values from 'terraform output frontend_env_vars'
+    5. Point your domain (geminivideo.studio) to: ${google_compute_address.gemini_studio.address}
     
   EOT
 }

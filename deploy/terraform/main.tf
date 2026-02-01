@@ -23,14 +23,14 @@ resource "google_compute_address" "gemini_studio" {
   region = var.region
 }
 
-# Firewall rule to allow HTTP/HTTPS and service ports
+# Firewall rule - only SSH and HTTP/HTTPS (backend services are internal-only)
 resource "google_compute_firewall" "gemini_studio" {
   name    = "gemini-studio-firewall"
   network = "default"
 
   allow {
     protocol = "tcp"
-    ports    = ["22", "80", "443", "4000", "8080", "8081", "8082", "3100"]
+    ports    = ["22", "80", "443"]
   }
 
   source_ranges = ["0.0.0.0/0"]

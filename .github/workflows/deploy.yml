@@ -111,34 +111,41 @@ jobs:
 
       - name: Health check
         run: |
-          # Get VM IP
-          IP=$(gcloud compute instances describe ${{ env.INSTANCE_NAME }} \
-            --zone=${{ env.ZONE }} \
-            --project=${{ env.PROJECT_ID }} \
-            --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
-          
-          echo "Checking services at $IP..."
-          
           # Wait for services to start (LangGraph takes longer due to Rust deps)
+          echo "Waiting 90s for services to initialize..."
           sleep 90
           
-          # Check health endpoints - fail job if any service is unhealthy
-          echo "Checking Asset service..."
-          curl -sf --retry 5 --retry-delay 15 --retry-all-errors "http://$IP:8081/health" || { echo "Asset service: FAILED"; exit 1; }
-          echo "Asset service: OK"
+          # Health check via SSH (backend services are internal-only)
+          gcloud compute ssh ${{ env.INSTANCE_NAME }} \
+            --zone=${{ env.ZONE }} \
+            --project=${{ env.PROJECT_ID }} \
+            --command='
+              echo "Checking internal services..."
+              
+              # Check via Docker network using service names
+              sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml exec -T asset-service curl -sf http://localhost:8081/health || { echo "Asset service: FAILED"; exit 1; }
+              echo "Asset service: OK"
+              
+              sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml exec -T langgraph-server curl -sf http://localhost:8080/healthz || { echo "LangGraph: FAILED"; exit 1; }
+              echo "LangGraph: OK"
+              
+              sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml exec -T renderer curl -sf http://localhost:4000/health || { echo "Renderer: FAILED"; exit 1; }
+              echo "Renderer: OK"
+              
+              sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml exec -T billing-service curl -sf http://localhost:3100/health || { echo "Billing: FAILED"; exit 1; }
+              echo "Billing: OK"
+              
+              sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml exec -T video-effects-service curl -sf http://localhost:8082/health || { echo "Video Effects: FAILED"; exit 1; }
+              echo "Video Effects: OK"
+              
+              echo "All internal services healthy!"
+            '
           
-          echo "Checking LangGraph..."
-          curl -sf --retry 5 --retry-delay 15 --retry-all-errors "http://$IP:8080/healthz" || { echo "LangGraph: FAILED"; exit 1; }
-          echo "LangGraph: OK"
-          
-          echo "Checking Renderer..."
-          curl -sf --retry 5 --retry-delay 15 --retry-all-errors "http://$IP:4000/health" || { echo "Renderer: FAILED"; exit 1; }
-          echo "Renderer: OK"
-          
-          echo "Checking Frontend (via Caddy)..."
+          # Check public frontend via Caddy
+          echo "Checking public frontend..."
           curl -sf --retry 5 --retry-delay 15 --retry-all-errors -k "https://geminivideo.studio/health" || { echo "Frontend: FAILED (might need DNS propagation)"; }
           echo "Frontend: OK"
           
-          echo "All services healthy!"
           echo ""
+          echo "All services healthy!"
           echo "Your app is live at: https://geminivideo.studio"

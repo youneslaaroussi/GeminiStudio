@@ -735,7 +735,7 @@ export function ChatPanel() {
         const result = await executeTool({
           toolName: options.toolName,
           input: options.input,
-          context: { project },
+          context: { project, projectId: projectId ?? undefined },
         });
         await submitClientToolResult({
           toolCallId: options.toolCallId,
@@ -755,7 +755,7 @@ export function ChatPanel() {
         });
       }
     },
-    [project, submitClientToolResult]
+    [project, projectId, submitClientToolResult]
   );
 
   useEffect(() => {

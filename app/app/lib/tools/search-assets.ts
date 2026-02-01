@@ -50,12 +50,7 @@ export const searchAssetsTool: ToolDefinition<typeof searchAssetsSchema, Project
     if (!projectId) {
       return {
         status: "error",
-        outputs: [
-          {
-            type: "text",
-            text: "No project ID available. Please open a project first.",
-          },
-        ],
+        error: "No project ID available. Please open a project first.",
       };
     }
 
@@ -75,12 +70,7 @@ export const searchAssetsTool: ToolDefinition<typeof searchAssetsSchema, Project
         const data = await response.json();
         return {
           status: "error",
-          outputs: [
-            {
-              type: "text",
-              text: data.error || `Search failed: ${response.status}`,
-            },
-          ],
+          error: data.error || `Search failed: ${response.status}`,
         };
       }
 
@@ -89,12 +79,7 @@ export const searchAssetsTool: ToolDefinition<typeof searchAssetsSchema, Project
       if (results.error) {
         return {
           status: "error",
-          outputs: [
-            {
-              type: "text",
-              text: results.error,
-            },
-          ],
+          error: results.error,
         };
       }
 
@@ -167,12 +152,7 @@ export const searchAssetsTool: ToolDefinition<typeof searchAssetsSchema, Project
     } catch (error) {
       return {
         status: "error",
-        outputs: [
-          {
-            type: "text",
-            text: error instanceof Error ? error.message : "Search failed",
-          },
-        ],
+        error: error instanceof Error ? error.message : "Search failed",
       };
     }
   },

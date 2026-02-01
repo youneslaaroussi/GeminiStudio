@@ -41,6 +41,7 @@ export type ToolExecutionResult = ToolExecutionSuccess | ToolExecutionFailure;
 
 export interface ToolRuntimeContext<TProject = unknown> {
   project?: TProject;
+  projectId?: string;
 }
 
 export interface ToolDefinition<

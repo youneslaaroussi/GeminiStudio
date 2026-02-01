@@ -66,6 +66,7 @@ function createId() {
 export function ToolboxPanel() {
   const tools = useMemo(() => toolRegistry.list(), []);
   const project = useProjectStore((state) => state.project);
+  const projectId = useProjectStore((state) => state.projectId);
   const currentTime = useProjectStore((state) => state.currentTime);
   const capturedAssets = useToolboxStore((state) => state.capturedAssets);
 
@@ -174,7 +175,7 @@ export function ToolboxPanel() {
     const result = await executeTool({
       toolName: selectedTool.name,
       input: parsedFormInput,
-      context: { project },
+      context: { project, projectId: projectId ?? undefined },
     });
     const durationMs = performance.now() - start;
     const entry: HistoryEntry = {
@@ -195,7 +196,7 @@ export function ToolboxPanel() {
     setIsRunning(false);
     // Auto-expand history on new entry
     setHistoryOpen(true);
-  }, [parsedFormInput, project, selectedTool]);
+  }, [parsedFormInput, project, projectId, selectedTool]);
 
   return (
     <div className="flex h-full flex-col">
