@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { Mic, Square, ChevronDown, RefreshCw, Volume2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useLiveSession } from "@/app/hooks/useLiveSession";
-import { getAudioInputDevices } from "@/app/lib/live";
+import { getAudioInputDevices, executeToolByName } from "@/app/lib/live";
 import { AudioWaveVisualizer } from "@/app/components/AudioWaveVisualizer";
 import type { ToolCallRequest, AudioDevice, LiveVoiceName } from "@/app/lib/live";
 
@@ -113,17 +113,16 @@ export function VoiceChat({ onToolCall, className = "" }: VoiceChatProps) {
     }
   }, []);
 
+  // Handle tool calls: always update UI, then delegate to custom handler or execute via registry
   const handleToolCall = useCallback(
     async (toolCall: ToolCallRequest) => {
       setLastAction({ name: toolCall.name, args: toolCall.args });
 
-      // Call the parent handler if provided
+      // Use custom handler if provided, otherwise execute tool from registry
       if (onToolCall) {
         return onToolCall(toolCall);
       }
-
-      // Default handling - just acknowledge
-      return { result: "ok", message: `Executed ${toolCall.name}` };
+      return executeToolByName(toolCall.name, toolCall.args);
     },
     [onToolCall]
   );

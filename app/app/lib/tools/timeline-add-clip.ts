@@ -32,8 +32,8 @@ const baseClipSchema = z.object({
     .min(1, "Name cannot be empty")
     .max(180, "Name must be 180 characters or fewer")
     .optional(),
-  start: z.number().min(0, "Start time must be zero or greater"),
-  duration: z.number().positive("Duration must be positive"),
+  start: z.number().min(0, "Start time must be zero or greater").optional().default(0),
+  duration: z.number().positive("Duration must be positive").optional(),
   offset: z.number().min(0, "Source offset must be zero or greater").optional(),
   speed: z
     .number()
@@ -64,48 +64,37 @@ const mediaSrcSchema = z
     { message: "Provide a valid media URL or application path" },
   );
 
-const addClipSchema = z.discriminatedUnion("type", [
-  baseClipSchema.extend({
-    type: z.literal("video"),
-    src: mediaSrcSchema,
-    width: z.number().positive().optional(),
-    height: z.number().positive().optional(),
-    sourceDuration: z.number().positive().optional(),
-    focus: focusSchema.optional(),
-    objectFit: z.enum(["contain", "cover", "fill"]).optional(),
-  }),
-  baseClipSchema.extend({
-    type: z.literal("audio"),
-    src: mediaSrcSchema,
-    sourceDuration: z.number().positive().optional(),
-    volume: z
-      .number()
-      .min(0, "Volume must be between 0 and 1")
-      .max(1, "Volume must be between 0 and 1")
-      .optional(),
-  }),
-  baseClipSchema.extend({
-    type: z.literal("image"),
-    src: mediaSrcSchema,
-    width: z.number().positive().optional(),
-    height: z.number().positive().optional(),
-  }),
-  baseClipSchema.extend({
-    type: z.literal("text"),
-    text: z.string().min(1, "Text content cannot be empty"),
-    fontSize: z.number().positive().optional(),
-    fill: z.string().optional(),
-    opacity: z
-      .number()
-      .min(0, "Opacity must be between 0 and 1")
-      .max(1, "Opacity must be between 0 and 1")
-      .optional(),
-  }),
-]);
+const addClipSchema = baseClipSchema.extend({
+  // Type is optional - can be inferred from assetId
+  type: z.enum(["video", "audio", "image", "text"]).optional(),
+  // Src is optional - can be fetched from assetId
+  src: mediaSrcSchema.optional(),
+  // Media properties (video/image)
+  width: z.number().positive().optional(),
+  height: z.number().positive().optional(),
+  sourceDuration: z.number().positive().optional(),
+  focus: focusSchema.optional(),
+  objectFit: z.enum(["contain", "cover", "fill"]).optional(),
+  // Audio properties
+  volume: z
+    .number()
+    .min(0, "Volume must be between 0 and 1")
+    .max(1, "Volume must be between 0 and 1")
+    .optional(),
+  // Text properties
+  text: z.string().optional(),
+  fontSize: z.number().positive().optional(),
+  fill: z.string().optional(),
+  opacity: z
+    .number()
+    .min(0, "Opacity must be between 0 and 1")
+    .max(1, "Opacity must be between 0 and 1")
+    .optional(),
+});
 
 type AddClipInput = z.infer<typeof addClipSchema>;
 
-function applyCommonOverrides(clip: TimelineClip, input: AddClipInput) {
+function applyCommonOverrides(clip: TimelineClip, input: Partial<AddClipInput>) {
   if (input.offset !== undefined) clip.offset = input.offset;
   if (input.speed !== undefined) clip.speed = input.speed;
   if (input.position) clip.position = input.position;
@@ -121,10 +110,17 @@ export const timelineAddClipTool: ToolDefinition<
   name: "timelineAddClip",
   label: "Add Timeline Clip",
   description:
-    "Insert a new clip on the timeline using the project store's existing helpers.",
+    "Insert a new clip on the timeline. If assetId is provided, type and src will be auto-detected from the asset. For media clips (video/audio/image), provide either assetId or both type and src. For text clips, provide type='text' and text content.",
   runLocation: "client",
   inputSchema: addClipSchema,
   fields: [
+    {
+      name: "assetId",
+      label: "Asset ID",
+      type: "text",
+      placeholder: "Asset ID from listAssets",
+      description: "Recommended: provide assetId to auto-detect type, src, and duration.",
+    },
     {
       name: "type",
       label: "Clip Type",
@@ -135,7 +131,7 @@ export const timelineAddClipTool: ToolDefinition<
         { value: "image", label: "Image" },
         { value: "text", label: "Text" },
       ],
-      required: true,
+      description: "Optional if assetId is provided (will be inferred from asset).",
     },
     {
       name: "layerId",
@@ -153,32 +149,26 @@ export const timelineAddClipTool: ToolDefinition<
       name: "start",
       label: "Start (seconds)",
       type: "number",
-      required: true,
+      description: "Defaults to 0 if not provided.",
     },
     {
       name: "duration",
       label: "Duration (seconds)",
       type: "number",
-      required: true,
+      description: "Optional: defaults to asset duration or 5s for images.",
     },
     {
       name: "src",
       label: "Source URL",
       type: "text",
       placeholder: "Video, audio, or image URL",
-      description: "Required for media clips (video, audio, image).",
+      description: "Optional if assetId is provided (will be fetched from asset).",
     },
     {
       name: "text",
       label: "Text Content",
       type: "textarea",
       description: "Required for text clips.",
-    },
-    {
-      name: "assetId",
-      label: "Asset ID",
-      type: "text",
-      placeholder: "Optional asset metadata reference",
     },
     {
       name: "offset",
@@ -270,24 +260,98 @@ export const timelineAddClipTool: ToolDefinition<
     }
 
     const store = useProjectStore.getState();
+
+    // Resolve asset details if assetId is provided
+    let resolvedSrc = input.src;
+    let resolvedType = input.type;
+    let resolvedDuration = input.duration;
+    let resolvedWidth = input.width;
+    let resolvedHeight = input.height;
+    let resolvedSourceDuration = input.sourceDuration;
+
+    if (input.assetId) {
+      // Try to find the asset in the store to get its details
+      const { useAssetsStore } = await import("@/app/lib/store/assets-store");
+      const assetsStore = useAssetsStore.getState();
+      const asset = assetsStore.assets.find((a) => a.id === input.assetId);
+
+      if (asset) {
+        // Infer type from asset if not provided
+        if (!resolvedType) {
+          const assetType = asset.type?.toLowerCase();
+          if (assetType === "video" || assetType === "audio" || assetType === "image") {
+            resolvedType = assetType;
+          }
+        }
+
+        // Use asset's signed URL if src not provided
+        if (!resolvedSrc && asset.signedUrl) {
+          resolvedSrc = asset.signedUrl;
+        }
+
+        // Use asset dimensions/duration if not provided
+        if (!resolvedWidth && asset.width) {
+          resolvedWidth = asset.width;
+        }
+        if (!resolvedHeight && asset.height) {
+          resolvedHeight = asset.height;
+        }
+        if (!resolvedSourceDuration && asset.duration) {
+          resolvedSourceDuration = asset.duration;
+          // Default clip duration to source duration if not specified
+          if (!resolvedDuration) {
+            resolvedDuration = asset.duration;
+          }
+        }
+      }
+    }
+
+    // Default duration for images if still not set
+    if (!resolvedDuration) {
+      resolvedDuration = resolvedType === "image" ? 5 : 10;
+    }
+
+    // Validate we have the required fields
+    if (!resolvedType) {
+      return {
+        status: "error",
+        error: "Could not determine clip type. Provide 'type' or a valid 'assetId'.",
+      };
+    }
+
+    if (resolvedType !== "text" && !resolvedSrc) {
+      return {
+        status: "error",
+        error: "Could not determine media source. Provide 'src' or a valid 'assetId' with a signed URL.",
+      };
+    }
+
+    if (resolvedType === "text" && !input.text) {
+      return {
+        status: "error",
+        error: "Text clips require 'text' content.",
+      };
+    }
+
     let clip: TimelineClip;
     const baseName = input.name?.trim();
+    const start = input.start ?? 0;
 
-    switch (input.type) {
+    switch (resolvedType) {
       case "video": {
         clip = createVideoClip(
-          input.src,
+          resolvedSrc!,
           baseName || "Video Clip",
-          input.start,
-          input.duration,
+          start,
+          resolvedDuration,
           {
             assetId: input.assetId,
-            width: input.width,
-            height: input.height,
-            sourceDuration: input.sourceDuration,
+            width: resolvedWidth,
+            height: resolvedHeight,
+            sourceDuration: resolvedSourceDuration,
           }
         );
-        applyCommonOverrides(clip, input);
+        applyCommonOverrides(clip, { ...input, type: resolvedType, src: resolvedSrc!, start, duration: resolvedDuration });
         if (input.objectFit) {
           clip.objectFit = input.objectFit;
         }
@@ -298,13 +362,13 @@ export const timelineAddClipTool: ToolDefinition<
       }
       case "audio": {
         clip = createAudioClip(
-          input.src,
+          resolvedSrc!,
           baseName || "Audio Clip",
-          input.start,
-          input.duration,
-          { assetId: input.assetId, sourceDuration: input.sourceDuration }
+          start,
+          resolvedDuration,
+          { assetId: input.assetId, sourceDuration: resolvedSourceDuration }
         );
-        applyCommonOverrides(clip, input);
+        applyCommonOverrides(clip, { ...input, type: resolvedType, src: resolvedSrc!, start, duration: resolvedDuration });
         if (input.volume !== undefined) {
           clip.volume = input.volume;
         }
@@ -312,27 +376,27 @@ export const timelineAddClipTool: ToolDefinition<
       }
       case "image": {
         clip = createImageClip(
-          input.src,
+          resolvedSrc!,
           baseName || "Image Clip",
-          input.start,
-          input.duration,
+          start,
+          resolvedDuration,
           {
             assetId: input.assetId,
-            width: input.width,
-            height: input.height,
+            width: resolvedWidth,
+            height: resolvedHeight,
           }
         );
-        applyCommonOverrides(clip, input);
+        applyCommonOverrides(clip, { ...input, type: resolvedType, src: resolvedSrc!, start, duration: resolvedDuration });
         break;
       }
       case "text": {
         clip = createTextClip(
-          input.text,
+          input.text!,
           baseName || "Text Clip",
-          input.start,
-          input.duration
+          start,
+          resolvedDuration
         );
-        applyCommonOverrides(clip, input);
+        applyCommonOverrides(clip, { ...input, type: resolvedType, start, duration: resolvedDuration });
         if (input.fontSize !== undefined) {
           clip.fontSize = input.fontSize;
         }
@@ -347,7 +411,7 @@ export const timelineAddClipTool: ToolDefinition<
       default:
         return {
           status: "error",
-          error: `Unsupported clip type ${(input as { type: string }).type}.`,
+          error: `Unsupported clip type ${resolvedType}.`,
         };
     }
 

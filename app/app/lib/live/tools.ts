@@ -181,7 +181,6 @@ export async function executeToolByName(
     };
   }
 
-  // Convert tool outputs to a simple object
   const outputTexts: string[] = [];
   const outputData: unknown[] = [];
 

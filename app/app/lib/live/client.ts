@@ -211,7 +211,6 @@ export class LiveSession {
 
     for (const call of functionCalls) {
       try {
-        // Call the tool callback
         const result = await this.callbacks.onToolCall?.({
           id: call.id,
           name: call.name,
@@ -234,7 +233,6 @@ export class LiveSession {
       }
     }
 
-    // Send tool responses back
     this.sendToolResponses(responses);
   }
 
