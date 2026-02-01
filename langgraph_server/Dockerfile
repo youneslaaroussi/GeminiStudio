@@ -22,7 +22,7 @@ WORKDIR /app
 
 RUN pip install "poetry==$POETRY_VERSION"
 
-COPY pyproject.toml poetry.lock* ./
+COPY pyproject.toml poetry.lock* README.md ./
 COPY src ./src
 
 RUN poetry config virtualenvs.create false \
