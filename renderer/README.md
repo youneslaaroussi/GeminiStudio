@@ -49,26 +49,43 @@ Create a `.env` file in `renderer/` (optional) or supply environment variables:
 
 The renderer publishes `render.completed` and `render.failed` events to Google Cloud Pub/Sub when jobs finish. This allows other services (like the LangGraph agent) to be notified of render status changes.
 
-**Required GCP Permissions:**
+**Setup:**
 
-The service account must have the `roles/pubsub.publisher` role:
+1. **Create the Pub/Sub topic:**
+   ```bash
+   gcloud pubsub topics create gemini-render-events
+   ```
 
-```bash
-# Get your service account email
-SERVICE_ACCOUNT="your-service-account@your-project.iam.gserviceaccount.com"
-PROJECT_ID="your-project-id"
+2. **Grant permissions to your service account:**
+   
+   The service account specified in `GOOGLE_APPLICATION_CREDENTIALS` must have the `roles/pubsub.publisher` role:
+   
+   ```bash
+   # Find your service account email (from the JSON file)
+   SERVICE_ACCOUNT=$(cat /path/to/google-service-account.json | grep client_email | cut -d'"' -f4)
+   PROJECT_ID="your-project-id"
+   
+   # Grant Pub/Sub Publisher role
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:$SERVICE_ACCOUNT" \
+     --role="roles/pubsub.publisher"
+   ```
 
-# Grant Pub/Sub Publisher role
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="serviceAccount:$SERVICE_ACCOUNT" \
-  --role="roles/pubsub.publisher"
-```
+3. **Restart the renderer** to pick up the new permissions:
+   ```bash
+   # If running in Docker
+   docker compose restart renderer
+   
+   # If running on GCE VM
+   gcloud compute ssh your-vm --zone=your-zone --command='sudo docker compose -f /path/to/docker-compose.yml restart renderer'
+   ```
 
-**Create the Pub/Sub topic:**
+**Troubleshooting:**
 
-```bash
-gcloud pubsub topics create gemini-render-events
-```
+If you see `PERMISSION_DENIED: User not authorized to perform this action` errors in the logs:
+- Verify the service account has `roles/pubsub.publisher`
+- Verify the topic exists: `gcloud pubsub topics list`
+- Restart the renderer service after granting permissions
 
 If Pub/Sub is not configured or permissions are missing, renders will still complete successfully but events won't be published (errors will be logged).
 

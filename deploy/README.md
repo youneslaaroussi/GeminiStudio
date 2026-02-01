@@ -58,26 +58,25 @@ Deploy all GeminiStudio backend services on a single GCE VM with Docker Compose.
    ```
 
 4. **Service Account** JSON file with required roles:
-   - `roles/compute.instanceAdmin.v1` - SSH access to VMs (required for CI/CD)
-   - `roles/iam.serviceAccountUser` - Act as VM service account (required for SSH)
-   - `roles/storage.admin` - GCS bucket access
-   - `roles/datastore.user` - Firestore access
-   - `roles/pubsub.publisher` - Pub/Sub publishing
-   - `roles/secretmanager.secretAccessor` - Read secrets
+   
+   Create a service account for your backend services with these roles:
+   - `roles/storage.admin` - GCS bucket access (upload/download assets, renders)
+   - `roles/datastore.user` - Firestore access (user data, projects, metadata)
+   - `roles/pubsub.publisher` - Pub/Sub publishing (renderer publishes completion events)
+   - `roles/pubsub.subscriber` - Pub/Sub subscribing (LangGraph receives render events)
+   - `roles/aiplatform.user` - Vertex AI access (Veo video generation)
+   - `roles/speech.client` - Speech-to-Text API access (transcription)
 
-   Grant these roles to your CI/CD service account:
    ```bash
-   SA_EMAIL="your-service-account@your-project.iam.gserviceaccount.com"
    PROJECT_ID="your-project-id"
+   
+   # Create service account for backend services
+   gcloud iam service-accounts create gemini-studio-backend \
+     --display-name="GeminiStudio Backend Services"
+   
+   SA_EMAIL="gemini-studio-backend@${PROJECT_ID}.iam.gserviceaccount.com"
 
-   gcloud projects add-iam-policy-binding $PROJECT_ID \
-     --member="serviceAccount:$SA_EMAIL" \
-     --role="roles/compute.instanceAdmin.v1"
-
-   gcloud projects add-iam-policy-binding $PROJECT_ID \
-     --member="serviceAccount:$SA_EMAIL" \
-     --role="roles/iam.serviceAccountUser"
-
+   # Grant required roles
    gcloud projects add-iam-policy-binding $PROJECT_ID \
      --member="serviceAccount:$SA_EMAIL" \
      --role="roles/storage.admin"
@@ -92,7 +91,41 @@ Deploy all GeminiStudio backend services on a single GCE VM with Docker Compose.
 
    gcloud projects add-iam-policy-binding $PROJECT_ID \
      --member="serviceAccount:$SA_EMAIL" \
-     --role="roles/secretmanager.secretAccessor"
+     --role="roles/pubsub.subscriber"
+
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:$SA_EMAIL" \
+     --role="roles/aiplatform.user"
+
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:$SA_EMAIL" \
+     --role="roles/speech.client"
+
+   # Create and download key
+   gcloud iam service-accounts keys create google-service-account.json \
+     --iam-account=$SA_EMAIL
+   ```
+
+   **For CI/CD (GitHub Actions)**, create a separate service account:
+   ```bash
+   # Create CI/CD service account
+   gcloud iam service-accounts create gemini-studio-cicd \
+     --display-name="GeminiStudio CI/CD"
+   
+   CICD_SA_EMAIL="gemini-studio-cicd@${PROJECT_ID}.iam.gserviceaccount.com"
+
+   # Grant deployment permissions
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:$CICD_SA_EMAIL" \
+     --role="roles/compute.instanceAdmin.v1"
+
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:$CICD_SA_EMAIL" \
+     --role="roles/iam.serviceAccountUser"
+
+   # Create and download key for GitHub Actions
+   gcloud iam service-accounts keys create cicd-service-account.json \
+     --iam-account=$CICD_SA_EMAIL
    ```
 
 5. **VM Default Service Account** - needs Secret Manager and Pub/Sub access:
@@ -114,7 +147,24 @@ Deploy all GeminiStudio backend services on a single GCE VM with Docker Compose.
 
 ## Quick Start
 
-### 1. Store Secrets in Secret Manager
+### 1. Create Pub/Sub Topics and Subscriptions
+
+```bash
+PROJECT_ID="your-project-id"
+
+# Create topics
+gcloud pubsub topics create gemini-render-events --project=$PROJECT_ID
+gcloud pubsub topics create gemini-pipeline-events --project=$PROJECT_ID
+gcloud pubsub topics create gemini-veo-events --project=$PROJECT_ID
+
+# Create subscription for LangGraph to receive render completion events
+gcloud pubsub subscriptions create gemini-render-events-sub \
+  --topic=gemini-render-events \
+  --ack-deadline=60 \
+  --project=$PROJECT_ID
+```
+
+### 2. Store Secrets in Secret Manager
 
 ```bash
 # Required: Gemini API key
@@ -127,7 +177,7 @@ echo -n "r8_xxx" | gcloud secrets create replicate-api-token --data-file=-
 echo -n "xxx" | gcloud secrets create algolia-admin-key --data-file=-
 ```
 
-### 1b. Stripe Setup (if using billing)
+### 2b. Stripe Setup (if using billing)
 
 **Add Stripe secrets:**
 
@@ -163,7 +213,7 @@ echo -n "price_xxx" | gcloud secrets create stripe-price-enterprise --data-file=
 echo -n "whsec_xxx" | gcloud secrets create stripe-webhook-secret --data-file=-
 ```
 
-### 2. Configure Terraform
+### 3. Configure Terraform
 
 ```bash
 cd deploy/terraform
@@ -177,7 +227,7 @@ cp terraform.tfvars.example terraform.tfvars
 # - Enable features you need (billing, video_effects, algolia)
 ```
 
-### 3. Deploy Infrastructure
+### 4. Deploy Infrastructure
 
 ```bash
 terraform init
@@ -192,22 +242,26 @@ This creates:
 - Pub/Sub topics
 - `generated.env` file with all configuration
 
-### 4. Setup the VM
+### 5. Setup the VM
 
 ```bash
 # Copy the generated .env file
 gcloud compute scp ../generated.env gemini-studio:/opt/gemini-studio/deploy/.env \
   --zone=us-central1-a
 
-# Copy your service account JSON
-gcloud compute scp ./service-account.json gemini-studio:/opt/gemini-studio/deploy/secrets/ \
+# Copy your backend service account JSON (created in Prerequisites step 4)
+gcloud compute scp ./google-service-account.json gemini-studio:/opt/gemini-studio/deploy/secrets/google-service-account.json \
+  --zone=us-central1-a
+
+# Also copy as firebase-service-account.json (some services expect this name)
+gcloud compute scp ./google-service-account.json gemini-studio:/opt/gemini-studio/deploy/secrets/firebase-service-account.json \
   --zone=us-central1-a
 
 # SSH into the VM
 gcloud compute ssh gemini-studio --zone=us-central1-a
 ```
 
-### 5. Setup CI/CD (GitHub Actions)
+### 6. Setup CI/CD (GitHub Actions)
 
 Add your service account as a GitHub secret:
 
@@ -215,7 +269,7 @@ Add your service account as a GitHub secret:
 2. Create new secret: `GCP_SERVICE_ACCOUNT_KEY`
 3. Value: paste the contents of your service account JSON file
 
-### 6. Deploy
+### 7. Deploy
 
 Push to main branch to trigger deployment:
 
@@ -231,7 +285,7 @@ GitHub Actions will:
 - Run `docker compose up -d --build`
 - Verify services are healthy
 
-### 7. Configure Frontend
+### 8. Configure Frontend
 
 Get the environment variables for your frontend:
 
@@ -330,14 +384,17 @@ Ensure service account has required roles. Common permission issues:
 
 **Renderer Pub/Sub errors** (`PERMISSION_DENIED: User not authorized to perform this action`):
 
-The renderer service publishes render completion/failure events to Pub/Sub. If you see this error in renderer logs, grant Pub/Sub Publisher permissions:
+The renderer service publishes render completion/failure events to Pub/Sub. If you see this error in renderer logs, the service account JSON file needs Pub/Sub Publisher permissions:
 
 ```bash
-# Get the VM's service account
-SERVICE_ACCOUNT=$(gcloud compute instances describe gemini-studio --zone=us-central1-a --format='get(serviceAccounts[0].email)')
 PROJECT_ID=$(gcloud config get-value project)
 
-# Grant Pub/Sub Publisher role
+# Find which service account is being used
+gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo cat /opt/gemini-studio/deploy/secrets/google-service-account.json | grep client_email'
+
+# Grant Pub/Sub Publisher role (replace with the email from above)
+SERVICE_ACCOUNT="your-service-account@your-project.iam.gserviceaccount.com"
+
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member="serviceAccount:$SERVICE_ACCOUNT" \
   --role="roles/pubsub.publisher"
@@ -345,6 +402,41 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
 # Restart renderer to apply changes
 gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml restart renderer'
 ```
+
+**Important**: The Docker containers use the service account JSON file mounted at `/app/secrets/google-service-account.json`, NOT the VM's compute service account. Make sure you grant permissions to the correct service account.
+
+**LangGraph not receiving render events**:
+
+The LangGraph server subscribes to render completion events via Pub/Sub. If renders complete but the user isn't notified:
+
+```bash
+PROJECT_ID=$(gcloud config get-value project)
+
+# 1. Verify the subscription exists
+gcloud pubsub subscriptions describe gemini-render-events-sub
+
+# If it doesn't exist, create it
+gcloud pubsub subscriptions create gemini-render-events-sub \
+  --topic=gemini-render-events \
+  --ack-deadline=60
+
+# 2. Grant subscriber permissions to the service account
+SERVICE_ACCOUNT="your-service-account@your-project.iam.gserviceaccount.com"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$SERVICE_ACCOUNT" \
+  --role="roles/pubsub.subscriber"
+
+# 3. Restart LangGraph to pick up permissions
+gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml restart langgraph-server'
+
+# 4. Check logs to verify subscription is active
+gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml logs langgraph-server --tail=50'
+```
+
+Look for log messages like:
+- `"Subscribed to render events on gemini-render-events-sub"` - subscription is active
+- `"Dispatched render event to agent"` - events are being received and processed
 
 **Secret Manager errors**:
 
