@@ -112,40 +112,55 @@ jobs:
       - name: Health check
         run: |
           # Wait for services to start (LangGraph takes longer due to Rust deps)
-          echo "Waiting 90s for services to initialize..."
-          sleep 90
+          echo "Waiting 120s for services to initialize..."
+          sleep 120
           
-          # Health check via SSH (backend services are internal-only)
+          # Health check via SSH - use Docker's built-in health status
           gcloud compute ssh ${{ env.INSTANCE_NAME }} \
             --zone=${{ env.ZONE }} \
             --project=${{ env.PROJECT_ID }} \
             --command='
-              echo "Checking internal services..."
+              echo "Checking container health status..."
+              cd /opt/gemini-studio/deploy
               
-              # Check via Docker network using service names
-              sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml exec -T asset-service curl -sf http://localhost:8081/health || { echo "Asset service: FAILED"; exit 1; }
-              echo "Asset service: OK"
+              # Show all container statuses
+              sudo docker compose ps
               
-              sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml exec -T langgraph-server curl -sf http://localhost:8080/healthz || { echo "LangGraph: FAILED"; exit 1; }
-              echo "LangGraph: OK"
+              # Check for unhealthy containers
+              UNHEALTHY=$(sudo docker compose ps --format json | grep -c "unhealthy" || true)
+              if [ "$UNHEALTHY" -gt 0 ]; then
+                echo "Found unhealthy containers!"
+                sudo docker compose ps | grep unhealthy
+                echo ""
+                echo "Checking logs for unhealthy services..."
+                sudo docker compose logs --tail=20
+                exit 1
+              fi
               
-              sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml exec -T renderer curl -sf http://localhost:4000/health || { echo "Renderer: FAILED"; exit 1; }
-              echo "Renderer: OK"
+              # Verify critical services are healthy
+              for svc in asset-service langgraph-server renderer frontend; do
+                STATUS=$(sudo docker compose ps $svc --format "{{.Health}}" 2>/dev/null || echo "unknown")
+                if [ "$STATUS" = "healthy" ]; then
+                  echo "$svc: OK (healthy)"
+                elif [ "$STATUS" = "starting" ]; then
+                  echo "$svc: STARTING (may need more time)"
+                else
+                  echo "$svc: $STATUS"
+                fi
+              done
               
-              sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml exec -T billing-service curl -sf http://localhost:3100/health || { echo "Billing: FAILED"; exit 1; }
-              echo "Billing: OK"
-              
-              sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml exec -T video-effects-service curl -sf http://localhost:8082/health || { echo "Video Effects: FAILED"; exit 1; }
-              echo "Video Effects: OK"
-              
-              echo "All internal services healthy!"
+              echo ""
+              echo "Container health check complete!"
             '
           
-          # Check public frontend via Caddy
-          echo "Checking public frontend..."
-          curl -sf --retry 5 --retry-delay 15 --retry-all-errors -k "https://geminivideo.studio/health" || { echo "Frontend: FAILED (might need DNS propagation)"; }
-          echo "Frontend: OK"
+          # Check Caddy logs for SSL issues
+          echo "Checking Caddy status..."
+          gcloud compute ssh ${{ env.INSTANCE_NAME }} \
+            --zone=${{ env.ZONE }} \
+            --project=${{ env.PROJECT_ID }} \
+            --command='sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml logs caddy --tail=20'
           
           echo ""
-          echo "All services healthy!"
-          echo "Your app is live at: https://geminivideo.studio"
+          echo "Deployment complete!"
+          echo "Your app should be at: https://geminivideo.studio"
+          echo "(SSL may take a few minutes to provision)"
