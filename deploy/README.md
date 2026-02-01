@@ -65,7 +65,7 @@ Deploy all GeminiStudio backend services on a single GCE VM with Docker Compose.
    - `roles/pubsub.publisher` - Pub/Sub publishing
    - `roles/secretmanager.secretAccessor` - Read secrets
 
-   Grant these roles to your service account:
+   Grant these roles to your CI/CD service account:
    ```bash
    SA_EMAIL="your-service-account@your-project.iam.gserviceaccount.com"
    PROJECT_ID="your-project-id"
@@ -92,6 +92,17 @@ Deploy all GeminiStudio backend services on a single GCE VM with Docker Compose.
 
    gcloud projects add-iam-policy-binding $PROJECT_ID \
      --member="serviceAccount:$SA_EMAIL" \
+     --role="roles/secretmanager.secretAccessor"
+   ```
+
+5. **VM Default Service Account** - needs Secret Manager access to pull secrets during deploy:
+   ```bash
+   # Get the default compute service account (format: PROJECT_NUMBER-compute@developer.gserviceaccount.com)
+   COMPUTE_SA=$(gcloud iam service-accounts list --filter="email~compute@developer" --format="value(email)")
+   PROJECT_ID="your-project-id"
+
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:$COMPUTE_SA" \
      --role="roles/secretmanager.secretAccessor"
    ```
 
