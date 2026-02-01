@@ -5,6 +5,7 @@ import logging
 import re
 import time
 import uuid
+from collections import deque
 from typing import Callable, Iterable, Optional
 
 
@@ -46,6 +47,9 @@ class TelegramProvider(ChatProvider):
         self.email_lookup = email_lookup or (lambda phone: lookup_email_by_phone(phone, settings))
         if not self.bot_token:
             raise ValueError("Telegram bot token is not configured.")
+        # Deduplication: Telegram retries webhooks if response is slow; skip already-processed update_ids
+        self._processed_update_ids: set[int] = set()
+        self._processed_update_ids_order: deque[int] = deque(maxlen=10_000)
         # Media-group (album) buffering: buffer updates, reset timer on each new item
         self._mg_buf: dict[tuple[str, str], list[dict]] = {}
         self._mg_events: dict[tuple[str, str], asyncio.Event] = {}
@@ -325,6 +329,19 @@ class TelegramProvider(ChatProvider):
         ]
 
     async def handle_update(self, payload: dict) -> Iterable[OutgoingMessage]:
+        # Deduplicate: Telegram retries webhooks when response is slow; skip duplicate update_ids
+        update_id = payload.get("update_id")
+        if update_id is not None:
+            if update_id in self._processed_update_ids:
+                logger.info("[TELEGRAM] Skipping duplicate update_id=%s", update_id)
+                return []
+            # Evict oldest if at capacity (deque has maxlen; keep set in sync)
+            if len(self._processed_update_ids_order) == self._processed_update_ids_order.maxlen:
+                old = self._processed_update_ids_order[0]
+                self._processed_update_ids.discard(old)
+            self._processed_update_ids.add(update_id)
+            self._processed_update_ids_order.append(update_id)
+
         # Check if this is a message_reaction update
         if payload.get("message_reaction"):
             await self.handle_reaction(payload)
