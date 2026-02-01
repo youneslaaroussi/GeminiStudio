@@ -43,26 +43,27 @@ ENV NEXT_PUBLIC_FIREBASE_APP_ID=$NEXT_PUBLIC_FIREBASE_APP_ID
 
 RUN pnpm run build
 
-# Production stage
+# Production stage - use standalone output
 FROM node:20-alpine AS production
 
 WORKDIR /app
 
-RUN npm install -g pnpm
+# Don't run as root
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
 
-# Copy built assets
-COPY --from=base /app/app/.next ./.next
-COPY --from=base /app/app/public ./public
-COPY --from=base /app/app/package.json ./
-COPY --from=base /app/app/node_modules ./node_modules
-COPY --from=base /app/node_modules ./parent_node_modules
+# Copy standalone build (includes server + required node_modules)
+COPY --from=base --chown=nextjs:nodejs /app/app/.next/standalone ./
+COPY --from=base --chown=nextjs:nodejs /app/app/.next/static ./.next/static
+COPY --from=base --chown=nextjs:nodejs /app/app/public ./public
 
-# Set node path to include parent modules
-ENV NODE_PATH=/app/parent_node_modules
+USER nextjs
 
 EXPOSE 3000
 
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
 
-CMD ["pnpm", "start"]
+# Standalone server is at server.js
+CMD ["node", "server.js"]
