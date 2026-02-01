@@ -23,7 +23,9 @@ export const runtime = "nodejs";
  */
 function toRemoteAsset(asset: AssetServiceAsset, projectId: string): RemoteAsset {
   // Use proxy URL to avoid CORS issues (auth via session cookie, not query param)
-  const proxyUrl = `/api/assets/${asset.id}/file?projectId=${projectId}`;
+  // Include version param (updatedAt) for cache busting - allows browser to cache stable assets
+  const version = asset.updatedAt ? new Date(asset.updatedAt).getTime() : Date.now();
+  const proxyUrl = `/api/assets/${asset.id}/file?projectId=${projectId}&v=${version}`;
 
   return {
     id: asset.id,

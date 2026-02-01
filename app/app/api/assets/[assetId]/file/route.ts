@@ -78,16 +78,21 @@ export async function GET(
 
     const data = await response.arrayBuffer();
     const isDownload = searchParams.get("download") === "1";
+    const hasVersion = searchParams.has("v");
 
     // Safe filename for Content-Disposition (strip path chars, quote if needed)
     const safeName = (asset.name || "download").replace(/[\\/"[\]:;|*?<>]/g, "_").trim() || "download";
 
-    // Do not cache: asset can be updated (e.g. transcode MOV→MP4), so preview must always get current file
+    // If version param is present, URL is cache-busted so we can cache aggressively.
+    // Otherwise, use no-cache for backwards compatibility with old URLs.
+    const cacheControl = hasVersion
+      ? "private, max-age=31536000, immutable" // 1 year - URL changes when asset updates
+      : "private, no-store, must-revalidate";
+
     const headers: Record<string, string> = {
       "Content-Type": asset.mimeType || "application/octet-stream",
       "Content-Length": String(data.byteLength),
-      "Cache-Control": "private, no-store, must-revalidate",
-      Pragma: "no-cache",
+      "Cache-Control": cacheControl,
       "Access-Control-Allow-Origin": "*",
     };
     if (isDownload) {

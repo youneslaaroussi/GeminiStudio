@@ -17,7 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from ..config import get_settings
 from ..tasks import start_worker, stop_worker, close_task_queue
 from ..tasks.worker import signal_shutdown
-from .routes import assets, pipeline
+from .routes import assets, pipeline, search
 
 logger = logging.getLogger(__name__)
 
@@ -182,6 +182,7 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(assets.router, prefix="/api/assets", tags=["assets"])
     app.include_router(pipeline.router, prefix="/api/pipeline", tags=["pipeline"])
+    app.include_router(search.router, prefix="/api/search", tags=["search"])
 
     @app.get("/health")
     async def health_check():

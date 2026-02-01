@@ -12,6 +12,8 @@ import {
   ListTodo,
   GitBranch,
   Circle,
+  Search,
+  X,
 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { createTextClip, createVideoClip, createAudioClip, createImageClip } from "@/app/types/timeline";
@@ -96,7 +98,40 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
     startTranscription,
     transcodingAssetIds,
     markAssetsTranscoding,
+    // Search
+    searchQuery,
+    searchResults,
+    isSearching,
+    searchAssets,
+    clearSearch,
   } = useAssets();
+
+  // Search input state (debounced)
+  const [searchInput, setSearchInput] = useState("");
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounced search
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchInput(value);
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+      if (!value.trim()) {
+        clearSearch();
+        return;
+      }
+      searchTimeoutRef.current = setTimeout(() => {
+        void searchAssets(value);
+      }, 300);
+    },
+    [searchAssets, clearSearch]
+  );
+
+  // Filter assets based on search results
+  const displayedAssets = searchResults
+    ? assets.filter((asset) => searchResults.some((r) => r.id === asset.id))
+    : assets;
 
   // Pipeline states for all assets (for Jobs tab)
   const { states: pipelineStates, refresh: refreshPipelineStates } = usePipelineStates(projectId);
@@ -370,11 +405,41 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
               </div>
             </div>
 
-            {/* Asset List */}
+            {/* Search + Asset List */}
             <div className="flex-1 min-h-0 flex flex-col">
+              {/* Search Input */}
+              <div className="px-3 py-2 border-b border-border">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search assets..."
+                    value={searchInput}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    className="h-8 pl-8 pr-8 text-sm"
+                  />
+                  {(searchInput || isSearching) && (
+                    <button
+                      onClick={() => {
+                        setSearchInput("");
+                        clearSearch();
+                      }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {isSearching ? (
+                        <RefreshCw className="size-3.5 animate-spin" />
+                      ) : (
+                        <X className="size-3.5" />
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="flex items-center justify-between px-3 py-2">
                 <span className="text-xs font-medium text-muted-foreground">
-                  {assets.length} asset{assets.length !== 1 && "s"}
+                  {searchResults
+                    ? `${displayedAssets.length} result${displayedAssets.length !== 1 ? "s" : ""}`
+                    : `${assets.length} asset${assets.length !== 1 ? "s" : ""}`}
                 </span>
                 <Button
                   variant="ghost"
@@ -387,7 +452,7 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
               </div>
               <ScrollArea className="flex-1 min-h-0 overflow-hidden">
                 <AssetList
-                  assets={assets}
+                  assets={displayedAssets}
                   isLoading={isLoading}
                   error={error}
                   metadata={metadata}

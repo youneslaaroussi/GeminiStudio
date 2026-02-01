@@ -397,6 +397,82 @@ export async function deleteUserFromAssetService(
 /**
  * Delete all assets for a specific project.
  */
+/**
+ * Search result from asset service.
+ */
+export interface SearchHit {
+  id: string;
+  userId?: string;
+  projectId?: string;
+  name: string;
+  fileName?: string;
+  type: string;
+  mimeType?: string;
+  size?: number;
+  width?: number;
+  height?: number;
+  duration?: number;
+  description?: string;
+  labels?: string[];
+  uploadedAt?: string;
+  updatedAt?: string;
+  highlights?: {
+    name?: string;
+    description?: string;
+    searchableText?: string;
+  };
+}
+
+export interface SearchResponse {
+  hits: SearchHit[];
+  total: number;
+  query: string;
+  page?: number;
+  totalPages?: number;
+  processingTimeMs?: number;
+  error?: string;
+}
+
+/**
+ * Search assets in a project.
+ */
+export async function searchAssetsFromService(
+  userId: string,
+  projectId: string,
+  query: string,
+  options: { type?: string; limit?: number } = {}
+): Promise<SearchResponse> {
+  const body = JSON.stringify({
+    query,
+    type: options.type,
+    limit: options.limit || 20,
+  });
+
+  const response = await fetch(
+    `${ASSET_SERVICE_URL}/api/search/${userId}/${projectId}/search`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders(body) },
+      body,
+    }
+  );
+
+  if (!response.ok) {
+    if (response.status === 503) {
+      return {
+        hits: [],
+        total: 0,
+        query,
+        error: "Search is not configured",
+      };
+    }
+    const text = await response.text();
+    throw new Error(`Asset service search failed: ${response.status} - ${text}`);
+  }
+
+  return response.json();
+}
+
 export async function deleteProjectFromAssetService(
   userId: string,
   projectId: string

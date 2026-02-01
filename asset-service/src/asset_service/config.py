@@ -63,6 +63,17 @@ class Settings(BaseSettings):
     # If not set, HMAC verification is disabled (dev mode)
     shared_secret: str | None = Field(default=None, alias="SHARED_SECRET")
 
+    # Algolia Search
+    algolia_app_id: str | None = Field(default=None, alias="ALGOLIA_APP_ID")
+    algolia_admin_api_key: str | None = Field(default=None, alias="ALGOLIA_ADMIN_API_KEY")
+    algolia_search_api_key: str | None = Field(default=None, alias="ALGOLIA_SEARCH_API_KEY")
+    algolia_index_prefix: str = Field(default="gemini_assets", alias="ALGOLIA_INDEX_PREFIX")
+
+    @property
+    def algolia_enabled(self) -> bool:
+        """Check if Algolia is configured."""
+        return bool(self.algolia_app_id and self.algolia_admin_api_key)
+
     @property
     def speech_language_codes_list(self) -> list[str]:
         return [code.strip() for code in self.speech_language_codes.split(",") if code.strip()]

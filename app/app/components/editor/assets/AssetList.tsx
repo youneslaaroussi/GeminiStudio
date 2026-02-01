@@ -2,41 +2,16 @@
 
 import { useCallback, useState, useRef, useEffect } from "react";
 import {
-  FileVideo,
-  FileAudio,
-  FileImage,
   File as FileIcon,
-  Plus,
   Loader2,
-  FileText,
-  MoreHorizontal,
-  GripVertical,
   Trash2,
-  Pencil,
-  Download,
   Check,
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import type { RemoteAsset, AssetDragPayload } from "@/app/types/assets";
 import { ASSET_DRAG_DATA_MIME } from "@/app/types/assets";
 import type { ProjectTranscription } from "@/app/types/transcription";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -45,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatBytes, formatDuration } from "./utils";
+import { AssetRow } from "./AssetRow";
 
 const ASSET_REORDER_MIME = "application/x-gemini-asset-reorder";
 
@@ -69,16 +44,6 @@ interface AssetListProps {
   transcodingAssetIds?: ReadonlySet<string>;
 }
 
-function AssetIcon({ type }: { type: RemoteAsset["type"] }) {
-  if (type === "video")
-    return <FileVideo className="size-4 text-blue-500" />;
-  if (type === "audio")
-    return <FileAudio className="size-4 text-emerald-500" />;
-  if (type === "image")
-    return <FileImage className="size-4 text-amber-500" />;
-  return <FileIcon className="size-4 text-muted-foreground" />;
-}
-
 export function AssetList({
   assets,
   isLoading,
@@ -100,22 +65,11 @@ export function AssetList({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
-  const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState("");
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
   const [deleteConfirmIds, setDeleteConfirmIds] = useState<string[] | null>(null);
-  const editInputRef = useRef<HTMLInputElement>(null);
   const dragFromReorderHandleRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (editingAssetId) {
-      setEditingName(assets.find((a) => a.id === editingAssetId)?.name ?? "");
-      editInputRef.current?.focus();
-      editInputRef.current?.select();
-    }
-  }, [editingAssetId, assets]);
 
   useEffect(() => {
     const assetIds = new Set(assets.map((a) => a.id));
@@ -144,40 +98,35 @@ export function AssetList({
     [onDelete]
   );
 
-  const handleDownload = useCallback(
-    async (asset: RemoteAsset) => {
-      setDownloadingIds((prev) => new Set(prev).add(asset.id));
-      try {
-        const base = asset.url;
-        const sep = base.includes("?") ? "&" : "?";
-        const downloadUrl = `${base}${sep}download=1`;
-        const res = await fetch(downloadUrl, { credentials: "include" });
-        if (!res.ok) throw new Error(res.statusText);
-        const blob = await res.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = objectUrl;
-        link.download = asset.name || "download";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(objectUrl);
-      } finally {
-        setDownloadingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(asset.id);
-          return next;
-        });
-      }
-    },
-    []
-  );
+  const handleDownload = useCallback(async (asset: RemoteAsset) => {
+    setDownloadingIds((prev) => new Set(prev).add(asset.id));
+    try {
+      const base = asset.url;
+      const sep = base.includes("?") ? "&" : "?";
+      const downloadUrl = `${base}${sep}download=1`;
+      const res = await fetch(downloadUrl, { credentials: "include" });
+      if (!res.ok) throw new Error(res.statusText);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = asset.name || "download";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(objectUrl);
+    } finally {
+      setDownloadingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(asset.id);
+        return next;
+      });
+    }
+  }, []);
 
   const handleDragStart = useCallback(
     (asset: RemoteAsset, event: React.DragEvent<HTMLDivElement>) => {
       if (!event.dataTransfer) return;
-      // Row is the draggable element so event.target is often the row; we track
-      // pointer-down on the grip instead to distinguish reorder vs timeline drag.
       const isReorder = dragFromReorderHandleRef.current;
       dragFromReorderHandleRef.current = false;
 
@@ -244,16 +193,6 @@ export function AssetList({
     [assets, onReorder]
   );
 
-  const submitRename = useCallback(
-    async (assetId: string) => {
-      const trimmed = editingName.trim();
-      setEditingAssetId(null);
-      if (!trimmed) return;
-      await onRename(assetId, trimmed);
-    },
-    [editingName, onRename]
-  );
-
   const toggleSelect = useCallback((assetId: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
     setSelectedIds((prev) => {
@@ -285,7 +224,7 @@ export function AssetList({
       const inList = containerRef.current?.contains(active);
 
       if (e.key === "Escape") {
-        if (inList && !editingAssetId && someSelected) {
+        if (inList && someSelected) {
           e.preventDefault();
           handleClearSelection();
         }
@@ -301,34 +240,7 @@ export function AssetList({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [editingAssetId, someSelected, allSelected, assets, handleClearSelection]);
-
-  const handleDeleteSelected = useCallback(async () => {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    if (onDeleteMany) {
-      setDeletingIds((prev) => new Set([...prev, ...ids]));
-      setSelectedIds(new Set());
-      try {
-        await onDeleteMany(ids);
-      } finally {
-        setDeletingIds((prev) => {
-          const next = new Set(prev);
-          ids.forEach((id) => next.delete(id));
-          return next;
-        });
-      }
-    } else {
-      for (const id of ids) {
-        await handleDelete(id);
-        setSelectedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-      }
-    }
-  }, [selectedIds, onDeleteMany, handleDelete]);
+  }, [someSelected, allSelected, assets, handleClearSelection]);
 
   const handleOpenDeleteConfirm = useCallback(() => {
     if (selectedIds.size === 0) return;
@@ -357,6 +269,14 @@ export function AssetList({
       });
     }
   }, [deleteConfirmIds, onDeleteMany, handleDelete]);
+
+  const handleReorderPointerDown = useCallback(() => {
+    dragFromReorderHandleRef.current = true;
+  }, []);
+
+  const handleReorderPointerUp = useCallback(() => {
+    dragFromReorderHandleRef.current = false;
+  }, []);
 
   // Full-screen loader only on initial load (no assets yet)
   if (isLoading && assets.length === 0) {
@@ -394,433 +314,127 @@ export function AssetList({
 
   return (
     <>
-    <div
-      ref={containerRef}
-      className="divide-y divide-border outline-none"
-      tabIndex={-1}
-      onClick={(e) => {
-        const t = e.target as HTMLElement;
-        if (
-          t.closest("button, input, textarea, select") ||
-          t.closest("[data-drag-handle]")
-        )
-          return;
-        containerRef.current?.focus();
-      }}
-    >
-      {/* Multiselect toolbar */}
-      {assets.length > 0 && (
-        <div className="flex items-center gap-2 px-2 py-1.5 border-b border-border bg-muted/30">
-          <button
-            type="button"
-            onClick={handleSelectAll}
-            className={cn(
-              "flex items-center justify-center size-5 rounded border shrink-0 transition-colors",
-              allSelected
-                ? "bg-primary border-primary text-primary-foreground"
-                : someSelected
-                  ? "bg-primary/50 border-primary/50 text-primary-foreground"
-                  : "border-muted-foreground/50 hover:border-muted-foreground"
-            )}
-            title={allSelected ? "Deselect all" : "Select all"}
-          >
-            {allSelected && <Check className="size-3" />}
-            {someSelected && !allSelected && (
-              <div className="size-1.5 bg-primary-foreground rounded-sm" />
-            )}
-          </button>
-          {someSelected && (
-            <>
-              <span className="text-xs text-muted-foreground">
-                {selectedIds.size} selected
-              </span>
-              <Button
-                variant="destructive"
-                size="sm"
-                className="h-6 px-2 text-xs"
-                onClick={handleOpenDeleteConfirm}
-                disabled={[...selectedIds].some((id) => deletingIds.has(id))}
-              >
-                {[...selectedIds].some((id) => deletingIds.has(id)) ? (
-                  <Loader2 className="size-3 animate-spin mr-1" />
-                ) : (
-                  <Trash2 className="size-3 mr-1" />
-                )}
-                Delete
-              </Button>
-            </>
-          )}
-        </div>
-      )}
-      {error && assets.length > 0 && (
-        <div className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs text-destructive bg-destructive/10">
-          <span className="truncate">{error}</span>
-          <Button variant="ghost" size="sm" className="h-6 px-2 shrink-0" onClick={onRefresh}>
-            Try again
-          </Button>
-        </div>
-      )}
-      {assets.map((asset) => {
-        const transcription = transcriptions[asset.id];
-        const canTranscribe = asset.type === "audio" || asset.type === "video";
-        const isTranscribing = transcription?.status === "processing" || transcription?.status === "pending";
-        const hasTranscript = transcription?.status === "completed";
-        const duration = resolveAssetDuration(asset);
-        const isTranscoding = transcodingAssetIds.has(asset.id);
-
-        return (
-          <ContextMenu key={asset.id}>
-            <ContextMenuTrigger asChild>
-              <div
-                className={cn(
-                  "group relative flex items-center gap-2 p-2 hover:bg-muted/50 transition-colors rounded-md",
-                  isTranscoding ? "cursor-not-allowed opacity-90" : "cursor-grab",
-                  dragOverId === asset.id && "bg-primary/10 ring-1 ring-primary/30"
-                )}
-                draggable={!downloadingIds.has(asset.id) && !deletingIds.has(asset.id) && !isTranscoding}
-                onClick={
-                  someSelected
-                    ? (e) => {
-                        if (
-                          !(e.target as HTMLElement).closest("button, [data-drag-handle], input")
-                        ) {
-                          toggleSelect(asset.id);
-                        }
-                      }
-                    : undefined
-                }
-                onDragStart={(e) => handleDragStart(asset, e)}
-                onDragEnd={handleDragEnd}
-                onDragOver={(e) => handleDragOver(e, asset.id)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, asset.id)}
-              >
-                {(downloadingIds.has(asset.id) || deletingIds.has(asset.id) || isTranscoding) && (
-                  <div className="absolute inset-0 z-10 rounded-md overflow-hidden pointer-events-none" aria-hidden>
-                    <div className="absolute inset-0 bg-background/50" />
-                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted/50 overflow-hidden">
-                      <div
-                        className="h-full w-1/3 bg-primary/80 rounded-full"
-                        style={{ animation: "asset-shimmer 1s ease-in-out infinite" }}
-                      />
-                    </div>
-                  </div>
-                )}
-                <div
-                  data-drag-handle="reorder"
-                  className="shrink-0 touch-none cursor-grab active:cursor-grabbing p-1 -m-1"
-                  title="Drag to reorder"
-                  onPointerDown={() => {
-                    dragFromReorderHandleRef.current = true;
-                  }}
-                  onPointerUp={() => {
-                    dragFromReorderHandleRef.current = false;
-                  }}
-                >
-                  <GripVertical className="size-3.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-
-                {/* Select checkbox */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleSelect(asset.id);
-                  }}
-                  className={cn(
-                    "flex items-center justify-center size-5 rounded border shrink-0 transition-colors",
-                    selectedIds.has(asset.id)
-                      ? "bg-primary border-primary text-primary-foreground"
-                      : "border-muted-foreground/50 hover:border-muted-foreground",
-                    someSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                  )}
-                  title={selectedIds.has(asset.id) ? "Deselect" : "Select"}
-                  onPointerDown={(e) => e.stopPropagation()}
-                >
-                  {selectedIds.has(asset.id) && <Check className="size-3" />}
-                </button>
-
-                {/* Thumbnail / Icon */}
-                <div className="size-10 rounded-md bg-muted flex items-center justify-center shrink-0 overflow-hidden">
-                  {asset.type === "image" ? (
-                    <img
-                      src={asset.thumbnailUrl || asset.url}
-                      alt=""
-                      className="size-full object-cover"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                      }}
-                    />
-                  ) : asset.type === "video" ? (
-                    <video
-                      src={asset.url}
-                      className="size-full object-cover"
-                      muted
-                      preload="metadata"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        e.currentTarget.nextElementSibling?.classList.remove("hidden");
-                      }}
-                    />
-                  ) : null}
-                  <div className={cn(
-                    "flex items-center justify-center",
-                    (asset.type === "image" || asset.type === "video") && "hidden"
-                  )}>
-                    <AssetIcon type={asset.type} />
-                  </div>
-                </div>
-
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  {editingAssetId === asset.id ? (
-                    <Input
-                      ref={editInputRef}
-                      className="h-7 text-sm font-medium"
-                      value={editingName}
-                      onChange={(e) => setEditingName(e.target.value)}
-                      onBlur={() => void submitRename(asset.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") void submitRename(asset.id);
-                        if (e.key === "Escape") setEditingAssetId(null);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      onDragStart={(e) => e.stopPropagation()}
-                    />
-                  ) : (
-                    <div className="relative overflow-hidden">
-                      <AnimatePresence mode="wait">
-                        <motion.p
-                          key={asset.description ? "description" : "name"}
-                          className="text-sm font-medium line-clamp-3 break-words"
-                          title={asset.name}
-                          initial={{ opacity: 0, filter: "blur(8px)", y: 4 }}
-                          animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
-                          exit={{ opacity: 0, filter: "blur(8px)", y: -4 }}
-                          transition={{
-                            duration: 0.4,
-                            ease: [0.4, 0, 0.2, 1],
-                          }}
-                        >
-                          {asset.description || asset.name}
-                        </motion.p>
-                      </AnimatePresence>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <span className="uppercase">{asset.type}</span>
-                    <span>•</span>
-                    <span>{formatBytes(asset.size)}</span>
-                    {duration > 0 && asset.type !== "image" && (
-                      <>
-                        <span>•</span>
-                        <span>{formatDuration(duration)}</span>
-                      </>
-                    )}
-                  </div>
-                  {isTranscribing && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                      <Loader2 className="size-3 animate-spin" />
-                      <span>Transcribing...</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-1 shrink-0">
-                  {hasTranscript && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-7"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onViewTranscription(asset.id);
-                      }}
-                    >
-                      <FileText className="size-3.5" />
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    disabled={isTranscoding}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onAddToTimeline(asset);
-                    }}
-                  >
-                    <Plus className="size-3.5 mr-1" />
-                    Add
-                  </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <MoreHorizontal className="size-3.5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setEditingAssetId(asset.id);
-                          setEditingName(asset.name);
-                        }}
-                      >
-                        <Pencil className="size-4 mr-2" />
-                        Rename
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={isTranscoding}
-                        onClick={() => onAddToTimeline(asset)}
-                      >
-                        <Plus className="size-4 mr-2" />
-                        Add to timeline
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        disabled={!canTranscribe || isTranscribing}
-                        onClick={() => onStartTranscription(asset)}
-                      >
-                        <FileText className="size-4 mr-2" />
-                        {isTranscribing ? "Transcribing..." : "Transcribe"}
-                      </DropdownMenuItem>
-                      {hasTranscript && (
-                        <DropdownMenuItem
-                          onClick={() => onViewTranscription(asset.id)}
-                        >
-                          <FileText className="size-4 mr-2" />
-                          View transcript
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => onViewDetails(asset.id)}>
-                        <FileIcon className="size-4 mr-2" />
-                        View details
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={downloadingIds.has(asset.id)}
-                        onClick={() => void handleDownload(asset)}
-                      >
-                        {downloadingIds.has(asset.id) ? (
-                          <Loader2 className="size-4 mr-2 animate-spin" />
-                        ) : (
-                          <Download className="size-4 mr-2" />
-                        )}
-                        Download
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
-                        disabled={deletingIds.has(asset.id)}
-                        onClick={() => handleDelete(asset.id)}
-                      >
-                        {deletingIds.has(asset.id) ? (
-                          <Loader2 className="size-4 mr-2 animate-spin" />
-                        ) : (
-                          <Trash2 className="size-4 mr-2" />
-                        )}
-                        {deletingIds.has(asset.id) ? "Deleting..." : "Delete"}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-            </ContextMenuTrigger>
-            <ContextMenuContent>
-              <ContextMenuItem
-                onClick={() => {
-                  setEditingAssetId(asset.id);
-                  setEditingName(asset.name);
-                }}
-              >
-                <Pencil className="size-4 mr-2" />
-                Rename
-              </ContextMenuItem>
-              <ContextMenuItem
-                disabled={isTranscoding}
-                onClick={() => onAddToTimeline(asset)}
-              >
-                <Plus className="size-4 mr-2" />
-                Add to timeline
-              </ContextMenuItem>
-              <ContextMenuSeparator />
-              <ContextMenuItem
-                disabled={!canTranscribe || isTranscribing}
-                onClick={() => onStartTranscription(asset)}
-              >
-                <FileText className="size-4 mr-2" />
-                {isTranscribing ? "Transcribing..." : "Transcribe"}
-              </ContextMenuItem>
-              {hasTranscript && (
-                <ContextMenuItem onClick={() => onViewTranscription(asset.id)}>
-                  <FileText className="size-4 mr-2" />
-                  View transcript
-                </ContextMenuItem>
+      <div
+        ref={containerRef}
+        className="divide-y divide-border outline-none"
+        tabIndex={-1}
+        onClick={(e) => {
+          const t = e.target as HTMLElement;
+          if (
+            t.closest("button, input, textarea, select") ||
+            t.closest("[data-drag-handle]")
+          )
+            return;
+          containerRef.current?.focus();
+        }}
+      >
+        {/* Multiselect toolbar */}
+        {assets.length > 0 && (
+          <div className="flex items-center gap-2 px-2 py-1.5 border-b border-border bg-muted/30">
+            <button
+              type="button"
+              onClick={handleSelectAll}
+              className={cn(
+                "flex items-center justify-center size-5 rounded border shrink-0 transition-colors",
+                allSelected
+                  ? "bg-primary border-primary text-primary-foreground"
+                  : someSelected
+                    ? "bg-primary/50 border-primary/50 text-primary-foreground"
+                    : "border-muted-foreground/50 hover:border-muted-foreground"
               )}
-              <ContextMenuSeparator />
-              <ContextMenuItem onClick={() => onViewDetails(asset.id)}>
-                <FileIcon className="size-4 mr-2" />
-                View details
-              </ContextMenuItem>
-              <ContextMenuItem
-                disabled={downloadingIds.has(asset.id)}
-                onClick={() => void handleDownload(asset)}
-              >
-                {downloadingIds.has(asset.id) ? (
-                  <Loader2 className="size-4 mr-2 animate-spin" />
-                ) : (
-                  <Download className="size-4 mr-2" />
-                )}
-                Download
-              </ContextMenuItem>
-              <ContextMenuSeparator />
-              <ContextMenuItem
-                className="text-destructive focus:text-destructive"
-                disabled={deletingIds.has(asset.id)}
-                onClick={() => handleDelete(asset.id)}
-              >
-                {deletingIds.has(asset.id) ? (
-                  <Loader2 className="size-4 mr-2 animate-spin" />
-                ) : (
-                  <Trash2 className="size-4 mr-2" />
-                )}
-                {deletingIds.has(asset.id) ? "Deleting..." : "Delete"}
-              </ContextMenuItem>
-            </ContextMenuContent>
-          </ContextMenu>
-        );
-      })}
-    </div>
+              title={allSelected ? "Deselect all" : "Select all"}
+            >
+              {allSelected && <Check className="size-3" />}
+              {someSelected && !allSelected && (
+                <div className="size-1.5 bg-primary-foreground rounded-sm" />
+              )}
+            </button>
+            {someSelected && (
+              <>
+                <span className="text-xs text-muted-foreground">
+                  {selectedIds.size} selected
+                </span>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={handleOpenDeleteConfirm}
+                  disabled={[...selectedIds].some((id) => deletingIds.has(id))}
+                >
+                  {[...selectedIds].some((id) => deletingIds.has(id)) ? (
+                    <Loader2 className="size-3 animate-spin mr-1" />
+                  ) : (
+                    <Trash2 className="size-3 mr-1" />
+                  )}
+                  Delete
+                </Button>
+              </>
+            )}
+          </div>
+        )}
 
-    {/* Destructive action: delete selected assets confirmation */}
-    <Dialog
-      open={deleteConfirmIds !== null}
-      onOpenChange={(open) => !open && setDeleteConfirmIds(null)}
-    >
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-destructive">Delete assets</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete {pendingDeleteCount} asset{pendingDeleteCount !== 1 ? "s" : ""}? This action cannot be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={() => setDeleteConfirmIds(null)}>
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={() => void handleConfirmDeleteMany()}>
-            Delete {pendingDeleteCount} asset{pendingDeleteCount !== 1 ? "s" : ""}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        {error && assets.length > 0 && (
+          <div className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs text-destructive bg-destructive/10">
+            <span className="truncate">{error}</span>
+            <Button variant="ghost" size="sm" className="h-6 px-2 shrink-0" onClick={onRefresh}>
+              Try again
+            </Button>
+          </div>
+        )}
+
+        {assets.map((asset) => (
+          <AssetRow
+            key={asset.id}
+            asset={asset}
+            transcription={transcriptions[asset.id]}
+            duration={resolveAssetDuration(asset)}
+            isSelected={selectedIds.has(asset.id)}
+            isDeleting={deletingIds.has(asset.id)}
+            isDownloading={downloadingIds.has(asset.id)}
+            isTranscoding={transcodingAssetIds.has(asset.id)}
+            isDragOver={dragOverId === asset.id}
+            someSelected={someSelected}
+            onToggleSelect={toggleSelect}
+            onAddToTimeline={onAddToTimeline}
+            onStartTranscription={onStartTranscription}
+            onViewTranscription={onViewTranscription}
+            onViewDetails={onViewDetails}
+            onRename={onRename}
+            onDelete={handleDelete}
+            onDownload={handleDownload}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onReorderHandlePointerDown={handleReorderPointerDown}
+            onReorderHandlePointerUp={handleReorderPointerUp}
+          />
+        ))}
+      </div>
+
+      {/* Destructive action: delete selected assets confirmation */}
+      <Dialog
+        open={deleteConfirmIds !== null}
+        onOpenChange={(open) => !open && setDeleteConfirmIds(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Delete assets</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {pendingDeleteCount} asset{pendingDeleteCount !== 1 ? "s" : ""}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDeleteConfirmIds(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => void handleConfirmDeleteMany()}>
+              Delete {pendingDeleteCount} asset{pendingDeleteCount !== 1 ? "s" : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

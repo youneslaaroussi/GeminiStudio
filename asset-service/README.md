@@ -10,6 +10,7 @@ A standalone service for asset upload, processing, and pipeline management for G
 - **Modular Pipeline**: Registry-based pipeline with pluggable steps
 - **Video Intelligence**: Shot detection, label detection, person detection, face detection
 - **Transcription**: Google Cloud Speech-to-Text integration
+- **Full-Text Search**: Algolia-powered search across filenames, descriptions, transcripts, and AI analysis
 
 ## Pipeline Steps
 
@@ -100,6 +101,15 @@ docker-compose up
 - `POST /api/pipeline/{userId}/{projectId}/{assetId}/{stepId}` - Run a step
 - `POST /api/pipeline/{userId}/{projectId}/{assetId}/auto` - Run auto-start steps
 
+### Search
+
+- `POST /api/search/search` - Search all assets (admin)
+- `POST /api/search/{userId}/search` - Search user's assets
+- `POST /api/search/{userId}/{projectId}/search` - Search project assets
+- `GET /api/search/{userId}/{projectId}/search?q=...` - Search (GET convenience)
+- `POST /api/search/{userId}/{projectId}/reindex` - Rebuild search index for project
+- `POST /api/search/configure-index` - Configure Algolia index settings (one-time)
+
 ### Health
 
 - `GET /health` - Health check
@@ -122,8 +132,126 @@ docker-compose up
 | `APP_HOST` | Server host (default: 0.0.0.0) | No |
 | `APP_PORT` | Server port (default: 8081) | No |
 | `DEBUG` | Enable debug mode | No |
+| `ALGOLIA_APP_ID` | Algolia Application ID | No** |
+| `ALGOLIA_ADMIN_API_KEY` | Algolia Admin API Key | No** |
+| `ALGOLIA_SEARCH_API_KEY` | Algolia Search-Only API Key | No** |
+| `ALGOLIA_INDEX_PREFIX` | Index name prefix (default: gemini_assets) | No |
 
 *One of `GOOGLE_SERVICE_ACCOUNT_KEY` or `FIREBASE_SERVICE_ACCOUNT_KEY` is required.
+
+**Algolia variables are required only if you want to enable asset search functionality.
+
+## Algolia Search Setup
+
+The asset service supports full-text search across asset metadata using Algolia. The service automatically indexes assets with rich content from the pipeline.
+
+### What Gets Indexed
+
+| Field | Source | Description |
+|-------|--------|-------------|
+| `name`, `fileName` | Asset document | Original filename |
+| `type`, `mimeType` | Asset document | Asset type filters |
+| `description` | Asset document | AI-generated short description |
+| `geminiAnalysis` | Pipeline state | Full Gemini analysis text |
+| `transcript` | Pipeline state | Speech-to-text transcription |
+| `labels` | Pipeline state | Detected objects/activities |
+| `searchableText` | Combined | All text for full-text search |
+
+### Step 1: Create Algolia Account
+
+1. Sign up at [Algolia](https://www.algolia.com/) (free tier available)
+2. Create a new application or use an existing one
+3. Go to **Settings → API Keys** and note:
+   - **Application ID**
+   - **Admin API Key** (keep secret!)
+   - **Search-Only API Key** (safe for client-side)
+
+### Step 2: Configure Environment
+
+Add to your `.env` file:
+
+```bash
+# Algolia Search
+ALGOLIA_APP_ID=your-algolia-app-id
+ALGOLIA_ADMIN_API_KEY=your-algolia-admin-api-key
+ALGOLIA_SEARCH_API_KEY=your-algolia-search-api-key
+ALGOLIA_INDEX_PREFIX=gemini_assets
+```
+
+### Step 3: Configure Index (One-Time)
+
+After starting the service, configure the Algolia index settings:
+
+```bash
+curl -X POST http://localhost:8081/api/search/configure-index \
+  -H "Content-Type: application/json"
+```
+
+This sets up:
+- Searchable attributes (name, description, transcript, analysis, labels)
+- Filterable attributes (userId, projectId, type) for multi-tenant security
+- Custom ranking by upload date
+
+### Step 4: Reindex Existing Assets (Optional)
+
+If you have existing assets, reindex them to populate the search index:
+
+```bash
+curl -X POST http://localhost:8081/api/search/{userId}/{projectId}/reindex \
+  -H "Content-Type: application/json"
+```
+
+### Automatic Sync
+
+Once configured, the service automatically:
+- Indexes new assets on upload (basic metadata)
+- Re-indexes after pipeline completion (with rich content)
+- Removes assets from index on deletion
+
+### Using Search
+
+#### Search API
+
+```bash
+# Search within a project
+curl -X POST http://localhost:8081/api/search/{userId}/{projectId}/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "sunset beach", "type": "video", "limit": 10}'
+
+# GET convenience endpoint
+curl "http://localhost:8081/api/search/{userId}/{projectId}/search?q=sunset+beach&type=video"
+```
+
+#### Response Format
+
+```json
+{
+  "hits": [
+    {
+      "id": "asset-123",
+      "name": "beach_sunset.mp4",
+      "type": "video",
+      "description": "A beautiful sunset over the ocean",
+      "labels": ["sunset", "beach", "ocean", "sky"],
+      "highlights": {
+        "description": "A beautiful <mark>sunset</mark> over the ocean"
+      }
+    }
+  ],
+  "total": 15,
+  "query": "sunset beach",
+  "processingTimeMs": 12
+}
+```
+
+#### LangGraph Agent Tool
+
+The `searchAssets` tool is available to the LangGraph agent:
+
+```
+User: "Find me videos with people talking"
+Agent: [calls searchAssets with query="people talking" type="video"]
+```
 
 ## Integration
 
@@ -221,7 +349,8 @@ asset-service/
 │   │   ├── app.py
 │   │   └── routes/
 │   │       ├── assets.py
-│   │       └── pipeline.py
+│   │       ├── pipeline.py
+│   │       └── search.py    # Algolia search endpoints
 │   ├── config.py           # Settings
 │   ├── metadata/
 │   │   └── ffprobe.py      # ffprobe metadata extraction
@@ -230,6 +359,9 @@ asset-service/
 │   │   ├── registry.py     # Step registry and runner
 │   │   ├── store.py        # Firestore pipeline state
 │   │   └── steps/          # Individual pipeline steps
+│   ├── search/              # Algolia search integration
+│   │   ├── __init__.py
+│   │   └── algolia.py      # Indexing and search operations
 │   ├── storage/
 │   │   ├── gcs.py          # GCS operations
 │   │   └── firestore.py    # Firestore operations

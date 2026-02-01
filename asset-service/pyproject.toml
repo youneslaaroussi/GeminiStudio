@@ -18,6 +18,7 @@ dependencies = [
     "google-auth>=2.27.0",
     "pillow>=10.2.0",
     "redis>=5.0.0",
+    "algoliasearch>=4.0.0,<5",
 ]
 
 [project.optional-dependencies]

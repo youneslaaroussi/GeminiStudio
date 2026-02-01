@@ -31,6 +31,7 @@ from ...storage.firestore import (
 )
 from ...storage.gcs import create_signed_url, delete_from_gcs, upload_to_gcs
 from ...tasks.queue import get_task_queue
+from ...search.algolia import index_asset, delete_asset_index, update_asset_index
 
 logger = logging.getLogger(__name__)
 
@@ -271,6 +272,17 @@ async def upload_asset(
     if (need_transcode_then_pipeline or not run_pipeline) and temp_path and os.path.exists(temp_path):
         os.unlink(temp_path)
 
+    # Index to Algolia (basic metadata, pipeline will update with rich content)
+    try:
+        await index_asset(
+            user_id=user_id,
+            project_id=project_id,
+            asset_data=saved_asset,
+            pipeline_state=None,  # Pipeline hasn't run yet
+        )
+    except Exception as e:
+        logger.warning(f"Failed to index new asset to Algolia: {e}")
+
     return UploadResponse(
         asset=AssetResponse(**saved_asset),
         pipelineStarted=pipeline_started,
@@ -403,6 +415,12 @@ async def delete_asset_by_id(
 
     # Delete from Firestore (run in thread pool)
     await asyncio.to_thread(delete_asset, user_id, project_id, asset_id, settings)
+
+    # Delete from Algolia search index
+    try:
+        await delete_asset_index(user_id, project_id, asset_id, settings)
+    except Exception as e:
+        logger.warning(f"Failed to delete asset from Algolia: {e}")
 
     return {"deleted": True, "assetId": asset_id}
 

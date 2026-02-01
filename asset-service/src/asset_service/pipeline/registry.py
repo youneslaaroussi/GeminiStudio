@@ -18,6 +18,7 @@ from .types import (
 )
 from .store import get_pipeline_state, update_pipeline_step
 from ..config import get_settings
+from ..search.algolia import index_asset
 
 logger = logging.getLogger(__name__)
 
@@ -420,5 +421,19 @@ async def run_auto_steps(
             "totalCount": total_count,
         },
     )
+
+    # Index asset to Algolia for search (with pipeline metadata)
+    try:
+        from ..storage.firestore import get_asset as get_asset_data
+        asset_data = get_asset_data(user_id, project_id, asset.id)
+        if asset_data:
+            await index_asset(
+                user_id=user_id,
+                project_id=project_id,
+                asset_data=asset_data,
+                pipeline_state=state,
+            )
+    except Exception as e:
+        logger.warning(f"Failed to index asset to Algolia after pipeline: {e}")
 
     return state

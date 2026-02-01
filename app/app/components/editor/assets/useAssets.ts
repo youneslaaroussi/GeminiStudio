@@ -11,12 +11,30 @@ import { extractMetadataFromUrl } from "@/app/lib/media/mediabunny";
 
 const TRANSCODE_POLL_MS = 2500;
 
+export interface SearchResult {
+  id: string;
+  name: string;
+  type: string;
+  description?: string;
+  labels?: string[];
+  highlights?: {
+    name?: string;
+    description?: string;
+    searchableText?: string;
+  };
+}
+
 export function useAssets() {
   const [assets, setAssets] = useState<RemoteAsset[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [assetDurations, setAssetDurations] = useState<Record<string, number>>({});
   const [transcodingAssetIds, setTranscodingAssetIds] = useState<Set<string>>(new Set());
+  
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
 
   const publishAssets = useAssetsStore((state) => state.setAssets);
   const upsertAssetMetadata = useAssetsStore((state) => state.upsertMetadata);
@@ -309,6 +327,56 @@ export function useAssets() {
     [assetDurations]
   );
 
+  // Search assets
+  const searchAssets = useCallback(
+    async (query: string): Promise<void> => {
+      if (!projectId) return;
+      
+      const trimmed = query.trim();
+      setSearchQuery(trimmed);
+      
+      if (!trimmed) {
+        setSearchResults(null);
+        return;
+      }
+      
+      setIsSearching(true);
+      try {
+        const authHeaders = await getAuthHeaders();
+        const url = new URL("/api/assets/search", window.location.origin);
+        url.searchParams.set("projectId", projectId);
+        
+        const response = await fetch(url.toString(), {
+          method: "POST",
+          headers: { ...authHeaders, "Content-Type": "application/json" },
+          body: JSON.stringify({ query: trimmed, limit: 50 }),
+        });
+        
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Search failed");
+        }
+        
+        const data = await response.json();
+        setSearchResults(data.hits || []);
+      } catch (err) {
+        console.error("Search failed:", err);
+        toast.error("Search failed", {
+          description: err instanceof Error ? err.message : "Unknown error",
+        });
+        setSearchResults(null);
+      } finally {
+        setIsSearching(false);
+      }
+    },
+    [projectId]
+  );
+
+  const clearSearch = useCallback(() => {
+    setSearchQuery("");
+    setSearchResults(null);
+  }, []);
+
   const startTranscription = useCallback(async (asset: RemoteAsset) => {
     if (asset.type !== "audio" && asset.type !== "video") {
       toast.error("Only audio or video assets can be transcribed.");
@@ -486,5 +554,11 @@ export function useAssets() {
     startTranscription,
     transcodingAssetIds,
     markAssetsTranscoding,
+    // Search
+    searchQuery,
+    searchResults,
+    isSearching,
+    searchAssets,
+    clearSearch,
   };
 }
