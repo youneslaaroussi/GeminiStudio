@@ -87,7 +87,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">7. Contact Us</h2>
             <p className="text-slate-300 leading-relaxed">
-              If you have any questions about this Privacy Policy, please contact us at: privacy@geministudio.dev
+              If you have any questions about this Privacy Policy, please contact Younes Laaroussi at: hello@youneslaaroussi.ca
             </p>
           </section>
 

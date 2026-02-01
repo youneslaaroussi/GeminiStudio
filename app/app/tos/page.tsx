@@ -131,7 +131,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">13. Contact</h2>
             <p className="text-slate-300 leading-relaxed">
-              If you have any questions about these Terms of Service, please contact us at: legal@geministudio.dev
+              If you have any questions about these Terms of Service, please contact Younes Laaroussi at: hello@youneslaaroussi.ca
             </p>
           </section>
 

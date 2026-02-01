@@ -18,7 +18,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">1. Introduction</h2>
             <p className="text-slate-300 leading-relaxed">
-              GeminiStudio ("we", "us", "our", or "Company") operates the GeminiStudio website and application (the "Service"). This page informs you of our policies regarding the collection, use, and disclosure of personal data when you use our Service and the choices you have associated with that data.
+              GeminiStudio ("we", "us", "our") is operated by Younes Laaroussi. This page informs you of our policies regarding the collection, use, and disclosure of personal data when you use our Service and the choices you have associated with that data.
             </p>
           </section>
 
@@ -87,7 +87,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">7. Contact Us</h2>
             <p className="text-slate-300 leading-relaxed">
-              If you have any questions about this Privacy Policy, please contact us at: privacy@geministudio.dev
+              If you have any questions about this Privacy Policy, please contact Younes Laaroussi at: hello@youneslaaroussi.ca
             </p>
           </section>
 
@@ -103,7 +103,7 @@ export default function PrivacyPage() {
       {/* Footer */}
       <footer className="border-t border-slate-800 bg-slate-900/50 py-8 mt-16">
         <div className="max-w-4xl mx-auto px-6 text-center text-slate-500 text-sm">
-          <p>© 2026 GeminiStudio | Built with Gemini 3</p>
+          <p>© 2026 Younes Laaroussi · GeminiStudio | Licensed under Elastic License 2.0 (ELv2)</p>
         </div>
       </footer>
     </div>

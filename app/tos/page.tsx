@@ -23,18 +23,22 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-white mb-4">2. Use License</h2>
+            <h2 className="text-2xl font-semibold text-white mb-4">2. Source Code License</h2>
             <p className="text-slate-300 leading-relaxed mb-4">
-              Permission is granted to temporarily download one copy of the materials (information or software) on GeminiStudio for personal, non-commercial transitory viewing only. This is the grant of a license, not a transfer of title, and under this license you may not:
+              GeminiStudio source code is licensed under the <strong className="text-white">Elastic License 2.0 (ELv2)</strong>. This is a source-available license that permits you to view, use, and modify the code for personal and internal purposes.
+            </p>
+            <p className="text-slate-300 leading-relaxed mb-4">
+              Under this license, you may NOT:
             </p>
             <ul className="list-disc list-inside text-slate-300 space-y-2">
-              <li>Modifying or copying the materials</li>
-              <li>Using the materials for any commercial purpose or for any public display</li>
-              <li>Attempting to decompile or reverse engineer any software contained on the Service</li>
-              <li>Removing any copyright or other proprietary notations from the materials</li>
-              <li>Transferring the materials to another person or "mirroring" the materials on any other server</li>
-              <li>Using the Service to upload illegal content or content that violates others' rights</li>
+              <li>Provide GeminiStudio to third parties as a hosted or managed service</li>
+              <li>Offer GeminiStudio's functionality as a commercial SaaS product</li>
+              <li>Remove or obscure any licensing, copyright, or other notices</li>
+              <li>Circumvent any license key functionality in the software</li>
             </ul>
+            <p className="text-slate-300 leading-relaxed mt-4">
+              The full license text is available at: <a href="https://github.com/youneslaaroussi/geministudio/blob/main/LICENSE" className="text-blue-400 hover:text-blue-300">github.com/youneslaaroussi/geministudio</a>
+            </p>
           </section>
 
           <section>
@@ -131,7 +135,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-semibold text-white mb-4">13. Contact</h2>
             <p className="text-slate-300 leading-relaxed">
-              If you have any questions about these Terms of Service, please contact us at: legal@geministudio.dev
+              If you have any questions about these Terms of Service, please contact Younes Laaroussi at: hello@youneslaaroussi.ca
             </p>
           </section>
 
@@ -147,7 +151,7 @@ export default function TermsPage() {
       {/* Footer */}
       <footer className="border-t border-slate-800 bg-slate-900/50 py-8 mt-16">
         <div className="max-w-4xl mx-auto px-6 text-center text-slate-500 text-sm">
-          <p>© 2026 GeminiStudio | Built with Gemini 3</p>
+          <p>© 2026 Younes Laaroussi · GeminiStudio | Licensed under Elastic License 2.0 (ELv2)</p>
         </div>
       </footer>
     </div>
