@@ -581,6 +581,7 @@ class TelegramProvider(ChatProvider):
         asset_id: str,
         timeout: float = 120.0,
         poll_interval: float = 3.0,
+        job_creation_timeout: float = 15.0,
     ) -> tuple[bytes | None, str | None]:
         """
         Wait for transcode to complete and fetch the transcoded file.
@@ -610,7 +611,16 @@ class TelegramProvider(ChatProvider):
             docs = list(query.stream())
             
             if not docs:
-                logger.warning("[TELEGRAM] No transcode job found for asset %s", asset_id)
+                elapsed = time.time() - start_time
+                # If no job found after job_creation_timeout, give up early
+                if elapsed > job_creation_timeout:
+                    logger.warning(
+                        "[TELEGRAM] No transcode job found for asset %s after %.1fs, giving up",
+                        asset_id,
+                        elapsed,
+                    )
+                    return None, None
+                logger.info("[TELEGRAM] Waiting for transcode job to appear for asset %s (%.1fs)", asset_id, elapsed)
                 await asyncio.sleep(poll_interval)
                 continue
             
@@ -1002,10 +1012,12 @@ class TelegramProvider(ChatProvider):
                                 file_mime = mime
                                 
                                 # For videos with transcode, wait for and use transcoded file
+                                # Skip waiting for MP4 - it's already in a compatible format for Gemini
                                 is_video = mime.startswith("video/")
+                                is_mp4 = mime == "video/mp4"
                                 transcode_started = asset_result and asset_result.get("transcodeStarted", False)
                                 
-                                if is_video and transcode_started:
+                                if is_video and transcode_started and not is_mp4:
                                     asset_data = asset_result.get("asset", {})
                                     asset_id = asset_data.get("id")
                                     if asset_id:
@@ -1034,6 +1046,10 @@ class TelegramProvider(ChatProvider):
                                                 "text": "\n[Note: Video transcoding failed. Please try again or upload a different format.]",
                                             })
                                             continue
+                                elif is_mp4 and transcode_started:
+                                    logger.info(
+                                        "[TELEGRAM] Skipping transcode wait for MP4 file, using original"
+                                    )
                                 
                                 # Upload to Gemini File API
                                 logger.info("[TELEGRAM] Uploading media to Gemini File API (%d bytes, %s)", len(file_bytes), file_mime)
