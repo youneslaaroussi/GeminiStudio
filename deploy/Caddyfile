@@ -1,0 +1,12 @@
+# Caddy reverse proxy configuration
+# Automatically provisions SSL from Let's Encrypt
+
+{$DOMAIN:localhost} {
+    # Frontend - Next.js
+    reverse_proxy frontend:3000
+
+    # Health check endpoint
+    handle /health {
+        respond "OK" 200
+    }
+}

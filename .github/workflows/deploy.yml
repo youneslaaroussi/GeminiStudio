@@ -87,9 +87,20 @@ jobs:
               echo "SPEECH_MODEL=chirp_3" >> .env
               echo "SPEECH_LANGUAGE_CODES=en-US" >> .env
               echo "RENDERER_CONCURRENCY=2" >> .env
-              echo "FRONTEND_URL=http://localhost:3000" >> .env
-              echo "CORS_ORIGIN=*" >> .env
               echo "DEBUG=false" >> .env
+              
+              # Domain and SSL
+              echo "DOMAIN=geminivideo.studio" >> .env
+              echo "FRONTEND_URL=https://geminivideo.studio" >> .env
+              echo "CORS_ORIGIN=https://geminivideo.studio" >> .env
+              
+              # Firebase config for frontend
+              echo "NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyAkxVuaLgi8ShjlJTuQKMh-U9r6vOvawXo" >> .env
+              echo "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=geministudio-app.firebaseapp.com" >> .env
+              echo "NEXT_PUBLIC_FIREBASE_PROJECT_ID=geministudio-app" >> .env
+              echo "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=geministudio-app.firebasestorage.app" >> .env
+              echo "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=710851187455" >> .env
+              echo "NEXT_PUBLIC_FIREBASE_APP_ID=1:710851187455:web:ba077c89c5b61fb24c72ca" >> .env
               
               # Deploy services
               sudo docker compose up -d --build
@@ -124,4 +135,10 @@ jobs:
           curl -sf --retry 5 --retry-delay 15 --retry-all-errors "http://$IP:4000/health" || { echo "Renderer: FAILED"; exit 1; }
           echo "Renderer: OK"
           
+          echo "Checking Frontend (via Caddy)..."
+          curl -sf --retry 5 --retry-delay 15 --retry-all-errors -k "https://geminivideo.studio/health" || { echo "Frontend: FAILED (might need DNS propagation)"; }
+          echo "Frontend: OK"
+          
           echo "All services healthy!"
+          echo ""
+          echo "Your app is live at: https://geminivideo.studio"

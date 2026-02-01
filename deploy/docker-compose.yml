@@ -2,6 +2,57 @@
 # All backend services running together
 
 services:
+  # Caddy reverse proxy - handles SSL and routing
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+    networks:
+      - gemini-network
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: ..
+      dockerfile: app/Dockerfile
+    restart: unless-stopped
+    environment:
+      - NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY}
+      - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+      - NEXT_PUBLIC_FIREBASE_PROJECT_ID=${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+      - NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}
+      - NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
+      - NEXT_PUBLIC_FIREBASE_APP_ID=${NEXT_PUBLIC_FIREBASE_APP_ID}
+      - NEXT_PUBLIC_LANGGRAPH_URL=http://langgraph-server:8080
+      - NEXT_PUBLIC_BILLING_SERVICE_URL=http://billing-service:3100
+      - ASSET_SERVICE_URL=http://asset-service:8081
+      - VIDEO_EFFECTS_SERVICE_URL=http://video-effects-service:8082
+      - RENDERER_API_URL=http://renderer:4000
+      - GOOGLE_GENERATIVE_AI_API_KEY=${GEMINI_API_KEY}
+      - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
+      - ASSET_GCS_BUCKET=${ASSET_GCS_BUCKET}
+      - FIREBASE_SERVICE_ACCOUNT_KEY=/app/secrets/service-account.json
+    volumes:
+      - ./secrets:/app/secrets:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - gemini-network
+
   # Shared Redis instance for all services
   redis:
     image: redis:7-alpine
@@ -199,6 +250,8 @@ services:
 volumes:
   redis-data:
   renderer-tmp:
+  caddy-data:
+  caddy-config:
 
 networks:
   gemini-network:
