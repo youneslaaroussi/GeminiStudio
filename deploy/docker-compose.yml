@@ -104,6 +104,7 @@ services:
     environment:
       - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/service-account.json
+      - GOOGLE_API_KEY=${GEMINI_API_KEY}
       - GOOGLE_GENERATIVE_AI_API_KEY=${GEMINI_API_KEY}
       - GOOGLE_CLOUD_STORAGE_BUCKET=${CHECKPOINT_GCS_BUCKET:-${ASSET_GCS_BUCKET}}
       - ASSET_SERVICE_URL=http://asset-service:8081
