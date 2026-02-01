@@ -850,7 +850,16 @@ function IntegrationsSection() {
                 )}
               </div>
               <p className="text-sm text-slate-400">
-                Interact with your projects via the Gemini Studio Telegram bot.
+                Interact with your projects via the{" "}
+                <a
+                  href="https://t.me/GeminiStudioProBot"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300 underline"
+                >
+                  @GeminiStudioProBot
+                </a>
+                .
               </p>
             </div>
           </div>
@@ -892,7 +901,16 @@ function IntegrationsSection() {
           ) : linkCode ? (
             <div className="space-y-3">
               <p className="text-sm text-slate-300">
-                Send this code to the Gemini Studio bot:
+                Send this code to{" "}
+                <a
+                  href="https://t.me/GeminiStudioProBot"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300 underline"
+                >
+                  @GeminiStudioProBot
+                </a>
+                :
               </p>
               <div className="flex items-center gap-2">
                 <code className="px-4 py-2 bg-slate-800 rounded-lg text-lg font-mono tracking-widest text-white">
@@ -907,7 +925,16 @@ function IntegrationsSection() {
                   {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
                 </Button>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <a
+                  href="https://t.me/GeminiStudioProBot"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300"
+                >
+                  <MessageCircle className="size-3.5" />
+                  Open @GeminiStudioProBot
+                </a>
                 <p className="text-xs text-slate-500">
                   Send <code className="text-slate-400">/link {linkCode}</code> · Expires in 10 min
                 </p>
