@@ -2,9 +2,17 @@
 # Automatically provisions SSL from Let's Encrypt
 
 {$DOMAIN:localhost}, www.{$DOMAIN:localhost} {
-    # Billing service API (for Stripe webhooks)
+    # Billing service API (for Stripe webhooks and client calls)
     handle /credits/* {
         reverse_proxy billing-service:3100
+    }
+
+    # LangGraph API (AI agent endpoints)
+    handle /teleport {
+        reverse_proxy langgraph-server:8080
+    }
+    handle /teleport/* {
+        reverse_proxy langgraph-server:8080
     }
 
     # Health check endpoint
