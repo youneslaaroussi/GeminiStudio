@@ -31,10 +31,10 @@ with open("assets/mermaid-config.json", "w") as f:
 # Diagram 1: Infrastructure
 infra = """
 flowchart TB
-    subgraph ai["AI Services"]
-        gemini["fa:fa-brain Gemini 3"]
-        video["fa:fa-eye Video Intelligence"]
-        gen["fa:fa-palette Veo / Imagen / Chirp"]
+    subgraph ai["Gemini 3 Pro"]
+        gemini["fa:fa-brain Reasoning Layer"]
+        vision["fa:fa-eye Multimodal Understanding"]
+        gen["fa:fa-palette Veo 3 / Nano Banana Pro / Lyria / Chirp"]
     end
 
     subgraph data["Data Layer"]
@@ -47,10 +47,10 @@ flowchart TB
         redis["fa:fa-server Redis"]
     end
 
-    gemini --> video
+    gemini --> vision
     gemini --> gen
     gemini -.-> firestore
-    video --> gcs
+    vision --> gcs
     gen --> gcs
     redis --> pubsub
 """
@@ -66,7 +66,7 @@ flowchart LR
     end
 
     subgraph reason["Reasoning Layer"]
-        agent["fa:fa-brain Gemini 3 Agent"]
+        agent["fa:fa-brain Gemini 3 Pro"]
     end
 
     subgraph exec["Execution Layer"]
@@ -87,7 +87,7 @@ flowchart LR
     video -.->|"ready!"| user
 """
 
-# Diagram 3: Asset Pipeline
+# Diagram 3: Asset Pipeline - emphasizing Gemini 3's native multimodal
 pipeline = """
 flowchart LR
     upload(("fa:fa-upload Upload"))
@@ -96,24 +96,22 @@ flowchart LR
         gcs["fa:fa-cloud GCS"]
     end
 
-    subgraph intel["Video Intelligence API"]
-        shots["fa:fa-cut Shots"]
-        labels["fa:fa-tags Labels"]
-        speech["fa:fa-microphone Speech"]
+    subgraph context["1M Token Context Window"]
+        media["fa:fa-photo-video Video / Images / Audio"]
     end
 
-    subgraph understand["Understanding"]
-        gemini["fa:fa-brain Gemini Analysis"]
+    subgraph gemini["Gemini 3 Pro Multimodal"]
+        understanding["fa:fa-brain Native Understanding"]
     end
 
     subgraph index["Index"]
-        library["fa:fa-book Asset Library"]
+        library["fa:fa-book Searchable Assets"]
     end
 
     upload --> gcs
-    gcs --> shots & labels & speech
-    shots & labels & speech --> gemini
-    gemini --> library
+    gcs --> media
+    media -->|"media_resolution"| understanding
+    understanding --> library
 """
 
 diagrams = [
@@ -146,4 +144,4 @@ for name, content in diagrams:
         print(f"✗ {name}: {result.stderr}")
 
 os.remove("assets/mermaid-config.json")
-print("\nDone! Hand-drawn diagrams with Font Awesome icons.")
+print("\nDone! Diagrams use official Gemini 3 terminology.")
