@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, Iterable, Mapping, Sequence, cast
 
 from google.cloud import storage
@@ -9,7 +10,6 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
-    PendingWrite,
 )
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -17,7 +17,6 @@ try:  # Postgres saver is optional; requires langgraph-checkpoint extras.
     from langgraph.checkpoint.postgres import PostgresSaver  # type: ignore
 except ImportError:  # pragma: no cover - optional dependency
     PostgresSaver = None  # type: ignore[assignment]
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langchain_core.runnables import RunnableConfig
 from datetime import datetime, timezone
 
@@ -32,12 +31,22 @@ class GCSCheckpointSaver(BaseCheckpointSaver):
         bucket_name: str,
         *,
         prefix: str = "langgraph/checkpoints",
-        serializer: JsonPlusSerializer | None = None,
     ) -> None:
+        super().__init__()
         self.client = storage.Client()
         self.bucket = self.client.bucket(bucket_name)
         self.prefix = prefix.strip("/")
-        self.serializer = serializer or JsonPlusSerializer(pickle_fallback=True)
+
+    def _serialize(self, data: Any) -> bytes:
+        """Serialize data using the serde protocol."""
+        type_str, payload = self.serde.dumps_typed(data)
+        # Store type and payload together as JSON
+        return json.dumps({"t": type_str, "d": payload.decode("latin-1")}).encode()
+
+    def _deserialize(self, data: bytes) -> Any:
+        """Deserialize data using the serde protocol."""
+        wrapper = json.loads(data.decode())
+        return self.serde.loads_typed((wrapper["t"], wrapper["d"].encode("latin-1")))
 
     def _thread_key(self, config: RunnableConfig) -> str:
         configurable = config.get("configurable") or {}
@@ -67,7 +76,7 @@ class GCSCheckpointSaver(BaseCheckpointSaver):
             "new_versions": dict(new_versions) if new_versions else {},
             "written_at": datetime.now(timezone.utc).isoformat(),
         }
-        payload = self.serializer.dumps(data)
+        payload = self._serialize(data)
         blob = self.bucket.blob(self._checkpoint_path(config, checkpoint["id"]))
         blob.upload_from_string(payload)
         # Return updated config with checkpoint_id
@@ -104,7 +113,7 @@ class GCSCheckpointSaver(BaseCheckpointSaver):
             "checkpoint_id": checkpoint_id,
             "written_at": datetime.now(timezone.utc).isoformat(),
         }
-        payload = self.serializer.dumps(data)
+        payload = self._serialize(data)
         blob = self.bucket.blob(self._writes_path(config, checkpoint_id))
         blob.upload_from_string(payload)
 
@@ -131,7 +140,7 @@ class GCSCheckpointSaver(BaseCheckpointSaver):
         try:
             blob = self.bucket.blob(self._checkpoint_path(config, checkpoint_id))
             payload = blob.download_as_bytes()
-            record = self.serializer.loads(payload)
+            record = self._deserialize(payload)
         except NotFound:
             return None
 
@@ -141,7 +150,7 @@ class GCSCheckpointSaver(BaseCheckpointSaver):
         try:
             writes_blob = self.bucket.blob(self._writes_path(config, checkpoint_id))
             writes_payload = writes_blob.download_as_bytes()
-            writes_record = self.serializer.loads(writes_payload)
+            writes_record = self._deserialize(writes_payload)
             writes = tuple(writes_record.get("writes", ()))
         except NotFound:
             writes = ()
@@ -177,13 +186,13 @@ class GCSCheckpointSaver(BaseCheckpointSaver):
             if before and checkpoint_id >= before:
                 continue
             payload = blob.download_as_bytes()
-            record = self.serializer.loads(payload)
+            record = self._deserialize(payload)
             checkpoint_value: Checkpoint = record["checkpoint"]
             metadata = cast(CheckpointMetadata, record.get("metadata") or {})
             writes_blob = self.bucket.blob(self._writes_path(config, checkpoint_id))
             try:
                 writes_payload = writes_blob.download_as_bytes()
-                writes_record = self.serializer.loads(writes_payload)
+                writes_record = self._deserialize(writes_payload)
                 writes = tuple(writes_record.get("writes", ()))
             except NotFound:
                 writes = ()
