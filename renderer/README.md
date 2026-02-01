@@ -41,6 +41,36 @@ Create a `.env` file in `renderer/` (optional) or supply environment variables:
 | `RENDERER_HEADLESS_CONCURRENCY` | `2` | Max concurrent headless Chrome contexts (segment rendering) |
 | `RENDERER_TMP_DIR` | `/tmp/gemini-renderer` | Working directory for intermediate files |
 | `LOG_LEVEL` | `info` | Pino log level |
+| `GOOGLE_PROJECT_ID` | — | GCP project ID (required for Pub/Sub) |
+| `RENDERER_EVENT_TOPIC` | `gemini-render-events` | Pub/Sub topic for render completion/failure events |
+| `GOOGLE_APPLICATION_CREDENTIALS` | — | Path to GCP service account JSON (required for Pub/Sub) |
+
+#### Pub/Sub Event Publishing
+
+The renderer publishes `render.completed` and `render.failed` events to Google Cloud Pub/Sub when jobs finish. This allows other services (like the LangGraph agent) to be notified of render status changes.
+
+**Required GCP Permissions:**
+
+The service account must have the `roles/pubsub.publisher` role:
+
+```bash
+# Get your service account email
+SERVICE_ACCOUNT="your-service-account@your-project.iam.gserviceaccount.com"
+PROJECT_ID="your-project-id"
+
+# Grant Pub/Sub Publisher role
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$SERVICE_ACCOUNT" \
+  --role="roles/pubsub.publisher"
+```
+
+**Create the Pub/Sub topic:**
+
+```bash
+gcloud pubsub topics create gemini-render-events
+```
+
+If Pub/Sub is not configured or permissions are missing, renders will still complete successfully but events won't be published (errors will be logged).
 
 ### 4. Run in development
 

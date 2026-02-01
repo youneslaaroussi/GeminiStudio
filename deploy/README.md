@@ -95,15 +95,21 @@ Deploy all GeminiStudio backend services on a single GCE VM with Docker Compose.
      --role="roles/secretmanager.secretAccessor"
    ```
 
-5. **VM Default Service Account** - needs Secret Manager access to pull secrets during deploy:
+5. **VM Default Service Account** - needs Secret Manager and Pub/Sub access:
    ```bash
    # Get the default compute service account (format: PROJECT_NUMBER-compute@developer.gserviceaccount.com)
    COMPUTE_SA=$(gcloud iam service-accounts list --filter="email~compute@developer" --format="value(email)")
    PROJECT_ID="your-project-id"
 
+   # Secret Manager access (to pull secrets during deploy)
    gcloud projects add-iam-policy-binding $PROJECT_ID \
      --member="serviceAccount:$COMPUTE_SA" \
      --role="roles/secretmanager.secretAccessor"
+
+   # Pub/Sub Publisher access (required for renderer to publish completion events)
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:$COMPUTE_SA" \
+     --role="roles/pubsub.publisher"
    ```
 
 ## Quick Start
@@ -320,7 +326,27 @@ machine_type = "e2-standard-4"
 
 ### Permission errors
 
-Ensure service account has required roles:
+Ensure service account has required roles. Common permission issues:
+
+**Renderer Pub/Sub errors** (`PERMISSION_DENIED: User not authorized to perform this action`):
+
+The renderer service publishes render completion/failure events to Pub/Sub. If you see this error in renderer logs, grant Pub/Sub Publisher permissions:
+
+```bash
+# Get the VM's service account
+SERVICE_ACCOUNT=$(gcloud compute instances describe gemini-studio --zone=us-central1-a --format='get(serviceAccounts[0].email)')
+PROJECT_ID=$(gcloud config get-value project)
+
+# Grant Pub/Sub Publisher role
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:$SERVICE_ACCOUNT" \
+  --role="roles/pubsub.publisher"
+
+# Restart renderer to apply changes
+gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml restart renderer'
+```
+
+**Secret Manager errors**:
 
 ```bash
 gcloud projects add-iam-policy-binding PROJECT_ID \
