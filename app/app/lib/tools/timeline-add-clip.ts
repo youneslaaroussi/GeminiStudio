@@ -284,9 +284,9 @@ export const timelineAddClipTool: ToolDefinition<
           }
         }
 
-        // Use asset's signed URL if src not provided
-        if (!resolvedSrc && asset.signedUrl) {
-          resolvedSrc = asset.signedUrl;
+        // Use asset's proxy URL if src not provided (not signedUrl which has CORS issues)
+        if (!resolvedSrc && asset.url) {
+          resolvedSrc = asset.url;
         }
 
         // Use asset dimensions/duration if not provided
@@ -322,7 +322,7 @@ export const timelineAddClipTool: ToolDefinition<
     if (resolvedType !== "text" && !resolvedSrc) {
       return {
         status: "error",
-        error: "Could not determine media source. Provide 'src' or a valid 'assetId' with a signed URL.",
+        error: "Could not determine media source. Provide 'src' or a valid 'assetId'.",
       };
     }
 

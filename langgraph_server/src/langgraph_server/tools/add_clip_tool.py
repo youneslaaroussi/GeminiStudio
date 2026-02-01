@@ -167,10 +167,9 @@ def _find_or_create_layer(project_data: dict, clip_type: str, layer_id: str | No
 
 @tool
 def addClipToTimeline(
-    clip_type: str,
-    start: float,
-    duration: float,
-    src: str | None = None,
+    clip_type: str | None = None,
+    start: float = 0,
+    duration: float | None = None,
     text: str | None = None,
     name: str | None = None,
     asset_id: str | None = None,
@@ -181,14 +180,16 @@ def addClipToTimeline(
 ) -> dict:
     """Add a new clip to the project timeline.
 
+    For media clips (video/audio/image), provide asset_id - type and duration will be auto-detected.
+    For text clips, provide clip_type='text' and text content.
+
     Args:
-        clip_type: Type of clip - "video", "audio", "image", or "text"
-        start: Start time in seconds on the timeline
-        duration: Duration of the clip in seconds
-        src: Source URL for media clips (video, audio, image)
+        clip_type: Type of clip - "video", "audio", "image", or "text". Optional for media clips if asset_id is provided.
+        start: Start time in seconds on the timeline (defaults to 0)
+        duration: Duration of the clip in seconds. Optional - defaults to asset duration or 5s for images.
         text: Text content for text clips
         name: Optional name for the clip
-        asset_id: Optional asset ID reference
+        asset_id: Asset ID for media clips - used to get the media source URL
         layer_id: Optional specific layer ID to add to
         project_id: Project ID (injected by agent)
         user_id: User ID (injected by agent)
@@ -198,9 +199,9 @@ def addClipToTimeline(
         Status dict with the created clip info or error message.
     """
     logger.info(
-        "[ADD_CLIP] Called with: type=%s, start=%s, duration=%s, src=%s, text=%s, name=%s, "
+        "[ADD_CLIP] Called with: type=%s, start=%s, duration=%s, text=%s, name=%s, "
         "asset_id=%s, layer_id=%s, project_id=%s, user_id=%s, branch_id=%s",
-        clip_type, start, duration, src[:50] if src else None, text[:50] if text else None,
+        clip_type, start, duration, text[:50] if text else None,
         name, asset_id, layer_id, project_id, user_id, branch_id
     )
 
@@ -211,33 +212,94 @@ def addClipToTimeline(
             "message": "User and project context required to modify timeline.",
         }
 
-    if clip_type not in ("video", "audio", "image", "text"):
+    # Initialize settings and Firestore client
+    settings = get_settings()
+    db = get_firestore_client(settings)
+
+    # Resolve clip_type and duration from asset metadata if asset_id is provided
+    resolved_type = clip_type
+    resolved_duration = duration
+    asset_filename = None
+
+    if asset_id:
+        # Fetch asset metadata from Firestore
+        asset_ref = (
+            db.collection("users")
+            .document(user_id)
+            .collection("projects")
+            .document(project_id)
+            .collection("assets")
+            .document(asset_id)
+        )
+        asset_doc = asset_ref.get()
+        
+        if asset_doc.exists:
+            asset_data = asset_doc.to_dict()
+            logger.info("[ADD_CLIP] Asset metadata: %s", {k: v for k, v in asset_data.items() if k != "signedUrl"})
+            
+            # Infer type from asset if not provided
+            if not resolved_type:
+                asset_type = asset_data.get("type", "").lower()
+                if asset_type in ("video", "audio", "image"):
+                    resolved_type = asset_type
+                    logger.info("[ADD_CLIP] Inferred clip_type from asset: %s", resolved_type)
+            
+            # Get duration from asset if not provided
+            if not resolved_duration and asset_data.get("duration"):
+                resolved_duration = asset_data["duration"]
+                logger.info("[ADD_CLIP] Using asset duration: %s", resolved_duration)
+            
+            # Get filename for proxy URL
+            asset_filename = asset_data.get("name") or asset_data.get("fileName")
+        else:
+            logger.warning("[ADD_CLIP] Asset not found: %s", asset_id)
+
+    # Default duration for images
+    if not resolved_duration:
+        resolved_duration = 5 if resolved_type == "image" else 10
+
+    # Validate resolved values
+    if resolved_type and resolved_type not in ("video", "audio", "image", "text"):
         return {
             "status": "error",
-            "message": f"Invalid clip_type '{clip_type}'. Must be video, audio, image, or text.",
+            "message": f"Invalid clip_type '{resolved_type}'. Must be video, audio, image, or text.",
         }
 
-    # Media clips need either src or asset_id (asset_id can be used to build proxy URL)
-    if clip_type in ("video", "audio", "image") and not src and not asset_id:
+    # Media clips need asset_id
+    if resolved_type in ("video", "audio", "image") and not asset_id:
         return {
             "status": "error",
-            "message": f"Either source URL (src) or asset_id is required for {clip_type} clips.",
+            "message": f"asset_id is required for {resolved_type} clips.",
         }
 
-    if clip_type == "text" and not text:
+    # Text clips need type and text
+    if not resolved_type:
+        return {
+            "status": "error",
+            "message": "Could not determine clip type. Provide 'clip_type' or a valid 'asset_id'.",
+        }
+
+    if resolved_type == "text" and not text:
         return {
             "status": "error",
             "message": "Text content is required for text clips.",
         }
 
-    if start < 0 or duration <= 0:
+    if start < 0 or resolved_duration <= 0:
         return {
             "status": "error",
             "message": "Start must be >= 0 and duration must be > 0.",
         }
 
-    settings = get_settings()
-    db = get_firestore_client(settings)
+    # Get settings and db client (may already be initialized above)
+    try:
+        settings
+    except NameError:
+        settings = get_settings()
+    try:
+        db
+    except NameError:
+        db = get_firestore_client(settings)
 
     # Determine which branch to use
     use_branch_id = branch_id or "main"
@@ -302,83 +364,43 @@ def addClipToTimeline(
             }
 
         # Find or create the appropriate layer
-        layer = _find_or_create_layer(project_data, clip_type, layer_id)
+        layer = _find_or_create_layer(project_data, resolved_type, layer_id)
 
         # Create the clip with all required base fields
         clip_id = f"clip-{uuid.uuid4().hex[:8]}"
         clip: dict[str, Any] = {
             "id": clip_id,
-            "type": clip_type,
-            "name": name or f"New {clip_type.capitalize()} Clip",
+            "type": resolved_type,
+            "name": name or f"New {resolved_type.capitalize()} Clip",
             "start": start,
-            "duration": duration,
+            "duration": resolved_duration,
             "offset": 0,
             "speed": 1,
             "position": {"x": 0, "y": 0},
             "scale": {"x": 1, "y": 1},
         }
 
-        # For media clips, use proxy URL to avoid CORS issues
-        # Try to extract asset_id and filename from GCS URL if not provided directly
-        effective_asset_id = asset_id
-        asset_filename = None
-        is_already_proxy_url = False
-        if src and clip_type in ("video", "audio", "image"):
-            import re
-            
-            # Check if src is already a proxy URL (starts with /api/assets/)
-            proxy_match = re.match(r'^/api/assets/([a-f0-9-]{36})/file/(.+?)(?:\?|$)', src)
-            if proxy_match:
-                # Already a proxy URL, extract asset_id and use as-is
-                if not effective_asset_id:
-                    effective_asset_id = proxy_match.group(1)
-                is_already_proxy_url = True
-                logger.info("[ADD_CLIP] Source is already a proxy URL, using as-is: %s", src[:80])
+        # For media clips, build proxy URL from asset_id
+        if asset_id and resolved_type in ("video", "audio", "image"):
+            # Build proxy URL - include filename for proper extension detection
+            if asset_filename:
+                from urllib.parse import quote
+                proxy_src = f"/api/assets/{asset_id}/file/{quote(asset_filename)}?projectId={project_id}&userId={user_id}"
             else:
-                # GCS URL format: https://storage.googleapis.com/.../assets/{asset_id}/{filename}?query...
-                # Extract asset_id
-                asset_match = re.search(r'/assets/([a-f0-9-]{36})/', src)
-                if asset_match:
-                    if not effective_asset_id:
-                        effective_asset_id = asset_match.group(1)
-                        logger.info("[ADD_CLIP] Extracted asset_id from URL: %s", effective_asset_id)
-                    # Extract filename (after asset_id, before query params)
-                    filename_match = re.search(r'/assets/[a-f0-9-]{36}/([^?]+)', src)
-                    if filename_match:
-                        asset_filename = filename_match.group(1)
-                        logger.info("[ADD_CLIP] Extracted filename from URL: %s", asset_filename)
-        
-        if effective_asset_id and clip_type in ("video", "audio", "image"):
-            if is_already_proxy_url:
-                # Already a valid proxy URL, use as-is
-                clip["src"] = src
-                clip["assetId"] = effective_asset_id
-                logger.info("[ADD_CLIP] Using existing proxy URL: %s", src[:80])
-            else:
-                # Build new proxy URL - include filename for proper extension detection
-                if asset_filename:
-                    proxy_src = f"/api/assets/{effective_asset_id}/file/{asset_filename}?projectId={project_id}&userId={user_id}"
-                else:
-                    proxy_src = f"/api/assets/{effective_asset_id}/file?projectId={project_id}&userId={user_id}"
-                clip["src"] = proxy_src
-                clip["assetId"] = effective_asset_id
-                logger.info("[ADD_CLIP] Using proxy URL: %s", proxy_src)
-        elif src:
-            clip["src"] = src
-            logger.warning("[ADD_CLIP] Using raw src URL (no proxy): %s", src[:80])
-        else:
-            # This shouldn't happen due to validation, but log if it does
-            logger.error("[ADD_CLIP] No src or asset_id for media clip")
+                proxy_src = f"/api/assets/{asset_id}/file?projectId={project_id}&userId={user_id}"
+            clip["src"] = proxy_src
+            clip["assetId"] = asset_id
+            logger.info("[ADD_CLIP] Using proxy URL: %s", proxy_src)
         
         if text:
             clip["text"] = text
 
         # Add type-specific defaults
-        if clip_type == "video":
+        if resolved_type == "video":
             clip["objectFit"] = "contain"
-        elif clip_type == "audio":
+        elif resolved_type == "audio":
             clip["volume"] = 1.0
-        elif clip_type == "text":
+        elif resolved_type == "text":
             clip["fontSize"] = 48
             clip["fill"] = "#ffffff"
             clip["opacity"] = 1.0
@@ -407,13 +429,13 @@ def addClipToTimeline(
 
         result = {
             "status": "success",
-            "message": f"Added {clip_type} clip '{clip['name']}' at {start}s for {duration}s.",
+            "message": f"Added {resolved_type} clip '{clip['name']}' at {start}s for {resolved_duration}s.",
             "clip": {
                 "id": clip_id,
-                "type": clip_type,
+                "type": resolved_type,
                 "name": clip["name"],
                 "start": start,
-                "duration": duration,
+                "duration": resolved_duration,
                 "layerId": layer.get("id"),
                 "layerName": layer.get("name"),
             },
