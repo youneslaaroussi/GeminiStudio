@@ -2,6 +2,9 @@
 
 <div align="center">
 
+![Gemini Studio Logo](app/public/gemini-logo.png)
+
+
 ### The Execution Layer for Agentic Video
 
 **Generative AI solved pixel generation. We're solving video production.**
