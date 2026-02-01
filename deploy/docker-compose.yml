@@ -1,0 +1,204 @@
+# GeminiStudio - Unified Docker Compose for Single VM Deployment
+# All backend services running together
+
+services:
+  # Shared Redis instance for all services
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - gemini-network
+
+  # Asset Service - handles media uploads, transcription, video analysis
+  asset-service:
+    build:
+      context: ../asset-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/service-account.json
+      - ASSET_GCS_BUCKET=${ASSET_GCS_BUCKET}
+      - ASSET_SIGNED_URL_TTL_SECONDS=${ASSET_SIGNED_URL_TTL_SECONDS:-604800}
+      - SPEECH_PROJECT_ID=${GOOGLE_PROJECT_ID}
+      - SPEECH_LOCATION=${SPEECH_LOCATION:-global}
+      - SPEECH_RECOGNIZER_ID=${SPEECH_RECOGNIZER_ID:-_}
+      - SPEECH_MODEL=${SPEECH_MODEL:-chirp_3}
+      - SPEECH_LANGUAGE_CODES=${SPEECH_LANGUAGE_CODES:-en-US}
+      - SPEECH_GCS_BUCKET=${SPEECH_GCS_BUCKET:-${ASSET_GCS_BUCKET}}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL_ID=${GEMINI_MODEL_ID:-gemini-3-pro-preview}
+      - REDIS_URL=redis://redis:6379/0
+      - PIPELINE_EVENT_TOPIC=${PIPELINE_EVENT_TOPIC:-gemini-pipeline-events}
+      - CLOUDCONVERT_API_KEY=${CLOUDCONVERT_API_KEY:-}
+      - ALGOLIA_APP_ID=${ALGOLIA_APP_ID:-}
+      - ALGOLIA_ADMIN_API_KEY=${ALGOLIA_ADMIN_API_KEY:-}
+      - ALGOLIA_INDEX_PREFIX=${ALGOLIA_INDEX_PREFIX:-gemini_assets}
+      - DEBUG=${DEBUG:-false}
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8081
+    volumes:
+      - ./secrets:/app/secrets:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - gemini-network
+
+  # Video Effects Service - AI video effects via Replicate
+  video-effects-service:
+    build:
+      context: ../video-effects-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      - REPLICATE_API_TOKEN=${REPLICATE_API_TOKEN}
+      - ASSET_SERVICE_URL=http://asset-service:8081
+      - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/service-account.json
+      - REDIS_URL=redis://redis:6379/1
+      - DEBUG=${DEBUG:-false}
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8082
+    volumes:
+      - ./secrets:/app/secrets:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      asset-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - gemini-network
+
+  # LangGraph Server - AI agent with tools
+  langgraph-server:
+    build:
+      context: ../langgraph_server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/service-account.json
+      - GOOGLE_GENERATIVE_AI_API_KEY=${GEMINI_API_KEY}
+      - GOOGLE_CLOUD_STORAGE_BUCKET=${CHECKPOINT_GCS_BUCKET:-${ASSET_GCS_BUCKET}}
+      - ASSET_SERVICE_URL=http://asset-service:8081
+      - ASSET_SERVICE_HMAC_SECRET=${ASSET_SERVICE_HMAC_SECRET:-}
+      - RENDERER_API_URL=http://renderer:4000
+      - VIDEO_EFFECTS_SERVICE_URL=http://video-effects-service:8082
+      - PIPELINE_EVENT_TOPIC=${PIPELINE_EVENT_TOPIC:-gemini-pipeline-events}
+      - RENDER_EVENT_TOPIC=${RENDER_EVENT_TOPIC:-gemini-render-events}
+      - VEO_EVENT_TOPIC=${VEO_EVENT_TOPIC:-gemini-veo-events}
+      - VEO_PROJECT_ID=${GOOGLE_PROJECT_ID}
+      - VEO_LOCATION=${VEO_LOCATION:-us-central1}
+      - VEO_MODEL_ID=${VEO_MODEL_ID:-veo-3.0-generate-001}
+    volumes:
+      - ./secrets:/app/secrets:ro
+    depends_on:
+      asset-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - gemini-network
+
+  # Renderer - Puppeteer-based video rendering
+  renderer:
+    build:
+      context: ..
+      dockerfile: renderer/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - REDIS_URL=redis://redis:6379/2
+      - RENDERER_CONCURRENCY=${RENDERER_CONCURRENCY:-2}
+      - RENDERER_HEADLESS_CONCURRENCY=${RENDERER_HEADLESS_CONCURRENCY:-2}
+      - RENDERER_TMP_DIR=/tmp/gemini-renderer
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - RENDERER_HEADLESS=true
+      - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/service-account.json
+      - RENDERER_EVENT_TOPIC=${RENDER_EVENT_TOPIC:-gemini-render-events}
+      - RENDERER_TASK_TIMEOUT_MS=${RENDERER_TASK_TIMEOUT_MS:-600000}
+    volumes:
+      - ./secrets:/app/secrets:ro
+      - renderer-tmp:/tmp/gemini-renderer
+    depends_on:
+      redis:
+        condition: service_healthy
+    # Renderer takes longer to start due to Puppeteer/Chrome
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - gemini-network
+
+  # Billing Service - Stripe integration for credits
+  billing-service:
+    build:
+      context: ../billing-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    environment:
+      - FIREBASE_SERVICE_ACCOUNT_KEY=/app/secrets/service-account.json
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_CREDITS_WEBHOOK_SECRET=${STRIPE_CREDITS_WEBHOOK_SECRET:-}
+      - STRIPE_PRICE_STARTER=${STRIPE_PRICE_STARTER:-}
+      - STRIPE_PRICE_PRO=${STRIPE_PRICE_PRO:-}
+      - STRIPE_PRICE_ENTERPRISE=${STRIPE_PRICE_ENTERPRISE:-}
+      - PORT=3100
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
+    volumes:
+      - ./secrets:/app/secrets:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - gemini-network
+
+volumes:
+  redis-data:
+  renderer-tmp:
+
+networks:
+  gemini-network:
+    driver: bridge

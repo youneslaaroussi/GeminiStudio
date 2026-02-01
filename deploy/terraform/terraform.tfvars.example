@@ -1,0 +1,82 @@
+# GeminiStudio Terraform Configuration
+# Copy to terraform.tfvars and fill in your values
+
+# =============================================================================
+# Required
+# =============================================================================
+
+project_id      = "your-gcp-project-id"
+gcs_bucket_name = "your-assets-bucket-name"
+
+# =============================================================================
+# Secret Manager (Recommended)
+# =============================================================================
+# Store your secrets in Google Secret Manager first:
+#
+#   gcloud secrets create gemini-api-key --data-file=- <<< "your-key"
+#   gcloud secrets create stripe-secret-key --data-file=- <<< "sk_xxx"
+#   gcloud secrets create replicate-api-token --data-file=- <<< "r8_xxx"
+#   gcloud secrets create algolia-admin-key --data-file=- <<< "xxx"
+#
+# Then Terraform will automatically fetch them.
+
+use_secret_manager = true
+
+# =============================================================================
+# Feature Flags
+# =============================================================================
+# Enable these if you've set up the corresponding secrets
+
+enable_billing       = false  # Requires: stripe-secret-key
+enable_video_effects = false  # Requires: replicate-api-token  
+enable_algolia       = false  # Requires: algolia-admin-key + algolia_app_id
+
+# =============================================================================
+# Infrastructure
+# =============================================================================
+
+region        = "us-central1"
+zone          = "us-central1-a"
+instance_name = "gemini-studio"
+
+# VM size options:
+#   e2-medium     = 2 vCPU, 4 GB  (~$25/month) - minimum viable
+#   e2-standard-2 = 2 vCPU, 8 GB  (~$50/month) - recommended
+#   e2-standard-4 = 4 vCPU, 16 GB (~$100/month) - heavy rendering
+machine_type = "e2-standard-2"
+disk_size_gb = 50
+
+# Leave empty to use default compute service account
+service_account_email = ""
+
+# =============================================================================
+# Service Configuration
+# =============================================================================
+
+gemini_model_id       = "gemini-2.0-flash"
+veo_location          = "us-central1"
+veo_model_id          = "veo-3.0-generate-001"
+speech_location       = "global"
+speech_model          = "chirp_3"
+speech_language_codes = "en-US"
+renderer_concurrency  = 2
+
+# Frontend URL (update after deploying to Vercel/hosting)
+frontend_url = "http://localhost:3000"
+
+# =============================================================================
+# Algolia (if enable_algolia = true)
+# =============================================================================
+
+algolia_app_id       = ""
+algolia_index_prefix = "gemini_assets"
+
+# =============================================================================
+# Resource Creation
+# =============================================================================
+
+# Set to true if you need Terraform to create the GCS bucket
+create_gcs_bucket = false
+
+# Create Pub/Sub topics for events
+create_pubsub_topics = true

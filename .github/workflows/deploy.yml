@@ -1,0 +1,84 @@
+name: Deploy to GCE
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  PROJECT_ID: experiments-484119
+  ZONE: us-central1-a
+  INSTANCE_NAME: gemini-studio
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Copy code to VM
+        run: |
+          # Create tarball of the repo (excludes .git, node_modules, etc.)
+          tar --exclude='.git' \
+              --exclude='node_modules' \
+              --exclude='__pycache__' \
+              --exclude='.env' \
+              --exclude='*.pyc' \
+              -czf /tmp/repo.tar.gz .
+          
+          # Copy to VM
+          gcloud compute scp /tmp/repo.tar.gz \
+            ${{ env.INSTANCE_NAME }}:/tmp/repo.tar.gz \
+            --zone=${{ env.ZONE }} \
+            --project=${{ env.PROJECT_ID }}
+
+      - name: Deploy to VM
+        run: |
+          gcloud compute ssh ${{ env.INSTANCE_NAME }} \
+            --zone=${{ env.ZONE }} \
+            --project=${{ env.PROJECT_ID }} \
+            --command='
+              # Extract code
+              mkdir -p /opt/gemini-studio
+              cd /opt/gemini-studio
+              tar -xzf /tmp/repo.tar.gz
+              rm /tmp/repo.tar.gz
+              
+              # Deploy services
+              cd deploy
+              docker compose up -d --build
+              
+              # Show status
+              docker compose ps
+            '
+
+      - name: Health check
+        run: |
+          # Get VM IP
+          IP=$(gcloud compute instances describe ${{ env.INSTANCE_NAME }} \
+            --zone=${{ env.ZONE }} \
+            --project=${{ env.PROJECT_ID }} \
+            --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+          
+          echo "Checking services at $IP..."
+          
+          # Wait for services to start
+          sleep 30
+          
+          # Check health endpoints
+          curl -sf "http://$IP:8081/health" && echo "Asset service: OK" || echo "Asset service: FAILED"
+          curl -sf "http://$IP:8080/health" && echo "LangGraph: OK" || echo "LangGraph: FAILED"

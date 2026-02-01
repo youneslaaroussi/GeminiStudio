@@ -1,0 +1,17 @@
+# Environment files with secrets
+.env
+generated.env
+
+# Terraform state (contains sensitive data)
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
+terraform/terraform.tfvars
+
+# Service account keys
+secrets/
+*.json
+
+# Local overrides
+docker-compose.override.yml
