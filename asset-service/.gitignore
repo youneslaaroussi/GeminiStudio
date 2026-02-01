@@ -12,6 +12,8 @@ secrets/
 *-credentials.json
 service-account.json
 firebase-key.json
+veo-service-account.json
+speech-service-account.json
 
 # Python
 __pycache__/
@@ -61,7 +63,6 @@ htmlcov/
 
 # uv
 .uv/
-# uv.lock should be committed for reproducible builds
 
 # Docker
 .docker/
