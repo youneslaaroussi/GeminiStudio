@@ -1,0 +1,318 @@
+"use client";
+
+import {
+  forwardRef,
+  useImperativeHandle,
+  useEffect,
+  useMemo,
+  useCallback,
+  useState,
+  useRef,
+} from "react";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Mention from "@tiptap/extension-mention";
+import Placeholder from "@tiptap/extension-placeholder";
+import { mergeAttributes } from "@tiptap/core";
+import { createMentionSuggestion } from "./useMentionSuggestion";
+
+/** Asset type colors and icons for mention chips (symbols only, no emojis) */
+const ASSET_TYPE_STYLES: Record<string, { icon: string; class: string }> = {
+  video: { icon: "\u25B8", class: "mention-chip--video" },   /* ▸ */
+  image: { icon: "\u25A1", class: "mention-chip--image" },   /* □ */
+  audio: { icon: "\u266A", class: "mention-chip--audio" },   /* ♪ */
+  other: { icon: "\u2022", class: "mention-chip--other" },   /* • */
+};
+
+const AssetMention = Mention.extend({
+  addAttributes() {
+    const parent = this.parent?.() ?? {};
+    return {
+      ...parent,
+      type: {
+        default: "other",
+        parseHTML: (el) => el.getAttribute("data-asset-type") || "other",
+        renderHTML: (attrs) =>
+          attrs.type ? { "data-asset-type": attrs.type } : {},
+      },
+    };
+  },
+  renderHTML({ node, HTMLAttributes }) {
+    const type = (node.attrs.type as string) || "other";
+    const style = ASSET_TYPE_STYLES[type] ?? ASSET_TYPE_STYLES.other;
+    const char = node.attrs.mentionSuggestionChar ?? "@";
+    const label = node.attrs.label ?? node.attrs.id;
+    const baseAttrs = this.options?.HTMLAttributes ?? {};
+    return [
+      "span",
+      mergeAttributes(
+        { "data-type": this.name },
+        baseAttrs,
+        HTMLAttributes ?? {},
+        {
+          class: `mention-chip ${style.class}`,
+          "data-asset-type": type,
+        }
+      ),
+      ["span", { class: "mention-chip-icon", "aria-hidden": "true" }, style.icon],
+      ` ${char}${label}`,
+    ];
+  },
+});
+import type { ChatInputProps, ChatInputRef, AssetMention } from "./types";
+import { ASSET_DRAG_DATA_MIME, type AssetDragPayload } from "@/app/types/assets";
+import { cn } from "@/lib/utils";
+import "./chat-input.css";
+
+/**
+ * Extract all mention nodes from the editor as AssetMention objects
+ */
+function extractMentions(editor: ReturnType<typeof useEditor>): AssetMention[] {
+  if (!editor) return [];
+
+  const mentions: AssetMention[] = [];
+
+  editor.state.doc.descendants((node) => {
+    if (node.type.name === "mention") {
+      mentions.push({
+        id: node.attrs.id,
+        name: node.attrs.label,
+        type: node.attrs.type || "other",
+        url: node.attrs.url,
+        thumbnailUrl: node.attrs.thumbnailUrl,
+        description: node.attrs.description,
+      });
+    }
+  });
+
+  // Dedupe by id
+  const seen = new Set<string>();
+  return mentions.filter((m) => {
+    if (seen.has(m.id)) return false;
+    seen.add(m.id);
+    return true;
+  });
+}
+
+/**
+ * Get plain text from editor, with mention nodes rendered as @name
+ */
+function extractPlainText(editor: ReturnType<typeof useEditor>): string {
+  if (!editor) return "";
+  return editor.getText();
+}
+
+export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
+  ({ projectId, disabled = false, submitDisabled = false, placeholder = "What would you like to do?", onSubmit, onContentChange }, ref) => {
+    const [isSuggestionActive, setIsSuggestionActive] = useState(false);
+    const isSuggestionActiveRef = useRef(false);
+    const handleSubmitRef = useRef<() => void>(() => {});
+    const submitDisabledRef = useRef(submitDisabled);
+    const [isDragOver, setIsDragOver] = useState(false);
+
+    submitDisabledRef.current = submitDisabled;
+
+    // Memoize the suggestion config so it doesn't recreate on every render
+    const mentionSuggestion = useMemo(() => {
+      console.log("[ChatInput] Creating mention suggestion with projectId:", projectId);
+      return createMentionSuggestion(projectId);
+    }, [projectId]);
+
+    const editor = useEditor({
+      immediatelyRender: false, // Avoid SSR hydration mismatch
+      extensions: [
+        StarterKit.configure({
+          // Disable formatting - we want plain text + mentions only
+          bold: false,
+          italic: false,
+          strike: false,
+          code: false,
+          codeBlock: false,
+          blockquote: false,
+          bulletList: false,
+          orderedList: false,
+          heading: false,
+          horizontalRule: false,
+        }),
+        Placeholder.configure({
+          placeholder,
+          emptyEditorClass: "is-editor-empty",
+        }),
+        AssetMention.configure({
+          HTMLAttributes: {
+            class: "mention-chip",
+          },
+          suggestion: {
+            ...mentionSuggestion,
+            // Track when suggestion popup is active
+            render: () => {
+              const original = mentionSuggestion.render?.();
+              if (!original) {
+                return {
+                  onStart: () => {},
+                  onUpdate: () => {},
+                  onKeyDown: () => false,
+                  onExit: () => {},
+                };
+              }
+              return {
+                onStart: (props) => {
+                  isSuggestionActiveRef.current = true;
+                  setIsSuggestionActive(true);
+                  original.onStart?.(props);
+                },
+                onUpdate: original.onUpdate,
+                onKeyDown: original.onKeyDown,
+                onExit: (props) => {
+                  isSuggestionActiveRef.current = false;
+                  setIsSuggestionActive(false);
+                  original.onExit?.(props);
+                },
+              };
+            },
+          },
+        }),
+      ],
+      editorProps: {
+        attributes: {
+          class: "tiptap chat-input-editor",
+        },
+        handleKeyDown: (view, event) => {
+          // Don't handle Enter if suggestion dropdown is active (use ref for sync access)
+          if (isSuggestionActiveRef.current) return false;
+
+          // Enter without Shift: submit (unless submitDisabled). Shift+Enter: newline (don't intercept).
+          if (event.key === "Enter" && !event.shiftKey) {
+            if (submitDisabledRef.current) return false; // Let Enter insert newline when sending is disabled
+            event.preventDefault();
+            event.stopPropagation();
+            handleSubmitRef.current();
+            return true;
+          }
+
+          return false;
+        },
+      },
+      editable: !disabled,
+    }, [mentionSuggestion, placeholder, submitDisabled]);
+
+    // Update editable state when disabled changes
+    useEffect(() => {
+      if (editor) {
+        editor.setEditable(!disabled);
+      }
+    }, [editor, disabled]);
+
+    // Track content changes for external state management (e.g., disable send button)
+    useEffect(() => {
+      if (!editor || !onContentChange) return;
+
+      const updateHandler = () => {
+        const hasContent = !editor.isEmpty;
+        onContentChange(hasContent);
+      };
+
+      editor.on("update", updateHandler);
+      // Call immediately to set initial state
+      updateHandler();
+
+      return () => {
+        editor.off("update", updateHandler);
+      };
+    }, [editor, onContentChange]);
+
+    const handleSubmit = useCallback(() => {
+      if (!editor || submitDisabled) return;
+
+      const text = extractPlainText(editor).trim();
+      const mentions = extractMentions(editor);
+
+      // Don't submit if empty
+      if (!text && mentions.length === 0) return;
+
+      onSubmit(text, mentions);
+      editor.commands.clearContent();
+    }, [editor, onSubmit, submitDisabled]);
+
+    // Refs so handleKeyDown (captured once at editor creation) always sees current values
+    useEffect(() => {
+      handleSubmitRef.current = handleSubmit;
+    }, [handleSubmit]);
+
+    // Expose ref methods
+    useImperativeHandle(ref, () => ({
+      focus: () => editor?.commands.focus(),
+      clear: () => editor?.commands.clearContent(),
+      isEmpty: () => !editor || editor.isEmpty,
+      getEditor: () => editor,
+      submit: handleSubmit,
+    }), [editor, handleSubmit]);
+
+    // Drag and drop handlers for assets
+    const handleDragOver = useCallback((e: React.DragEvent) => {
+      if (e.dataTransfer.types.includes(ASSET_DRAG_DATA_MIME)) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        setIsDragOver(true);
+      }
+    }, []);
+
+    const handleDragLeave = useCallback((e: React.DragEvent) => {
+      // Only set false if we're leaving the container (not entering a child)
+      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+        setIsDragOver(false);
+      }
+    }, []);
+
+    const handleDrop = useCallback((e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+
+      if (!editor) return;
+
+      const data = e.dataTransfer.getData(ASSET_DRAG_DATA_MIME);
+      if (!data) return;
+
+      try {
+        const asset: AssetDragPayload = JSON.parse(data);
+
+        // Insert mention node at current cursor position (or end if no selection)
+        editor
+          .chain()
+          .focus()
+          .insertContent({
+            type: "mention",
+            attrs: {
+              id: asset.id,
+              label: asset.name,
+              type: asset.type,
+              url: asset.url,
+            },
+          })
+          .insertContent(" ") // Add space after mention
+          .run();
+      } catch (err) {
+        console.error("Failed to parse dropped asset:", err);
+      }
+    }, [editor]);
+
+    return (
+      <div
+        className={cn(
+          "chat-input-container flex-1 rounded-lg border bg-background focus-within:ring-2 focus-within:ring-primary/50 cursor-text transition-colors",
+          isDragOver
+            ? "border-primary border-dashed bg-primary/5"
+            : "border-border"
+        )}
+        onClick={() => editor?.commands.focus()}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <EditorContent editor={editor} />
+      </div>
+    );
+  }
+);
+
+ChatInput.displayName = "ChatInput";

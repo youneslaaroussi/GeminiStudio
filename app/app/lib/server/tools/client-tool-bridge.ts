@@ -10,7 +10,14 @@ type PendingClientTool = {
 };
 
 const DEFAULT_TIMEOUT_MS = 45_000;
-const pending = new Map<string, PendingClientTool>();
+
+const globalBridge = globalThis as typeof globalThis & {
+  __clientToolPendingMap?: Map<string, PendingClientTool>;
+};
+
+const pending =
+  globalBridge.__clientToolPendingMap ??
+  (globalBridge.__clientToolPendingMap = new Map<string, PendingClientTool>());
 
 export function waitForClientToolResult(options: {
   toolCallId: string;

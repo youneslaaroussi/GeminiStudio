@@ -126,6 +126,17 @@
   100% { transform: translateX(400%); }
 }
 
+/* Reusable highlight flash (e.g. asset rows, search results). Add .highlight-flash for a moment. */
+@keyframes highlight-flash {
+  0% { background-color: hsl(45 93% 47% / 0.6); }
+  50% { background-color: hsl(45 93% 47% / 0.4); }
+  100% { background-color: transparent; }
+}
+
+.highlight-flash {
+  animation: highlight-flash 2s ease-out forwards;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

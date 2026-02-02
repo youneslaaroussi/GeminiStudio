@@ -47,11 +47,13 @@ import {
 import { cn } from "@/lib/utils";
 import { z } from "zod";
 import type {
+  AssetMention,
   ChatAttachment,
   ChatMode,
   TaskListSnapshot,
   TimelineChatMessage,
 } from "@/app/types/chat";
+import { ChatInput, type ChatInputRef } from "./chat";
 import type { ToolResultOutput } from "@ai-sdk/provider-utils";
 import { MemoizedMarkdown } from "../MemoizedMarkdown";
 import {
@@ -66,6 +68,8 @@ import type {
 } from "@/app/lib/tools/types";
 import type { Project } from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
+import { useAssetsStore } from "@/app/lib/store/assets-store";
+import { requestAssetHighlight } from "@/app/lib/store/asset-highlight-store";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import { useAnalytics } from "@/app/lib/hooks/useAnalytics";
 import {
@@ -123,7 +127,7 @@ const TASK_STATUS_STYLES: Record<string, string> = {
 };
 
 export function ChatPanel() {
-  const [input, setInput] = useState("");
+  const [hasInputContent, setHasInputContent] = useState(false);
   const [mode, setMode] = useState<ChatMode>("agent");
   const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(true);
   const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
@@ -147,6 +151,7 @@ export function ChatPanel() {
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const cloudUnsubscribeRef = useRef<(() => void) | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatInputRef = useRef<ChatInputRef>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [sessionId, setSessionId] = useState(() => `chat-${Date.now()}`);
@@ -283,10 +288,9 @@ export function ChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isBusy]);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmed = input.trim();
-    if (!trimmed && pendingAttachments.length === 0) return;
+  const handleChatSubmit = useCallback((text: string, mentions: AssetMention[]) => {
+    const trimmed = text.trim();
+    if (!trimmed && pendingAttachments.length === 0 && mentions.length === 0) return;
 
     if (isCloudMode) {
       // Save and teleport to cloud
@@ -298,12 +302,18 @@ export function ChatPanel() {
         metadata: {
           mode,
           attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
+          assetMentions: mentions.length > 0 ? mentions : undefined,
         },
       });
     }
     analytics.chatMessageSent();
-    setInput("");
     setPendingAttachments([]);
+  }, [pendingAttachments, isCloudMode, mode, sendMessage, analytics]);
+
+  const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    // Trigger submit via ChatInput ref
+    chatInputRef.current?.submit();
   };
 
   const handleExportChat = () => {
@@ -631,7 +641,7 @@ export function ChatPanel() {
     // Clear pending attachments
     setPendingAttachments([]);
     // Clear input
-    setInput("");
+    chatInputRef.current?.clear();
     // Stop any cloud listener
     stopCloudListener();
   }, [stopCloudListener]);
@@ -821,8 +831,12 @@ export function ChatPanel() {
           {messages?.map((message) => {
             const parts = Array.isArray(message.parts) ? message.parts : [];
             const isUser = message.role === "user";
-            const metadata = message.metadata as { attachments?: ChatAttachment[] } | undefined;
+            const metadata = message.metadata as {
+              attachments?: ChatAttachment[];
+              assetMentions?: AssetMention[];
+            } | undefined;
             const attachments = metadata?.attachments;
+            const assetMentions = metadata?.assetMentions;
             
             // Extract text content for TTS
             const textContent = parts
@@ -853,7 +867,8 @@ export function ChatPanel() {
                     const content = renderMessagePart(
                       part,
                       `${message.id}-${index}`,
-                      isUser
+                      isUser,
+                      assetMentions
                     );
                     if (!content) return null;
                     return (
@@ -1159,7 +1174,7 @@ export function ChatPanel() {
         </p>
 
         {/* Message Input */}
-        <form onSubmit={handleSubmit} className="flex gap-2">
+        <form onSubmit={handleFormSubmit} className="flex gap-2">
           {/* Hidden file input */}
           <input
             ref={fileInputRef}
@@ -1185,20 +1200,22 @@ export function ChatPanel() {
             )}
           </button>
 
-          <input
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
+          <ChatInput
+            ref={chatInputRef}
+            projectId={projectId}
+            submitDisabled={isBusy}
             placeholder={
-              pendingAttachments.length > 0
+              (pendingAttachments.length > 0
                 ? "Add a message or send files..."
                 : mode === "ask"
                   ? "Ask a question..."
                   : mode === "plan"
                     ? "Describe what to plan..."
-                    : "What would you like to do?"
+                    : "What would you like to do?") +
+              " (Enter to send, Shift+Enter for new line)"
             }
-            className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-            disabled={isBusy}
+            onSubmit={handleChatSubmit}
+            onContentChange={setHasInputContent}
           />
           {isBusy ? (
             <button
@@ -1211,7 +1228,7 @@ export function ChatPanel() {
           ) : (
             <button
               type="submit"
-              disabled={!input.trim() && pendingAttachments.length === 0}
+              disabled={!hasInputContent && pendingAttachments.length === 0}
               className="shrink-0 rounded-lg bg-primary px-3 py-2 text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
               <Send className="size-4" />
@@ -1239,13 +1256,126 @@ type MessagePart = {
   [key: string]: unknown;
 };
 
-function renderMessagePart(part: MessagePart, key: string, isUser: boolean) {
+/** Asset type colors and symbols for message mention chips (matches ChatInput) */
+const MESSAGE_MENTION_STYLES: Record<
+  string,
+  { symbol: string; class: string }
+> = {
+  video: { symbol: "\u25B8", class: "mention-chip--video" },
+  image: { symbol: "\u25A1", class: "mention-chip--image" },
+  audio: { symbol: "\u266A", class: "mention-chip--audio" },
+  other: { symbol: "\u2022", class: "mention-chip--other" },
+};
+
+/**
+ * Renders text with @mentions styled as chips (colors and symbols by asset type)
+ */
+function TextWithMentions({
+  text,
+  isUser,
+  assetMentions,
+}: {
+  text: string;
+  isUser: boolean;
+  assetMentions?: AssetMention[];
+}) {
+  const findByName = useAssetsStore((s) => s.findByName);
+  const nameToType = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of assetMentions ?? []) {
+      map.set(m.name, m.type);
+    }
+    return map;
+  }, [assetMentions]);
+
+  const mentionRegex = /@(\S+)/g;
+  const parts: (string | { type: "mention"; name: string })[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = mentionRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    parts.push({ type: "mention", name: match[1] });
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return (
+    <span>
+      {parts.map((part, i) =>
+        typeof part === "string" ? (
+          <span key={i}>{part}</span>
+        ) : (
+          (() => {
+            const asset = findByName(part.name);
+            const assetType = nameToType.get(part.name) ?? asset?.type ?? "other";
+            const assetId = asset?.id;
+            const style =
+              MESSAGE_MENTION_STYLES[assetType] ?? MESSAGE_MENTION_STYLES.other;
+            const chipClass = cn(
+              "inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded text-xs font-semibold mention-chip",
+              style.class,
+              assetId && "cursor-pointer hover:opacity-90 transition-opacity"
+            );
+            return assetId ? (
+              <button
+                key={i}
+                type="button"
+                className={chipClass}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  requestAssetHighlight(assetId);
+                }}
+                title="Locate in Assets"
+              >
+                <span className="mention-chip-icon" aria-hidden>
+                  {style.symbol}
+                </span>
+                @{part.name}
+              </button>
+            ) : (
+              <span key={i} className={chipClass}>
+                <span className="mention-chip-icon" aria-hidden>
+                  {style.symbol}
+                </span>
+                @{part.name}
+              </span>
+            );
+          })()
+        )
+      )}
+    </span>
+  );
+}
+
+function renderMessagePart(
+  part: MessagePart,
+  key: string,
+  isUser: boolean,
+  assetMentions?: AssetMention[]
+) {
   if (!part || typeof part !== "object") {
     return null;
   }
 
   if (part.type === "text") {
     if (!part.text) return null;
+    // For user messages, render with mention chips (type-colored, with symbols)
+    if (isUser) {
+      return (
+        <TextWithMentions
+          text={part.text}
+          isUser={isUser}
+          assetMentions={assetMentions}
+        />
+      );
+    }
     return (
       <div className={cn("prose prose-sm max-w-none", isUser && "prose-invert")}>
         <MemoizedMarkdown id={`${key}-text`} content={part.text} />

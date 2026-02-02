@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useRef, useEffect } from "react";
+import { useCallback, useState, useRef, useEffect, useLayoutEffect } from "react";
 import {
   File as FileIcon,
   Loader2,
@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AssetRow } from "./AssetRow";
+import { useAssetHighlightStore } from "@/app/lib/store/asset-highlight-store";
 
 const ASSET_REORDER_MIME = "application/x-gemini-asset-reorder";
 
@@ -70,6 +71,20 @@ export function AssetList({
   const [deleteConfirmIds, setDeleteConfirmIds] = useState<string[] | null>(null);
   const dragFromReorderHandleRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const highlightRequest = useAssetHighlightStore((s) => s.request);
+  const highlightedAssetId =
+    highlightRequest?.target.type === "asset" ? highlightRequest.target.id : null;
+
+  useLayoutEffect(() => {
+    if (!highlightedAssetId || !containerRef.current) return;
+    const el = containerRef.current.querySelector(
+      `[data-asset-id="${highlightedAssetId}"]`
+    );
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [highlightedAssetId]);
 
   useEffect(() => {
     const assetIds = new Set(assets.map((a) => a.id));
@@ -393,6 +408,7 @@ export function AssetList({
             isDownloading={downloadingIds.has(asset.id)}
             isTranscoding={transcodingAssetIds.has(asset.id)}
             isDragOver={dragOverId === asset.id}
+            isHighlighted={highlightedAssetId === asset.id}
             someSelected={someSelected}
             onToggleSelect={toggleSelect}
             onAddToTimeline={onAddToTimeline}

@@ -131,6 +131,8 @@ export interface AssetRowProps {
   onDrop: (e: React.DragEvent<HTMLDivElement>, assetId: string) => void;
   onReorderHandlePointerDown: () => void;
   onReorderHandlePointerUp: () => void;
+  /** When true, show yellow highlight flash (e.g. from chat mention click) */
+  isHighlighted?: boolean;
 }
 
 export const AssetRow = memo(function AssetRow({
@@ -158,6 +160,7 @@ export const AssetRow = memo(function AssetRow({
   onDrop,
   onReorderHandlePointerDown,
   onReorderHandlePointerUp,
+  isHighlighted = false,
 }: AssetRowProps) {
   const [editingName, setEditingName] = useState("");
   const [isEditing, setIsEditing] = useState(false);
@@ -204,10 +207,12 @@ export const AssetRow = memo(function AssetRow({
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
+          data-asset-id={asset.id}
           className={cn(
             "group relative flex items-center gap-2 p-2 hover:bg-muted/50 transition-colors rounded-md",
             isTranscoding ? "cursor-not-allowed opacity-90" : "cursor-grab",
-            isDragOver && "bg-primary/10 ring-1 ring-primary/30"
+            isDragOver && "bg-primary/10 ring-1 ring-primary/30",
+            isHighlighted && "highlight-flash"
           )}
           draggable={!isProcessing}
           onClick={handleRowClick}

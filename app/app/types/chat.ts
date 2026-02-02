@@ -1,7 +1,20 @@
 import { UIMessage, UIDataTypes } from "ai";
 import type { ToolExecutionResult } from "@/app/lib/tools/types";
+import type { AssetType } from "@/app/types/assets";
 
 export type ChatMode = "ask" | "agent" | "plan";
+
+/**
+ * Represents an asset mentioned in the chat input via @ mention
+ */
+export interface AssetMention {
+  id: string;
+  name: string;
+  type: AssetType;
+  url?: string;
+  thumbnailUrl?: string;
+  description?: string;
+}
 
 /**
  * Media category for attachments
@@ -40,6 +53,8 @@ export interface ChatMessageMetadata {
   mode: ChatMode;
   /** Attachments included with this message */
   attachments?: ChatAttachment[];
+  /** Assets mentioned via @ in the message */
+  assetMentions?: AssetMention[];
 }
 
 export type TaskStatus = "pending" | "in_progress" | "completed";

@@ -30,6 +30,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { VoiceChat } from "@/app/components/VoiceChat";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useAssetsStore } from "@/app/lib/store/assets-store";
+import { useAssetHighlightStore } from "@/app/lib/store/asset-highlight-store";
 import { usePipelineStates } from "@/app/lib/hooks/usePipelineStates";
 import { useShortcuts } from "@/app/hooks/use-shortcuts";
 import { usePageReloadBlocker } from "@/app/hooks/use-page-reload-blocker";
@@ -125,6 +126,14 @@ export function EditorLayout() {
   const handleAssetTabReady = useCallback((setTab: (tab: "assets" | "video" | "image" | "music" | "tts" | "jobs" | "branches") => void) => {
     setAssetTabRef.current = setTab;
   }, []);
+
+  // Switch to assets tab when an asset highlight is requested (e.g. from chat mention click)
+  const highlightRequest = useAssetHighlightStore((s) => s.request);
+  useEffect(() => {
+    if (highlightRequest?.target.type === "asset") {
+      setAssetTabRef.current?.("assets");
+    }
+  }, [highlightRequest]);
 
   // Connect to Zustand store
   const isPlaying = useProjectStore((s) => s.isPlaying);
