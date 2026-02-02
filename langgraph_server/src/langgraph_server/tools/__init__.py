@@ -8,6 +8,7 @@ from typing import Dict
 from langchain_core.tools import BaseTool
 
 from .add_clip_tool import addClipToTimeline
+from .update_clip_tool import updateClipInTimeline
 from .add_transition_tool import addTransition
 from .apply_video_effect_tool import applyVideoEffectToClip, getVideoEffectJobStatus
 from .delete_clip_tool import deleteClipFromTimeline
@@ -37,6 +38,7 @@ def get_registered_tools() -> Sequence[BaseTool]:
 
     return (
         addClipToTimeline,
+        updateClipInTimeline,
         addTransition,
         applyVideoEffectToClip,
         getVideoEffectJobStatus,

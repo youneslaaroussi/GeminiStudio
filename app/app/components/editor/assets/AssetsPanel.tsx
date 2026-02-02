@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   RefreshCw,
-  Type,
   FolderOpen,
   Video,
   ImageIcon,
@@ -14,22 +13,17 @@ import {
   Circle,
   Search,
   X,
+  LayoutTemplate,
 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
-import { createTextClip, createVideoClip, createAudioClip, createImageClip } from "@/app/types/timeline";
+import { createVideoClip, createAudioClip, createImageClip } from "@/app/types/timeline";
 import type { RemoteAsset } from "@/app/types/assets";
 import type { VeoJob } from "@/app/types/veo";
+import type { VideoEffectJob } from "@/app/types/video-effects";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -38,6 +32,8 @@ import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
 
+import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
+import { useVideoEffectsStore } from "@/app/lib/store/video-effects-store";
 import { useAssets } from "./useAssets";
 import { AssetList } from "./AssetList";
 import { UploadZone } from "./UploadZone";
@@ -55,9 +51,10 @@ import {
   TtsPanel,
   JobsPanel,
   BranchesPanel,
+  TemplatesPanel,
 } from "./panels";
 
-type TabId = "assets" | "video" | "image" | "music" | "tts" | "jobs" | "branches";
+type TabId = "assets" | "templates" | "video" | "image" | "music" | "tts" | "jobs" | "branches";
 
 interface TabConfig {
   id: TabId;
@@ -68,12 +65,13 @@ interface TabConfig {
 
 const TABS: TabConfig[] = [
   { id: "assets", icon: FolderOpen, label: "Assets", shortcut: "1" },
-  { id: "video", icon: Video, label: "Video", shortcut: "2" },
-  { id: "image", icon: ImageIcon, label: "Image", shortcut: "3" },
-  { id: "music", icon: Music, label: "Music", shortcut: "4" },
-  { id: "tts", icon: Volume2, label: "Speech", shortcut: "5" },
-  { id: "jobs", icon: ListTodo, label: "Jobs", shortcut: "6" },
-  { id: "branches", icon: GitBranch, label: "Branches", shortcut: "7" },
+  { id: "templates", icon: LayoutTemplate, label: "Templates", shortcut: "2" },
+  { id: "video", icon: Video, label: "Video", shortcut: "3" },
+  { id: "image", icon: ImageIcon, label: "Image", shortcut: "4" },
+  { id: "music", icon: Music, label: "Music", shortcut: "5" },
+  { id: "tts", icon: Volume2, label: "Speech", shortcut: "6" },
+  { id: "jobs", icon: ListTodo, label: "Jobs", shortcut: "7" },
+  { id: "branches", icon: GitBranch, label: "Branches", shortcut: "8" },
 ];
 
 interface AssetsPanelProps {
@@ -209,16 +207,55 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
     setVeoJobs((prev) => [job, ...prev]);
   }, []);
 
-  // Active tab
+  // Active tab (declared before fetchVeoJobsForProject / useEffect that depend on it)
   const [activeTab, setActiveTab] = useState<TabId>("assets");
 
-  // Expose setActiveTab to parent for keyboard shortcuts (1–7)
+  // Expose setActiveTab to parent for keyboard shortcuts (1–8)
   useEffect(() => {
     onSetAssetTabReady?.(setActiveTab);
     return () => {
       onSetAssetTabReady?.(() => {});
     };
   }, [onSetAssetTabReady]);
+
+  // Fetch Veo jobs for project (so agent-started jobs appear in Jobs tab)
+  const fetchVeoJobsForProject = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(`/api/veo?projectId=${encodeURIComponent(projectId)}`, {
+        headers: authHeaders as Record<string, string>,
+      });
+      if (!response.ok) return;
+      const data = (await response.json()) as { jobs?: VeoJob[] };
+      const apiJobs = data.jobs ?? [];
+      setVeoJobs((prev) => {
+        const byId = new Map(apiJobs.map((j) => [j.id, j]));
+        prev.forEach((j) => {
+          if (!byId.has(j.id)) byId.set(j.id, j);
+        });
+        return Array.from(byId.values()).sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+      });
+    } catch {
+      // Ignore fetch errors
+    }
+  }, [projectId]);
+
+  // When Jobs tab is shown, fetch Veo jobs so agent-started jobs appear
+  useEffect(() => {
+    if (activeTab === "jobs" && projectId) {
+      void fetchVeoJobsForProject();
+    }
+  }, [activeTab, projectId, fetchVeoJobsForProject]);
+
+  // Video effect jobs from store (filter by project for Jobs tab)
+  const videoEffectsJobsRecord = useVideoEffectsStore((s) => s.jobs);
+  const videoEffectJobs = useMemo((): VideoEffectJob[] => {
+    const list = Object.values(videoEffectsJobsRecord);
+    return projectId ? list.filter((j) => j.projectId === projectId) : list;
+  }, [projectId, videoEffectsJobsRecord]);
 
   // Dialog states (keeping transcript and details as dialogs)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -227,14 +264,13 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
   const [transcriptDialogAssetId, setTranscriptDialogAssetId] = useState<string | null>(null);
   const [detailsDialogAssetId, setDetailsDialogAssetId] = useState<string | null>(null);
 
-  // Text input state
-  const [textName, setTextName] = useState("");
-  const [textContent, setTextContent] = useState("");
-  const [textSectionOpen, setTextSectionOpen] = useState(false);
 
   // Count running jobs for badge
   const runningVeoCount = veoJobs.filter((j) => j.status === "pending" || j.status === "running").length;
-  const runningJobsCount = runningVeoCount;
+  const runningVideoEffectCount = videoEffectJobs.filter(
+    (j) => j.status === "pending" || j.status === "running"
+  ).length;
+  const runningJobsCount = runningVeoCount + runningVideoEffectCount;
 
   // Handle files from dropzone
   const handleFilesSelected = useCallback((files: File[]) => {
@@ -294,15 +330,6 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
     [addClip, getDuration, resolveAssetDuration, metadata]
   );
 
-  // Add text to timeline
-  const handleAddText = useCallback(() => {
-    if (!textContent.trim()) return;
-    const name = textName.trim() || "Text";
-    const clip = createTextClip(textContent, name, getDuration(), 5);
-    addClip(clip);
-    setTextContent("");
-    setTextName("");
-  }, [textContent, textName, addClip, getDuration]);
 
   // Get data for dialogs
   const transcriptDialogData = transcriptDialogAssetId
@@ -472,51 +499,16 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
               </ScrollArea>
             </div>
 
-            {/* Add Text (collapsible) */}
-            <Collapsible
-              open={textSectionOpen}
-              onOpenChange={setTextSectionOpen}
-              className="border-t border-border"
-            >
-              <CollapsibleTrigger className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/30 transition-colors">
-                <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                  <Type className="size-3.5" />
-                  Add Text
-                </span>
-                <ChevronDown
-                  className={cn(
-                    "size-3.5 text-muted-foreground transition-transform",
-                    textSectionOpen && "rotate-180"
-                  )}
-                />
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="p-3 pt-0 space-y-2">
-                  <Input
-                    placeholder="Name (optional)"
-                    value={textName}
-                    onChange={(e) => setTextName(e.target.value)}
-                    className="h-8 text-sm"
-                  />
-                  <Textarea
-                    placeholder="Enter text..."
-                    value={textContent}
-                    onChange={(e) => setTextContent(e.target.value)}
-                    rows={2}
-                    className="text-sm resize-none"
-                  />
-                  <Button
-                    size="sm"
-                    className="w-full"
-                    disabled={!textContent.trim()}
-                    onClick={handleAddText}
-                  >
-                    <Type className="size-3.5 mr-1.5" />
-                    Add to Timeline
-                  </Button>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+          </div>
+
+          {/* Templates Panel */}
+          <div
+            className={cn(
+              "absolute inset-0",
+              activeTab !== "templates" && "invisible pointer-events-none"
+            )}
+          >
+            <TemplatesPanel projectId={projectId} />
           </div>
 
           {/* Video Panel */}
@@ -570,7 +562,12 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
               assets={assets}
               pipelineStates={pipelineStates}
               veoJobs={veoJobs}
-              onRefresh={() => { fetchAssets(); refreshPipelineStates(); }}
+              videoEffectJobs={videoEffectJobs}
+              onRefresh={() => {
+                fetchAssets();
+                refreshPipelineStates();
+                void fetchVeoJobsForProject();
+              }}
               isLoading={isLoading}
             />
           </div>

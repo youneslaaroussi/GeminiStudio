@@ -14,6 +14,7 @@ const __dirname = path.dirname(__filename);
  */
 const LANGGRAPH_TOOL_MAP: Record<string, string> = {
   timelineAddClip: "addClipToTimeline",
+  timelineUpdateClip: "updateClipInTimeline",
   timelineDeleteClip: "deleteClipFromTimeline",
   getTimelineState: "getTimelineState",
   listAssets: "listAssets",

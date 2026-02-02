@@ -12854,50 +12854,358 @@ function* playVideo({
     yield* playback();
   }
 }
-function createTextElements({ clips, view, settings: settings2 }) {
+function* applyEnterTransition(node, transition, targetOpacity, sceneWidth, sceneHeight) {
+  if (!transition || transition.type === "none") {
+    node.opacity(targetOpacity);
+    return;
+  }
+  const initialPos = node.position();
+  const initialScale = node.scale();
+  const duration = transition.duration;
+  switch (transition.type) {
+    case "fade":
+    case "dip-to-black":
+      node.opacity(0);
+      yield* node.opacity(targetOpacity, duration, easeOutCubic);
+      break;
+    case "zoom":
+      node.opacity(0);
+      node.scale(initialScale.mul(0.3));
+      yield* node.opacity(targetOpacity, duration * 0.3);
+      yield* node.scale(initialScale, duration, easeOutCubic);
+      break;
+    case "slide-left":
+      node.opacity(targetOpacity);
+      node.position(new Vector2(initialPos.x + sceneWidth, initialPos.y));
+      yield* node.position(initialPos, duration, easeOutCubic);
+      break;
+    case "slide-right":
+      node.opacity(targetOpacity);
+      node.position(new Vector2(initialPos.x - sceneWidth, initialPos.y));
+      yield* node.position(initialPos, duration, easeOutCubic);
+      break;
+    case "slide-up":
+      node.opacity(targetOpacity);
+      node.position(new Vector2(initialPos.x, initialPos.y + sceneHeight));
+      yield* node.position(initialPos, duration, easeOutCubic);
+      break;
+    case "slide-down":
+      node.opacity(targetOpacity);
+      node.position(new Vector2(initialPos.x, initialPos.y - sceneHeight));
+      yield* node.position(initialPos, duration, easeOutCubic);
+      break;
+    default:
+      node.opacity(targetOpacity);
+  }
+}
+function* applyExitTransition(node, transition, sceneWidth, sceneHeight) {
+  if (!transition || transition.type === "none") {
+    node.opacity(0);
+    return;
+  }
+  const currentPos = node.position();
+  const currentScale = node.scale();
+  const duration = transition.duration;
+  switch (transition.type) {
+    case "fade":
+    case "dip-to-black":
+      yield* node.opacity(0, duration, easeInCubic);
+      break;
+    case "zoom":
+      yield* node.scale(currentScale.mul(1.8), duration, easeInCubic);
+      yield* node.opacity(0, duration * 0.7, easeInCubic);
+      break;
+    case "slide-left":
+      yield* node.position(new Vector2(currentPos.x - sceneWidth, currentPos.y), duration, easeInCubic);
+      node.opacity(0);
+      break;
+    case "slide-right":
+      yield* node.position(new Vector2(currentPos.x + sceneWidth, currentPos.y), duration, easeInCubic);
+      node.opacity(0);
+      break;
+    case "slide-up":
+      yield* node.position(new Vector2(currentPos.x, currentPos.y - sceneHeight), duration, easeInCubic);
+      node.opacity(0);
+      break;
+    case "slide-down":
+      yield* node.position(new Vector2(currentPos.x, currentPos.y + sceneHeight), duration, easeInCubic);
+      node.opacity(0);
+      break;
+    default:
+      node.opacity(0);
+  }
+}
+function getTransitionAdjustedTiming(start, duration, speed, enterTransition, exitTransition) {
+  const safeSpeed = Math.max(speed, 1e-4);
+  const enterDuration = (enterTransition == null ? void 0 : enterTransition.duration) ?? 0;
+  const exitDuration = (exitTransition == null ? void 0 : exitTransition.duration) ?? 0;
+  const timelineDuration = duration / safeSpeed;
+  return {
+    startAt: Math.max(start, 0),
+    enterDuration,
+    mainDuration: Math.max(0, timelineDuration - enterDuration - exitDuration),
+    exitDuration,
+    totalDuration: timelineDuration
+  };
+}
+function createTextElements({ clips, view, settings: settings2, sceneWidth, sceneHeight }) {
   const entries = [];
   for (const clip of clips) {
-    const ref = createRef();
-    const fontSize = clip.fontSize ?? settings2.defaultFontSize ?? 48;
-    const fill = clip.fill ?? settings2.defaultFill ?? "#ffffff";
-    const effectShaders = getEffectShaderConfig(clip.effect);
-    entries.push({ clip, ref });
-    view.add(
-      /* @__PURE__ */ jsx(
-        Txt,
-        {
-          ref,
-          text: clip.text,
-          fontFamily: settings2.fontFamily,
-          fontWeight: settings2.fontWeight,
-          fontSize,
-          fill,
-          x: clip.position.x,
-          y: clip.position.y,
-          scale: clip.scale,
-          opacity: 0,
-          shaders: effectShaders
-        },
-        `text-clip-${clip.id}`
-      )
-    );
+    const template = clip.template ?? "text";
+    switch (template) {
+      case "title-card":
+        entries.push(createTitleCard(clip, view, settings2, sceneWidth, sceneHeight));
+        break;
+      case "lower-third":
+        entries.push(createLowerThird(clip, view, settings2, sceneWidth, sceneHeight));
+        break;
+      case "caption-style":
+        entries.push(createCaptionStyle(clip, view, settings2));
+        break;
+      case "text":
+      default:
+        entries.push(createBasicText(clip, view, settings2));
+        break;
+    }
   }
   return entries;
 }
-function* playText({ entry }) {
-  const { clip, ref } = entry;
-  const speed = clip.speed ?? 1;
-  const safeSpeed = Math.max(speed, 1e-4);
-  const startAt = Math.max(clip.start, 0);
-  const timelineDuration = clip.duration / safeSpeed;
-  if (startAt > 0) {
-    yield* waitFor(startAt);
+function createBasicText(clip, view, settings2) {
+  const ref = createRef();
+  const fontSize = clip.fontSize ?? settings2.defaultFontSize ?? 48;
+  const fill = clip.fill ?? settings2.defaultFill ?? "#ffffff";
+  const effectShaders = getEffectShaderConfig(clip.effect);
+  view.add(
+    /* @__PURE__ */ jsx(
+      Txt,
+      {
+        ref,
+        text: clip.text,
+        fontFamily: settings2.fontFamily,
+        fontWeight: settings2.fontWeight,
+        fontSize,
+        fill,
+        x: clip.position.x,
+        y: clip.position.y,
+        scale: clip.scale,
+        opacity: 0,
+        shaders: effectShaders,
+        shadowBlur: 8,
+        shadowColor: "rgba(0,0,0,0.5)"
+      },
+      `text-clip-${clip.id}`
+    )
+  );
+  return { clip, ref };
+}
+function createTitleCard(clip, view, settings2, sceneWidth, sceneHeight) {
+  const ref = createRef();
+  const containerRef = createRef();
+  const fontSize = clip.fontSize ?? 72;
+  const fill = clip.fill ?? "#ffffff";
+  const backgroundColor = clip.backgroundColor ?? "#1a1a2e";
+  const effectShaders = getEffectShaderConfig(clip.effect);
+  view.add(
+    /* @__PURE__ */ jsx(
+      Node,
+      {
+        ref: containerRef,
+        opacity: 0,
+        children: [
+          /* @__PURE__ */ jsx(
+            Rect,
+            {
+              width: sceneWidth,
+              height: sceneHeight,
+              fill: backgroundColor
+            }
+          ),
+          /* @__PURE__ */ jsx(
+            Txt,
+            {
+              ref,
+              text: clip.text,
+              fontFamily: settings2.fontFamily,
+              fontWeight: 700,
+              fontSize,
+              fill,
+              y: clip.subtitle ? -30 : 0,
+              shaders: effectShaders,
+              shadowBlur: 20,
+              shadowColor: "rgba(255,255,255,0.15)"
+            }
+          ),
+          clip.subtitle && /* @__PURE__ */ jsx(
+            Rect,
+            {
+              width: 80,
+              height: 2,
+              fill: `${fill}66`,
+              y: 10,
+              radius: 1
+            }
+          ),
+          clip.subtitle && /* @__PURE__ */ jsx(
+            Txt,
+            {
+              text: clip.subtitle,
+              fontFamily: settings2.fontFamily,
+              fontWeight: 400,
+              fontSize: fontSize * 0.4,
+              fill: `${fill}99`,
+              y: 50
+            }
+          )
+        ]
+      },
+      `title-card-container-${clip.id}`
+    )
+  );
+  return { clip, ref, containerRef };
+}
+function createLowerThird(clip, view, settings2, _sceneWidth, sceneHeight) {
+  const ref = createRef();
+  const containerRef = createRef();
+  const fontSize = clip.fontSize ?? 36;
+  const fill = clip.fill ?? "#ffffff";
+  const backgroundColor = clip.backgroundColor ?? "rgba(0,0,0,0.85)";
+  const effectShaders = getEffectShaderConfig(clip.effect);
+  const yPosition = sceneHeight / 2 - 120;
+  view.add(
+    /* @__PURE__ */ jsx(
+      Node,
+      {
+        ref: containerRef,
+        y: yPosition,
+        opacity: 0,
+        children: /* @__PURE__ */ jsx(
+          Rect,
+          {
+            layout: true,
+            direction: "row",
+            alignItems: "stretch",
+            gap: 0,
+            shadowBlur: 30,
+            shadowColor: "rgba(0,0,0,0.6)",
+            children: [
+              /* @__PURE__ */ jsx(
+                Rect,
+                {
+                  width: 6,
+                  fill: "#3b82f6",
+                  radius: [4, 0, 0, 4]
+                }
+              ),
+              /* @__PURE__ */ jsx(
+                Rect,
+                {
+                  layout: true,
+                  direction: "column",
+                  alignItems: "start",
+                  padding: [16, 24],
+                  fill: backgroundColor,
+                  radius: [0, 8, 8, 0],
+                  children: [
+                    /* @__PURE__ */ jsx(
+                      Txt,
+                      {
+                        ref,
+                        text: clip.text,
+                        fontFamily: settings2.fontFamily,
+                        fontWeight: 600,
+                        fontSize,
+                        fill,
+                        shaders: effectShaders
+                      }
+                    ),
+                    clip.subtitle && /* @__PURE__ */ jsx(
+                      Txt,
+                      {
+                        text: clip.subtitle,
+                        fontFamily: settings2.fontFamily,
+                        fontWeight: 400,
+                        fontSize: fontSize * 0.65,
+                        fill: `${fill}99`,
+                        marginTop: 4
+                      }
+                    )
+                  ]
+                }
+              )
+            ]
+          }
+        )
+      },
+      `lower-third-container-${clip.id}`
+    )
+  );
+  return { clip, ref, containerRef };
+}
+function createCaptionStyle(clip, view, settings2) {
+  const ref = createRef();
+  const containerRef = createRef();
+  const fontSize = clip.fontSize ?? 32;
+  const fill = clip.fill ?? "#ffffff";
+  const backgroundColor = clip.backgroundColor ?? "rgba(0,0,0,0.9)";
+  const effectShaders = getEffectShaderConfig(clip.effect);
+  view.add(
+    /* @__PURE__ */ jsx(
+      Node,
+      {
+        ref: containerRef,
+        x: clip.position.x,
+        y: clip.position.y,
+        scale: clip.scale,
+        opacity: 0,
+        children: /* @__PURE__ */ jsx(
+          Rect,
+          {
+            layout: true,
+            padding: [12, 24],
+            fill: backgroundColor,
+            radius: 999,
+            shadowBlur: 20,
+            shadowColor: "rgba(0,0,0,0.5)",
+            children: /* @__PURE__ */ jsx(
+              Txt,
+              {
+                ref,
+                text: clip.text,
+                fontFamily: settings2.fontFamily,
+                fontWeight: settings2.fontWeight,
+                fontSize,
+                fill,
+                shaders: effectShaders
+              }
+            )
+          }
+        )
+      },
+      `caption-style-container-${clip.id}`
+    )
+  );
+  return { clip, ref, containerRef };
+}
+function* playText({ entry, sceneWidth, sceneHeight }) {
+  const { clip, ref, containerRef } = entry;
+  const targetOpacity = clip.opacity ?? 1;
+  const timing = getTransitionAdjustedTiming(
+    clip.start,
+    clip.duration,
+    clip.speed ?? 1,
+    clip.enterTransition,
+    clip.exitTransition
+  );
+  if (timing.startAt > 0) {
+    yield* waitFor(timing.startAt);
   }
-  const text = ref();
-  if (!text) return;
-  text.opacity(clip.opacity ?? 1);
-  yield* waitFor(timelineDuration);
-  text.opacity(0);
+  const target = (containerRef == null ? void 0 : containerRef()) ?? ref();
+  if (!target) return;
+  yield* applyEnterTransition(target, clip.enterTransition, targetOpacity, sceneWidth, sceneHeight);
+  if (timing.mainDuration > 0) {
+    yield* waitFor(timing.mainDuration);
+  }
+  yield* applyExitTransition(target, clip.exitTransition, sceneWidth, sceneHeight);
 }
 function createImageElements({ clips, view }) {
   const entries = [];
@@ -12944,20 +13252,25 @@ function createImageElements({ clips, view }) {
   }
   return entries;
 }
-function* playImage({ entry }) {
+function* playImage({ entry, sceneWidth, sceneHeight }) {
   const { clip, ref } = entry;
-  const speed = clip.speed ?? 1;
-  const safeSpeed = Math.max(speed, 1e-4);
-  const startAt = Math.max(clip.start, 0);
-  const timelineDuration = clip.duration / safeSpeed;
-  if (startAt > 0) {
-    yield* waitFor(startAt);
+  const timing = getTransitionAdjustedTiming(
+    clip.start,
+    clip.duration,
+    clip.speed ?? 1,
+    clip.enterTransition,
+    clip.exitTransition
+  );
+  if (timing.startAt > 0) {
+    yield* waitFor(timing.startAt);
   }
   const image = ref();
   if (!image) return;
-  image.opacity(1);
-  yield* waitFor(timelineDuration);
-  image.opacity(0);
+  yield* applyEnterTransition(image, clip.enterTransition, 1, sceneWidth, sceneHeight);
+  if (timing.mainDuration > 0) {
+    yield* waitFor(timing.mainDuration);
+  }
+  yield* applyExitTransition(image, clip.exitTransition, sceneWidth, sceneHeight);
 }
 function createAudioElements({ clips, view, sceneWidth, sceneHeight }) {
   const entries = [];
@@ -13145,7 +13458,9 @@ const description = makeScene2D(function* (view) {
         const entries = createTextElements({
           clips: layer.clips,
           view,
-          settings: textClipSettings
+          settings: textClipSettings,
+          sceneWidth: width,
+          sceneHeight: height
         });
         textEntries.push(...entries);
         break;
@@ -13186,11 +13501,11 @@ const description = makeScene2D(function* (view) {
   }
   function* processTextClips() {
     if (textEntries.length === 0) return;
-    yield* all(...textEntries.map((entry) => playText({ entry })));
+    yield* all(...textEntries.map((entry) => playText({ entry, sceneWidth: width, sceneHeight: height })));
   }
   function* processImageClips() {
     if (imageEntries.length === 0) return;
-    yield* all(...imageEntries.map((entry) => playImage({ entry })));
+    yield* all(...imageEntries.map((entry) => playImage({ entry, sceneWidth: width, sceneHeight: height })));
   }
   function* processAudioTracks() {
     if (audioEntries.length === 0) return;

@@ -35,9 +35,7 @@ def setSceneConfig(
     fps: int | None = None,
     background: str | None = None,
     name: str | None = None,
-    project_id: str | None = None,
-    user_id: str | None = None,
-    branch_id: str | None = None,
+    _agent_context: dict | None = None,
 ) -> dict:
     """Set the project scene configuration: dimensions (width x height), frame rate (fps), background color, or project name.
 
@@ -50,13 +48,15 @@ def setSceneConfig(
         fps: Frames per second (1–240). Common values: 24, 25, 30, 50, 60.
         background: Background color as hex (e.g. "#000000" for black).
         name: Project display name.
-        project_id: Project ID (injected by agent).
-        user_id: User ID (injected by agent).
-        branch_id: Branch ID (injected by agent).
 
     Returns:
         Status dict with updated config or error message.
     """
+    context = _agent_context or {}
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
+    branch_id = context.get("branch_id")
+
     if not user_id or not project_id:
         return {
             "status": "error",

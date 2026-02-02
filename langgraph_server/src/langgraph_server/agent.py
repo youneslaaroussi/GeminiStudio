@@ -73,27 +73,15 @@ def create_graph(settings: Settings | None = None):
             else:
                 try:
                     args = dict(tool_call.get("args") or {})
-                    # SECURITY: Always override user_id/project_id/branch_id from trusted context
-                    # Never trust values provided by the LLM (could be prompt injection)
-                    if project_id:
-                        args["project_id"] = project_id
-                    if user_id:
-                        args["user_id"] = user_id
-                    if branch_id:
-                        args["branch_id"] = branch_id
-                    
+                    # SECURITY: Inject context from session only; never use LLM-provided user_id/project_id
+                    args["_agent_context"] = {
+                        "thread_id": thread_id,
+                        "project_id": project_id,
+                        "user_id": user_id,
+                        "branch_id": branch_id,
+                    }
                     logger.info("[AGENT] Tool args (with context): %s", str(args)[:500])
-                    
-                    if getattr(tool, "name", None) in ("renderVideo", "generateVeoVideo"):
-                        args["_agent_context"] = {
-                            "thread_id": thread_id,
-                            "project_id": project_id,
-                            "user_id": user_id,
-                            "branch_id": branch_id,
-                        }
-                        result = tool.func(**args)
-                    else:
-                        result = tool.invoke(args, config=config)
+                    result = tool.invoke(args, config=config)
                     observation = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
                     logger.info("[AGENT] Tool result: %s", observation[:500] if len(observation) > 500 else observation)
                 except Exception as exc:  # pragma: no cover - surface tool exceptions

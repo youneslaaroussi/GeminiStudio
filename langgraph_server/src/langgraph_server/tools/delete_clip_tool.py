@@ -24,9 +24,7 @@ logger = logging.getLogger(__name__)
 @tool
 def deleteClipFromTimeline(
     clip_ids: list[str],
-    project_id: str | None = None,
-    user_id: str | None = None,
-    branch_id: str | None = None,
+    _agent_context: dict | None = None,
 ) -> dict:
     """Delete one or more clips from the project timeline by clip ID.
 
@@ -35,13 +33,15 @@ def deleteClipFromTimeline(
 
     Args:
         clip_ids: List of clip IDs to delete (e.g. ["clip-abc12345", "clip-def67890"])
-        project_id: Project ID (injected by agent)
-        user_id: User ID (injected by agent)
-        branch_id: Branch ID (injected by agent, defaults to "main")
 
     Returns:
         Status dict with deleted clip info or error message.
     """
+    context = _agent_context or {}
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
+    branch_id = context.get("branch_id")
+
     logger.info(
         "[DELETE_CLIP] Called with: clip_ids=%s, project_id=%s, user_id=%s, branch_id=%s",
         clip_ids, project_id, user_id, branch_id,

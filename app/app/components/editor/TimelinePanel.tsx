@@ -24,7 +24,14 @@ import { Playhead } from "../timeline/Playhead";
 import type { ClipType } from "@/app/types/timeline";
 import { createLayerTemplate } from "@/app/lib/store/project-store";
 import { TRACK_LABEL_WIDTH } from "../timeline/constants";
-import { createClipFromAsset, hasAssetDragData, readDraggedAsset } from "@/app/lib/assets/drag";
+import {
+  createClipFromAsset,
+  hasAssetDragData,
+  readDraggedAsset,
+  hasTemplateDragData,
+  readDraggedTemplate,
+  createClipFromTemplate,
+} from "@/app/lib/assets/drag";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 export type TimelineTool = "selection" | "hand";
@@ -135,7 +142,7 @@ export function TimelinePanel({
 
   const handleTimelineDragOver = useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
-      if (!hasAssetDragData(event)) return;
+      if (!hasAssetDragData(event) && !hasTemplateDragData(event)) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
     },
@@ -144,18 +151,31 @@ export function TimelinePanel({
 
   const handleTimelineDrop = useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
-      if (!hasAssetDragData(event)) return;
-      event.preventDefault();
-      const asset = readDraggedAsset(event);
-      if (!asset) return;
       const area = timelineAreaRef.current;
       if (!area) return;
       const rect = area.getBoundingClientRect();
-      // timelineAreaRef is the right column; content starts at rect.left
       const x = event.clientX - rect.left;
       const start = Math.max(0, x / zoom);
-      const clip = createClipFromAsset(asset, start);
-      addClip(clip);
+
+      // Handle asset drops
+      if (hasAssetDragData(event)) {
+        event.preventDefault();
+        const asset = readDraggedAsset(event);
+        if (!asset) return;
+        const clip = createClipFromAsset(asset, start);
+        addClip(clip);
+        return;
+      }
+
+      // Handle template drops
+      if (hasTemplateDragData(event)) {
+        event.preventDefault();
+        const template = readDraggedTemplate(event);
+        if (!template) return;
+        const clip = createClipFromTemplate(template, start);
+        addClip(clip);
+        return;
+      }
     },
     [addClip, zoom]
   );
@@ -163,7 +183,7 @@ export function TimelinePanel({
   // Handlers for empty state drop zone
   const handleEmptyDragOver = useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
-      if (!hasAssetDragData(event)) return;
+      if (!hasAssetDragData(event) && !hasTemplateDragData(event)) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
       if (!isEmptyDropTarget) setIsEmptyDropTarget(true);
@@ -179,14 +199,27 @@ export function TimelinePanel({
 
   const handleEmptyDrop = useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
-      if (!hasAssetDragData(event)) return;
-      event.preventDefault();
-      setIsEmptyDropTarget(false);
-      const asset = readDraggedAsset(event);
-      if (!asset) return;
-      // Start at time 0 for empty timeline drops
-      const clip = createClipFromAsset(asset, 0);
-      addClip(clip);
+      // Handle asset drops
+      if (hasAssetDragData(event)) {
+        event.preventDefault();
+        setIsEmptyDropTarget(false);
+        const asset = readDraggedAsset(event);
+        if (!asset) return;
+        const clip = createClipFromAsset(asset, 0);
+        addClip(clip);
+        return;
+      }
+
+      // Handle template drops
+      if (hasTemplateDragData(event)) {
+        event.preventDefault();
+        setIsEmptyDropTarget(false);
+        const template = readDraggedTemplate(event);
+        if (!template) return;
+        const clip = createClipFromTemplate(template, 0);
+        addClip(clip);
+        return;
+      }
     },
     [addClip]
   );

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any, Dict, Literal, Optional
 
 import httpx
 from langchain_core.tools import tool
@@ -27,21 +27,21 @@ METADATA_TYPES = [
 @tool
 def getAssetMetadata(
     asset_id: str,
-    user_id: str | None = None,
-    project_id: str | None = None,
     metadata_type: str | None = None,
+    _agent_context: Optional[Dict[str, Any]] = None,
 ) -> dict:
     """Get detailed metadata for an asset including face detection, shot detection, labels, transcription, and more.
 
     Args:
         asset_id: The ID of the asset to get metadata for.
-        user_id: The user ID (injected by agent context).
-        project_id: The project ID (injected by agent context).
         metadata_type: Optional filter to get specific metadata type.
             Valid values: face-detection, shot-detection, label-detection,
             person-detection, transcription, metadata.
             If not specified, returns all available metadata.
     """
+    context = _agent_context or {}
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
 
     if not user_id or not project_id:
         return {

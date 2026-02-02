@@ -187,6 +187,8 @@ export default makeScene2D(function* (view) {
           clips: layer.clips as TextClip[],
           view,
           settings: textClipSettings,
+          sceneWidth: width,
+          sceneHeight: height,
         });
         textEntries.push(...entries);
         break;
@@ -230,12 +232,12 @@ export default makeScene2D(function* (view) {
 
   function* processTextClips() {
     if (textEntries.length === 0) return;
-    yield* all(...textEntries.map((entry) => playText({ entry })));
+    yield* all(...textEntries.map((entry) => playText({ entry, sceneWidth: width, sceneHeight: height })));
   }
 
   function* processImageClips() {
     if (imageEntries.length === 0) return;
-    yield* all(...imageEntries.map((entry) => playImage({ entry })));
+    yield* all(...imageEntries.map((entry) => playImage({ entry, sceneWidth: width, sceneHeight: height })));
   }
 
   function* processAudioTracks() {

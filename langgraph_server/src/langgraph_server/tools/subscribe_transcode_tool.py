@@ -16,8 +16,6 @@ logger = logging.getLogger(__name__)
 async def subscribeToAssetTranscode(
     asset_id: str,
     asset_name: str | None = None,
-    project_id: str | None = None,
-    user_id: str | None = None,
     _agent_context: Annotated[Optional[Dict[str, Any]], InjectedToolArg] = None,
 ) -> dict:
     """Subscribe to receive a notification when an asset's transcode completes.
@@ -32,8 +30,6 @@ async def subscribeToAssetTranscode(
     Args:
         asset_id: The ID of the asset to watch.
         asset_name: Optional name of the asset for display purposes.
-        project_id: Project ID (injected by agent if not provided).
-        user_id: User ID (injected by agent if not provided).
 
     Returns:
         Status dict confirming the subscription.
@@ -43,7 +39,7 @@ async def subscribeToAssetTranscode(
     context = _agent_context or {}
     settings = get_settings()
 
-    effective_user_id = user_id or context.get("user_id")
+    effective_user_id = context.get("user_id")
     if not effective_user_id:
         return {
             "status": "error",
@@ -69,7 +65,7 @@ async def subscribeToAssetTranscode(
             "reason": "invalid_asset_id",
         }
 
-    effective_project_id = project_id or context.get("project_id")
+    effective_project_id = context.get("project_id")
     effective_branch_id = context.get("branch_id")
 
     # Register the subscription

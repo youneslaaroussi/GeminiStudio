@@ -63,6 +63,13 @@ export type VisualEffectType =
   | 'pixelate'
   | 'chromatic';
 
+/** Text template styles */
+export type TextTemplateType =
+  | 'text'           // Basic text (default)
+  | 'title-card'     // Full screen with background
+  | 'lower-third'    // Bar at bottom of screen
+  | 'caption-style'; // Floating pill/card
+
 export interface BaseClip {
   id: string;
   name: string;
@@ -73,6 +80,10 @@ export interface BaseClip {
   position: Vec2;
   scale: Vec2;
   assetId?: string;
+  /** Transition when clip enters (starts playing) */
+  enterTransition?: ClipTransition;
+  /** Transition when clip exits (stops playing) */
+  exitTransition?: ClipTransition;
 }
 
 export type MaskMode = 'include' | 'exclude';
@@ -108,6 +119,12 @@ export interface TextClip extends BaseClip {
   opacity?: number;
   /** Optional visual effect (glitch, ripple, vhs, etc.) */
   effect?: VisualEffectType;
+  /** Template style for text rendering */
+  template?: TextTemplateType;
+  /** Subtitle text (for title-card template) */
+  subtitle?: string;
+  /** Background color (for templates with backgrounds) */
+  backgroundColor?: string;
 }
 
 export interface ImageClip extends BaseClip {

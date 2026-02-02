@@ -77,8 +77,10 @@ import type {
   ToolExecutionResult,
 } from "@/app/lib/tools/types";
 import type { Project } from "@/app/types/timeline";
+import type { VideoEffectJob } from "@/app/types/video-effects";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useAssetsStore } from "@/app/lib/store/assets-store";
+import { useVideoEffectsStore } from "@/app/lib/store/video-effects-store";
 import { requestAssetHighlight } from "@/app/lib/store/asset-highlight-store";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import { useAnalytics } from "@/app/lib/hooks/useAnalytics";
@@ -798,6 +800,24 @@ export function ChatPanel() {
           input: options.input,
           context: { project, projectId: projectId ?? undefined },
         });
+        // Surface agent-started video effect jobs in the Jobs tab
+        if (
+          options.toolName === "applyVideoEffectToClip" &&
+          result.status === "success" &&
+          result.outputs?.length
+        ) {
+          const jsonOutput = result.outputs.find((o) => o.type === "json");
+          if (
+            jsonOutput &&
+            "data" in jsonOutput &&
+            jsonOutput.data &&
+            typeof jsonOutput.data === "object" &&
+            "id" in jsonOutput.data &&
+            "assetId" in jsonOutput.data
+          ) {
+            useVideoEffectsStore.getState().upsertJob(jsonOutput.data as VideoEffectJob);
+          }
+        }
         await submitClientToolResult({
           toolCallId: options.toolCallId,
           result,

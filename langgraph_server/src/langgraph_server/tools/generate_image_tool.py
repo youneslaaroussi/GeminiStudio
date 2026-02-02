@@ -160,8 +160,7 @@ def generateImage(
     prompt: str,
     aspect_ratio: str = "1:1",
     image_size: str = "1K",
-    project_id: str | None = None,
-    user_id: str | None = None,
+    _agent_context: dict | None = None,
 ) -> dict:
     """Generate an image using Google's Gemini image model (Banana).
 
@@ -175,12 +174,14 @@ def generateImage(
         prompt: Detailed description of the image to generate.
         aspect_ratio: Image aspect ratio - "1:1", "16:9", "9:16", "4:3", or "3:4".
         image_size: Output size - "1K", "2K", or "4K".
-        project_id: Project ID (injected by agent).
-        user_id: User ID (injected by agent).
 
     Returns:
         Dict with imageUrl that MUST be included in your response to the user.
     """
+    context = _agent_context or {}
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
+
     settings = get_settings()
 
     if not user_id:

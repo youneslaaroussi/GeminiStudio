@@ -6,8 +6,17 @@ import {
   type AssetType,
   DEFAULT_ASSET_DURATIONS,
 } from "@/app/types/assets";
-import type { ClipType, TimelineClip } from "@/app/types/timeline";
-import { createAudioClip, createImageClip, createVideoClip } from "@/app/types/timeline";
+import {
+  TEMPLATE_DRAG_DATA_MIME,
+  type TemplateDragPayload,
+} from "@/app/types/templates";
+import type { ClipType, TextClip, TimelineClip } from "@/app/types/timeline";
+import {
+  createAudioClip,
+  createImageClip,
+  createVideoClip,
+  createTextClipFromTemplate,
+} from "@/app/types/timeline";
 
 export function hasAssetDragData(event: React.DragEvent | DragEvent): boolean {
   const types = Array.from(event.dataTransfer?.types ?? []);
@@ -54,4 +63,27 @@ export function createClipFromAsset(payload: AssetDragPayload, start: number): T
     default:
       return createVideoClip(payload.url, name, start, duration, options);
   }
+}
+
+// Template drag utilities
+
+export function hasTemplateDragData(event: React.DragEvent | DragEvent): boolean {
+  const types = Array.from(event.dataTransfer?.types ?? []);
+  return types.includes(TEMPLATE_DRAG_DATA_MIME);
+}
+
+export function readDraggedTemplate(event: React.DragEvent | DragEvent): TemplateDragPayload | null {
+  const raw = event.dataTransfer?.getData(TEMPLATE_DRAG_DATA_MIME);
+  if (!raw) return null;
+  try {
+    const payload = JSON.parse(raw) as TemplateDragPayload;
+    if (!payload || typeof payload !== "object") return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+export function createClipFromTemplate(payload: TemplateDragPayload, start: number): TextClip {
+  return createTextClipFromTemplate(payload.templateType, start, payload.duration);
 }

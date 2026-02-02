@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any, Dict, Optional
 
 import httpx
 from langchain_core.tools import tool
@@ -16,10 +17,9 @@ logger = logging.getLogger(__name__)
 @tool
 def searchAssets(
     query: str,
-    project_id: str | None = None,
-    user_id: str | None = None,
     asset_type: str | None = None,
     limit: int = 10,
+    _agent_context: Optional[Dict[str, Any]] = None,
 ) -> dict:
     """Search for assets in the project's media library by content.
 
@@ -39,14 +39,16 @@ def searchAssets(
 
     Args:
         query: Search query - can be natural language like "sunset beach" or "person talking"
-        project_id: Project ID (required)
-        user_id: User ID (required)
         asset_type: Optional filter - "video", "audio", "image", or "other"
         limit: Maximum number of results to return (default 10)
 
     Returns:
         Search results with matching assets and highlighted snippets
     """
+    context = _agent_context or {}
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
+
     if not user_id or not project_id:
         return {
             "status": "error",

@@ -110,6 +110,13 @@ export type VisualEffectType =
   | 'pixelate'
   | 'chromatic';
 
+/** Text template styles */
+export type TextTemplateType =
+  | 'text'           // Basic text (default)
+  | 'title-card'     // Full screen with background
+  | 'lower-third'    // Bar at bottom of screen
+  | 'caption-style'; // Floating pill/card
+
 export interface BaseClip {
   id: string;
   name: string;        // Display name
@@ -123,6 +130,10 @@ export interface BaseClip {
    * Optional asset identifier, used for caching waveform data or resolving metadata
    */
   assetId?: string;
+  /** Transition when clip enters (starts playing) */
+  enterTransition?: ClipTransition;
+  /** Transition when clip exits (stops playing) */
+  exitTransition?: ClipTransition;
 }
 
 export type MaskMode = 'include' | 'exclude';
@@ -160,6 +171,12 @@ export interface TextClip extends BaseClip {
   opacity?: number;   // Opacity 0-1
   /** Optional visual effect (glitch, ripple, vhs, etc.) */
   effect?: VisualEffectType;
+  /** Template style for text rendering */
+  template?: TextTemplateType;
+  /** Subtitle text (for title-card template) */
+  subtitle?: string;
+  /** Background color (for templates with backgrounds) */
+  backgroundColor?: string;
 }
 
 export interface ImageClip extends BaseClip {
@@ -333,6 +350,97 @@ export function createTextClip(
     position: { x: 0, y: -200 },
     scale: { x: 1, y: 1 },
     opacity: 1,
+    template: 'text',
+  };
+}
+
+/** Template preset configurations */
+export interface TextTemplatePreset {
+  id: TextTemplateType;
+  name: string;
+  description: string;
+  defaultText: string;
+  defaultSubtitle?: string;
+  defaults: Partial<TextClip>;
+}
+
+export const TEXT_TEMPLATE_PRESETS: TextTemplatePreset[] = [
+  {
+    id: 'text',
+    name: 'Text',
+    description: 'Simple text overlay',
+    defaultText: 'Your text here',
+    defaults: {
+      fontSize: 48,
+      fill: '#ffffff',
+      position: { x: 0, y: 0 },
+      template: 'text',
+    },
+  },
+  {
+    id: 'title-card',
+    name: 'Title Card',
+    description: 'Full screen title with background',
+    defaultText: 'Title',
+    defaultSubtitle: 'Subtitle',
+    defaults: {
+      fontSize: 72,
+      fill: '#ffffff',
+      position: { x: 0, y: 0 },
+      template: 'title-card',
+      backgroundColor: '#1a1a2e',
+    },
+  },
+  {
+    id: 'lower-third',
+    name: 'Lower Third',
+    description: 'Name/title bar at bottom',
+    defaultText: 'Name',
+    defaultSubtitle: 'Title',
+    defaults: {
+      fontSize: 36,
+      fill: '#ffffff',
+      position: { x: 0, y: 350 },
+      template: 'lower-third',
+      backgroundColor: 'rgba(0,0,0,0.8)',
+    },
+  },
+  {
+    id: 'caption-style',
+    name: 'Caption Style',
+    description: 'Floating pill overlay',
+    defaultText: 'Caption text',
+    defaults: {
+      fontSize: 32,
+      fill: '#ffffff',
+      position: { x: 0, y: 300 },
+      template: 'caption-style',
+      backgroundColor: 'rgba(0,0,0,0.9)',
+    },
+  },
+];
+
+// Helper to create a text clip from template
+export function createTextClipFromTemplate(
+  template: TextTemplateType,
+  start: number,
+  duration: number = 5
+): TextClip {
+  const preset = TEXT_TEMPLATE_PRESETS.find((p) => p.id === template) ?? TEXT_TEMPLATE_PRESETS[0];
+  return {
+    id: crypto.randomUUID(),
+    type: 'text',
+    name: preset.name,
+    text: preset.defaultText,
+    subtitle: preset.defaultSubtitle,
+    start,
+    duration,
+    offset: 0,
+    speed: 1,
+    scale: { x: 1, y: 1 },
+    opacity: 1,
+    ...preset.defaults,
+    position: preset.defaults.position ?? { x: 0, y: 0 },
   };
 }
 

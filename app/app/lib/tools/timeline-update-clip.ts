@@ -8,6 +8,8 @@ import type {
   ImageClip,
   TextClip,
   Focus,
+  ClipTransition,
+  TransitionType,
 } from "@/app/types/timeline";
 import type { ToolDefinition, ToolOutput } from "./types";
 
@@ -22,6 +24,16 @@ const focusSchema: z.ZodType<Focus> = z.object({
   width: z.number().positive(),
   height: z.number().positive(),
   padding: z.number().min(0),
+});
+
+const transitionTypeSchema = z.enum([
+  "none", "fade", "slide-left", "slide-right", "slide-up", "slide-down",
+  "cross-dissolve", "zoom", "blur", "dip-to-black",
+]);
+
+const clipTransitionSchema = z.object({
+  type: transitionTypeSchema,
+  duration: z.number().min(0.1).max(5),
 });
 
 const clipUpdateSchema = z.object({
@@ -45,7 +57,6 @@ const clipUpdateSchema = z.object({
   assetId: z.string().optional(),
   videoSettings: z
     .object({
-      src: z.string().url("Provide a valid video URL").optional(),
       width: z.number().positive().optional(),
       height: z.number().positive().optional(),
       objectFit: z.enum(["contain", "cover", "fill"]).optional(),
@@ -54,7 +65,6 @@ const clipUpdateSchema = z.object({
     .optional(),
   audioSettings: z
     .object({
-      src: z.string().url("Provide a valid audio URL").optional(),
       volume: z
         .number()
         .min(0, "Volume must be between 0 and 1")
@@ -64,7 +74,6 @@ const clipUpdateSchema = z.object({
     .optional(),
   imageSettings: z
     .object({
-      src: z.string().url("Provide a valid image URL").optional(),
       width: z.number().positive().optional(),
       height: z.number().positive().optional(),
     })
@@ -79,8 +88,15 @@ const clipUpdateSchema = z.object({
         .min(0, "Opacity must be between 0 and 1")
         .max(1, "Opacity must be between 0 and 1")
         .optional(),
+      template: z
+        .enum(["text", "title-card", "lower-third", "caption-style"])
+        .optional(),
+      subtitle: z.string().optional(),
+      backgroundColor: z.string().optional(),
     })
     .optional(),
+  enterTransition: clipTransitionSchema.optional().nullable(),
+  exitTransition: clipTransitionSchema.optional().nullable(),
 });
 
 type ClipUpdateInput = z.infer<typeof clipUpdateSchema>;
@@ -100,12 +116,27 @@ function buildUpdates(
   if (input.scale) updates.scale = input.scale;
   if (input.assetId !== undefined) updates.assetId = input.assetId;
 
+  // Enter/exit transitions (apply to all clip types)
+  if (input.enterTransition !== undefined) {
+    if (input.enterTransition === null || input.enterTransition.type === "none") {
+      updates.enterTransition = undefined;
+    } else {
+      updates.enterTransition = input.enterTransition as ClipTransition;
+    }
+  }
+  if (input.exitTransition !== undefined) {
+    if (input.exitTransition === null || input.exitTransition.type === "none") {
+      updates.exitTransition = undefined;
+    } else {
+      updates.exitTransition = input.exitTransition as ClipTransition;
+    }
+  }
+
   switch (clip.type) {
     case "video": {
       const videoUpdates: Partial<VideoClip> = {};
       if (input.videoSettings) {
-        const { src, width, height, objectFit, focus } = input.videoSettings;
-        if (src !== undefined) videoUpdates.src = src;
+        const { width, height, objectFit, focus } = input.videoSettings;
         if (width !== undefined) videoUpdates.width = width;
         if (height !== undefined) videoUpdates.height = height;
         if (objectFit !== undefined) videoUpdates.objectFit = objectFit;
@@ -116,8 +147,7 @@ function buildUpdates(
     case "audio": {
       const audioUpdates: Partial<AudioClip> = {};
       if (input.audioSettings) {
-        const { src, volume } = input.audioSettings;
-        if (src !== undefined) audioUpdates.src = src;
+        const { volume } = input.audioSettings;
         if (volume !== undefined) audioUpdates.volume = volume;
       }
       return { ...updates, ...audioUpdates };
@@ -125,8 +155,7 @@ function buildUpdates(
     case "image": {
       const imageUpdates: Partial<ImageClip> = {};
       if (input.imageSettings) {
-        const { src, width, height } = input.imageSettings;
-        if (src !== undefined) imageUpdates.src = src;
+        const { width, height } = input.imageSettings;
         if (width !== undefined) imageUpdates.width = width;
         if (height !== undefined) imageUpdates.height = height;
       }
@@ -135,11 +164,14 @@ function buildUpdates(
     case "text": {
       const textUpdates: Partial<TextClip> = {};
       if (input.textSettings) {
-        const { text, fontSize, fill, opacity } = input.textSettings;
+        const { text, fontSize, fill, opacity, template, subtitle, backgroundColor } = input.textSettings;
         if (text !== undefined) textUpdates.text = text;
         if (fontSize !== undefined) textUpdates.fontSize = fontSize;
         if (fill !== undefined) textUpdates.fill = fill;
         if (opacity !== undefined) textUpdates.opacity = opacity;
+        if (template !== undefined) textUpdates.template = template;
+        if (subtitle !== undefined) textUpdates.subtitle = subtitle;
+        if (backgroundColor !== undefined) textUpdates.backgroundColor = backgroundColor;
       }
       return { ...updates, ...textUpdates };
     }
@@ -155,7 +187,7 @@ export const timelineUpdateClipTool: ToolDefinition<
   name: "timelineUpdateClip",
   label: "Update Timeline Clip",
   description:
-    "Adjust clip timing and type-specific settings while reusing the existing project store update action.",
+    "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s).",
   runLocation: "client",
   inputSchema: clipUpdateSchema,
   fields: [
@@ -207,25 +239,43 @@ export const timelineUpdateClipTool: ToolDefinition<
       name: "videoSettings",
       label: "Video Settings",
       type: "json",
-      placeholder: '{"src":"","width":1920,"height":1080,"objectFit":"contain","focus":{...}}',
+      placeholder: '{"width":1920,"height":1080,"objectFit":"contain","focus":{...}}',
+      description: "Do not pass src—media URL is derived from clip's assetId.",
     },
     {
       name: "audioSettings",
       label: "Audio Settings",
       type: "json",
-      placeholder: '{"src":"","volume":1}',
+      placeholder: '{"volume":1}',
+      description: "Do not pass src—media URL is derived from clip's assetId.",
     },
     {
       name: "imageSettings",
       label: "Image Settings",
       type: "json",
-      placeholder: '{"src":"","width":1920,"height":1080}',
+      placeholder: '{"width":1920,"height":1080}',
+      description: "Do not pass src—media URL is derived from clip's assetId.",
     },
     {
       name: "textSettings",
       label: "Text Settings",
       type: "json",
-      placeholder: '{"text":"","fontSize":48,"fill":"#ffffff","opacity":1}',
+      placeholder: '{"text":"","fontSize":48,"fill":"#ffffff","opacity":1,"template":"lower-third","subtitle":"","backgroundColor":"rgba(0,0,0,0.8)"}',
+      description: "For text clips: template (text|title-card|lower-third|caption-style), subtitle, backgroundColor.",
+    },
+    {
+      name: "enterTransition",
+      label: "Enter Transition",
+      type: "json",
+      placeholder: '{"type":"fade","duration":0.5}',
+      description: "In transition when clip starts. Type: fade, slide-left, slide-right, slide-up, slide-down, zoom, dip-to-black. Duration 0.1-5s. Omit or type:none to clear.",
+    },
+    {
+      name: "exitTransition",
+      label: "Exit Transition",
+      type: "json",
+      placeholder: '{"type":"fade","duration":0.5}',
+      description: "Out transition when clip ends. Same types as enter. Omit or type:none to clear.",
     },
   ],
   async run(input) {

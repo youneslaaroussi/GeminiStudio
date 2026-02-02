@@ -33,9 +33,9 @@ export function CollapsibleSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className="w-full flex items-center justify-between py-2 hover:bg-muted/30 rounded-md px-1 -mx-1 transition-colors">
+      <CollapsibleTrigger className="w-full flex items-center justify-between py-2 hover:bg-muted/30 rounded-md px-1 -mx-1 transition-colors text-left">
         {header ?? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 text-left">
             {icon && (
               <span className="shrink-0 text-muted-foreground">{icon}</span>
             )}

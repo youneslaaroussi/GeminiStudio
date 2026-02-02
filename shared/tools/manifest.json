@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-02T04:38:38.248Z",
+  "generatedAt": "2026-02-02T19:38:08.745Z",
   "tools": {
     "captureAsset": {
       "name": "captureAsset",
@@ -121,6 +121,19 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
     },
+    "generateImage": {
+      "name": "generateImage",
+      "label": "Generate Image",
+      "description": "Generate an image using Google's Gemini image model from a text prompt.",
+      "runLocation": "server",
+      "implementations": {
+        "app": false,
+        "langgraph": true,
+        "langgraphName": "generateImage"
+      },
+      "fields": [],
+      "inputSchema": null
+    },
     "generateMusic": {
       "name": "generateMusic",
       "label": "Generate Music (Lyria)",
@@ -132,14 +145,6 @@
         "langgraphName": "generateMusic"
       },
       "fields": [
-        {
-          "name": "projectId",
-          "label": "Project ID",
-          "type": "text",
-          "placeholder": "project_abc123...",
-          "description": "The project to associate this music with.",
-          "required": true
-        },
         {
           "name": "prompt",
           "label": "Music Description",
@@ -180,27 +185,29 @@
           "generateMusicInput": {
             "type": "object",
             "properties": {
-              "projectId": {
-                "type": "string",
-                "minLength": 1
-              },
               "prompt": {
                 "type": "string",
                 "minLength": 5
               },
               "durationSeconds": {
-                "type": "string",
-                "enum": [
-                  "10",
-                  "20",
-                  "30",
-                  "60"
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "10",
+                      "20",
+                      "30",
+                      "60"
+                    ]
+                  },
+                  {
+                    "type": "number"
+                  }
                 ],
                 "default": "30"
               }
             },
             "required": [
-              "projectId",
               "prompt"
             ],
             "additionalProperties": false
@@ -220,14 +227,6 @@
         "langgraphName": "generateSpeech"
       },
       "fields": [
-        {
-          "name": "projectId",
-          "label": "Project ID",
-          "type": "text",
-          "placeholder": "project_abc123...",
-          "description": "The project to associate this audio with.",
-          "required": true
-        },
         {
           "name": "text",
           "label": "Text to Speak",
@@ -284,10 +283,6 @@
           "generateSpeechInput": {
             "type": "object",
             "properties": {
-              "projectId": {
-                "type": "string",
-                "minLength": 1
-              },
               "text": {
                 "type": "string",
                 "minLength": 2,
@@ -309,7 +304,6 @@
               }
             },
             "required": [
-              "projectId",
               "text"
             ],
             "additionalProperties": false
@@ -497,7 +491,7 @@
     "timelineAddClip": {
       "name": "timelineAddClip",
       "label": "Add Timeline Clip",
-      "description": "Insert a new clip on the timeline. If assetId is provided, type and src will be auto-detected from the asset. For media clips (video/audio/image), provide either assetId or both type and src. For text clips, provide type='text' and text content.",
+      "description": "Insert a new clip on the timeline. For media clips (video/audio/image), provide type and assetId only—do not pass src (proxy URL is derived from assetId). For text clips, provide type='text' and text content. Use template, subtitle, backgroundColor for text styling. Use enterTransition and exitTransition for fade/slide/zoom in/out (type, duration 0.1-5s).",
       "runLocation": "client",
       "implementations": {
         "app": true,
@@ -509,8 +503,8 @@
           "name": "assetId",
           "label": "Asset ID",
           "type": "text",
-          "placeholder": "Asset ID from listAssets",
-          "description": "Recommended: provide assetId to auto-detect type, src, and duration."
+          "placeholder": "Asset ID from listAssets or generateImage",
+          "description": "Required for media clips. Proxy URL is derived from assetId—do not pass src."
         },
         {
           "name": "type",
@@ -534,7 +528,7 @@
               "label": "Text"
             }
           ],
-          "description": "Optional if assetId is provided (will be inferred from asset)."
+          "description": "Required for media clips. Optional if assetId is provided (will be inferred from asset)."
         },
         {
           "name": "layerId",
@@ -559,13 +553,6 @@
           "label": "Duration (seconds)",
           "type": "number",
           "description": "Optional: defaults to asset duration or 5s for images."
-        },
-        {
-          "name": "src",
-          "label": "Source URL",
-          "type": "text",
-          "placeholder": "Video, audio, or image URL",
-          "description": "Optional if assetId is provided (will be fetched from asset)."
         },
         {
           "name": "text",
@@ -661,6 +648,57 @@
           "label": "Opacity",
           "type": "number",
           "description": "Text opacity (0-1)."
+        },
+        {
+          "name": "template",
+          "label": "Text Template",
+          "type": "select",
+          "description": "Template style: text (default), title-card, lower-third, caption-style.",
+          "options": [
+            {
+              "value": "text",
+              "label": "Plain Text"
+            },
+            {
+              "value": "title-card",
+              "label": "Title Card"
+            },
+            {
+              "value": "lower-third",
+              "label": "Lower Third"
+            },
+            {
+              "value": "caption-style",
+              "label": "Caption Style"
+            }
+          ]
+        },
+        {
+          "name": "subtitle",
+          "label": "Subtitle",
+          "type": "text",
+          "description": "For title-card and lower-third templates."
+        },
+        {
+          "name": "backgroundColor",
+          "label": "Background Color",
+          "type": "text",
+          "placeholder": "rgba(0,0,0,0.8) or #1a1a2e",
+          "description": "For templates with backgrounds."
+        },
+        {
+          "name": "enterTransition",
+          "label": "Enter Transition",
+          "type": "json",
+          "placeholder": "{\"type\":\"fade\",\"duration\":0.5}",
+          "description": "In transition when clip starts. Type: fade, slide-left, slide-right, slide-up, slide-down, zoom, dip-to-black. Duration 0.1-5s."
+        },
+        {
+          "name": "exitTransition",
+          "label": "Exit Transition",
+          "type": "json",
+          "placeholder": "{\"type\":\"fade\",\"duration\":0.5}",
+          "description": "Out transition when clip ends. Same types as enter."
         }
       ],
       "inputSchema": {
@@ -725,10 +763,6 @@
                   "image",
                   "text"
                 ]
-              },
-              "src": {
-                "type": "string",
-                "minLength": 1
               },
               "width": {
                 "type": "number",
@@ -800,6 +834,54 @@
                 "type": "number",
                 "minimum": 0,
                 "maximum": 1
+              },
+              "template": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "title-card",
+                  "lower-third",
+                  "caption-style"
+                ]
+              },
+              "subtitle": {
+                "type": "string"
+              },
+              "backgroundColor": {
+                "type": "string"
+              },
+              "enterTransition": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "fade",
+                      "slide-left",
+                      "slide-right",
+                      "slide-up",
+                      "slide-down",
+                      "cross-dissolve",
+                      "zoom",
+                      "blur",
+                      "dip-to-black"
+                    ]
+                  },
+                  "duration": {
+                    "type": "number",
+                    "minimum": 0.1,
+                    "maximum": 5
+                  }
+                },
+                "required": [
+                  "type",
+                  "duration"
+                ],
+                "additionalProperties": false
+              },
+              "exitTransition": {
+                "$ref": "#/definitions/timelineAddClipInput/properties/enterTransition"
               }
             },
             "additionalProperties": false
@@ -860,11 +942,12 @@
     "timelineUpdateClip": {
       "name": "timelineUpdateClip",
       "label": "Update Timeline Clip",
-      "description": "Adjust clip timing and type-specific settings while reusing the existing project store update action.",
+      "description": "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s).",
       "runLocation": "client",
       "implementations": {
         "app": true,
-        "langgraph": false
+        "langgraph": true,
+        "langgraphName": "updateClipInTimeline"
       },
       "fields": [
         {
@@ -915,25 +998,43 @@
           "name": "videoSettings",
           "label": "Video Settings",
           "type": "json",
-          "placeholder": "{\"src\":\"\",\"width\":1920,\"height\":1080,\"objectFit\":\"contain\",\"focus\":{...}}"
+          "placeholder": "{\"width\":1920,\"height\":1080,\"objectFit\":\"contain\",\"focus\":{...}}",
+          "description": "Do not pass src—media URL is derived from clip's assetId."
         },
         {
           "name": "audioSettings",
           "label": "Audio Settings",
           "type": "json",
-          "placeholder": "{\"src\":\"\",\"volume\":1}"
+          "placeholder": "{\"volume\":1}",
+          "description": "Do not pass src—media URL is derived from clip's assetId."
         },
         {
           "name": "imageSettings",
           "label": "Image Settings",
           "type": "json",
-          "placeholder": "{\"src\":\"\",\"width\":1920,\"height\":1080}"
+          "placeholder": "{\"width\":1920,\"height\":1080}",
+          "description": "Do not pass src—media URL is derived from clip's assetId."
         },
         {
           "name": "textSettings",
           "label": "Text Settings",
           "type": "json",
-          "placeholder": "{\"text\":\"\",\"fontSize\":48,\"fill\":\"#ffffff\",\"opacity\":1}"
+          "placeholder": "{\"text\":\"\",\"fontSize\":48,\"fill\":\"#ffffff\",\"opacity\":1,\"template\":\"lower-third\",\"subtitle\":\"\",\"backgroundColor\":\"rgba(0,0,0,0.8)\"}",
+          "description": "For text clips: template (text|title-card|lower-third|caption-style), subtitle, backgroundColor."
+        },
+        {
+          "name": "enterTransition",
+          "label": "Enter Transition",
+          "type": "json",
+          "placeholder": "{\"type\":\"fade\",\"duration\":0.5}",
+          "description": "In transition when clip starts. Type: fade, slide-left, slide-right, slide-up, slide-down, zoom, dip-to-black. Duration 0.1-5s. Omit or type:none to clear."
+        },
+        {
+          "name": "exitTransition",
+          "label": "Exit Transition",
+          "type": "json",
+          "placeholder": "{\"type\":\"fade\",\"duration\":0.5}",
+          "description": "Out transition when clip ends. Same types as enter. Omit or type:none to clear."
         }
       ],
       "inputSchema": {
@@ -993,10 +1094,6 @@
               "videoSettings": {
                 "type": "object",
                 "properties": {
-                  "src": {
-                    "type": "string",
-                    "format": "uri"
-                  },
                   "width": {
                     "type": "number",
                     "exclusiveMinimum": 0
@@ -1050,10 +1147,6 @@
               "audioSettings": {
                 "type": "object",
                 "properties": {
-                  "src": {
-                    "type": "string",
-                    "format": "uri"
-                  },
                   "volume": {
                     "type": "number",
                     "minimum": 0,
@@ -1065,10 +1158,6 @@
               "imageSettings": {
                 "type": "object",
                 "properties": {
-                  "src": {
-                    "type": "string",
-                    "format": "uri"
-                  },
                   "width": {
                     "type": "number",
                     "exclusiveMinimum": 0
@@ -1098,9 +1187,85 @@
                     "type": "number",
                     "minimum": 0,
                     "maximum": 1
+                  },
+                  "template": {
+                    "type": "string",
+                    "enum": [
+                      "text",
+                      "title-card",
+                      "lower-third",
+                      "caption-style"
+                    ]
+                  },
+                  "subtitle": {
+                    "type": "string"
+                  },
+                  "backgroundColor": {
+                    "type": "string"
                   }
                 },
                 "additionalProperties": false
+              },
+              "enterTransition": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "not": {}
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "none",
+                              "fade",
+                              "slide-left",
+                              "slide-right",
+                              "slide-up",
+                              "slide-down",
+                              "cross-dissolve",
+                              "zoom",
+                              "blur",
+                              "dip-to-black"
+                            ]
+                          },
+                          "duration": {
+                            "type": "number",
+                            "minimum": 0.1,
+                            "maximum": 5
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "duration"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "exitTransition": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "not": {}
+                      },
+                      {
+                        "$ref": "#/definitions/timelineUpdateClipInput/properties/enterTransition/anyOf/0/anyOf/1"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
@@ -1509,14 +1674,6 @@
       },
       "fields": [
         {
-          "name": "projectId",
-          "label": "Project ID",
-          "type": "text",
-          "placeholder": "project_abc123...",
-          "description": "The project to associate this video with.",
-          "required": true
-        },
-        {
           "name": "prompt",
           "label": "Prompt",
           "type": "textarea",
@@ -1613,10 +1770,6 @@
           "veoGenerateInput": {
             "type": "object",
             "properties": {
-              "projectId": {
-                "type": "string",
-                "minLength": 1
-              },
               "prompt": {
                 "type": "string",
                 "minLength": 1
@@ -1651,7 +1804,6 @@
               }
             },
             "required": [
-              "projectId",
               "prompt"
             ],
             "additionalProperties": false
@@ -2132,19 +2284,6 @@
         "app": false,
         "langgraph": true,
         "langgraphName": "renderVideo"
-      },
-      "fields": [],
-      "inputSchema": null
-    },
-    "generateImage": {
-      "name": "generateImage",
-      "label": "Generate Image",
-      "description": "Generate an image using Google's Gemini image model from a text prompt.",
-      "runLocation": "server",
-      "implementations": {
-        "app": false,
-        "langgraph": true,
-        "langgraphName": "generateImage"
       },
       "fields": [],
       "inputSchema": null

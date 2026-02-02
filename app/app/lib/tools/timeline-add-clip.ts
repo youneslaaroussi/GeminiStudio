@@ -8,6 +8,7 @@ import {
   type Project,
   type TimelineClip,
   type Focus,
+  type ClipTransition,
 } from "@/app/types/timeline";
 import type { ToolDefinition, ToolOutput } from "./types";
 
@@ -22,6 +23,16 @@ const focusSchema: z.ZodType<Focus> = z.object({
   width: z.number().positive("Focus width must be positive"),
   height: z.number().positive("Focus height must be positive"),
   padding: z.number().min(0, "Padding must be zero or greater"),
+});
+
+const transitionTypeSchema = z.enum([
+  "none", "fade", "slide-left", "slide-right", "slide-up", "slide-down",
+  "cross-dissolve", "zoom", "blur", "dip-to-black",
+]);
+
+const clipTransitionSchema = z.object({
+  type: transitionTypeSchema,
+  duration: z.number().min(0.1).max(5),
 });
 
 const baseClipSchema = z.object({
@@ -45,30 +56,10 @@ const baseClipSchema = z.object({
   assetId: z.string().optional(),
 });
 
-const mediaSrcSchema = z
-  .string()
-  .trim()
-  .min(1, "Media source cannot be empty")
-  .refine(
-    (value) => {
-      if (!value) return false;
-      try {
-        // Accept absolute URLs
-        const url = new URL(value);
-        return url.protocol === "http:" || url.protocol === "https:";
-      } catch {
-        // Also allow application-relative paths
-        return value.startsWith("/");
-      }
-    },
-    { message: "Provide a valid media URL or application path" },
-  );
-
 const addClipSchema = baseClipSchema.extend({
-  // Type is optional - can be inferred from assetId
+  // Type is optional for media clips - can be inferred from assetId
   type: z.enum(["video", "audio", "image", "text"]).optional(),
-  // Src is optional - can be fetched from assetId
-  src: mediaSrcSchema.optional(),
+  // Do not accept src from LLM - proxy URL is derived from assetId only
   // Media properties (video/image)
   width: z.number().positive().optional(),
   height: z.number().positive().optional(),
@@ -90,6 +81,11 @@ const addClipSchema = baseClipSchema.extend({
     .min(0, "Opacity must be between 0 and 1")
     .max(1, "Opacity must be between 0 and 1")
     .optional(),
+  template: z.enum(["text", "title-card", "lower-third", "caption-style"]).optional(),
+  subtitle: z.string().optional(),
+  backgroundColor: z.string().optional(),
+  enterTransition: clipTransitionSchema.optional(),
+  exitTransition: clipTransitionSchema.optional(),
 });
 
 type AddClipInput = z.infer<typeof addClipSchema>;
@@ -101,6 +97,12 @@ function applyCommonOverrides(clip: TimelineClip, input: Partial<AddClipInput>) 
   if (input.scale) clip.scale = input.scale;
   if (input.assetId) clip.assetId = input.assetId;
   if (input.name) clip.name = input.name;
+  if (input.enterTransition && input.enterTransition.type !== "none") {
+    clip.enterTransition = input.enterTransition as ClipTransition;
+  }
+  if (input.exitTransition && input.exitTransition.type !== "none") {
+    clip.exitTransition = input.exitTransition as ClipTransition;
+  }
 }
 
 export const timelineAddClipTool: ToolDefinition<
@@ -110,7 +112,7 @@ export const timelineAddClipTool: ToolDefinition<
   name: "timelineAddClip",
   label: "Add Timeline Clip",
   description:
-    "Insert a new clip on the timeline. If assetId is provided, type and src will be auto-detected from the asset. For media clips (video/audio/image), provide either assetId or both type and src. For text clips, provide type='text' and text content.",
+    "Insert a new clip on the timeline. For media clips (video/audio/image), provide type and assetId only—do not pass src (proxy URL is derived from assetId). For text clips, provide type='text' and text content. Use template, subtitle, backgroundColor for text styling. Use enterTransition and exitTransition for fade/slide/zoom in/out (type, duration 0.1-5s).",
   runLocation: "client",
   inputSchema: addClipSchema,
   fields: [
@@ -118,8 +120,8 @@ export const timelineAddClipTool: ToolDefinition<
       name: "assetId",
       label: "Asset ID",
       type: "text",
-      placeholder: "Asset ID from listAssets",
-      description: "Recommended: provide assetId to auto-detect type, src, and duration.",
+      placeholder: "Asset ID from listAssets or generateImage",
+      description: "Required for media clips. Proxy URL is derived from assetId—do not pass src.",
     },
     {
       name: "type",
@@ -131,7 +133,7 @@ export const timelineAddClipTool: ToolDefinition<
         { value: "image", label: "Image" },
         { value: "text", label: "Text" },
       ],
-      description: "Optional if assetId is provided (will be inferred from asset).",
+      description: "Required for media clips. Optional if assetId is provided (will be inferred from asset).",
     },
     {
       name: "layerId",
@@ -156,13 +158,6 @@ export const timelineAddClipTool: ToolDefinition<
       label: "Duration (seconds)",
       type: "number",
       description: "Optional: defaults to asset duration or 5s for images.",
-    },
-    {
-      name: "src",
-      label: "Source URL",
-      type: "text",
-      placeholder: "Video, audio, or image URL",
-      description: "Optional if assetId is provided (will be fetched from asset).",
     },
     {
       name: "text",
@@ -250,6 +245,45 @@ export const timelineAddClipTool: ToolDefinition<
       type: "number",
       description: "Text opacity (0-1).",
     },
+    {
+      name: "template",
+      label: "Text Template",
+      type: "select",
+      description: "Template style: text (default), title-card, lower-third, caption-style.",
+      options: [
+        { value: "text", label: "Plain Text" },
+        { value: "title-card", label: "Title Card" },
+        { value: "lower-third", label: "Lower Third" },
+        { value: "caption-style", label: "Caption Style" },
+      ],
+    },
+    {
+      name: "subtitle",
+      label: "Subtitle",
+      type: "text",
+      description: "For title-card and lower-third templates.",
+    },
+    {
+      name: "backgroundColor",
+      label: "Background Color",
+      type: "text",
+      placeholder: "rgba(0,0,0,0.8) or #1a1a2e",
+      description: "For templates with backgrounds.",
+    },
+    {
+      name: "enterTransition",
+      label: "Enter Transition",
+      type: "json",
+      placeholder: '{"type":"fade","duration":0.5}',
+      description: "In transition when clip starts. Type: fade, slide-left, slide-right, slide-up, slide-down, zoom, dip-to-black. Duration 0.1-5s.",
+    },
+    {
+      name: "exitTransition",
+      label: "Exit Transition",
+      type: "json",
+      placeholder: '{"type":"fade","duration":0.5}',
+      description: "Out transition when clip ends. Same types as enter.",
+    },
   ],
   async run(input) {
     if (typeof window === "undefined") {
@@ -260,9 +294,10 @@ export const timelineAddClipTool: ToolDefinition<
     }
 
     const store = useProjectStore.getState();
+    const projectId = store.projectId;
 
-    // Resolve asset details if assetId is provided
-    let resolvedSrc = input.src;
+    // Resolve asset details from assetId only—never use LLM-provided src (breaks proxy)
+    let resolvedSrc: string | undefined;
     let resolvedType = input.type;
     let resolvedDuration = input.duration;
     let resolvedWidth = input.width;
@@ -270,39 +305,29 @@ export const timelineAddClipTool: ToolDefinition<
     let resolvedSourceDuration = input.sourceDuration;
 
     if (input.assetId) {
-      // Try to find the asset in the store to get its details
       const { useAssetsStore } = await import("@/app/lib/store/assets-store");
       const assetsStore = useAssetsStore.getState();
       const asset = assetsStore.assets.find((a) => a.id === input.assetId);
 
       if (asset) {
-        // Infer type from asset if not provided
         if (!resolvedType) {
           const assetType = asset.type?.toLowerCase();
           if (assetType === "video" || assetType === "audio" || assetType === "image") {
             resolvedType = assetType;
           }
         }
+        // Always use asset's proxy URL (asset.url), never signed URLs
+        resolvedSrc = asset.url;
 
-        // Use asset's proxy URL if src not provided (not signedUrl which has CORS issues)
-        if (!resolvedSrc && asset.url) {
-          resolvedSrc = asset.url;
-        }
-
-        // Use asset dimensions/duration if not provided
-        if (!resolvedWidth && asset.width) {
-          resolvedWidth = asset.width;
-        }
-        if (!resolvedHeight && asset.height) {
-          resolvedHeight = asset.height;
-        }
+        if (!resolvedWidth && asset.width) resolvedWidth = asset.width;
+        if (!resolvedHeight && asset.height) resolvedHeight = asset.height;
         if (!resolvedSourceDuration && asset.duration) {
           resolvedSourceDuration = asset.duration;
-          // Default clip duration to source duration if not specified
-          if (!resolvedDuration) {
-            resolvedDuration = asset.duration;
-          }
+          if (!resolvedDuration) resolvedDuration = asset.duration;
         }
+      } else if (projectId) {
+        // Asset not in store yet (e.g. just generated)—build proxy URL from assetId
+        resolvedSrc = `/api/assets/${input.assetId}/file?projectId=${encodeURIComponent(projectId)}`;
       }
     }
 
@@ -322,7 +347,7 @@ export const timelineAddClipTool: ToolDefinition<
     if (resolvedType !== "text" && !resolvedSrc) {
       return {
         status: "error",
-        error: "Could not determine media source. Provide 'src' or a valid 'assetId'.",
+        error: "For media clips provide type and assetId (proxy URL is derived from assetId). Do not pass src.",
       };
     }
 
@@ -351,7 +376,7 @@ export const timelineAddClipTool: ToolDefinition<
             sourceDuration: resolvedSourceDuration,
           }
         );
-        applyCommonOverrides(clip, { ...input, type: resolvedType, src: resolvedSrc!, start, duration: resolvedDuration });
+        applyCommonOverrides(clip, { ...input, type: resolvedType, start, duration: resolvedDuration });
         if (input.objectFit) {
           clip.objectFit = input.objectFit;
         }
@@ -368,7 +393,7 @@ export const timelineAddClipTool: ToolDefinition<
           resolvedDuration,
           { assetId: input.assetId, sourceDuration: resolvedSourceDuration }
         );
-        applyCommonOverrides(clip, { ...input, type: resolvedType, src: resolvedSrc!, start, duration: resolvedDuration });
+        applyCommonOverrides(clip, { ...input, type: resolvedType, start, duration: resolvedDuration });
         if (input.volume !== undefined) {
           clip.volume = input.volume;
         }
@@ -386,7 +411,7 @@ export const timelineAddClipTool: ToolDefinition<
             height: resolvedHeight,
           }
         );
-        applyCommonOverrides(clip, { ...input, type: resolvedType, src: resolvedSrc!, start, duration: resolvedDuration });
+        applyCommonOverrides(clip, { ...input, type: resolvedType, start, duration: resolvedDuration });
         break;
       }
       case "text": {
@@ -405,6 +430,15 @@ export const timelineAddClipTool: ToolDefinition<
         }
         if (input.opacity !== undefined) {
           clip.opacity = input.opacity;
+        }
+        if (input.template !== undefined) {
+          clip.template = input.template;
+        }
+        if (input.subtitle !== undefined) {
+          clip.subtitle = input.subtitle;
+        }
+        if (input.backgroundColor !== undefined) {
+          clip.backgroundColor = input.backgroundColor;
         }
         break;
       }

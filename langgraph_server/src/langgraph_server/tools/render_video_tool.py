@@ -191,9 +191,6 @@ def renderVideo(
   include_audio: bool = True,
   range_start: float | None = None,
   range_end: float | None = None,
-  project_id: str | None = None,
-  user_id: str | None = None,
-  branch_id: str | None = None,
   _agent_context: Annotated[Optional[Dict[str, Any]], InjectedToolArg] = None,
 ) -> dict:
   """Queue a timeline render for the active project and notify when it completes.
@@ -208,15 +205,12 @@ def renderVideo(
       include_audio: Whether to include audio in the output.
       range_start: Start time in seconds for partial render. Use with range_end for previews.
       range_end: End time in seconds for partial render. Use with range_start for previews.
-      project_id: Project ID (auto-injected from context).
-      user_id: User ID (auto-injected from context).
-      branch_id: Branch ID (auto-injected from context).
   """
 
   context = _agent_context or {}
   settings = get_settings()
 
-  effective_user_id = user_id or context.get("user_id")
+  effective_user_id = context.get("user_id")
   if not effective_user_id:
     return {
       "status": "error",
@@ -224,8 +218,8 @@ def renderVideo(
       "reason": "missing_user",
     }
 
-  effective_project_id = project_id or context.get("project_id")
-  effective_branch_id = branch_id or context.get("branch_id")
+  effective_project_id = context.get("project_id")
+  effective_branch_id = context.get("branch_id")
   # When branch_id is set (chat session branch), only that branch's data is used
   if effective_branch_id and effective_project_id:
     projects = fetch_user_projects(effective_user_id, settings, branch_id=effective_branch_id, project_id=effective_project_id)

@@ -305,8 +305,7 @@ def _generate_signed_url(
 def generateMusic(
     prompt: str,
     duration_seconds: int = 30,
-    project_id: str | None = None,
-    user_id: str | None = None,
+    _agent_context: dict | None = None,
 ) -> dict:
     """Generate music using Google's Lyria AI model from a text prompt.
 
@@ -322,12 +321,14 @@ def generateMusic(
             instruments, tempo, and style. E.g. "upbeat electronic dance music with
             synth leads, driving bassline, 128 BPM, energetic festival vibe".
         duration_seconds: Length of the music - 10, 20, 30, or 60 seconds.
-        project_id: Project ID (injected by agent).
-        user_id: User ID (injected by agent).
 
     Returns:
         Dict with audioUrl that MUST be included in your response to the user.
     """
+    context = _agent_context or {}
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
+
     settings = get_settings()
 
     if not user_id:
@@ -452,7 +453,7 @@ def generateMusic(
         elif "wav" in mime_type:
             ext = ".wav"
 
-    effective_project_id = project_id or "unknown"
+    effective_project_id = project_id or context.get("project_id") or "unknown"
     prompt_slug = prompt[:30].replace(" ", "-").lower()
     # Remove special characters from slug
     prompt_slug = "".join(c for c in prompt_slug if c.isalnum() or c == "-")

@@ -105,7 +105,7 @@ export function EditorLayout() {
   const loadRef = useRef<(() => void) | null>(null);
   const exportRef = useRef<(() => void) | null>(null);
   const refreshRef = useRef<(() => void) | null>(null);
-  const setAssetTabRef = useRef<((tab: "assets" | "video" | "image" | "music" | "tts" | "jobs" | "branches") => void) | null>(null);
+  const setAssetTabRef = useRef<((tab: "assets" | "templates" | "video" | "image" | "music" | "tts" | "jobs" | "branches") => void) | null>(null);
 
   const handleRecenterReady = useCallback((recenter: () => void) => {
     recenterRef.current = recenter;
@@ -123,7 +123,7 @@ export function EditorLayout() {
     refreshRef.current = refresh;
   }, []);
 
-  const handleAssetTabReady = useCallback((setTab: (tab: "assets" | "video" | "image" | "music" | "tts" | "jobs" | "branches") => void) => {
+  const handleAssetTabReady = useCallback((setTab: (tab: "assets" | "templates" | "video" | "image" | "music" | "tts" | "jobs" | "branches") => void) => {
     setAssetTabRef.current = setTab;
   }, []);
 
@@ -451,7 +451,7 @@ export function EditorLayout() {
       handler: () => setCommandMenuOpen((prev) => !prev),
       preventDefault: true,
     },
-    // Asset panel tabs: 1–7 (no modifiers; Cmd+1 etc. left to browser)
+    // Asset panel tabs: 1–8 (no modifiers; Cmd+1 etc. left to browser)
     {
       key: '1',
       handler: (e) => {
@@ -465,7 +465,7 @@ export function EditorLayout() {
       key: '2',
       handler: (e) => {
         if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-          setAssetTabRef.current?.('video');
+          setAssetTabRef.current?.('templates');
           e.preventDefault();
         }
       },
@@ -474,7 +474,7 @@ export function EditorLayout() {
       key: '3',
       handler: (e) => {
         if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-          setAssetTabRef.current?.('image');
+          setAssetTabRef.current?.('video');
           e.preventDefault();
         }
       },
@@ -483,7 +483,7 @@ export function EditorLayout() {
       key: '4',
       handler: (e) => {
         if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-          setAssetTabRef.current?.('music');
+          setAssetTabRef.current?.('image');
           e.preventDefault();
         }
       },
@@ -492,7 +492,7 @@ export function EditorLayout() {
       key: '5',
       handler: (e) => {
         if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-          setAssetTabRef.current?.('tts');
+          setAssetTabRef.current?.('music');
           e.preventDefault();
         }
       },
@@ -501,13 +501,22 @@ export function EditorLayout() {
       key: '6',
       handler: (e) => {
         if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-          setAssetTabRef.current?.('jobs');
+          setAssetTabRef.current?.('tts');
           e.preventDefault();
         }
       },
     },
     {
       key: '7',
+      handler: (e) => {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          setAssetTabRef.current?.('jobs');
+          e.preventDefault();
+        }
+      },
+    },
+    {
+      key: '8',
       handler: (e) => {
         if (!e.ctrlKey && !e.metaKey && !e.altKey) {
           setAssetTabRef.current?.('branches');

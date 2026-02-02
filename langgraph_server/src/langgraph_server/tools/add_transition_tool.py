@@ -57,9 +57,7 @@ def addTransition(
     to_clip_id: str,
     transition_type: str = "fade",
     duration: float = 0.5,
-    project_id: str | None = None,
-    user_id: str | None = None,
-    branch_id: str | None = None,
+    _agent_context: dict | None = None,
 ) -> dict:
     """Add a transition effect between two adjacent video clips on the same layer.
 
@@ -71,13 +69,15 @@ def addTransition(
         to_clip_id: ID of the second (right) clip.
         transition_type: Effect type: "fade", "slide-left", "slide-right", "slide-up", "slide-down". Default "fade".
         duration: Transition duration in seconds (0.1 to 5). Default 0.5.
-        project_id: Project ID (injected by agent).
-        user_id: User ID (injected by agent).
-        branch_id: Branch ID (injected by agent).
 
     Returns:
         Status dict with transition info or error message.
     """
+    context = _agent_context or {}
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
+    branch_id = context.get("branch_id")
+
     if not user_id or not project_id:
         return {
             "status": "error",

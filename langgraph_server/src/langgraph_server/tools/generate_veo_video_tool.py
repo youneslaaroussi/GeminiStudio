@@ -35,9 +35,6 @@ def generateVeoVideo(
     resolution: str = "720p",
     duration_seconds: int = 8,
     negative_prompt: str | None = None,
-    project_id: str | None = None,
-    user_id: str | None = None,
-    branch_id: str | None = None,
     _agent_context: Annotated[Optional[Dict[str, Any]], InjectedToolArg] = None,
 ) -> dict:
     """Generate a video using Google's Veo AI model from a text prompt.
@@ -52,9 +49,6 @@ def generateVeoVideo(
         resolution: Output resolution - "720p" or "1080p" (1080p only for 8s videos).
         duration_seconds: Video length - 4, 6, or 8 seconds.
         negative_prompt: What NOT to include in the video (e.g. "cartoon, blurry").
-        project_id: Project ID (injected by agent).
-        user_id: User ID (injected by agent).
-        branch_id: Branch ID (injected by agent).
 
     Returns:
         Status dict with operation info or error message.
@@ -64,7 +58,7 @@ def generateVeoVideo(
     context = _agent_context or {}
     settings = get_settings()
 
-    effective_user_id = user_id or context.get("user_id")
+    effective_user_id = context.get("user_id")
     if not effective_user_id:
         return {
             "status": "error",
@@ -135,7 +129,7 @@ def generateVeoVideo(
         }
 
     request_id = uuid4().hex
-    effective_project_id = project_id or context.get("project_id")
+    effective_project_id = context.get("project_id")
 
     try:
         client = _get_veo_client()
@@ -182,7 +176,7 @@ def generateVeoVideo(
         "projectId": effective_project_id,
         "userId": effective_user_id,
         "requestId": request_id,
-        "branchId": branch_id or context.get("branch_id"),
+        "branchId": context.get("branch_id"),
     }
     
     metadata = {

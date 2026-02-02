@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any, Dict, Optional
 
 import httpx
 from langchain_core.tools import tool
@@ -18,17 +19,17 @@ logger = logging.getLogger(__name__)
 def setAssetNotes(
     asset_id: str,
     notes: str,
-    user_id: str | None = None,
-    project_id: str | None = None,
+    _agent_context: Optional[Dict[str, Any]] = None,
 ) -> dict:
     """Set or update notes on an asset. Use this to remember what an asset is for (e.g. "B-roll for intro", "voiceover take 2").
 
     Args:
         asset_id: The ID of the asset to update.
         notes: The notes text to set. Use empty string to clear notes.
-        user_id: The user ID (injected by agent context).
-        project_id: The project ID (injected by agent context).
     """
+    context = _agent_context or {}
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
 
     if not user_id or not project_id:
         return {

@@ -5,7 +5,6 @@ import type { VeoJob } from "@/app/types/veo";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 
 const veoGenerateSchema = z.object({
-  projectId: z.string().min(1, "Project ID is required"),
   prompt: z.string().min(1, "Prompt is required"),
   durationSeconds: z.coerce.number().refine((n) => [4, 6, 8].includes(n), {
     message: "Duration must be 4, 6, or 8 seconds",
@@ -24,14 +23,6 @@ export const veoGenerateTool: ToolDefinition<typeof veoGenerateSchema, Project> 
   runLocation: "client",
   inputSchema: veoGenerateSchema,
   fields: [
-    {
-      name: "projectId",
-      label: "Project ID",
-      type: "text",
-      placeholder: "project_abc123...",
-      description: "The project to associate this video with.",
-      required: true,
-    },
     {
       name: "prompt",
       label: "Prompt",
@@ -93,7 +84,7 @@ export const veoGenerateTool: ToolDefinition<typeof veoGenerateSchema, Project> 
       description: "Optional: describe what to avoid in the generated video.",
     },
   ],
-  async run(input) {
+  async run(input, context) {
     try {
       // Veo requires browser context for auth
       if (typeof window === "undefined") {
@@ -103,7 +94,13 @@ export const veoGenerateTool: ToolDefinition<typeof veoGenerateSchema, Project> 
         };
       }
 
-      const projectId = input.projectId;
+      const projectId = context.projectId;
+      if (!projectId) {
+        return {
+          status: "error" as const,
+          error: "No project open. Open a project in the editor first.",
+        };
+      }
 
       // Enforce duration constraint for higher resolutions
       let duration = input.durationSeconds as 4 | 6 | 8;

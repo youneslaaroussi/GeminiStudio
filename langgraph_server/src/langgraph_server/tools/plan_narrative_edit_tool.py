@@ -107,9 +107,8 @@ def _build_asset_context(asset_id: str, pipeline_state: dict) -> str:
 def createEditPlan(
     intent: str,
     asset_ids: list[str],
-    user_id: str | None = None,
-    project_id: str | None = None,
     target_duration_seconds: Optional[float] = None,
+    _agent_context: Optional[dict] = None,
 ) -> dict:
     """Create a structured edit plan for a narrative/vlog from the given assets.
 
@@ -122,14 +121,16 @@ def createEditPlan(
     Args:
         intent: User intent, e.g. '2-min vlog', 'highlight reel', 'tutorial'.
         asset_ids: List of asset IDs to use (from listProjectAssets).
-        user_id: User ID (injected by agent).
-        project_id: Project ID (injected by agent).
         target_duration_seconds: Optional target total duration in seconds.
 
     Returns:
         Plan with segments (asset_id, offset, duration, timeline_start, role) and
         optional voiceover_script. Execute with addClipToTimeline and generateSpeech.
     """
+    context = _agent_context or {}
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
+
     if not user_id or not project_id:
         return {
             "status": "error",

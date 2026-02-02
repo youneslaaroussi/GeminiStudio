@@ -329,9 +329,51 @@ export function Clip({ clip, layerId }: ClipProps) {
           </div>
         )}
 
+        {/* Enter transition indicator */}
+        {clip.enterTransition && clip.enterTransition.type !== 'none' && (
+          <div
+            className="absolute left-0 top-0 bottom-0 bg-white/20 border-r border-white/40 pointer-events-none"
+            style={{ width: Math.max(4, clip.enterTransition.duration * zoom) }}
+          >
+            <div
+              className="absolute inset-0 opacity-50"
+              style={{
+                backgroundImage: `repeating-linear-gradient(
+                  45deg,
+                  transparent,
+                  transparent 2px,
+                  rgba(255,255,255,0.3) 2px,
+                  rgba(255,255,255,0.3) 3px
+                )`,
+              }}
+            />
+          </div>
+        )}
+
+        {/* Exit transition indicator */}
+        {clip.exitTransition && clip.exitTransition.type !== 'none' && (
+          <div
+            className="absolute right-0 top-0 bottom-0 bg-white/20 border-l border-white/40 pointer-events-none"
+            style={{ width: Math.max(4, clip.exitTransition.duration * zoom) }}
+          >
+            <div
+              className="absolute inset-0 opacity-50"
+              style={{
+                backgroundImage: `repeating-linear-gradient(
+                  -45deg,
+                  transparent,
+                  transparent 2px,
+                  rgba(255,255,255,0.3) 2px,
+                  rgba(255,255,255,0.3) 3px
+                )`,
+              }}
+            />
+          </div>
+        )}
+
         {/* Left resize handle */}
         <div
-          className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20"
+          className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 z-10"
           onMouseDown={(e) => handleMouseDown(e, "resize-left")}
         />
 
@@ -345,7 +387,7 @@ export function Clip({ clip, layerId }: ClipProps) {
 
         {/* Right resize handle */}
         <div
-          className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20"
+          className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 z-10"
           onMouseDown={(e) => handleMouseDown(e, "resize-right")}
         />
       </div>

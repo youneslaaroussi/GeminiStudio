@@ -25,6 +25,13 @@ export type VisualEffectType =
   | 'pixelate'
   | 'chromatic';
 
+/** Text template styles */
+export type TextTemplateType =
+  | 'text'           // Basic text (default)
+  | 'title-card'     // Full screen with background
+  | 'lower-third'    // Bar at bottom of screen
+  | 'caption-style'; // Floating pill/card
+
 /** Color grading settings for video/image clips */
 export interface ColorGradingSettings {
   exposure: number;      // -2 to 2
@@ -57,6 +64,10 @@ export interface VideoClip {
   effect?: VisualEffectType;
   /** Color grading settings */
   colorGrading?: ColorGradingSettings;
+  /** Transition when clip enters (starts playing) */
+  enterTransition?: ClipTransition;
+  /** Transition when clip exits (stops playing) */
+  exitTransition?: ClipTransition;
 }
 
 export interface AudioClip {
@@ -72,6 +83,10 @@ export interface AudioClip {
   position: Transform;
   scale: Transform;
   assetId?: string;
+  /** Transition when clip enters (starts playing) */
+  enterTransition?: ClipTransition;
+  /** Transition when clip exits (stops playing) */
+  exitTransition?: ClipTransition;
 }
 
 export interface TextClip {
@@ -90,6 +105,16 @@ export interface TextClip {
   scale: Transform;
   /** Optional visual effect (glitch, ripple, vhs, etc.) */
   effect?: VisualEffectType;
+  /** Template style for text rendering */
+  template?: TextTemplateType;
+  /** Subtitle text (for title-card template) */
+  subtitle?: string;
+  /** Background color (for templates with backgrounds) */
+  backgroundColor?: string;
+  /** Transition when clip enters (starts playing) */
+  enterTransition?: ClipTransition;
+  /** Transition when clip exits (stops playing) */
+  exitTransition?: ClipTransition;
 }
 
 export interface ImageClip {
@@ -109,6 +134,10 @@ export interface ImageClip {
   effect?: VisualEffectType;
   /** Color grading settings */
   colorGrading?: ColorGradingSettings;
+  /** Transition when clip enters (starts playing) */
+  enterTransition?: ClipTransition;
+  /** Transition when clip exits (stops playing) */
+  exitTransition?: ClipTransition;
 }
 
 export interface ClipTransition {
@@ -162,6 +191,7 @@ export interface VideoEntry {
 export interface TextEntry {
   clip: TextClip;
   ref: Reference<Txt>;
+  containerRef?: Reference<Node>;
 }
 
 export interface ImageEntry {

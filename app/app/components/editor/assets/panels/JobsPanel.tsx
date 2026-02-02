@@ -20,18 +20,21 @@ import {
   Users,
   Smile,
   Sparkles,
+  Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { PipelineStepState } from "@/app/types/pipeline";
 import type { RemoteAsset } from "@/app/types/assets";
 import type { VeoJob } from "@/app/types/veo";
+import type { VideoEffectJob } from "@/app/types/video-effects";
 import { cn } from "@/lib/utils";
 
 interface JobsPanelProps {
   assets: RemoteAsset[];
   pipelineStates: Record<string, PipelineStepState[]>;
   veoJobs: VeoJob[];
+  videoEffectJobs?: VideoEffectJob[];
   onRefresh: () => void;
   isLoading: boolean;
 }
@@ -148,8 +151,54 @@ function VeoJobItem({ job }: VeoJobItemProps) {
   );
 }
 
-export function JobsPanel({ assets, pipelineStates, veoJobs, onRefresh, isLoading }: JobsPanelProps) {
-  const { runningJobs, recentJobs, runningVeoJobs, recentVeoJobs } = useMemo(() => {
+const VIDEO_EFFECT_STATUS_MAP: Record<string, keyof typeof STATUS_CONFIG> = {
+  pending: "queued",
+  running: "running",
+  completed: "succeeded",
+  error: "failed",
+};
+
+interface VideoEffectJobItemProps {
+  job: VideoEffectJob;
+}
+
+function VideoEffectJobItem({ job }: VideoEffectJobItemProps) {
+  const statusKey = VIDEO_EFFECT_STATUS_MAP[job.status] ?? "idle";
+  const config = STATUS_CONFIG[statusKey];
+  const StatusIcon = config.icon;
+  const label = job.effectLabel ?? job.effectId;
+
+  return (
+    <div className={cn("rounded-md border border-border p-2.5 space-y-1.5", config.bg)}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <Wand2 className="size-3.5 text-muted-foreground shrink-0" />
+          <div className="min-w-0">
+            <p className="text-xs font-medium truncate">{label}</p>
+            <p className="text-[11px] text-muted-foreground truncate">{job.assetName}</p>
+          </div>
+        </div>
+        <div className={cn("flex items-center gap-1", config.color)}>
+          <StatusIcon className={cn("size-3.5", config.animate && "animate-spin")} />
+          <span className="text-[11px] capitalize">{job.status}</span>
+        </div>
+      </div>
+      {job.error && (
+        <p className="text-[11px] text-red-500 truncate">{job.error}</p>
+      )}
+    </div>
+  );
+}
+
+export function JobsPanel({ assets, pipelineStates, veoJobs, videoEffectJobs = [], onRefresh, isLoading }: JobsPanelProps) {
+  const {
+    runningJobs,
+    recentJobs,
+    runningVeoJobs,
+    recentVeoJobs,
+    runningVideoEffectJobs,
+    recentVideoEffectJobs,
+  } = useMemo(() => {
     const running: Array<{ assetName: string; step: PipelineStepState }> = [];
     const recent: Array<{ assetName: string; step: PipelineStepState }> = [];
 
@@ -186,15 +235,34 @@ export function JobsPanel({ assets, pipelineStates, veoJobs, onRefresh, isLoadin
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       .slice(0, 5);
 
+    // Split video effect jobs into running and recent
+    const runningVideoEffect = videoEffectJobs.filter(
+      (j) => j.status === "pending" || j.status === "running"
+    );
+    const recentVideoEffect = videoEffectJobs
+      .filter((j) => j.status === "completed" || j.status === "error")
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .slice(0, 5);
+
     return {
       runningJobs: running,
       recentJobs: recent.slice(0, 10),
       runningVeoJobs: runningVeo,
       recentVeoJobs: recentVeo,
+      runningVideoEffectJobs: runningVideoEffect,
+      recentVideoEffectJobs: recentVideoEffect,
     };
-  }, [assets, pipelineStates, veoJobs]);
+  }, [assets, pipelineStates, veoJobs, videoEffectJobs]);
 
-  const hasAnyJobs = runningJobs.length > 0 || recentJobs.length > 0 || runningVeoJobs.length > 0 || recentVeoJobs.length > 0;
+  const hasAnyJobs =
+    runningJobs.length > 0 ||
+    recentJobs.length > 0 ||
+    runningVeoJobs.length > 0 ||
+    recentVeoJobs.length > 0 ||
+    runningVideoEffectJobs.length > 0 ||
+    recentVideoEffectJobs.length > 0;
+  const activeCount =
+    runningJobs.length + runningVeoJobs.length + runningVideoEffectJobs.length;
 
   return (
     <ScrollArea className="h-full">
@@ -228,17 +296,20 @@ export function JobsPanel({ assets, pipelineStates, veoJobs, onRefresh, isLoadin
         ) : (
           <>
             {/* Running Jobs */}
-            {(runningJobs.length > 0 || runningVeoJobs.length > 0) && (
+            {(runningJobs.length > 0 || runningVeoJobs.length > 0 || runningVideoEffectJobs.length > 0) && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Play className="size-3 text-blue-500" />
                   <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                    Active ({runningJobs.length + runningVeoJobs.length})
+                    Active ({activeCount})
                   </span>
                 </div>
                 <div className="space-y-1.5">
                   {runningVeoJobs.map((job) => (
                     <VeoJobItem key={job.id} job={job} />
+                  ))}
+                  {runningVideoEffectJobs.map((job) => (
+                    <VideoEffectJobItem key={job.id} job={job} />
                   ))}
                   {runningJobs.map((job, i) => (
                     <JobItem
@@ -252,7 +323,9 @@ export function JobsPanel({ assets, pipelineStates, veoJobs, onRefresh, isLoadin
             )}
 
             {/* Recent Jobs */}
-            {(recentJobs.length > 0 || recentVeoJobs.length > 0) && (
+            {(recentJobs.length > 0 ||
+              recentVeoJobs.length > 0 ||
+              recentVideoEffectJobs.length > 0) && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Clock className="size-3 text-muted-foreground" />
@@ -263,6 +336,9 @@ export function JobsPanel({ assets, pipelineStates, veoJobs, onRefresh, isLoadin
                 <div className="space-y-1.5">
                   {recentVeoJobs.map((job) => (
                     <VeoJobItem key={job.id} job={job} />
+                  ))}
+                  {recentVideoEffectJobs.map((job) => (
+                    <VideoEffectJobItem key={job.id} job={job} />
                   ))}
                   {recentJobs.map((job, i) => (
                     <JobItem

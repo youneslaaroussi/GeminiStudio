@@ -29,6 +29,8 @@
 
 > **The Bet:** In 2 years, manual video editing will be obsolete for 90% of use cases. The bottleneck isn't AI models—it's the lack of infrastructure that lets agents *actually edit*. We're building that missing layer.
 
+> **The Moat:** Gemini Studio is the **first video editor that understands your assets semantically.** You don't hunt through bins or remember file names—you say what you mean: *Put the title card over the drone shot.* The agent knows which image, which clip, and where. Semantic understanding turns natural language into precise edits.
+
 ---
 
 ## Demo & submission
@@ -70,7 +72,7 @@ We're moving from **"Tools for Editors"** (e.g. Premiere Pro) to **"Directors fo
 
 We built the deterministic engine that allows an agent to:
 - **Ingest** raw footage (screen recordings, generated clips, uploads)
-- **Understand** semantic intent ("zoom in on the error", "cut to the reaction")
+- **Understand** your assets *and* your intent semantically—that title card, the drone shot, zoom in on the error—no file names, no hunting
 - **Execute** the edit programmatically—frame-perfect, no human in the loop
 
 This isn't a chatbot wrapper. The agent has **real agency**: it calls the renderer, manipulates the timeline, triggers Veo 3/Nano Banana Pro/Lyria/Chirp generation, and proactively notifies you when your video is ready. Gemini 3 Pro becomes the **reasoning layer** for the entire production stack.
@@ -92,6 +94,7 @@ Your timeline is version-controlled. The cloud agent edits on a branch. You revi
 
 | Feature | What It Enables |
 |---------|-----------------|
+| **Semantic Assets** | Refer to assets by what they *are*—put the title card over the drone shot—not by filename |
 | **Vibe Editing** | Intent-based editing ("make it cinematic") |
 | **Real-time Sync** | Agent edits appear live in your timeline |
 | **Branching** | Non-destructive experimentation |
@@ -118,7 +121,7 @@ Every uploaded asset goes through Gemini 3 Pro's multimodal analysis:
 - **Speech Transcription** — Full audio-to-text with word-level timestamps
 - **Semantic Understanding** — High-level analysis ("what's happening here?")
 
-The agent doesn't just know *that* you have a video—it knows *what's in it*, frame by frame. This is how "find the moment where I click the submit button" actually works.
+The agent doesn't just know *that* you have a video—it knows *what's in it*, frame by frame. **This is the moat:** you say *put the title card over the drone shot* and the agent resolves which image and which clip by meaning, not by filename. No other editor does this.
 
 ![Asset Pipeline](assets/asset_pipeline_diagram.png)
 

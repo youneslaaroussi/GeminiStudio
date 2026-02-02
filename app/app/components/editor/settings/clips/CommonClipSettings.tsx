@@ -9,6 +9,7 @@ import {
   cardClassName,
   type ClipUpdateHandler,
 } from "../utils";
+import { ClipTransitionSettings } from "./ClipTransitionSettings";
 
 interface CommonClipSettingsProps {
   clip: TimelineClip;
@@ -183,6 +184,9 @@ export function CommonClipSettings({ clip, onUpdate }: CommonClipSettingsProps) 
           />
         </div>
       </div>
+
+      {/* Transitions */}
+      <ClipTransitionSettings clip={clip} onUpdate={onUpdate} />
     </div>
   );
 }

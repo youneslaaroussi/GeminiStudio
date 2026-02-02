@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, Dict, Optional
+
 from langchain_core.tools import tool
 
 from ..config import get_settings
@@ -10,9 +12,7 @@ from ..firebase import fetch_user_projects
 
 @tool
 def getTimelineState(
-    project_id: str | None = None,
-    user_id: str | None = None,
-    branch_id: str | None = None,
+    _agent_context: Optional[Dict[str, Any]] = None,
 ) -> dict:
     """Get the current state of the project timeline including all layers and clips with their IDs.
 
@@ -22,6 +22,10 @@ def getTimelineState(
     Uses the session's branch when provided, so the state reflects the timeline
     for this conversation's branch (not necessarily main).
     """
+    context = _agent_context or {}
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
+    branch_id = context.get("branch_id")
 
     if not user_id:
         return {
@@ -111,9 +115,7 @@ def getTimelineState(
                 "end": round(clip_end, 2),
                 "speed": clip_speed,
             }
-            # Include source info if available
-            if clip.get("src"):
-                clip_info["src"] = clip.get("src")
+            # Include assetId for reference; do not expose src so LLM does not pass it to add/update clip (proxy is derived from assetId)
             if clip.get("assetId"):
                 clip_info["assetId"] = clip.get("assetId")
             if clip.get("text"):

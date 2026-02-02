@@ -16,6 +16,28 @@ from ..firebase import get_firestore_client, decode_automerge_state, ensure_main
 
 logger = logging.getLogger(__name__)
 
+ADD_CLIP_TRANSITION_TYPES = (
+    "fade", "slide-left", "slide-right", "slide-up", "slide-down",
+    "cross-dissolve", "zoom", "blur", "dip-to-black",
+)
+
+
+def _parse_transition(param: str | None) -> dict | None:
+    """Parse transition JSON. Returns dict or None if invalid."""
+    if not param:
+        return None
+    try:
+        t = json.loads(param) if isinstance(param, str) else param
+        if isinstance(t, dict):
+            tt = t.get("type")
+            if tt in ADD_CLIP_TRANSITION_TYPES:
+                dur = t.get("duration", 0.5)
+                if isinstance(dur, (int, float)) and 0.1 <= dur <= 5:
+                    return {"type": tt, "duration": float(dur)}
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return None
+
 
 def _load_automerge_doc(base64_state: str):
     """Load an Automerge document from base64 state."""
@@ -174,17 +196,22 @@ def addClipToTimeline(
     offset: float = 0,
     text: str | None = None,
     name: str | None = None,
+    template: str | None = None,
+    subtitle: str | None = None,
+    backgroundColor: str | None = None,
+    enter_transition: str | None = None,
+    exit_transition: str | None = None,
     asset_id: str | None = None,
     layer_id: str | None = None,
-    project_id: str | None = None,
-    user_id: str | None = None,
-    branch_id: str | None = None,
+    _agent_context: dict | None = None,
 ) -> dict:
     """Add a new clip to the project timeline.
 
     For media clips (video/audio/image), provide asset_id - type and duration will be auto-detected.
     Use offset and duration to trim: e.g. offset=30, duration=20 uses seconds 30-50 of the source.
-    For text clips, provide clip_type='text' and text content.
+    For text clips, provide clip_type='text' and text content. Use template (text|title-card|lower-third|caption-style),
+    subtitle, and backgroundColor for text clip styling. Use enter_transition and exit_transition (JSON: {"type":"fade","duration":0.5})
+    for in/out effects. Types: fade, slide-left, slide-right, slide-up, slide-down, zoom, dip-to-black.
 
     Args:
         clip_type: Type of clip - "video", "audio", "image", or "text". Optional for media clips if asset_id is provided.
@@ -193,20 +220,27 @@ def addClipToTimeline(
         offset: Start time in seconds within the source media (defaults to 0). Use with duration to trim to a segment.
         text: Text content for text clips
         name: Optional name for the clip
+        template: For text clips: text, title-card, lower-third, or caption-style
+        subtitle: For text clips with title-card or lower-third template
+        backgroundColor: For text clips with background (e.g. rgba(0,0,0,0.8))
+        enter_transition: Optional JSON {"type":"fade","duration":0.5} for in transition
+        exit_transition: Optional JSON {"type":"fade","duration":0.5} for out transition
         asset_id: Asset ID for media clips - used to get the media source URL
         layer_id: Optional specific layer ID to add to
-        project_id: Project ID (injected by agent)
-        user_id: User ID (injected by agent)
-        branch_id: Branch ID (injected by agent)
 
     Returns:
         Status dict with the created clip info or error message.
     """
+    context = _agent_context or {}
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
+    branch_id = context.get("branch_id")
+
     logger.info(
         "[ADD_CLIP] Called with: type=%s, start=%s, duration=%s, offset=%s, text=%s, name=%s, "
-        "asset_id=%s, layer_id=%s, project_id=%s, user_id=%s, branch_id=%s",
+        "template=%s, asset_id=%s, layer_id=%s, project_id=%s, user_id=%s, branch_id=%s",
         clip_type, start, duration, offset, text[:50] if text else None,
-        name, asset_id, layer_id, project_id, user_id, branch_id
+        name, template, asset_id, layer_id, project_id, user_id, branch_id
     )
 
     if not user_id or not project_id:
@@ -421,6 +455,23 @@ def addClipToTimeline(
         
         if text:
             clip["text"] = text
+
+        # Add text template fields for text clips
+        if resolved_type == "text":
+            if template and template in ("text", "title-card", "lower-third", "caption-style"):
+                clip["template"] = template
+            if subtitle is not None:
+                clip["subtitle"] = subtitle
+            if backgroundColor is not None:
+                clip["backgroundColor"] = backgroundColor
+
+        # Add enter/exit transitions
+        enter_t = _parse_transition(enter_transition)
+        if enter_t:
+            clip["enterTransition"] = enter_t
+        exit_t = _parse_transition(exit_transition)
+        if exit_t:
+            clip["exitTransition"] = exit_t
 
         # Add type-specific defaults
         if resolved_type == "video":

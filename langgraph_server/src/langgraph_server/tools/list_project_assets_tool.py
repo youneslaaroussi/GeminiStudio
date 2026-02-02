@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any, Dict, Optional
 
 import httpx
 from langchain_core.tools import tool
@@ -15,8 +16,7 @@ logger = logging.getLogger(__name__)
 
 @tool
 def listProjectAssets(
-    project_id: str | None = None,
-    user_id: str | None = None,
+    _agent_context: Optional[Dict[str, Any]] = None,
 ) -> dict:
     """Return the uploaded assets in the project's media library.
 
@@ -32,6 +32,9 @@ def listProjectAssets(
     The response includes signedUrl for each asset which you should include in your
     response if the user wants to see the media.
     """
+    context = _agent_context or {}
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
 
     if not user_id or not project_id:
         return {

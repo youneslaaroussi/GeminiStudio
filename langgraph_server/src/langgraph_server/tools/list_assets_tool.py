@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, Dict, Optional
+
 from langchain_core.tools import tool
 
 from ..config import get_settings
@@ -8,11 +10,13 @@ from ..firebase import fetch_user_projects
 
 @tool
 def listAssets(
-    project_id: str | None = None,
-    user_id: str | None = None,
-    branch_id: str | None = None,
+    _agent_context: Optional[Dict[str, Any]] = None,
 ) -> dict:
     """Return the media assets currently in the user's project timeline. Uses the session's branch when provided."""
+    context = _agent_context or {}
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
+    branch_id = context.get("branch_id")
 
     if not user_id:
         # Gracefully handle - agent should use project context instead
@@ -61,7 +65,6 @@ def listAssets(
                 "name": clip.get("name", "Untitled"),
                 "type": clip.get("type", "unknown"),
                 "duration": clip.get("duration", 0),
-                "src": clip.get("src", ""),
                 "layer": layer.get("name", "Unknown Layer"),
             })
 

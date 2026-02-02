@@ -37,9 +37,7 @@ def _find_clip_and_layer(project_data: dict, clip_id: str) -> tuple[dict | None,
 def removeTransition(
     from_clip_id: str,
     to_clip_id: str,
-    project_id: str | None = None,
-    user_id: str | None = None,
-    branch_id: str | None = None,
+    _agent_context: dict | None = None,
 ) -> dict:
     """Remove an existing transition between two clips.
 
@@ -49,13 +47,15 @@ def removeTransition(
     Args:
         from_clip_id: ID of the first (left) clip in the transition.
         to_clip_id: ID of the second (right) clip in the transition.
-        project_id: Project ID (injected by agent).
-        user_id: User ID (injected by agent).
-        branch_id: Branch ID (injected by agent).
 
     Returns:
         Status dict with removed transition info or error message.
     """
+    context = _agent_context or {}
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
+    branch_id = context.get("branch_id")
+
     if not user_id or not project_id:
         return {
             "status": "error",

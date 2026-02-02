@@ -74,13 +74,13 @@ export function SettingsPanel() {
               <CollapsibleSection
                 title={selectedClip.name}
                 header={
-                  <div className="flex items-center gap-2">
-                    <div className="size-7 rounded-md bg-muted flex items-center justify-center">
+                  <div className="flex items-center gap-2 text-left">
+                    <div className="size-7 shrink-0 rounded-md bg-muted flex items-center justify-center">
                       {CLIP_ICONS[selectedClip.type]}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{selectedClip.name}</p>
-                      <p className="text-xs text-muted-foreground capitalize">
+                    <div className="flex-1 min-w-0 text-left overflow-hidden">
+                      <p className="text-sm font-medium truncate text-left">{selectedClip.name}</p>
+                      <p className="text-xs text-muted-foreground capitalize text-left">
                         {selectedClip.type} Clip
                       </p>
                     </div>

@@ -4,14 +4,18 @@ import type { Project } from "@/app/types/timeline";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 
 const DURATION_OPTIONS = ["10", "20", "30", "60"] as const;
+const DURATION_NUMBERS = [10, 20, 30, 60] as const;
 
 const generateMusicSchema = z.object({
-  projectId: z.string().min(1, "Project ID is required"),
   prompt: z.string().min(5, "Prompt must be at least 5 characters"),
+  // Accept string enum from UI or number from agent (e.g. durationSeconds: 30)
   durationSeconds: z
-    .enum(DURATION_OPTIONS)
+    .union([
+      z.enum(DURATION_OPTIONS),
+      z.number().refine((n) => (DURATION_NUMBERS as readonly number[]).includes(n)),
+    ])
     .default("30")
-    .transform(Number) as unknown as z.ZodNumber,
+    .transform((v) => (typeof v === "string" ? Number(v) : v)),
 });
 
 export const generateMusicTool: ToolDefinition<typeof generateMusicSchema, Project> = {
@@ -22,14 +26,6 @@ export const generateMusicTool: ToolDefinition<typeof generateMusicSchema, Proje
   runLocation: "client",
   inputSchema: generateMusicSchema,
   fields: [
-    {
-      name: "projectId",
-      label: "Project ID",
-      type: "text",
-      placeholder: "project_abc123...",
-      description: "The project to associate this music with.",
-      required: true,
-    },
     {
       name: "prompt",
       label: "Music Description",
@@ -54,7 +50,7 @@ export const generateMusicTool: ToolDefinition<typeof generateMusicSchema, Proje
       description: "Length of the generated music.",
     },
   ],
-  async run(input) {
+  async run(input, context) {
     try {
       if (typeof window === "undefined") {
         return {
@@ -63,10 +59,18 @@ export const generateMusicTool: ToolDefinition<typeof generateMusicSchema, Proje
         };
       }
 
+      const projectId = context.projectId;
+      if (!projectId) {
+        return {
+          status: "error" as const,
+          error: "No project open. Open a project in the editor first.",
+        };
+      }
+
       const payload = {
         prompt: input.prompt.trim(),
         durationSeconds: input.durationSeconds,
-        projectId: input.projectId,
+        projectId,
       };
 
       const authHeaders = await getAuthHeaders();

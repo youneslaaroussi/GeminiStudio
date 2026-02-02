@@ -27,7 +27,6 @@ const VOICE_ID_MAP: Record<string, string> = {
 };
 
 const generateTtsSchema = z.object({
-  projectId: z.string().min(1, "Project ID is required"),
   text: z.string().min(2, "Text must be at least 2 characters").max(5000, "Text must be under 5000 characters"),
   voice: z.enum(VOICE_OPTIONS).default("Kore"),
 });
@@ -40,14 +39,6 @@ export const generateTtsTool: ToolDefinition<typeof generateTtsSchema, Project> 
   runLocation: "client",
   inputSchema: generateTtsSchema,
   fields: [
-    {
-      name: "projectId",
-      label: "Project ID",
-      type: "text",
-      placeholder: "project_abc123...",
-      description: "The project to associate this audio with.",
-      required: true,
-    },
     {
       name: "text",
       label: "Text to Speak",
@@ -74,12 +65,20 @@ export const generateTtsTool: ToolDefinition<typeof generateTtsSchema, Project> 
       description: "Choose the voice for the speech.",
     },
   ],
-  async run(input) {
+  async run(input, context) {
     try {
       if (typeof window === "undefined") {
         return {
           status: "error" as const,
           error: "Speech generation must be run from the client side.",
+        };
+      }
+
+      const projectId = context.projectId;
+      if (!projectId) {
+        return {
+          status: "error" as const,
+          error: "No project open. Open a project in the editor first.",
         };
       }
 
@@ -90,7 +89,7 @@ export const generateTtsTool: ToolDefinition<typeof generateTtsSchema, Project> 
         voiceName,
         languageCode: "en-US",
         audioEncoding: "mp3" as const,
-        projectId: input.projectId,
+        projectId,
       };
 
       const authHeaders = await getAuthHeaders();

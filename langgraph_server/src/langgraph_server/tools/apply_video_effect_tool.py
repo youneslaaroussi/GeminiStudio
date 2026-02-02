@@ -26,8 +26,7 @@ def applyVideoEffectToClip(
     mask_type: str = "binary",
     video_fps: int = 25,
     output_video: bool = True,
-    user_id: str | None = None,
-    project_id: str | None = None,
+    _agent_context: dict | None = None,
 ) -> dict[str, Any]:
     """Apply a video effect (e.g. segmentation) to a clip/asset.
 
@@ -46,9 +45,11 @@ def applyVideoEffectToClip(
         mask_type: 'binary' or 'highlighted'. Default 'binary'.
         video_fps: Output FPS. Default 25.
         output_video: Whether to return video output. Default True.
-        user_id: Injected from agent context.
-        project_id: Injected from agent context.
     """
+    context = _agent_context or {}
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
+
     if not user_id or not project_id:
         return {
             "status": "error",

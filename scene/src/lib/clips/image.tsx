@@ -2,6 +2,7 @@ import { Img, Node } from '@motion-canvas/2d';
 import { createRef, waitFor, type ThreadGenerator } from '@motion-canvas/core';
 import type { ImageClip, ImageEntry } from '../types';
 import { getEffectShaderConfig, getColorGradingShaderConfig } from '../effectShaders';
+import { applyEnterTransition, applyExitTransition, getTransitionAdjustedTiming } from './transitions';
 
 interface CreateImageElementsOptions {
   clips: ImageClip[];
@@ -59,23 +60,36 @@ export function createImageElements({ clips, view }: CreateImageElementsOptions)
 
 interface PlayImageOptions {
   entry: ImageEntry;
+  sceneWidth: number;
+  sceneHeight: number;
 }
 
-export function* playImage({ entry }: PlayImageOptions): ThreadGenerator {
+export function* playImage({ entry, sceneWidth, sceneHeight }: PlayImageOptions): ThreadGenerator {
   const { clip, ref } = entry;
-  const speed = clip.speed ?? 1;
-  const safeSpeed = Math.max(speed, 0.0001);
-  const startAt = Math.max(clip.start, 0);
-  const timelineDuration = clip.duration / safeSpeed;
 
-  if (startAt > 0) {
-    yield* waitFor(startAt);
+  const timing = getTransitionAdjustedTiming(
+    clip.start,
+    clip.duration,
+    clip.speed ?? 1,
+    clip.enterTransition,
+    clip.exitTransition
+  );
+
+  if (timing.startAt > 0) {
+    yield* waitFor(timing.startAt);
   }
 
   const image = ref();
   if (!image) return;
 
-  image.opacity(1);
-  yield* waitFor(timelineDuration);
-  image.opacity(0);
+  // Enter transition
+  yield* applyEnterTransition(image, clip.enterTransition, 1, sceneWidth, sceneHeight);
+
+  // Main duration
+  if (timing.mainDuration > 0) {
+    yield* waitFor(timing.mainDuration);
+  }
+
+  // Exit transition
+  yield* applyExitTransition(image, clip.exitTransition, sceneWidth, sceneHeight);
 }

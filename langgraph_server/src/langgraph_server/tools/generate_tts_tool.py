@@ -260,8 +260,7 @@ def _generate_signed_url(
 def generateSpeech(
     text: str,
     voice: str = "Kore",
-    project_id: str | None = None,
-    user_id: str | None = None,
+    _agent_context: dict | None = None,
 ) -> dict:
     """Generate natural-sounding speech from text using Google's TTS model.
 
@@ -286,14 +285,16 @@ def generateSpeech(
         text: The text to convert to speech. Can include punctuation for natural pauses.
             Supports up to 5000 characters.
         voice: Voice to use - Puck, Charon, Kore, Fenrir, Aoede, Leda, Orus, or Zephyr.
-        project_id: Project ID (injected by agent).
-        user_id: User ID (injected by agent).
 
     Returns:
         Dict with audioUrl that MUST be included in your response to the user.
     """
     from google import genai
     from google.genai import types
+
+    context = _agent_context or {}
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
 
     settings = get_settings()
 
