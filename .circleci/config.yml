@@ -63,18 +63,16 @@ jobs:
                 --exclude='*.pyc' \
                 -czf /tmp/repo.tar.gz .
             gcloud compute scp /tmp/repo.tar.gz \
-              $INSTANCE_NAME:/tmp/repo.tar.gz \
+              runner@$INSTANCE_NAME:/tmp/repo.tar.gz \
               --zone=$ZONE \
-              --project=$PROJECT_ID \
-              --ssh-flag="-l runner"
+              --project=$PROJECT_ID
 
       - run:
           name: Deploy to VM
           command: |
-            gcloud compute ssh $INSTANCE_NAME \
+            gcloud compute ssh runner@$INSTANCE_NAME \
               --zone=$ZONE \
               --project=$PROJECT_ID \
-              --ssh-flag="-l runner" \
               --command='set -e
                 sudo mkdir -p /opt/gemini-studio
                 sudo chown -R $(whoami):$(whoami) /opt/gemini-studio
