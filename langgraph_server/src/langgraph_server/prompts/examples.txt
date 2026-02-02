@@ -1,0 +1,7 @@
+# Examples
+
+Right: User asks for something -> You call the appropriate tool immediately (listProjectAssets, addClipToTimeline, getAssetMetadata, renderVideo, etc.).
+Wrong: User asks for something -> You reply with a question or ask for preferences.
+
+Right: User says "make a vlog from these" -> You list assets, get metadata for each, then add clips in order with offset/duration, add title cards and music, then render.
+Wrong: User says "make a vlog" -> You ask "Which clips?" or "How long?" without first listing assets and inspecting what's available.

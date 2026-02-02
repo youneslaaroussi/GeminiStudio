@@ -170,6 +170,7 @@ def addClipToTimeline(
     clip_type: str | None = None,
     start: float = 0,
     duration: float | None = None,
+    offset: float = 0,
     text: str | None = None,
     name: str | None = None,
     asset_id: str | None = None,
@@ -181,12 +182,14 @@ def addClipToTimeline(
     """Add a new clip to the project timeline.
 
     For media clips (video/audio/image), provide asset_id - type and duration will be auto-detected.
+    Use offset and duration to trim: e.g. offset=30, duration=20 uses seconds 30-50 of the source.
     For text clips, provide clip_type='text' and text content.
 
     Args:
         clip_type: Type of clip - "video", "audio", "image", or "text". Optional for media clips if asset_id is provided.
         start: Start time in seconds on the timeline (defaults to 0)
         duration: Duration of the clip in seconds. Optional - defaults to asset duration or 5s for images.
+        offset: Start time in seconds within the source media (defaults to 0). Use with duration to trim to a segment.
         text: Text content for text clips
         name: Optional name for the clip
         asset_id: Asset ID for media clips - used to get the media source URL
@@ -199,9 +202,9 @@ def addClipToTimeline(
         Status dict with the created clip info or error message.
     """
     logger.info(
-        "[ADD_CLIP] Called with: type=%s, start=%s, duration=%s, text=%s, name=%s, "
+        "[ADD_CLIP] Called with: type=%s, start=%s, duration=%s, offset=%s, text=%s, name=%s, "
         "asset_id=%s, layer_id=%s, project_id=%s, user_id=%s, branch_id=%s",
-        clip_type, start, duration, text[:50] if text else None,
+        clip_type, start, duration, offset, text[:50] if text else None,
         name, asset_id, layer_id, project_id, user_id, branch_id
     )
 
@@ -220,6 +223,7 @@ def addClipToTimeline(
     resolved_type = clip_type
     resolved_duration = duration
     asset_filename = None
+    asset_duration = None
 
     if asset_id:
         # Fetch asset metadata from Firestore
@@ -248,11 +252,20 @@ def addClipToTimeline(
             if not resolved_duration and asset_data.get("duration"):
                 resolved_duration = asset_data["duration"]
                 logger.info("[ADD_CLIP] Using asset duration: %s", resolved_duration)
-            
+
+            asset_duration = asset_data.get("duration")
+
             # Get filename for proxy URL
             asset_filename = asset_data.get("name") or asset_data.get("fileName")
         else:
             logger.warning("[ADD_CLIP] Asset not found: %s", asset_id)
+
+    # Reject explicit zero or negative duration before applying defaults
+    if duration is not None and duration <= 0:
+        return {
+            "status": "error",
+            "message": "Duration must be greater than 0.",
+        }
 
     # Default duration for images
     if not resolved_duration:
@@ -289,6 +302,19 @@ def addClipToTimeline(
         return {
             "status": "error",
             "message": "Start must be >= 0 and duration must be > 0.",
+        }
+
+    # offset only applies to video/audio (trim to segment); images use 0
+    source_offset = offset if resolved_type in ("video", "audio") else 0
+    if source_offset < 0:
+        return {
+            "status": "error",
+            "message": "Offset must be >= 0 (start time within source media in seconds).",
+        }
+    if asset_duration is not None and source_offset + resolved_duration > asset_duration:
+        return {
+            "status": "error",
+            "message": f"Segment (offset={source_offset}s, duration={resolved_duration}s) extends past source duration ({asset_duration}s).",
         }
 
     # Get settings and db client (may already be initialized above)
@@ -374,7 +400,7 @@ def addClipToTimeline(
             "name": name or f"New {resolved_type.capitalize()} Clip",
             "start": start,
             "duration": resolved_duration,
-            "offset": 0,
+            "offset": source_offset,
             "speed": 1,
             "position": {"x": 0, "y": 0},
             "scale": {"x": 1, "y": 1},
@@ -429,13 +455,15 @@ def addClipToTimeline(
 
         result = {
             "status": "success",
-            "message": f"Added {resolved_type} clip '{clip['name']}' at {start}s for {resolved_duration}s.",
+            "message": f"Added {resolved_type} clip '{clip['name']}' at {start}s for {resolved_duration}s."
+            + (f" (source segment {source_offset}s–{source_offset + resolved_duration}s)" if source_offset else ""),
             "clip": {
                 "id": clip_id,
                 "type": resolved_type,
                 "name": clip["name"],
                 "start": start,
                 "duration": resolved_duration,
+                "offset": source_offset,
                 "layerId": layer.get("id"),
                 "layerName": layer.get("name"),
             },

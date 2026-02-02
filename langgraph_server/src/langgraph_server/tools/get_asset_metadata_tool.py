@@ -175,6 +175,19 @@ def _format_step_summary(step_id: str, metadata: dict) -> str:
 
     elif step_id == "shot-detection":
         shot_count = metadata.get("shotCount", 0)
+        shots = metadata.get("shots", [])
+        if shots:
+            # Show shot boundaries for narrative trimming (e.g. "Shots: 0.0-5.2s, 5.2-12.1s, ...")
+            max_shots = 15
+            parts = []
+            for s in shots[:max_shots]:
+                start = s.get("start", 0)
+                end = s.get("end", start)
+                parts.append(f"{start:.1f}-{end:.1f}s")
+            shot_ranges = ", ".join(parts)
+            if len(shots) > max_shots:
+                shot_ranges += f", ... (+{len(shots) - max_shots} more)"
+            return f"{shot_count} shot{'s' if shot_count != 1 else ''} detected. Shots: {shot_ranges}"
         return f"{shot_count} shot{'s' if shot_count != 1 else ''} detected"
 
     elif step_id == "label-detection":
@@ -190,6 +203,20 @@ def _format_step_summary(step_id: str, metadata: dict) -> str:
     elif step_id == "transcription":
         transcript = metadata.get("transcript", "")
         word_count = len(transcript.split()) if transcript else 0
+        segments = metadata.get("segments", [])
+        if segments:
+            # Show segment timestamps (start_sec + snippet) for narrative trimming
+            max_segments = 20
+            parts = []
+            for seg in segments[:max_segments]:
+                start_ms = seg.get("start", 0)
+                start_sec = start_ms / 1000.0 if isinstance(start_ms, (int, float)) else 0
+                speech = (seg.get("speech") or "")[:20].replace("'", "\\'")
+                parts.append(f"{start_sec:.1f}s '{speech}'")
+            seg_line = ", ".join(parts)
+            if len(segments) > max_segments:
+                seg_line += f", ... (+{len(segments) - max_segments} more)"
+            return f"{word_count} words transcribed. Segments (start_sec, text): {seg_line}"
         return f"{word_count} words transcribed"
 
     elif step_id == "metadata":

@@ -33,28 +33,8 @@ class Settings(BaseSettings):
     app_port: int = Field(default=8080, alias="APP_PORT")
     debug: bool = Field(default=False, alias="DEBUG")
 
-    # Optional default system prompt
-    system_prompt: str = Field(
-        default=(
-            "You are an autonomous task executor for Gemini Studio. You are NOT a chatbot. "
-            "ABSOLUTE RULES - VIOLATION IS FAILURE: "
-            "1. FORBIDDEN: Asking questions. FORBIDDEN: Asking for preferences. FORBIDDEN: Asking for confirmation. "
-            "2. When user says 'render' - IMMEDIATELY call renderVideo with defaults. No discussion. "
-            "3. Defaults: format='mp4', quality='web', include_audio=True. USE THESE. DO NOT ASK. "
-            "4. Call ONE tool per response. Wait for result. Continue until done. "
-            "5. Your ONLY output when executing a task should be a tool call. Not a question. "
-            "6. If a task is requested, your FIRST response MUST be a tool call, not text asking questions. "
-            "7. When applying a video effect (e.g. segmentation) to a clip: FIRST digest the clip (digestAsset or getAssetMetadata) so you know the video content and where to place tracking points (click_coordinates, click_frames); THEN call applyVideoEffectToClip with the appropriate params. "
-            "8. VIDEO ITERATION WORKFLOW: For complex edits, use preview renders to iterate. "
-            "   - Preview render: quality='low', fps=15, and optionally range_start/range_end to render only a segment. "
-            "   - After render completes, you receive an assetId. Call getAssetMetadata(assetId) to review the output. "
-            "   - Analyze the result and make timeline adjustments if needed, then re-render preview. "
-            "   - Once satisfied, do final render with quality='studio' for production quality. "
-            "EXAMPLE - User: 'render this video' -> You: [call renderVideo tool immediately] "
-            "WRONG - User: 'render this video' -> You: 'What format do you want?' <- THIS IS FORBIDDEN"
-        ),
-        alias="SYSTEM_PROMPT",
-    )
+    # System prompt: if set (e.g. SYSTEM_PROMPT env), used as-is; otherwise built from prompts/*.txt
+    system_prompt: str | None = Field(default=None, alias="SYSTEM_PROMPT")
 
     default_project_id: str | None = Field(default=None, alias="DEFAULT_PROJECT_ID")
     firebase_service_account_key: str | None = Field(

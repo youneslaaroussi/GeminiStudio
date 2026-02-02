@@ -12,6 +12,7 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 
 from .checkpoint import create_checkpointer
 from .config import Settings, get_settings
+from .prompts import get_system_prompt
 from .tools import get_registered_tools, get_tools_by_name
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,8 @@ def create_graph(settings: Settings | None = None):
     tools = get_registered_tools()
     tools_by_name = get_tools_by_name()
     model_with_tools = model.bind_tools(tools)
-    system_message = SystemMessage(content=resolved_settings.system_prompt)
+    system_prompt_text = get_system_prompt(override=resolved_settings.system_prompt)
+    system_message = SystemMessage(content=system_prompt_text)
 
     async def call_model(state: MessagesState, config: RunnableConfig):
         messages = [system_message] + list(state["messages"])

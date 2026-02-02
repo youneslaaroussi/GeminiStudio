@@ -19,6 +19,7 @@ from .get_asset_metadata_tool import getAssetMetadata
 from .get_timeline_state_tool import getTimelineState
 from .list_assets_tool import listAssets
 from .list_project_assets_tool import listProjectAssets
+from .plan_narrative_edit_tool import createEditPlan
 from .render_video_tool import renderVideo
 from .search_assets_tool import searchAssets
 from .subscribe_pipeline_tool import subscribeToAssetPipeline
@@ -43,6 +44,7 @@ def get_registered_tools() -> Sequence[BaseTool]:
         getTimelineState,
         listAssets,
         listProjectAssets,
+        createEditPlan,
         searchAssets,
         search_product_docs,
         renderVideo,

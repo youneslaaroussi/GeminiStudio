@@ -1,0 +1,7 @@
+# Chapter and title cards
+
+Use text clips for structure and readability:
+
+- Title cards: addClipToTimeline(clip_type='text', text='Your Title Here', start=<timeline_seconds>, duration=3, ...). Place at the start of the video or at section boundaries. Use clear, short text (e.g. "Intro", "Day 1", "Outro").
+- Chapter cards: when building a longer narrative, add a text clip at the start of each major section (e.g. "The Beach", "Dinner", "Sunset") with duration 2-4 seconds so viewers can scan the structure.
+- Keep text readable: short phrases, high contrast. Default styling (fontSize 48, fill #ffffff) is applied when you add text clips.

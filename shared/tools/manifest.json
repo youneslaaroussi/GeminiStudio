@@ -121,6 +121,77 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
     },
+    "createEditPlan": {
+      "name": "createEditPlan",
+      "label": "Create Edit Plan",
+      "description": "Create a structured edit plan for a narrative/vlog from the given assets. Use when the user wants a meaningful video (vlog, story, highlight reel) from raw clips. Call listProjectAssets first to get asset_ids, then createEditPlan(intent, asset_ids). Execute the returned plan with addClipToTimeline(asset_id, offset, duration, start=timeline_start) for each segment; if the plan includes voiceover_script, use generateSpeech then add the clip.",
+      "runLocation": "server",
+      "implementations": {
+        "app": false,
+        "langgraph": true,
+        "langgraphName": "createEditPlan"
+      },
+      "fields": [
+        {
+          "name": "intent",
+          "label": "Intent",
+          "type": "text",
+          "placeholder": "e.g. 2-min vlog, highlight reel, tutorial",
+          "description": "User intent for the edit (e.g. '2-min vlog', 'highlight reel', 'tutorial').",
+          "required": true
+        },
+        {
+          "name": "asset_ids",
+          "label": "Asset IDs",
+          "type": "json",
+          "placeholder": "[\"asset_abc\", \"asset_def\"]",
+          "description": "List of asset IDs to use (from listProjectAssets).",
+          "required": true
+        },
+        {
+          "name": "target_duration_seconds",
+          "label": "Target Duration (seconds)",
+          "type": "number",
+          "placeholder": "120",
+          "description": "Optional target total duration in seconds."
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/createEditPlanInput",
+        "definitions": {
+          "createEditPlanInput": {
+            "type": "object",
+            "properties": {
+              "intent": {
+                "type": "string",
+                "minLength": 1,
+                "description": "User intent for the edit (e.g. '2-min vlog', 'highlight reel')"
+              },
+              "asset_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "description": "List of asset IDs (from listProjectAssets)"
+              },
+              "target_duration_seconds": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Optional target total duration in seconds"
+              }
+            },
+            "required": [
+              "intent",
+              "asset_ids"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
     "generateMusic": {
       "name": "generateMusic",
       "label": "Generate Music (Lyria)",
@@ -321,7 +392,7 @@
     "getAssetMetadata": {
       "name": "getAssetMetadata",
       "label": "Get Asset Metadata",
-      "description": "Get detailed metadata for an asset including face detection, shot detection, labels, and transcription.",
+      "description": "Get detailed metadata for an asset including face detection, shot detection (with shot boundaries in seconds), labels, and transcription (with segment timestamps and text for narrative trimming).",
       "runLocation": "server",
       "implementations": {
         "app": false,

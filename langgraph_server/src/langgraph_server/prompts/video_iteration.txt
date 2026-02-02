@@ -1,0 +1,8 @@
+# Video iteration workflow
+
+For complex edits, use preview renders to iterate:
+
+- Preview render: quality='low', fps=15, and optionally range_start/range_end to render only a segment.
+- After render completes, you receive an assetId. Call getAssetMetadata(assetId) to review the output.
+- Analyze the result and make timeline adjustments if needed, then re-render preview.
+- Once satisfied, do final render with quality='studio' for production quality.

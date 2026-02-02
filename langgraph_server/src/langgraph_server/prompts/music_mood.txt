@@ -1,0 +1,7 @@
+# Music mood from narrative
+
+When adding background music with generateMusic, choose mood from the story and intent:
+
+- Match the narrative: e.g. "upbeat travel" for a vlog intro, "calm" or "reflective" for an outro, "energetic" for action or highlights, "ambient" for B-roll or transitions.
+- Use the prompt parameter to describe genre and mood: e.g. "Upbeat indie pop, travel vlog, 90 BPM" or "Calm acoustic, reflective outro, slow".
+- Avoid generic "background music"; be specific so the track fits the edit (e.g. "Upbeat summer vibes for beach montage" vs "Dark ambient for night scene").

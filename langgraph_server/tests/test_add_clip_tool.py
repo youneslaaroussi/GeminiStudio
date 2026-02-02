@@ -108,20 +108,19 @@ class TestAddClipToTimeline:
         assert result["status"] == "error"
         assert "Invalid clip_type" in result["message"]
 
-    def test_requires_src_for_media_clips(self):
-        """Should require src for video/audio/image clips."""
+    def test_requires_asset_id_for_media_clips(self):
+        """Should require asset_id for video/audio/image clips."""
         for clip_type in ["video", "audio", "image"]:
             result = addClipToTimeline.invoke({
                 "clip_type": clip_type,
                 "start": 0,
                 "duration": 5,
-                "src": None,
                 "user_id": "user-123",
                 "project_id": "proj-123",
             })
             
             assert result["status"] == "error"
-            assert "src" in result["message"].lower()
+            assert "asset_id" in result["message"].lower()
 
     def test_requires_text_for_text_clips(self):
         """Should require text content for text clips."""
@@ -152,7 +151,7 @@ class TestAddClipToTimeline:
         assert "start" in result["message"].lower()
 
     def test_validates_duration(self):
-        """Should reject zero or negative duration."""
+        """Should reject zero or negative duration when explicitly provided."""
         result = addClipToTimeline.invoke({
             "clip_type": "text",
             "start": 0,
@@ -182,39 +181,58 @@ class TestAddClipToTimeline:
         mock_settings,
         sample_project_data,
     ):
-        """Should successfully add a video clip."""
+        """Should successfully add a video clip (with asset_id and optional offset)."""
         mock_get_settings.return_value = mock_settings
-        
-        # Setup Firestore mock
-        mock_db = MagicMock()
+
+        # Firestore: different .collection() returns for "assets" vs "branches"
+        mock_asset_doc = MagicMock()
+        mock_asset_doc.exists = True
+        mock_asset_doc.to_dict.return_value = {
+            "type": "video",
+            "duration": 5,
+            "name": "new_video.mp4",
+        }
         mock_branch_doc = MagicMock()
         mock_branch_doc.exists = True
         mock_branch_doc.to_dict.return_value = {"automergeState": "base64_state_here"}
-        mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = mock_branch_doc
+
+        mock_assets_coll = MagicMock()
+        mock_assets_coll.document.return_value.get.return_value = mock_asset_doc
+        mock_branches_coll = MagicMock()
+        mock_branches_coll.document.return_value.get.return_value = mock_branch_doc
+
+        mock_projects_doc = MagicMock()
+        mock_projects_doc.collection.side_effect = lambda name: (
+            mock_assets_coll if name == "assets" else mock_branches_coll if name == "branches" else MagicMock()
+        )
+
+        mock_db = MagicMock()
+        mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_projects_doc
         mock_get_firestore.return_value = mock_db
-        
-        # Setup Automerge mocks
+
+        # Automerge mocks
         mock_doc = MagicMock()
         mock_load_doc.return_value = mock_doc
         mock_get_data.return_value = sample_project_data
         mock_save_doc.return_value = "new_base64_state"
-        
+
         result = addClipToTimeline.invoke({
             "clip_type": "video",
             "start": 10,
             "duration": 5,
-            "src": "https://example.com/new_video.mp4",
+            "asset_id": "asset-123",
             "name": "New Video Clip",
             "user_id": "user-123",
             "project_id": "proj-123",
             "branch_id": "main",
         })
-        
+
         assert result["status"] == "success"
         assert "clip" in result
         assert result["clip"]["type"] == "video"
         assert result["clip"]["start"] == 10
         assert result["clip"]["duration"] == 5
+        assert result["clip"]["offset"] == 0
 
     @patch("langgraph_server.tools.add_clip_tool.get_settings")
     @patch("langgraph_server.tools.add_clip_tool.get_firestore_client")
@@ -299,16 +317,24 @@ class TestAddClipToTimeline:
     @patch("langgraph_server.tools.add_clip_tool.get_settings")
     @patch("langgraph_server.tools.add_clip_tool.get_firestore_client")
     def test_handles_missing_automerge_state(self, mock_get_firestore, mock_get_settings, mock_settings):
-        """Should handle missing Automerge state."""
+        """Should handle missing Automerge state on non-main branch."""
         mock_get_settings.return_value = mock_settings
-        
-        mock_db = MagicMock()
+
         mock_branch_doc = MagicMock()
         mock_branch_doc.exists = True
         mock_branch_doc.to_dict.return_value = {}  # No automergeState
-        mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = mock_branch_doc
+
+        mock_branches_coll = MagicMock()
+        mock_branches_coll.document.return_value.get.return_value = mock_branch_doc
+        mock_projects_doc = MagicMock()
+        mock_projects_doc.collection.side_effect = lambda name: (
+            mock_branches_coll if name == "branches" else MagicMock()
+        )
+
+        mock_db = MagicMock()
+        mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_projects_doc
         mock_get_firestore.return_value = mock_db
-        
+
         result = addClipToTimeline.invoke({
             "clip_type": "text",
             "start": 0,
@@ -316,8 +342,9 @@ class TestAddClipToTimeline:
             "text": "Hello",
             "user_id": "user-123",
             "project_id": "proj-123",
+            "branch_id": "other",  # non-main so we don't call ensure_main_branch_exists
         })
-        
+
         assert result["status"] == "error"
         assert "no timeline data" in result["message"].lower()
 

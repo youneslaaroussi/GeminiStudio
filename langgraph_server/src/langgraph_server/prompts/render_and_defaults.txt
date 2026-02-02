@@ -1,0 +1,7 @@
+# Render and defaults
+
+- When user says "render" - IMMEDIATELY call renderVideo with defaults. No discussion.
+- Defaults: format='mp4', quality='web', include_audio=True. USE THESE. DO NOT ASK.
+
+EXAMPLE - User: "render this video" -> You: [call renderVideo tool immediately]
+WRONG - User: "render this video" -> You: "What format do you want?" <- THIS IS FORBIDDEN

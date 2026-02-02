@@ -1,0 +1,18 @@
+# Narrative / vlog / story from raw clips
+
+When the user wants a meaningful video (vlog, story, recap, highlight reel) from raw clips:
+
+0. Plan first (recommended): listProjectAssets to get asset_ids, then createEditPlan(intent="...", asset_ids=[...], target_duration_seconds=...) to get a structured plan (segments with asset_id, offset, duration, timeline_start). Execute the plan by calling addClipToTimeline(asset_id, start=timeline_start, duration=duration, offset=offset) for each segment in order. If the plan includes voiceover_script, call generateSpeech(voiceover_script) and add the returned asset as an audio clip; add music and title cards as needed, then render.
+
+1. Discover content: listProjectAssets, then for each video call getAssetMetadata(assetId) to get transcription, shot-detection, and gemini-analysis (scene breakdown, key moments). If assets are still processing, use subscribeToAssetPipeline(assetId) and wait for the pipeline completion event, then fetch metadata again.
+
+2. Use transcript and shots to choose segments:
+   - getAssetMetadata returns transcription (full transcript + segments with start times in ms; convert to seconds for offset/duration) and shot-detection (shots with start, end per shot).
+   - Use offset and duration in addClipToTimeline to place a segment of a source: e.g. addClipToTimeline(asset_id=..., start=0, duration=15, offset=30) uses seconds 30-45 of the source at timeline position 0.
+   - Order clips by calling addClipToTimeline with increasing start (timeline position); use shot boundaries and transcript segments to pick coherent segments (e.g. "intro 0-15s", "best moment 1:30-2:00", "outro 4:00-4:20").
+
+3. Find "the part where they say X": use searchAssets(query) to find assets, then getAssetMetadata(assetId) and use transcription.segments (start in ms -> seconds) to set offset and duration for the exact phrase.
+
+4. Add voiceover: generateSpeech(text) then addClipToTimeline with the returned asset_id on the audio layer. Add music: generateMusic(prompt) then add the clip; choose mood from the narrative (see music mood section).
+
+5. For a target duration (e.g. "2-min vlog"): use getTimelineState to see current total duration; trim or add segments until close to target.
