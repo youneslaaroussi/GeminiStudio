@@ -3,6 +3,9 @@
 This module polls pending Veo operations and dispatches completion events
 to the agent conversation, similar to how RenderEventSubscriber handles
 render completion events.
+
+Jobs are persisted to Firestore for shared state between Python (LLM tool)
+and Node.js (frontend polling via /api/veo).
 """
 
 from __future__ import annotations
@@ -20,13 +23,72 @@ from google.cloud import storage
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from .config import Settings
+from .firebase import get_firestore_client
 
 logger = logging.getLogger(__name__)
 
-# In-memory store for pending operations
-# In production, consider using Redis or Firestore for persistence
+# Firestore collection name (must match Node.js veo-store.ts)
+VEO_JOBS_COLLECTION = "veoJobs"
+
+# In-memory store for pending operations (for polling loop)
 _pending_operations: Dict[str, Dict[str, Any]] = {}
 _lock = asyncio.Lock()
+
+
+def _save_veo_job_to_firestore(
+    job_id: str,
+    operation_name: str,
+    metadata: Dict[str, Any],
+    settings: Settings,
+) -> None:
+    """Save a new Veo job to Firestore."""
+    agent_meta = metadata.get("agent", {})
+    extra_meta = metadata.get("extra", {})
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Build params to match Node.js VeoJobParams structure
+    params = {
+        "prompt": extra_meta.get("prompt", ""),
+        "durationSeconds": extra_meta.get("durationSeconds", 8),
+        "aspectRatio": extra_meta.get("aspectRatio", "16:9"),
+        "resolution": extra_meta.get("resolution", "720p"),
+        "generateAudio": True,
+        "projectId": agent_meta.get("projectId"),
+        "userId": agent_meta.get("userId"),
+    }
+
+    job_doc = {
+        "id": job_id,
+        "status": "running",
+        "params": params,
+        "operationName": operation_name,
+        "createdAt": now,
+        "updatedAt": now,
+    }
+
+    try:
+        db = get_firestore_client(settings)
+        db.collection(VEO_JOBS_COLLECTION).document(job_id).set(job_doc)
+        logger.info("[VEO_EVENTS] Saved Veo job to Firestore: %s", job_id)
+    except Exception as e:
+        logger.exception("[VEO_EVENTS] Failed to save Veo job to Firestore: %s", e)
+
+
+def _update_veo_job_in_firestore(
+    job_id: str,
+    updates: Dict[str, Any],
+    settings: Settings,
+) -> None:
+    """Update a Veo job in Firestore."""
+    updates["updatedAt"] = datetime.now(timezone.utc).isoformat()
+
+    try:
+        db = get_firestore_client(settings)
+        db.collection(VEO_JOBS_COLLECTION).document(job_id).update(updates)
+        logger.info("[VEO_EVENTS] Updated Veo job in Firestore: %s -> %s", job_id, updates.get("status", "?"))
+    except Exception as e:
+        logger.exception("[VEO_EVENTS] Failed to update Veo job in Firestore: %s", e)
 
 
 def register_pending_operation(
@@ -35,12 +97,21 @@ def register_pending_operation(
     settings: Settings,
 ) -> None:
     """Register an operation to be polled for completion."""
+    # Extract job ID from metadata (requestId from the tool)
+    agent_meta = metadata.get("agent", {})
+    job_id = agent_meta.get("requestId", operation_name[:32])
+
+    # Save to Firestore for frontend visibility
+    _save_veo_job_to_firestore(job_id, operation_name, metadata, settings)
+
+    # Also keep in memory for polling loop
     _pending_operations[operation_name] = {
+        "job_id": job_id,
         "metadata": metadata,
         "registered_at": datetime.now(timezone.utc).isoformat(),
         "poll_count": 0,
     }
-    logger.info("[VEO_EVENTS] Registered pending operation: %s", operation_name)
+    logger.info("[VEO_EVENTS] Registered pending operation: %s (job_id=%s)", operation_name, job_id)
 
 
 def _get_gcs_credentials(settings: Settings):
@@ -275,10 +346,11 @@ class VeoEventPoller:
     ) -> None:
         """Handle a completed Veo operation."""
         from google import genai
-        
+
         metadata = op_data.get("metadata", {})
         agent_meta = metadata.get("agent", {})
         extra_meta = metadata.get("extra", {})
+        job_id = op_data.get("job_id")
         
         thread_id = agent_meta.get("threadId")
         if not thread_id:
@@ -289,30 +361,36 @@ class VeoEventPoller:
             # Get the generated video
             response = operation.response
             if not response or not response.generated_videos:
+                error_msg = "No video was generated"
+                if job_id:
+                    _update_veo_job_in_firestore(job_id, {"status": "error", "error": error_msg}, self._settings)
                 await self._dispatch_event(
                     thread_id=thread_id,
                     event_type="veo.failed",
                     agent_meta=agent_meta,
                     extra_meta=extra_meta,
-                    error="No video was generated",
+                    error=error_msg,
                 )
                 return
 
             generated_video = response.generated_videos[0]
             video = generated_video.video
-            
+
             # Download the video
             client = genai.Client(api_key=self._settings.google_api_key)
             client.files.download(file=video)
-            
+
             video_bytes = video.video_bytes
             if not video_bytes:
+                error_msg = "Failed to download generated video"
+                if job_id:
+                    _update_veo_job_in_firestore(job_id, {"status": "error", "error": error_msg}, self._settings)
                 await self._dispatch_event(
                     thread_id=thread_id,
                     event_type="veo.failed",
                     agent_meta=agent_meta,
                     extra_meta=extra_meta,
-                    error="Failed to download generated video",
+                    error=error_msg,
                 )
                 return
 
@@ -331,6 +409,15 @@ class VeoEventPoller:
                 # Prefer signedUrl for external clients (Telegram) - it's a full https:// URL
                 # Fall back to proxyUrl for web app (CORS-safe)
                 download_url = asset_data.get("signedUrl") or asset_data.get("proxyUrl")
+
+                # Update Firestore with completion status
+                if job_id:
+                    _update_veo_job_in_firestore(job_id, {
+                        "status": "completed",
+                        "resultAssetId": asset_data.get("assetId"),
+                        "resultAssetUrl": download_url,
+                    }, self._settings)
+
                 await self._dispatch_event(
                     thread_id=thread_id,
                     event_type="veo.completed",
@@ -344,10 +431,17 @@ class VeoEventPoller:
                 # Fallback to direct GCS upload
                 gcs_object_name = f"veo/{user_id}/{project_id}/{request_id}.mp4"
                 gcs_uri = _upload_video_to_gcs(video_bytes, gcs_object_name, self._settings)
-                
+
                 download_url = None
                 if gcs_uri:
                     download_url = _generate_signed_download_url(gcs_uri, self._settings)
+
+                # Update Firestore with completion status
+                if job_id:
+                    _update_veo_job_in_firestore(job_id, {
+                        "status": "completed",
+                        "resultAssetUrl": download_url,
+                    }, self._settings)
 
                 await self._dispatch_event(
                     thread_id=thread_id,
@@ -360,6 +454,12 @@ class VeoEventPoller:
 
         except Exception as exc:
             logger.exception("[VEO_EVENTS] Error handling completion: %s", exc)
+            # Update Firestore with error status
+            if job_id:
+                _update_veo_job_in_firestore(job_id, {
+                    "status": "error",
+                    "error": str(exc),
+                }, self._settings)
             await self._dispatch_event(
                 thread_id=thread_id,
                 event_type="veo.failed",
@@ -378,6 +478,12 @@ class VeoEventPoller:
         agent_meta = metadata.get("agent", {})
         extra_meta = metadata.get("extra", {})
         thread_id = agent_meta.get("threadId")
+        job_id = op_data.get("job_id")
+        error_msg = "Video generation timed out after 10 minutes"
+
+        # Update Firestore with error status
+        if job_id:
+            _update_veo_job_in_firestore(job_id, {"status": "error", "error": error_msg}, self._settings)
 
         if thread_id:
             await self._dispatch_event(
@@ -385,7 +491,7 @@ class VeoEventPoller:
                 event_type="veo.failed",
                 agent_meta=agent_meta,
                 extra_meta=extra_meta,
-                error="Video generation timed out after 10 minutes",
+                error=error_msg,
             )
 
     async def _handle_error(
@@ -399,6 +505,12 @@ class VeoEventPoller:
         agent_meta = metadata.get("agent", {})
         extra_meta = metadata.get("extra", {})
         thread_id = agent_meta.get("threadId")
+        job_id = op_data.get("job_id")
+        error_msg = f"Failed to check video generation status: {error}"
+
+        # Update Firestore with error status
+        if job_id:
+            _update_veo_job_in_firestore(job_id, {"status": "error", "error": error_msg}, self._settings)
 
         if thread_id:
             await self._dispatch_event(
@@ -406,7 +518,7 @@ class VeoEventPoller:
                 event_type="veo.failed",
                 agent_meta=agent_meta,
                 extra_meta=extra_meta,
-                error=f"Failed to check video generation status: {error}",
+                error=error_msg,
             )
 
     async def _dispatch_event(

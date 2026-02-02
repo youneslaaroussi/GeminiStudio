@@ -1,73 +1,57 @@
-import { promises as fs } from "fs";
-import path from "path";
+import { getAdminFirestore } from "@/app/lib/server/firebase-admin";
 import type { StoredVeoJob, VeoJob } from "@/app/types/veo";
 
-const DATA_DIR = path.join(process.cwd(), ".data");
-const STORE_PATH = path.join(DATA_DIR, "veo-jobs.json");
-
-async function ensureStore() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return typeof error === "object" && error !== null && "code" in error;
-}
+const COLLECTION_NAME = "veoJobs";
 
 export async function readVeoJobs(): Promise<StoredVeoJob[]> {
-  await ensureStore();
-  try {
-    const raw = await fs.readFile(STORE_PATH, "utf8");
-    return JSON.parse(raw) as StoredVeoJob[];
-  } catch (error) {
-    if (isNodeError(error) && error.code === "ENOENT") {
-      return [];
-    }
-    throw error;
-  }
+  const db = await getAdminFirestore();
+  const snapshot = await db.collection(COLLECTION_NAME).get();
+  return snapshot.docs.map((doc) => doc.data() as StoredVeoJob);
 }
 
-export async function writeVeoJobs(jobs: StoredVeoJob[]) {
-  await ensureStore();
-  await fs.writeFile(STORE_PATH, JSON.stringify(jobs, null, 2), "utf8");
-}
-
-export async function saveVeoJob(job: StoredVeoJob) {
-  const jobs = await readVeoJobs();
-  const next = jobs.filter((existing) => existing.id !== job.id);
-  next.push(job);
-  await writeVeoJobs(next);
+export async function saveVeoJob(job: StoredVeoJob): Promise<StoredVeoJob> {
+  const db = await getAdminFirestore();
+  await db.collection(COLLECTION_NAME).doc(job.id).set(job);
   return job;
 }
 
 export async function updateVeoJob(
   jobId: string,
   updates: Partial<StoredVeoJob>
-) {
-  const jobs = await readVeoJobs();
-  const index = jobs.findIndex((job) => job.id === jobId);
-  if (index === -1) return null;
+): Promise<StoredVeoJob | null> {
+  const db = await getAdminFirestore();
+  const docRef = db.collection(COLLECTION_NAME).doc(jobId);
+  const doc = await docRef.get();
+
+  if (!doc.exists) return null;
+
+  const current = doc.data() as StoredVeoJob;
   const updated: StoredVeoJob = {
-    ...jobs[index],
+    ...current,
     ...updates,
     updatedAt: updates.updatedAt ?? new Date().toISOString(),
   };
-  jobs[index] = updated;
-  await writeVeoJobs(jobs);
+
+  await docRef.set(updated);
   return updated;
 }
 
-export async function findVeoJobById(jobId: string) {
-  const jobs = await readVeoJobs();
-  return jobs.find((job) => job.id === jobId);
+export async function findVeoJobById(jobId: string): Promise<StoredVeoJob | undefined> {
+  const db = await getAdminFirestore();
+  const doc = await db.collection(COLLECTION_NAME).doc(jobId).get();
+  if (!doc.exists) return undefined;
+  return doc.data() as StoredVeoJob;
 }
 
-export async function findVeoJobsByProject(projectId: string) {
-  const jobs = await readVeoJobs();
-  return jobs
-    .filter((job) => job.params.projectId === projectId)
-    .sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+export async function findVeoJobsByProject(projectId: string): Promise<StoredVeoJob[]> {
+  const db = await getAdminFirestore();
+  const snapshot = await db
+    .collection(COLLECTION_NAME)
+    .where("params.projectId", "==", projectId)
+    .orderBy("createdAt", "desc")
+    .get();
+
+  return snapshot.docs.map((doc) => doc.data() as StoredVeoJob);
 }
 
 export function serializeVeoJob(job: StoredVeoJob): VeoJob {

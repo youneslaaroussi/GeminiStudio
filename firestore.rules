@@ -93,5 +93,11 @@ service cloud.firestore {
     match /messageFeedback/{feedbackId} {
       allow read, write: if false;
     }
+
+    // Veo jobs - server-side only (admin SDK), no direct client access
+    // Frontend accesses via /api/veo which uses admin SDK
+    match /veoJobs/{jobId} {
+      allow read, write: if false;
+    }
   }
 }
