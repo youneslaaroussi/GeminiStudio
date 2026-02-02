@@ -13007,19 +13007,14 @@ function createTitleCard(clip, view, settings2, sceneWidth, sceneHeight) {
   const effectShaders = getEffectShaderConfig(clip.effect);
   view.add(
     /* @__PURE__ */ jsx(
-      Node,
+      Rect,
       {
         ref: containerRef,
+        width: sceneWidth,
+        height: sceneHeight,
+        fill: backgroundColor,
         opacity: 0,
         children: [
-          /* @__PURE__ */ jsx(
-            Rect,
-            {
-              width: sceneWidth,
-              height: sceneHeight,
-              fill: backgroundColor
-            }
-          ),
           /* @__PURE__ */ jsx(
             Txt,
             {
@@ -13073,68 +13068,63 @@ function createLowerThird(clip, view, settings2, _sceneWidth, sceneHeight) {
   const yPosition = sceneHeight / 2 - 120;
   view.add(
     /* @__PURE__ */ jsx(
-      Node,
+      Rect,
       {
         ref: containerRef,
+        layout: true,
+        direction: "row",
+        alignItems: "stretch",
+        gap: 0,
         y: yPosition,
         opacity: 0,
-        children: /* @__PURE__ */ jsx(
-          Rect,
-          {
-            layout: true,
-            direction: "row",
-            alignItems: "stretch",
-            gap: 0,
-            shadowBlur: 30,
-            shadowColor: "rgba(0,0,0,0.6)",
-            children: [
-              /* @__PURE__ */ jsx(
-                Rect,
-                {
-                  width: 6,
-                  fill: "#3b82f6",
-                  radius: [4, 0, 0, 4]
-                }
-              ),
-              /* @__PURE__ */ jsx(
-                Rect,
-                {
-                  layout: true,
-                  direction: "column",
-                  alignItems: "start",
-                  padding: [16, 24],
-                  fill: backgroundColor,
-                  radius: [0, 8, 8, 0],
-                  children: [
-                    /* @__PURE__ */ jsx(
-                      Txt,
-                      {
-                        ref,
-                        text: clip.text,
-                        fontFamily: settings2.fontFamily,
-                        fontWeight: 600,
-                        fontSize,
-                        fill,
-                        shaders: effectShaders
-                      }
-                    ),
-                    clip.subtitle && /* @__PURE__ */ jsx(
-                      Txt,
-                      {
-                        text: clip.subtitle,
-                        fontFamily: settings2.fontFamily,
-                        fontWeight: 400,
-                        fontSize: fontSize * 0.65,
-                        fill: `${fill}99`,
-                        marginTop: 4
-                      }
-                    )
-                  ]
-                }
-              )
-            ]
-          }
-        )
+        shadowBlur: 30,
+        shadowColor: "rgba(0,0,0,0.6)",
+        children: [
+          /* @__PURE__ */ jsx(
+            Rect,
+            {
+              width: 6,
+              fill: "#3b82f6",
+              radius: [4, 0, 0, 4]
+            }
+          ),
+          /* @__PURE__ */ jsx(
+            Rect,
+            {
+              layout: true,
+              direction: "column",
+              alignItems: "start",
+              padding: [16, 24],
+              fill: backgroundColor,
+              radius: [0, 8, 8, 0],
+              children: [
+                /* @__PURE__ */ jsx(
+                  Txt,
+                  {
+                    ref,
+                    text: clip.text,
+                    fontFamily: settings2.fontFamily,
+                    fontWeight: 600,
+                    fontSize,
+                    fill,
+                    shaders: effectShaders
+                  }
+                ),
+                clip.subtitle && /* @__PURE__ */ jsx(
+                  Txt,
+                  {
+                    text: clip.subtitle,
+                    fontFamily: settings2.fontFamily,
+                    fontWeight: 400,
+                    fontSize: fontSize * 0.65,
+                    fill: `${fill}99`,
+                    marginTop: 4
+                  }
+                )
+              ]
+            }
+          )
+        ]
       },
       `lower-third-container-${clip.id}`
     )
@@ -13150,34 +13140,29 @@ function createCaptionStyle(clip, view, settings2) {
   const effectShaders = getEffectShaderConfig(clip.effect);
   view.add(
     /* @__PURE__ */ jsx(
-      Node,
+      Rect,
       {
         ref: containerRef,
+        layout: true,
+        padding: [12, 24],
+        fill: backgroundColor,
+        radius: 999,
         x: clip.position.x,
         y: clip.position.y,
         scale: clip.scale,
         opacity: 0,
+        shadowBlur: 20,
+        shadowColor: "rgba(0,0,0,0.5)",
         children: /* @__PURE__ */ jsx(
-          Rect,
+          Txt,
           {
-            layout: true,
-            padding: [12, 24],
-            fill: backgroundColor,
-            radius: 999,
-            shadowBlur: 20,
-            shadowColor: "rgba(0,0,0,0.5)",
-            children: /* @__PURE__ */ jsx(
-              Txt,
-              {
-                ref,
-                text: clip.text,
-                fontFamily: settings2.fontFamily,
-                fontWeight: settings2.fontWeight,
-                fontSize,
-                fill,
-                shaders: effectShaders
-              }
-            )
+            ref,
+            text: clip.text,
+            fontFamily: settings2.fontFamily,
+            fontWeight: settings2.fontWeight,
+            fontSize,
+            fill,
+            shaders: effectShaders
           }
         )
       },
