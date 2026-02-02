@@ -49,12 +49,24 @@ def _config_hash(config: dict[str, Any]) -> str:
 
 
 def _parse_transcode_params(params: dict[str, Any]) -> TranscodeConfig:
-    """Parse transcode parameters from request into TranscodeConfig."""
+    """Parse transcode parameters from request into TranscodeConfig.
+    Preset 'preset/web-hd' and 'preset/web-sd' are expanded into aspect-preserving
+    custom config (no width/height) so vertical videos stay vertical.
+    """
     config = TranscodeConfig()
 
-    # Check for preset first
-    if params.get("preset"):
-        config.preset = params["preset"]
+    # Expand aspect-preserving presets to custom config (no width/height) so the
+    # Transcoder API uses input dimensions and preserves aspect ratio (e.g. vertical).
+    preset_val = params.get("preset")
+    if preset_val in ("preset/web-hd", "preset/web-sd"):
+        config.preset = None  # Don't use templateId; build custom config
+        if not params.get("videoBitrate") and not params.get("videoBitrateBps"):
+            config.video_bitrate_bps = 2500000 if preset_val == "preset/web-hd" else 550000
+        if not params.get("frameRate"):
+            config.frame_rate = 30.0
+        # Explicitly do not set width/height so API preserves input dimensions
+    elif preset_val:
+        config.preset = preset_val
         return config
 
     # Output format
@@ -403,9 +415,10 @@ async def _transcode_impl(
     
     transcode_config = _parse_transcode_params(context.params)
 
-    # Create config hash for deduplication
+    # Create config hash for deduplication (use params preset when we expanded to custom for aspect ratio)
+    logical_preset = transcode_config.preset or context.params.get("preset")
     config_dict = {
-        "preset": transcode_config.preset,
+        "preset": logical_preset,
         "outputFormat": transcode_config.output_format.value if not transcode_config.preset else None,
         "videoCodec": transcode_config.video_codec.value if not transcode_config.preset else None,
         "videoBitrate": transcode_config.video_bitrate_bps,

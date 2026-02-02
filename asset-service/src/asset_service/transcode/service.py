@@ -137,50 +137,44 @@ class TranscodeConfig:
         return {"config": config}
 
     def _build_h264_config(self) -> dict[str, Any]:
-        """Build H264 video config."""
+        """Build H264 video config. Omit width/height to preserve input aspect ratio (e.g. vertical)."""
         cfg: dict[str, Any] = {
             "profile": "high",
             "preset": "medium",
+            "bitrateBps": self.video_bitrate_bps or 2_500_000,
+            "frameRate": self.frame_rate or 30.0,
         }
-        if self.video_bitrate_bps:
-            cfg["bitrateBps"] = self.video_bitrate_bps
         if self.width:
             cfg["widthPixels"] = self.width
         if self.height:
             cfg["heightPixels"] = self.height
-        if self.frame_rate:
-            cfg["frameRate"] = self.frame_rate
         return cfg
 
     def _build_h265_config(self) -> dict[str, Any]:
-        """Build H265/HEVC video config."""
+        """Build H265/HEVC video config. Omit width/height to preserve input aspect ratio."""
         cfg: dict[str, Any] = {
             "profile": "main",
             "preset": "medium",
+            "bitrateBps": self.video_bitrate_bps or 2_500_000,
+            "frameRate": self.frame_rate or 30.0,
         }
-        if self.video_bitrate_bps:
-            cfg["bitrateBps"] = self.video_bitrate_bps
         if self.width:
             cfg["widthPixels"] = self.width
         if self.height:
             cfg["heightPixels"] = self.height
-        if self.frame_rate:
-            cfg["frameRate"] = self.frame_rate
         return cfg
 
     def _build_vp9_config(self) -> dict[str, Any]:
-        """Build VP9 video config."""
+        """Build VP9 video config. Omit width/height to preserve input aspect ratio."""
         cfg: dict[str, Any] = {
             "profile": "profile0",
+            "bitrateBps": self.video_bitrate_bps or 2_500_000,
+            "frameRate": self.frame_rate or 30.0,
         }
-        if self.video_bitrate_bps:
-            cfg["bitrateBps"] = self.video_bitrate_bps
         if self.width:
             cfg["widthPixels"] = self.width
         if self.height:
             cfg["heightPixels"] = self.height
-        if self.frame_rate:
-            cfg["frameRate"] = self.frame_rate
         return cfg
 
 
