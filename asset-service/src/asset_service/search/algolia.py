@@ -60,27 +60,37 @@ def build_searchable_content(
 ) -> dict[str, Any]:
     """
     Build searchable content from asset data and optional pipeline state.
-    
+
     Combines:
     - Asset metadata (name, type, dimensions, duration)
     - AI-generated description
-    - Gemini analysis text
-    - Transcription text
+    - Gemini analysis text (truncated)
+    - Transcription text (truncated)
     - Labels/entities from video intelligence
-    
+
     Returns a dict ready for Algolia indexing.
+
+    Note: Algolia has a 10KB record size limit. We truncate large text fields
+    to stay well under this limit while preserving searchability.
     """
+    # Algolia record size limits (in characters, ~1 byte each for ASCII)
+    MAX_GEMINI_ANALYSIS = 2000
+    MAX_TRANSCRIPT = 2000
+    MAX_DESCRIPTION = 500
+    MAX_NOTES = 500
+    MAX_LABELS = 50
+
     # Extract pipeline step metadata
     gemini_analysis = ""
     transcript = ""
     labels: list[str] = []
-    
+
     if pipeline_state:
         steps = pipeline_state.get("steps", [])
         for step in steps:
             step_id = step.get("id", "")
             metadata = step.get("metadata", {})
-            
+
             if step_id == "gemini-analysis":
                 gemini_analysis = metadata.get("analysis", "")
             elif step_id == "transcription":
@@ -92,20 +102,12 @@ def build_searchable_content(
                     entity = label.get("entity", {})
                     if entity.get("description"):
                         labels.append(entity["description"])
-    
-    # Combine all text for full-text search
-    searchable_parts = [
-        asset_data.get("name", ""),
-        asset_data.get("description", ""),
-        asset_data.get("notes", ""),
-        gemini_analysis,
-        transcript,
-    ]
-    searchable_text = " ".join(filter(None, searchable_parts))
-    
-    # Build the indexable document
+
+    # Build the indexable document with truncated fields
     now = datetime.utcnow().isoformat() + "Z"
-    
+    description = asset_data.get("description", "") or ""
+    notes = asset_data.get("notes", "") or ""
+
     return {
         "objectID": asset_data.get("id"),
         "userId": asset_data.get("userId"),
@@ -118,12 +120,11 @@ def build_searchable_content(
         "width": asset_data.get("width"),
         "height": asset_data.get("height"),
         "duration": asset_data.get("duration"),
-        "description": asset_data.get("description", ""),
-        "notes": asset_data.get("notes", ""),
-        "geminiAnalysis": gemini_analysis[:5000] if gemini_analysis else "",  # Truncate long analysis
-        "transcript": transcript[:5000] if transcript else "",  # Truncate long transcripts
-        "labels": labels[:100],  # Limit labels
-        "searchableText": searchable_text[:10000],  # Combined text for search
+        "description": description[:MAX_DESCRIPTION],
+        "notes": notes[:MAX_NOTES],
+        "geminiAnalysis": gemini_analysis[:MAX_GEMINI_ANALYSIS] if gemini_analysis else "",
+        "transcript": transcript[:MAX_TRANSCRIPT] if transcript else "",
+        "labels": labels[:MAX_LABELS],
         "uploadedAt": asset_data.get("uploadedAt", now),
         "updatedAt": asset_data.get("updatedAt", now),
         "indexedAt": now,
@@ -352,7 +353,7 @@ async def search_assets(
             "attributesToHighlight": [
                 "name",
                 "description",
-                "searchableText",
+                "transcript",
             ],
         }
         
@@ -398,7 +399,7 @@ async def search_assets(
                 "highlights": {
                     "name": highlight.get("name", {}).get("value"),
                     "description": highlight.get("description", {}).get("value"),
-                    "searchableText": highlight.get("searchableText", {}).get("value"),
+                    "transcript": highlight.get("transcript", {}).get("value"),
                 },
             })
         
@@ -458,7 +459,6 @@ async def configure_index(settings: Settings | None = None) -> bool:
                 "labels",
                 "transcript",
                 "geminiAnalysis",
-                "searchableText",
             ],
             # Attributes for filtering (multi-tenancy security)
             "attributesForFaceting": [
