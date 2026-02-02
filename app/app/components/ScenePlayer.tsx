@@ -3,7 +3,6 @@
 import { Player, Stage, Vector2, type Project, type Scene } from '@motion-canvas/core';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { Layer, TimelineClip } from '@/app/types/timeline';
-import { getSceneNodeKey } from '@/app/lib/scene-node-key';
 import type { ProjectTranscription } from '@/app/types/transcription';
 import { useDrag } from '@/app/hooks/use-drag';
 import { SelectionOverlay } from './SelectionOverlay';
@@ -296,8 +295,29 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
           // Skip if clip is not active at current time
           if (currentSeconds < clipStart || currentSeconds > clipEnd) continue;
 
-          // Get node key (text templates use container keys for hitbox)
-          const nodeKey = getSceneNodeKey(clip);
+          // Get node key based on clip type
+          let nodeKey: string | null = null;
+          if (clip.type === 'video') nodeKey = `video-clip-${clip.id}`;
+          else if (clip.type === 'text') {
+            const template = clip.template ?? 'text';
+            switch (template) {
+              case 'title-card':
+                nodeKey = `title-card-container-${clip.id}`;
+                break;
+              case 'lower-third':
+                nodeKey = `lower-third-container-${clip.id}`;
+                break;
+              case 'caption-style':
+                nodeKey = `caption-style-container-${clip.id}`;
+                break;
+              case 'text':
+              default:
+                nodeKey = `text-clip-${clip.id}`;
+                break;
+            }
+          }
+          else if (clip.type === 'image') nodeKey = `image-clip-${clip.id}`;
+
           if (!nodeKey) continue;
 
           try {

@@ -277,10 +277,10 @@ def create_initial_automerge_state(name: str = "Untitled Project") -> str:
     # Default empty project structure (matching frontend's defaultProject)
     default_project = {
         "name": name,
-        "resolution": {"width": 1920, "height": 1080},
+        "resolution": {"width": 1080, "height": 720},
         "fps": 30,
         "renderScale": 1,
-        "background": "#141417",
+        "background": "#000000",
         "layers": [],
         "transcriptions": {},
         "transitions": {},
