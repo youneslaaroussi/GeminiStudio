@@ -28,7 +28,7 @@ def deleteClipFromTimeline(
 ) -> dict:
     """Delete one or more clips from the project timeline by clip ID.
 
-    Use getProjectSummary or list clips to discover clip IDs before deleting.
+    Use getTimelineState or list clips to discover clip IDs before deleting.
     Clips are identified by their "id" field (e.g. "clip-abc12345").
 
     Args:
@@ -148,7 +148,7 @@ def deleteClipFromTimeline(
             return {
                 "status": "error",
                 "message": f"No clips found with the given IDs: {list(to_delete)}. "
-                           "Use getProjectSummary or list clips to get valid clip IDs.",
+                           "Use getTimelineState or list clips to get valid clip IDs.",
             }
 
         _set_project_data(doc, project_data)

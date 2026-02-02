@@ -7,6 +7,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
+from tests.helpers import agent_context, invoke_with_context
 from langgraph_server.tools.add_clip_tool import (
     addClipToTimeline,
     _find_or_create_layer,
@@ -69,41 +70,27 @@ class TestAddClipToTimeline:
 
     def test_requires_user_id(self):
         """Should return error if user_id is missing."""
-        result = addClipToTimeline.invoke({
-            "clip_type": "video",
-            "start": 0,
-            "duration": 5,
-            "src": "https://example.com/video.mp4",
-            "user_id": None,
-            "project_id": "proj-123",
-        })
+        result = invoke_with_context(
+            addClipToTimeline, user_id=None,
+            clip_type="video", start=0, duration=5, src="https://example.com/video.mp4",
+        )
         
         assert result["status"] == "error"
         assert "required" in result["message"].lower()
 
     def test_requires_project_id(self):
         """Should return error if project_id is missing."""
-        result = addClipToTimeline.invoke({
-            "clip_type": "video",
-            "start": 0,
-            "duration": 5,
-            "src": "https://example.com/video.mp4",
-            "user_id": "user-123",
-            "project_id": None,
-        })
+        result = invoke_with_context(
+            addClipToTimeline, project_id=None,
+            clip_type="video", start=0, duration=5, src="https://example.com/video.mp4",
+        )
         
         assert result["status"] == "error"
         assert "required" in result["message"].lower()
 
     def test_validates_clip_type(self):
         """Should reject invalid clip types."""
-        result = addClipToTimeline.invoke({
-            "clip_type": "invalid_type",
-            "start": 0,
-            "duration": 5,
-            "user_id": "user-123",
-            "project_id": "proj-123",
-        })
+        result = invoke_with_context(addClipToTimeline, clip_type="invalid_type", start=0, duration=5)
         
         assert result["status"] == "error"
         assert "Invalid clip_type" in result["message"]
@@ -111,55 +98,34 @@ class TestAddClipToTimeline:
     def test_requires_asset_id_for_media_clips(self):
         """Should require asset_id for video/audio/image clips."""
         for clip_type in ["video", "audio", "image"]:
-            result = addClipToTimeline.invoke({
-                "clip_type": clip_type,
-                "start": 0,
-                "duration": 5,
-                "user_id": "user-123",
-                "project_id": "proj-123",
-            })
+            result = invoke_with_context(addClipToTimeline, clip_type=clip_type, start=0, duration=5)
             
             assert result["status"] == "error"
             assert "asset_id" in result["message"].lower()
 
     def test_requires_text_for_text_clips(self):
         """Should require text content for text clips."""
-        result = addClipToTimeline.invoke({
-            "clip_type": "text",
-            "start": 0,
-            "duration": 5,
-            "text": None,
-            "user_id": "user-123",
-            "project_id": "proj-123",
-        })
+        result = invoke_with_context(
+            addClipToTimeline, clip_type="text", start=0, duration=5, text=None,
+        )
         
         assert result["status"] == "error"
         assert "text" in result["message"].lower()
 
     def test_validates_start_time(self):
         """Should reject negative start times."""
-        result = addClipToTimeline.invoke({
-            "clip_type": "text",
-            "start": -1,
-            "duration": 5,
-            "text": "Hello",
-            "user_id": "user-123",
-            "project_id": "proj-123",
-        })
+        result = invoke_with_context(
+            addClipToTimeline, clip_type="text", start=-1, duration=5, text="Hello",
+        )
         
         assert result["status"] == "error"
         assert "start" in result["message"].lower()
 
     def test_validates_duration(self):
         """Should reject zero or negative duration when explicitly provided."""
-        result = addClipToTimeline.invoke({
-            "clip_type": "text",
-            "start": 0,
-            "duration": 0,
-            "text": "Hello",
-            "user_id": "user-123",
-            "project_id": "proj-123",
-        })
+        result = invoke_with_context(
+            addClipToTimeline, clip_type="text", start=0, duration=0, text="Hello",
+        )
         
         assert result["status"] == "error"
         assert "duration" in result["message"].lower()
@@ -216,16 +182,10 @@ class TestAddClipToTimeline:
         mock_get_data.return_value = sample_project_data
         mock_save_doc.return_value = "new_base64_state"
 
-        result = addClipToTimeline.invoke({
-            "clip_type": "video",
-            "start": 10,
-            "duration": 5,
-            "asset_id": "asset-123",
-            "name": "New Video Clip",
-            "user_id": "user-123",
-            "project_id": "proj-123",
-            "branch_id": "main",
-        })
+        result = invoke_with_context(
+            addClipToTimeline, branch_id="main",
+            clip_type="video", start=10, duration=5, asset_id="asset-123", name="New Video Clip",
+        )
 
         assert result["status"] == "success"
         assert "clip" in result
@@ -267,14 +227,9 @@ class TestAddClipToTimeline:
         mock_get_data.return_value = {"layers": []}
         mock_save_doc.return_value = "new_base64_state"
         
-        result = addClipToTimeline.invoke({
-            "clip_type": "text",
-            "start": 0,
-            "duration": 3,
-            "text": "Hello World",
-            "user_id": "user-123",
-            "project_id": "proj-123",
-        })
+        result = invoke_with_context(
+            addClipToTimeline, clip_type="text", start=0, duration=3, text="Hello World",
+        )
         
         assert result["status"] == "success"
         assert result["clip"]["type"] == "text"
@@ -301,15 +256,10 @@ class TestAddClipToTimeline:
         mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = mock_branch_doc
         mock_get_firestore.return_value = mock_db
         
-        result = addClipToTimeline.invoke({
-            "clip_type": "text",
-            "start": 0,
-            "duration": 3,
-            "text": "Hello",
-            "user_id": "user-123",
-            "project_id": "proj-123",
-            "branch_id": "nonexistent_branch",
-        })
+        result = invoke_with_context(
+            addClipToTimeline, branch_id="nonexistent_branch",
+            clip_type="text", start=0, duration=3, text="Hello",
+        )
         
         assert result["status"] == "error"
         assert "not found" in result["message"].lower()
@@ -335,15 +285,10 @@ class TestAddClipToTimeline:
         mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_projects_doc
         mock_get_firestore.return_value = mock_db
 
-        result = addClipToTimeline.invoke({
-            "clip_type": "text",
-            "start": 0,
-            "duration": 3,
-            "text": "Hello",
-            "user_id": "user-123",
-            "project_id": "proj-123",
-            "branch_id": "other",  # non-main so we don't call ensure_main_branch_exists
-        })
+        result = invoke_with_context(
+            addClipToTimeline, branch_id="other",  # non-main so we don't call ensure_main_branch_exists
+            clip_type="text", start=0, duration=3, text="Hello",
+        )
 
         assert result["status"] == "error"
         assert "no timeline data" in result["message"].lower()
@@ -383,15 +328,10 @@ class TestAddClipToTimeline:
         mock_get_data.return_value = {"layers": []}
         mock_save_doc.return_value = "new_state"
         
-        addClipToTimeline.invoke({
-            "clip_type": "text",
-            "start": 0,
-            "duration": 3,
-            "text": "Hello",
-            "user_id": "user-123",
-            "project_id": "proj-123",
-            # branch_id not specified
-        })
+        invoke_with_context(
+            addClipToTimeline,  # branch_id defaults to "main"
+            clip_type="text", start=0, duration=3, text="Hello",
+        )
         
         # Verify "main" was used
         calls = mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value.collection.return_value.document.call_args_list

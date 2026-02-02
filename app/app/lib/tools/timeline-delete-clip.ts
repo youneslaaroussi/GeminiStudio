@@ -67,7 +67,7 @@ export const timelineDeleteClipTool: ToolDefinition<
     if (toDelete.length === 0) {
       return {
         status: "error",
-        error: `No clips found with the given IDs: ${notFound.join(", ")}. Use getProjectSummary to discover valid clip IDs.`,
+        error: `No clips found with the given IDs: ${notFound.join(", ")}. Use getTimelineState to discover valid clip IDs.`,
       };
     }
 

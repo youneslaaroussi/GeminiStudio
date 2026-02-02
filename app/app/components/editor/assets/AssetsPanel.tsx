@@ -243,19 +243,77 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
     }
   }, [projectId]);
 
-  // When Jobs tab is shown, fetch Veo jobs so agent-started jobs appear
+  // Always fetch Veo jobs for project (on mount + periodically) so agent-started jobs appear and we poll regardless of tab
   useEffect(() => {
-    if (activeTab === "jobs" && projectId) {
-      void fetchVeoJobsForProject();
-    }
-  }, [activeTab, projectId, fetchVeoJobsForProject]);
+    if (!projectId) return;
+    void fetchVeoJobsForProject();
+    const interval = setInterval(fetchVeoJobsForProject, 10000);
+    return () => clearInterval(interval);
+  }, [projectId, fetchVeoJobsForProject]);
 
   // Video effect jobs from store (filter by project for Jobs tab)
   const videoEffectsJobsRecord = useVideoEffectsStore((s) => s.jobs);
+  const upsertVideoEffectJob = useVideoEffectsStore((s) => s.upsertJob);
   const videoEffectJobs = useMemo((): VideoEffectJob[] => {
     const list = Object.values(videoEffectsJobsRecord);
     return projectId ? list.filter((j) => j.projectId === projectId) : list;
   }, [projectId, videoEffectsJobsRecord]);
+
+  // Always poll pending video effect jobs (regardless of tab or selected clip)
+  const videoEffectPollingRef = useRef<NodeJS.Timeout | null>(null);
+  const pollVideoEffectJobs = useCallback(async () => {
+    const pending = videoEffectJobs.filter(
+      (j) => j.status === "pending" || j.status === "running"
+    );
+    if (pending.length === 0) return;
+    for (const job of pending) {
+      try {
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch(`/api/video-effects/${job.id}`, {
+          headers: authHeaders as Record<string, string>,
+        });
+        if (!response.ok) {
+          if (response.status === 404) continue;
+          return;
+        }
+        const payload = (await response.json()) as { job?: VideoEffectJob };
+        if (payload.job) {
+          upsertVideoEffectJob(payload.job);
+          if (payload.job.status === "completed") {
+            toast.success("Video effect completed", {
+              description: payload.job.effectLabel,
+            });
+            void fetchAssets();
+          } else if (payload.job.status === "error") {
+            toast.error("Video effect failed", {
+              description: payload.job.error ?? "Please try again.",
+            });
+          }
+        }
+      } catch {
+        // Keep polling on next interval
+      }
+    }
+  }, [videoEffectJobs, upsertVideoEffectJob, fetchAssets]);
+
+  useEffect(() => {
+    const hasPending = videoEffectJobs.some(
+      (j) => j.status === "pending" || j.status === "running"
+    );
+    if (hasPending && !videoEffectPollingRef.current) {
+      void pollVideoEffectJobs();
+      videoEffectPollingRef.current = setInterval(pollVideoEffectJobs, 5000);
+    } else if (!hasPending && videoEffectPollingRef.current) {
+      clearInterval(videoEffectPollingRef.current);
+      videoEffectPollingRef.current = null;
+    }
+    return () => {
+      if (videoEffectPollingRef.current) {
+        clearInterval(videoEffectPollingRef.current);
+        videoEffectPollingRef.current = null;
+      }
+    };
+  }, [videoEffectJobs, pollVideoEffectJobs]);
 
   // Dialog states (keeping transcript and details as dialogs)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);

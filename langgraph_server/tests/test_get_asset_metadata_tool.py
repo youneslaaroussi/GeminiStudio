@@ -7,6 +7,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 import httpx
 
+from tests.helpers import agent_context, invoke_with_context
 from langgraph_server.tools.get_asset_metadata_tool import getAssetMetadata
 
 
@@ -71,33 +72,21 @@ class TestGetAssetMetadata:
 
     def test_requires_user_id(self, mock_settings):
         """Should return error if user_id is missing."""
-        result = getAssetMetadata.invoke({
-            "asset_id": "asset-123",
-            "project_id": "proj-123",
-            "user_id": None,
-        })
+        result = invoke_with_context(getAssetMetadata, user_id=None, asset_id="asset-123")
         
         assert result["status"] == "error"
         assert "required" in result["message"].lower()
 
     def test_requires_project_id(self, mock_settings):
         """Should return error if project_id is missing."""
-        result = getAssetMetadata.invoke({
-            "asset_id": "asset-123",
-            "project_id": None,
-            "user_id": "user-123",
-        })
+        result = invoke_with_context(getAssetMetadata, project_id=None, asset_id="asset-123")
         
         assert result["status"] == "error"
         assert "required" in result["message"].lower()
 
     def test_requires_asset_id(self, mock_settings):
         """Should return error if asset_id is missing."""
-        result = getAssetMetadata.invoke({
-            "asset_id": "",
-            "project_id": "proj-123",
-            "user_id": "user-123",
-        })
+        result = invoke_with_context(getAssetMetadata, asset_id="")
         
         assert result["status"] == "error"
         assert "asset_id" in result["message"].lower()
@@ -115,11 +104,7 @@ class TestGetAssetMetadata:
         mock_response.json.return_value = sample_pipeline_state
         mock_get.return_value = mock_response
         
-        result = getAssetMetadata.invoke({
-            "asset_id": "asset-123",
-            "project_id": "proj-123",
-            "user_id": "user-123",
-        })
+        result = invoke_with_context(getAssetMetadata, asset_id="asset-123")
         
         assert result["status"] == "success"
         assert "outputs" in result
@@ -147,12 +132,7 @@ class TestGetAssetMetadata:
         mock_response.json.return_value = sample_pipeline_state
         mock_get.return_value = mock_response
         
-        result = getAssetMetadata.invoke({
-            "asset_id": "asset-123",
-            "project_id": "proj-123",
-            "user_id": "user-123",
-            "metadata_type": "face-detection",
-        })
+        result = invoke_with_context(getAssetMetadata, asset_id="asset-123", metadata_type="face-detection")
         
         assert result["status"] == "success"
         json_output = next(o for o in result["outputs"] if o["type"] == "json")
@@ -173,11 +153,7 @@ class TestGetAssetMetadata:
         mock_response.json.return_value = sample_pipeline_state
         mock_get.return_value = mock_response
         
-        result = getAssetMetadata.invoke({
-            "asset_id": "asset-123",
-            "project_id": "proj-123",
-            "user_id": "user-123",
-        })
+        result = invoke_with_context(getAssetMetadata, asset_id="asset-123")
         
         assert result["status"] == "success"
         list_output = next(o for o in result["outputs"] if o["type"] == "list")
@@ -190,12 +166,7 @@ class TestGetAssetMetadata:
         with patch("langgraph_server.tools.get_asset_metadata_tool.get_settings") as mock_get_settings:
             mock_get_settings.return_value = mock_settings
             
-            result = getAssetMetadata.invoke({
-                "asset_id": "asset-123",
-                "project_id": "proj-123",
-                "user_id": "user-123",
-                "metadata_type": "invalid-type",
-            })
+            result = invoke_with_context(getAssetMetadata, asset_id="asset-123", metadata_type="invalid-type")
             
             assert result["status"] == "error"
             assert "invalid" in result["message"].lower()
@@ -211,11 +182,7 @@ class TestGetAssetMetadata:
         mock_response.text = "Not found"
         mock_get.return_value = mock_response
         
-        result = getAssetMetadata.invoke({
-            "asset_id": "asset-123",
-            "project_id": "proj-123",
-            "user_id": "user-123",
-        })
+        result = invoke_with_context(getAssetMetadata, asset_id="asset-123")
         
         assert result["status"] == "error"
         assert "not found" in result["message"].lower()
@@ -227,11 +194,7 @@ class TestGetAssetMetadata:
         mock_get_settings.return_value = mock_settings
         mock_get.side_effect = httpx.HTTPError("Connection failed")
         
-        result = getAssetMetadata.invoke({
-            "asset_id": "asset-123",
-            "project_id": "proj-123",
-            "user_id": "user-123",
-        })
+        result = invoke_with_context(getAssetMetadata, asset_id="asset-123")
         
         assert result["status"] == "error"
         assert "reach" in result["message"].lower() or "could not" in result["message"].lower()
@@ -243,11 +206,7 @@ class TestGetAssetMetadata:
         settings.asset_service_url = None
         mock_get_settings.return_value = settings
         
-        result = getAssetMetadata.invoke({
-            "asset_id": "asset-123",
-            "project_id": "proj-123",
-            "user_id": "user-123",
-        })
+        result = invoke_with_context(getAssetMetadata, asset_id="asset-123")
         
         assert result["status"] == "error"
         assert "not configured" in result["message"].lower()
@@ -263,11 +222,7 @@ class TestGetAssetMetadata:
         mock_response.json.return_value = {"assetId": "asset-123", "steps": []}
         mock_get.return_value = mock_response
         
-        getAssetMetadata.invoke({
-            "asset_id": "asset-456",
-            "project_id": "proj-789",
-            "user_id": "user-012",
-        })
+        invoke_with_context(getAssetMetadata, user_id="user-012", project_id="proj-789", asset_id="asset-456")
         
         mock_get.assert_called_once()
         call_url = mock_get.call_args[0][0]
@@ -287,11 +242,7 @@ class TestGetAssetMetadata:
         mock_response.json.return_value = {"assetId": "asset-123", "steps": []}
         mock_get.return_value = mock_response
         
-        result = getAssetMetadata.invoke({
-            "asset_id": "asset-123",
-            "project_id": "proj-123",
-            "user_id": "user-123",
-        })
+        result = invoke_with_context(getAssetMetadata, asset_id="asset-123")
         
         assert result["status"] == "success"
         # Should indicate no metadata available

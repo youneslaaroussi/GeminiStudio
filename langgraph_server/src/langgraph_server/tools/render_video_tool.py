@@ -294,7 +294,7 @@ def renderVideo(
   project_payload.setdefault("fps", project_payload.get("fps", output_fps))
 
   # Generate signed upload URL for GCS
-  effective_project_id = project_id or target_project.get("id") or "unknown"
+  effective_project_id = effective_project_id or target_project.get("id") or "unknown"
   gcs_object_name = f"renders/{effective_user_id}/{effective_project_id}/{request_id}.{output_format}"
   content_type = _MIME_TYPES.get(output_format, "application/octet-stream")
   

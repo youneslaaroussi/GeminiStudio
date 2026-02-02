@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.helpers import agent_context, invoke_with_context
 from langgraph_server.tools.delete_clip_tool import deleteClipFromTimeline
 
 
@@ -14,41 +15,25 @@ class TestDeleteClipFromTimeline:
 
     def test_requires_user_id(self):
         """Should return error if user_id is missing."""
-        result = deleteClipFromTimeline.invoke({
-            "clip_ids": ["clip-abc123"],
-            "project_id": "proj-123",
-            "user_id": None,
-        })
+        result = invoke_with_context(deleteClipFromTimeline, user_id=None, clip_ids=["clip-abc123"])
         assert result["status"] == "error"
         assert "required" in result["message"].lower() or "context" in result["message"].lower()
 
     def test_requires_project_id(self):
         """Should return error if project_id is missing."""
-        result = deleteClipFromTimeline.invoke({
-            "clip_ids": ["clip-abc123"],
-            "project_id": None,
-            "user_id": "user-123",
-        })
+        result = invoke_with_context(deleteClipFromTimeline, project_id=None, clip_ids=["clip-abc123"])
         assert result["status"] == "error"
         assert "required" in result["message"].lower() or "context" in result["message"].lower()
 
     def test_requires_clip_ids(self):
         """Should return error if clip_ids is empty or missing."""
-        result = deleteClipFromTimeline.invoke({
-            "clip_ids": [],
-            "project_id": "proj-123",
-            "user_id": "user-123",
-        })
+        result = invoke_with_context(deleteClipFromTimeline, clip_ids=[])
         assert result["status"] == "error"
         assert "clip" in result["message"].lower()
 
     def test_requires_valid_clip_ids(self):
         """Should return error if clip_ids has no valid entries."""
-        result = deleteClipFromTimeline.invoke({
-            "clip_ids": ["", "  "],
-            "project_id": "proj-123",
-            "user_id": "user-123",
-        })
+        result = invoke_with_context(deleteClipFromTimeline, clip_ids=["", "  "])
         assert result["status"] == "error"
         assert "valid" in result["message"].lower()
 
@@ -98,11 +83,7 @@ class TestDeleteClipFromTimeline:
         mock_get_data.return_value = project_data
         mock_save_doc.return_value = "new_state"
 
-        result = deleteClipFromTimeline.invoke({
-            "clip_ids": ["clip-abc123"],
-            "project_id": "proj-123",
-            "user_id": "user-123",
-        })
+        result = invoke_with_context(deleteClipFromTimeline, clip_ids=["clip-abc123"])
 
         assert result["status"] == "success"
         assert len(result["deleted"]) == 1
@@ -142,11 +123,7 @@ class TestDeleteClipFromTimeline:
         mock_load_doc.return_value = MagicMock()
         mock_get_data.return_value = {"layers": [{"id": "L1", "clips": [{"id": "clip-other"}]}]}
 
-        result = deleteClipFromTimeline.invoke({
-            "clip_ids": ["clip-nonexistent"],
-            "project_id": "proj-123",
-            "user_id": "user-123",
-        })
+        result = invoke_with_context(deleteClipFromTimeline, clip_ids=["clip-nonexistent"])
 
         assert result["status"] == "error"
         assert "no clips found" in result["message"].lower() or "not found" in result["message"].lower()
@@ -163,12 +140,7 @@ class TestDeleteClipFromTimeline:
         mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = mock_branch_doc
         mock_get_firestore.return_value = mock_db
 
-        result = deleteClipFromTimeline.invoke({
-            "clip_ids": ["clip-abc"],
-            "project_id": "proj-123",
-            "user_id": "user-123",
-            "branch_id": "nonexistent",
-        })
+        result = invoke_with_context(deleteClipFromTimeline, branch_id="nonexistent", clip_ids=["clip-abc"])
 
         assert result["status"] == "error"
         assert "not found" in result["message"].lower()
@@ -176,7 +148,7 @@ class TestDeleteClipFromTimeline:
     @patch("langgraph_server.tools.delete_clip_tool.get_settings")
     @patch("langgraph_server.tools.delete_clip_tool.get_firestore_client")
     def test_handles_missing_automerge_state(self, mock_get_firestore, mock_get_settings, mock_settings):
-        """Should handle missing Automerge state."""
+        """Should handle missing Automerge state (use non-main branch so we do not call ensure_main_branch_exists)."""
         mock_get_settings.return_value = mock_settings
 
         mock_db = MagicMock()
@@ -186,11 +158,7 @@ class TestDeleteClipFromTimeline:
         mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = mock_branch_doc
         mock_get_firestore.return_value = mock_db
 
-        result = deleteClipFromTimeline.invoke({
-            "clip_ids": ["clip-abc"],
-            "project_id": "proj-123",
-            "user_id": "user-123",
-        })
+        result = invoke_with_context(deleteClipFromTimeline, branch_id="other", clip_ids=["clip-abc"])
 
         assert result["status"] == "error"
         assert "no timeline data" in result["message"].lower()
