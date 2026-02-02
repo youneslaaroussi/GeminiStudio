@@ -3,6 +3,29 @@ import type { StoredVeoJob, VeoJob } from "@/app/types/veo";
 
 const COLLECTION_NAME = "veoJobs";
 
+/**
+ * Recursively remove undefined values from an object so it can be written to Firestore.
+ * Firestore does not accept undefined; optional fields must be omitted instead.
+ */
+function sanitizeForFirestore<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeForFirestore) as T;
+  }
+  if (typeof obj === "object") {
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        sanitized[key] = sanitizeForFirestore(value);
+      }
+    }
+    return sanitized as T;
+  }
+  return obj;
+}
+
 export async function readVeoJobs(): Promise<StoredVeoJob[]> {
   const db = await getAdminFirestore();
   const snapshot = await db.collection(COLLECTION_NAME).get();
@@ -11,7 +34,8 @@ export async function readVeoJobs(): Promise<StoredVeoJob[]> {
 
 export async function saveVeoJob(job: StoredVeoJob): Promise<StoredVeoJob> {
   const db = await getAdminFirestore();
-  await db.collection(COLLECTION_NAME).doc(job.id).set(job);
+  const sanitized = sanitizeForFirestore(job) as StoredVeoJob;
+  await db.collection(COLLECTION_NAME).doc(job.id).set(sanitized);
   return job;
 }
 
@@ -32,7 +56,8 @@ export async function updateVeoJob(
     updatedAt: updates.updatedAt ?? new Date().toISOString(),
   };
 
-  await docRef.set(updated);
+  const sanitized = sanitizeForFirestore(updated) as StoredVeoJob;
+  await docRef.set(sanitized);
   return updated;
 }
 
