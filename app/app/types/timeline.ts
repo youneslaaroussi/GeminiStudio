@@ -283,6 +283,7 @@ export function createVideoClip(
     width: options?.width,
     height: options?.height,
     sourceDuration: options?.sourceDuration,
+    objectFit: 'contain',
   };
 }
 

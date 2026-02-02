@@ -12659,7 +12659,7 @@ function* playVideo({
       maskVideo.seek(safeOffset);
       maskVideo.playbackRate(safeSpeed);
     }
-    const fit = clip.objectFit ?? "fill";
+    const fit = clip.objectFit ?? "contain";
     let vidW = sceneWidth;
     let vidH = sceneHeight;
     if (fit !== "fill") {

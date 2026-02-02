@@ -192,7 +192,7 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
             <div>
               <label className={labelClassName}>Fill Mode</label>
               <select
-                value={clip.objectFit ?? "fill"}
+                value={clip.objectFit ?? "contain"}
                 onChange={(e) => onUpdate({ objectFit: e.target.value as VideoClip["objectFit"] })}
                 className={inputClassName}
               >

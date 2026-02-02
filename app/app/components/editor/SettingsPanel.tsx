@@ -432,7 +432,7 @@ export function SettingsPanel() {
                   Fill Mode
                 </label>
                 <select
-                  value={(selectedClip as VideoClip).objectFit ?? 'fill'}
+                  value={(selectedClip as VideoClip).objectFit ?? 'contain'}
                   onChange={(e) => handleUpdate({ objectFit: e.target.value as any })}
                   className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
                 >

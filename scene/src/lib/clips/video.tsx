@@ -227,7 +227,7 @@ export function* playVideo({
     }
 
     // Calculate dimensions based on objectFit
-    const fit = clip.objectFit ?? 'fill';
+    const fit = clip.objectFit ?? 'contain';
     let vidW = sceneWidth;
     let vidH = sceneHeight;
 
