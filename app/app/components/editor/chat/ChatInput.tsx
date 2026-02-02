@@ -11,95 +11,65 @@ import {
 } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import Mention from "@tiptap/extension-mention";
 import Placeholder from "@tiptap/extension-placeholder";
-import { mergeAttributes } from "@tiptap/core";
 import { createMentionSuggestion } from "./useMentionSuggestion";
+import { AssetMentionExtension } from "./mention-extension";
 
-/** Asset type colors and icons for mention chips (symbols only, no emojis) */
-const ASSET_TYPE_STYLES: Record<string, { icon: string; class: string }> = {
-  video: { icon: "\u25B8", class: "mention-chip--video" },   /* ▸ */
-  image: { icon: "\u25A1", class: "mention-chip--image" },   /* □ */
-  audio: { icon: "\u266A", class: "mention-chip--audio" },   /* ♪ */
-  other: { icon: "\u2022", class: "mention-chip--other" },   /* • */
-};
-
-const AssetMention = Mention.extend({
-  addAttributes() {
-    const parent = this.parent?.() ?? {};
-    return {
-      ...parent,
-      type: {
-        default: "other",
-        parseHTML: (el) => el.getAttribute("data-asset-type") || "other",
-        renderHTML: (attrs) =>
-          attrs.type ? { "data-asset-type": attrs.type } : {},
-      },
-    };
-  },
-  renderHTML({ node, HTMLAttributes }) {
-    const type = (node.attrs.type as string) || "other";
-    const style = ASSET_TYPE_STYLES[type] ?? ASSET_TYPE_STYLES.other;
-    const char = node.attrs.mentionSuggestionChar ?? "@";
-    const label = node.attrs.label ?? node.attrs.id;
-    const baseAttrs = this.options?.HTMLAttributes ?? {};
-    return [
-      "span",
-      mergeAttributes(
-        { "data-type": this.name },
-        baseAttrs,
-        HTMLAttributes ?? {},
-        {
-          class: `mention-chip ${style.class}`,
-          "data-asset-type": type,
-        }
-      ),
-      ["span", { class: "mention-chip-icon", "aria-hidden": "true" }, style.icon],
-      ` ${char}${label}`,
-    ];
-  },
-});
 import type { ChatInputProps, ChatInputRef, AssetMention } from "./types";
 import { ASSET_DRAG_DATA_MIME, type AssetDragPayload } from "@/app/types/assets";
 import { cn } from "@/lib/utils";
 import "./chat-input.css";
 
 /**
- * Extract all mention nodes from the editor as AssetMention objects
+ * Build plain text with mention nodes expanded to "@label", and extract mentions
+ * with start/end indices in that same string. ProseMirror's getText() omits
+ * custom nodes (mentions have no textContent), so we must build the string
+ * ourselves so stored message text and mention ranges stay in sync.
  */
-function extractMentions(editor: ReturnType<typeof useEditor>): AssetMention[] {
-  if (!editor) return [];
+function extractPlainTextAndMentions(editor: ReturnType<typeof useEditor>): {
+  text: string;
+  mentions: AssetMention[];
+} {
+  if (!editor) return { text: "", mentions: [] };
 
+  const parts: string[] = [];
   const mentions: AssetMention[] = [];
+  let length = 0;
 
   editor.state.doc.descendants((node) => {
+    // Block boundary: insert newline between blocks (match getText() behavior)
+    if (node.isBlock && node.type.name !== "doc" && length > 0) {
+      parts.push("\n");
+      length += 1;
+    }
     if (node.type.name === "mention") {
+      const label = node.attrs.label ?? node.attrs.id ?? "";
+      const plainText = `@${label}`;
+      const start = length;
+      parts.push(plainText);
+      length += plainText.length;
       mentions.push({
         id: node.attrs.id,
-        name: node.attrs.label,
+        name: label,
         type: node.attrs.type || "other",
         url: node.attrs.url,
         thumbnailUrl: node.attrs.thumbnailUrl,
         description: node.attrs.description,
+        start,
+        end: start + plainText.length,
+        plainText,
       });
+      return;
+    }
+    if (node.isText) {
+      const t = node.text ?? "";
+      parts.push(t);
+      length += t.length;
     }
   });
 
-  // Dedupe by id
-  const seen = new Set<string>();
-  return mentions.filter((m) => {
-    if (seen.has(m.id)) return false;
-    seen.add(m.id);
-    return true;
-  });
-}
-
-/**
- * Get plain text from editor, with mention nodes rendered as @name
- */
-function extractPlainText(editor: ReturnType<typeof useEditor>): string {
-  if (!editor) return "";
-  return editor.getText();
+  const text = parts.join("");
+  return { text, mentions };
 }
 
 export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
@@ -138,9 +108,10 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
           placeholder,
           emptyEditorClass: "is-editor-empty",
         }),
-        AssetMention.configure({
+        AssetMentionExtension.configure({
           HTMLAttributes: {
             class: "mention-chip",
+            title: "",
           },
           suggestion: {
             ...mentionSuggestion,
@@ -194,7 +165,9 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
         },
       },
       editable: !disabled,
-    }, [mentionSuggestion, placeholder, submitDisabled]);
+      // Only recreate editor when project/mention config changes; avoid losing input when
+      // placeholder or submitDisabled change (handled via refs / setEditable).
+    }, [mentionSuggestion]);
 
     // Update editable state when disabled changes
     useEffect(() => {
@@ -224,13 +197,22 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
     const handleSubmit = useCallback(() => {
       if (!editor || submitDisabled) return;
 
-      const text = extractPlainText(editor).trim();
-      const mentions = extractMentions(editor);
+      const { text: rawText, mentions } = extractPlainTextAndMentions(editor);
+      const text = rawText.trim();
 
       // Don't submit if empty
       if (!text && mentions.length === 0) return;
 
-      onSubmit(text, mentions);
+      // Trim shifts character indices: adjust mention start/end to match trimmed text
+      const trimStart = rawText.length - rawText.trimStart().length;
+      const adjustedMentions = mentions.map((m) => {
+        if (m.start == null || m.end == null) return m;
+        const start = Math.max(0, (m.start ?? 0) - trimStart);
+        const end = Math.max(start, Math.min(text.length, (m.end ?? 0) - trimStart));
+        return { ...m, start, end };
+      });
+
+      onSubmit(text, adjustedMentions);
       editor.commands.clearContent();
     }, [editor, onSubmit, submitDisabled]);
 

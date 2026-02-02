@@ -54,6 +54,10 @@ import type {
   TimelineChatMessage,
 } from "@/app/types/chat";
 import { ChatInput, type ChatInputRef } from "./chat";
+import {
+  MENTION_TOKEN_REGEX,
+  getMentionAppearance,
+} from "./chat/mention-extension";
 import type { ToolResultOutput } from "@ai-sdk/provider-utils";
 import { MemoizedMarkdown } from "../MemoizedMarkdown";
 import {
@@ -61,6 +65,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toolRegistry, executeTool } from "@/app/lib/tools/tool-registry";
 import type {
   ToolDefinition,
@@ -153,6 +163,7 @@ export function ChatPanel() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatInputRef = useRef<ChatInputRef>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesScrollContainerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [sessionId, setSessionId] = useState(() => `chat-${Date.now()}`);
   const [initialMessages, setInitialMessages] = useState<TimelineChatMessage[]>([]);
@@ -283,9 +294,18 @@ export function ChatPanel() {
   }, [toolboxTools]);
   const handledToolCalls = useRef<Set<string>>(new Set());
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages only when user is already near bottom
+  const SCROLL_NEAR_BOTTOM_THRESHOLD = 120;
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = messagesScrollContainerRef.current;
+    const end = messagesEndRef.current;
+    if (!container || !end) return;
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    const isNearBottom = distanceFromBottom <= SCROLL_NEAR_BOTTOM_THRESHOLD;
+    if (isNearBottom) {
+      end.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, isBusy]);
 
   const handleChatSubmit = useCallback((text: string, mentions: AssetMention[]) => {
@@ -800,7 +820,7 @@ export function ChatPanel() {
   return (
     <div className="flex h-full flex-col">
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={messagesScrollContainerRef} className="flex-1 overflow-y-auto">
         {/* Task List (sticky at top when present) */}
         {taskListSnapshot && (
           <div className="sticky top-0 z-10 p-3 bg-gradient-to-b from-card via-card to-transparent pb-6">
@@ -1212,7 +1232,7 @@ export function ChatPanel() {
                   : mode === "plan"
                     ? "Describe what to plan..."
                     : "What would you like to do?") +
-              " (Enter to send, Shift+Enter for new line)"
+              " — Type @ to add assets or drag them here. Enter to send, Shift+Enter for new line"
             }
             onSubmit={handleChatSubmit}
             onContentChange={setHasInputContent}
@@ -1256,101 +1276,411 @@ type MessagePart = {
   [key: string]: unknown;
 };
 
-/** Asset type colors and symbols for message mention chips (matches ChatInput) */
-const MESSAGE_MENTION_STYLES: Record<
-  string,
-  { symbol: string; class: string }
-> = {
-  video: { symbol: "\u25B8", class: "mention-chip--video" },
-  image: { symbol: "\u25A1", class: "mention-chip--image" },
-  audio: { symbol: "\u266A", class: "mention-chip--audio" },
-  other: { symbol: "\u2022", class: "mention-chip--other" },
+type MentionDisplay = {
+  label: string;
+  assetId?: string;
+  assetType: string;
+  url?: string;
+  thumbnailUrl?: string;
+  description?: string;
 };
 
-/**
- * Renders text with @mentions styled as chips (colors and symbols by asset type)
- */
-function TextWithMentions({
+type MessageToken =
+  | { type: "text"; text: string }
+  | { type: "mention"; data: MentionDisplay };
+
+type AssetLookupFn = (name: string) => {
+  id: string;
+  name?: string | null;
+  type?: string | null;
+} | null;
+
+function stripMentionPrefix(value: string) {
+  if (!value) return value;
+  return value.startsWith("@") ? value.slice(1) : value;
+}
+
+function resolveMentionDisplay(
+  rawLabel: string,
+  meta: AssetMention | null,
+  mentionLookup: Map<string, AssetMention>,
+  findAssetByName: AssetLookupFn
+): MentionDisplay {
+  const normalized = stripMentionPrefix(rawLabel.trim());
+  const lower = normalized.toLowerCase();
+  const metaSource =
+    meta ??
+    mentionLookup.get(normalized) ??
+    mentionLookup.get(lower) ??
+    null;
+  const asset = findAssetByName(normalized);
+  const assetId = metaSource?.id ?? asset?.id ?? undefined;
+  const assetType = metaSource?.type ?? asset?.type ?? "other";
+  const label =
+    metaSource?.name ??
+    asset?.name ??
+    normalized ??
+    rawLabel.replace(/^@/, "");
+
+  return {
+    label: label || normalized || rawLabel,
+    assetId,
+    assetType,
+    url: metaSource?.url,
+    thumbnailUrl: metaSource?.thumbnailUrl,
+    description: metaSource?.description,
+  };
+}
+
+function expandFallbackMentions(
+  tokens: MessageToken[],
+  mentionLookup: Map<string, AssetMention>,
+  findAssetByName: AssetLookupFn
+): MessageToken[] {
+  const expanded: MessageToken[] = [];
+
+  for (const token of tokens) {
+    if (token.type === "mention") {
+      expanded.push(token);
+      continue;
+    }
+
+    const segment = token.text;
+    if (!segment) {
+      expanded.push(token);
+      continue;
+    }
+
+    let lastIndex = 0;
+    const regex = new RegExp(MENTION_TOKEN_REGEX.source, "g");
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(segment)) !== null) {
+      const start = match.index;
+      const end = match.index + match[0].length;
+      if (start > lastIndex) {
+        expanded.push({
+          type: "text",
+          text: segment.slice(lastIndex, start),
+        });
+      }
+
+      const label = match[1] ?? "";
+      if (label.length === 0) {
+        expanded.push({
+          type: "text",
+          text: match[0],
+        });
+      } else {
+        expanded.push({
+          type: "mention",
+          data: resolveMentionDisplay(
+            label,
+            mentionLookup.get(label) ?? mentionLookup.get(label.toLowerCase()) ?? null,
+            mentionLookup,
+            findAssetByName
+          ),
+        });
+      }
+
+      lastIndex = end;
+    }
+
+    if (lastIndex < segment.length) {
+      expanded.push({
+        type: "text",
+        text: segment.slice(lastIndex),
+      });
+    }
+  }
+
+  return expanded;
+}
+
+function buildMessageTokens(
+  text: string,
+  assetMentions: AssetMention[] | undefined,
+  findAssetByName: AssetLookupFn
+): MessageToken[] {
+  if (!text) return [];
+
+  const mentionLookup = new Map<string, AssetMention>();
+  for (const mention of assetMentions ?? []) {
+    if (mention.name) {
+      mentionLookup.set(mention.name, mention);
+      mentionLookup.set(mention.name.toLowerCase(), mention);
+    }
+    if (mention.plainText) {
+      const stripped = stripMentionPrefix(mention.plainText);
+      if (stripped) {
+        mentionLookup.set(stripped, mention);
+        mentionLookup.set(stripped.toLowerCase(), mention);
+      }
+    }
+  }
+
+  const length = text.length;
+  const sortedMentions = (assetMentions ?? [])
+    .filter(
+      (mention): mention is AssetMention & { start: number; end: number } =>
+        typeof mention.start === "number" &&
+        typeof mention.end === "number" &&
+        mention.end > mention.start
+    )
+    .sort((a, b) => a.start - b.start);
+
+  const tokens: MessageToken[] = [];
+  let cursor = 0;
+
+  const clampIndex = (value: number) =>
+    Math.max(0, Math.min(length, value));
+
+  for (const mention of sortedMentions) {
+    const start = clampIndex(mention.start);
+    const end = clampIndex(mention.end);
+    if (end <= start || start < cursor) continue;
+
+    if (start > cursor) {
+      tokens.push({
+        type: "text",
+        text: text.slice(cursor, start),
+      });
+    }
+
+    const raw = mention.plainText ?? text.slice(start, end);
+    const resolved = resolveMentionDisplay(
+      raw || mention.name || "",
+      mention,
+      mentionLookup,
+      findAssetByName
+    );
+    tokens.push({ type: "mention", data: resolved });
+
+    cursor = end;
+  }
+
+  if (cursor < length) {
+    tokens.push({
+      type: "text",
+      text: text.slice(cursor),
+    });
+  }
+
+  return expandFallbackMentions(tokens, mentionLookup, findAssetByName);
+}
+
+function MessageTextContent({
   text,
-  isUser,
   assetMentions,
 }: {
   text: string;
-  isUser: boolean;
   assetMentions?: AssetMention[];
 }) {
   const findByName = useAssetsStore((s) => s.findByName);
-  const nameToType = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const m of assetMentions ?? []) {
-      map.set(m.name, m.type);
+  const getAssetById = useAssetsStore((s) => s.getAssetById);
+
+  const elements = useMemo(() => {
+    const tokens = buildMessageTokens(
+      text,
+      assetMentions,
+      (name) => findByName(name) ?? null
+    );
+
+    if (tokens.length === 0) {
+      return [<span key="text-0">{text}</span>];
     }
-    return map;
-  }, [assetMentions]);
 
-  const mentionRegex = /@(\S+)/g;
-  const parts: (string | { type: "mention"; name: string })[] = [];
-  let lastIndex = 0;
-  let match;
+    let keyCounter = 0;
+    return tokens
+      .map((token) => {
+        if (token.type === "text") {
+          keyCounter += 1;
+          return token.text.length > 0 ? (
+            <span key={`text-${keyCounter}`}>{token.text}</span>
+          ) : null;
+        }
 
-  while ((match = mentionRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index));
-    }
-    parts.push({ type: "mention", name: match[1] });
-    lastIndex = match.index + match[0].length;
-  }
+        const { className, Icon } = getMentionAppearance(token.data.assetType);
+        const baseClass = cn(
+          "mention-chip",
+          className,
+          token.data.assetId &&
+            "cursor-pointer hover:opacity-90 transition-opacity"
+        );
+        const chipContent = (
+          <>
+            <Icon className="mention-chip-icon" aria-hidden="true" />
+            <span className="mention-chip-label">@{token.data.label}</span>
+          </>
+        );
 
-  if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex));
-  }
+        const typeLabel =
+          token.data.assetType === "other"
+            ? "Asset"
+            : (token.data.assetType as string).charAt(0).toUpperCase() +
+              (token.data.assetType as string).slice(1);
+        const fullAsset = token.data.assetId
+          ? getAssetById(token.data.assetId)
+          : undefined;
+        const isImage =
+          token.data.assetType === "image" ||
+          fullAsset?.type === "image";
+        const thumbUrl =
+          isImage &&
+          (token.data.thumbnailUrl ??
+            token.data.url ??
+            fullAsset?.thumbnailUrl ??
+            fullAsset?.url);
+        const description =
+          token.data.description ?? fullAsset?.description ?? undefined;
+        const notes = fullAsset?.notes;
+        const formatBytes = (n: number) =>
+          n >= 1024 * 1024
+            ? `${(n / (1024 * 1024)).toFixed(1)} MB`
+            : n >= 1024
+              ? `${(n / 1024).toFixed(1)} KB`
+              : `${n} B`;
+        const formatDuration = (s: number) => {
+          const m = Math.floor(s / 60);
+          const sec = Math.floor(s % 60);
+          return m > 0 ? `${m}:${sec.toString().padStart(2, "0")}` : `${sec}s`;
+        };
+        const formatDate = (iso: string) => {
+          try {
+            const d = new Date(iso);
+            return d.toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+              year: d.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+            });
+          } catch {
+            return "";
+          }
+        };
+
+        const preview = (
+          <div className="mention-preview max-w-[280px] rounded-md border border-zinc-700/60 bg-zinc-900 p-2">
+            {thumbUrl && (
+              <div className="mention-preview-media mb-2 rounded overflow-hidden bg-zinc-800">
+                <img
+                  src={thumbUrl}
+                  alt=""
+                  className="h-14 w-full object-cover object-center"
+                />
+              </div>
+            )}
+            <div className="font-medium text-zinc-100 truncate">
+              {token.data.label}
+            </div>
+            <div className="text-[11px] text-zinc-400 mt-0.5">{typeLabel}</div>
+
+            {description && (
+              <div className="mt-1.5">
+                <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-0.5">
+                  Description
+                </div>
+                <p className="text-xs text-zinc-400 line-clamp-4">
+                  {description}
+                </p>
+              </div>
+            )}
+
+            {notes && (
+              <div className="mt-1.5">
+                <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-0.5">
+                  Notes
+                </div>
+                <p className="text-xs text-zinc-400 line-clamp-2">
+                  {notes}
+                </p>
+              </div>
+            )}
+
+            {(fullAsset || token.data.assetId) && (
+              <div className="mt-2 pt-2 border-t border-zinc-700/60 space-y-1">
+                {fullAsset?.size != null && (
+                  <div className="text-[11px] text-zinc-500">
+                    Size: {formatBytes(fullAsset.size)}
+                  </div>
+                )}
+                {fullAsset?.duration != null && fullAsset.duration > 0 && (
+                  <div className="text-[11px] text-zinc-500">
+                    Duration: {formatDuration(fullAsset.duration)}
+                  </div>
+                )}
+                {fullAsset?.uploadedAt && (
+                  <div className="text-[11px] text-zinc-500">
+                    Uploaded: {formatDate(fullAsset.uploadedAt)}
+                  </div>
+                )}
+                {fullAsset?.width != null &&
+                  fullAsset?.height != null && (
+                    <div className="text-[11px] text-zinc-500">
+                      {fullAsset.width} × {fullAsset.height}
+                    </div>
+                  )}
+                {token.data.assetId && (
+                  <div className="text-[10px] text-zinc-600 font-mono truncate">
+                    ID: {token.data.assetId.slice(0, 8)}…
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+
+        keyCounter += 1;
+        if (token.data.assetId) {
+          const assetId = token.data.assetId;
+          return (
+            <Tooltip key={`mention-${keyCounter}-${assetId}`} delayDuration={400}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className={baseClass}
+                  onClick={() => requestAssetHighlight(assetId)}
+                  title="Locate in Assets"
+                  data-source="message"
+                  data-mention-id={assetId}
+                  data-mention-name={token.data.label}
+                  data-asset-type={token.data.assetType}
+                >
+                  {chipContent}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={6} className="p-0 border-0">
+                {preview}
+              </TooltipContent>
+            </Tooltip>
+          );
+        }
+        return (
+          <Tooltip key={`mention-${keyCounter}`} delayDuration={400}>
+            <TooltipTrigger asChild>
+              <span
+                className={baseClass}
+                data-source="message"
+                data-mention-name={token.data.label}
+                data-asset-type={token.data.assetType}
+              >
+                {chipContent}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={6} className="p-0 border-0">
+              {preview}
+            </TooltipContent>
+          </Tooltip>
+        );
+      })
+      .filter(Boolean);
+  }, [text, assetMentions, findByName, getAssetById]);
 
   return (
-    <span>
-      {parts.map((part, i) =>
-        typeof part === "string" ? (
-          <span key={i}>{part}</span>
-        ) : (
-          (() => {
-            const asset = findByName(part.name);
-            const assetType = nameToType.get(part.name) ?? asset?.type ?? "other";
-            const assetId = asset?.id;
-            const style =
-              MESSAGE_MENTION_STYLES[assetType] ?? MESSAGE_MENTION_STYLES.other;
-            const chipClass = cn(
-              "inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded text-xs font-semibold mention-chip",
-              style.class,
-              assetId && "cursor-pointer hover:opacity-90 transition-opacity"
-            );
-            return assetId ? (
-              <button
-                key={i}
-                type="button"
-                className={chipClass}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  requestAssetHighlight(assetId);
-                }}
-                title="Locate in Assets"
-              >
-                <span className="mention-chip-icon" aria-hidden>
-                  {style.symbol}
-                </span>
-                @{part.name}
-              </button>
-            ) : (
-              <span key={i} className={chipClass}>
-                <span className="mention-chip-icon" aria-hidden>
-                  {style.symbol}
-                </span>
-                @{part.name}
-              </span>
-            );
-          })()
-        )
-      )}
-    </span>
+    <TooltipProvider delayDuration={400}>
+      <div className="message-mention-text whitespace-pre-wrap">
+        {elements}
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -1369,11 +1699,7 @@ function renderMessagePart(
     // For user messages, render with mention chips (type-colored, with symbols)
     if (isUser) {
       return (
-        <TextWithMentions
-          text={part.text}
-          isUser={isUser}
-          assetMentions={assetMentions}
-        />
+        <MessageTextContent text={part.text} assetMentions={assetMentions} />
       );
     }
     return (

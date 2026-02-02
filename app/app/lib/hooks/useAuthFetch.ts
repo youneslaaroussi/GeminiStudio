@@ -6,7 +6,7 @@ import { auth } from '@/app/lib/server/firebase';
 /**
  * Get auth headers with Firebase ID token.
  */
-export async function getAuthHeaders(): Promise<HeadersInit> {
+export async function getAuthHeaders(): Promise<Record<string, string>> {
   const user = auth.currentUser;
   if (!user) {
     return {};

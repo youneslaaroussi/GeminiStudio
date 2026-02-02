@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "./types";
 import type { Project } from "@/app/types/timeline";
+import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 
 const searchAssetsSchema = z.object({
   query: z.string().min(1).describe("Search query - can be natural language like 'sunset beach' or 'person talking'"),
@@ -55,10 +56,20 @@ export const searchAssetsTool: ToolDefinition<typeof searchAssetsSchema, Project
     }
 
     try {
+      const authHeaders = await getAuthHeaders();
+      if (!authHeaders.Authorization) {
+        return {
+          status: "error",
+          error: "Please sign in to search assets.",
+        };
+      }
       const params = new URLSearchParams({ projectId });
       const response = await fetch(`/api/assets/search?${params}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders,
+        },
         body: JSON.stringify({
           query: input.query,
           type: input.type || undefined,

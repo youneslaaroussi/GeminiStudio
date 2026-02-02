@@ -11,6 +11,12 @@ export interface AssetMention {
   url?: string;
   thumbnailUrl?: string;
   description?: string;
+  /** Starting character offset (in plain text) where @mention begins */
+  start?: number;
+  /** Ending character offset (exclusive) for the @mention */
+  end?: number;
+  /** Plain text slice for the mention (e.g., "@Asset Name") */
+  plainText?: string;
 }
 
 /**
