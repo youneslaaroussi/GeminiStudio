@@ -50,8 +50,15 @@ jobs:
             NEW="runner:${PUBKEY}"
             [ -n "$CUR" ] && NEW="${CUR}"$'\n'"${NEW}"
             gcloud compute instances add-metadata $INSTANCE_NAME --zone=$ZONE --project=$PROJECT_ID --metadata=ssh-keys="$NEW"
-            echo "Waiting 15s for SSH key to propagate on instance..."
-            sleep 15
+            echo "Waiting for SSH key to propagate on instance..."
+            for i in $(seq 1 30); do
+              if gcloud compute ssh runner@$INSTANCE_NAME --zone=$ZONE --project=$PROJECT_ID --command='echo SSH ready' 2>/dev/null; then
+                echo "SSH connection successful after $i attempt(s)"
+                break
+              fi
+              echo "Attempt $i: SSH not ready yet, retrying in 2s..."
+              sleep 2
+            done
 
       - run:
           name: Copy code to VM
