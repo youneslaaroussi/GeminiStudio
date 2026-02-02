@@ -56,6 +56,55 @@ data "google_secret_manager_secret_version" "renderer_shared_secret" {
   depends_on = [google_project_service.secretmanager]
 }
 
+# Firebase configuration (public keys, stored in Secret Manager to keep out of repo)
+data "google_secret_manager_secret_version" "firebase_api_key" {
+  count   = var.use_secret_manager ? 1 : 0
+  secret  = "firebase-api-key"
+  project = var.project_id
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+data "google_secret_manager_secret_version" "firebase_auth_domain" {
+  count   = var.use_secret_manager ? 1 : 0
+  secret  = "firebase-auth-domain"
+  project = var.project_id
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+data "google_secret_manager_secret_version" "firebase_project_id" {
+  count   = var.use_secret_manager ? 1 : 0
+  secret  = "firebase-project-id"
+  project = var.project_id
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+data "google_secret_manager_secret_version" "firebase_storage_bucket" {
+  count   = var.use_secret_manager ? 1 : 0
+  secret  = "firebase-storage-bucket"
+  project = var.project_id
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+data "google_secret_manager_secret_version" "firebase_messaging_sender_id" {
+  count   = var.use_secret_manager ? 1 : 0
+  secret  = "firebase-messaging-sender-id"
+  project = var.project_id
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+data "google_secret_manager_secret_version" "firebase_app_id" {
+  count   = var.use_secret_manager ? 1 : 0
+  secret  = "firebase-app-id"
+  project = var.project_id
+
+  depends_on = [google_project_service.secretmanager]
+}
+
 # Local values for secrets (uses Secret Manager or falls back to variables)
 locals {
   gemini_api_key = var.use_secret_manager ? (
