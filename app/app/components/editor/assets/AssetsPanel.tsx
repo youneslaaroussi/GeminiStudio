@@ -150,7 +150,10 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
     const updatedJobs = await Promise.all(
       pendingJobs.map(async (job) => {
         try {
-          const response = await fetch(`/api/veo/${job.id}`);
+          const authHeaders = await getAuthHeaders();
+          const response = await fetch(`/api/veo/${job.id}`, {
+            headers: authHeaders as Record<string, string>,
+          });
           const data = (await response.json()) as { job?: VeoJob; error?: string };
           if (data.job) {
             // If completed, trigger asset refresh and show toast
