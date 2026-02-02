@@ -106,8 +106,8 @@ class TranscodeConfig:
         elif self.audio_codec == AudioCodec.OPUS:
             audio_stream["audioStream"]["codec"] = "opus"
 
-        if self.audio_bitrate_bps:
-            audio_stream["audioStream"]["bitrateBps"] = self.audio_bitrate_bps
+        # Transcoder API requires audio bitrateBps
+        audio_stream["audioStream"]["bitrateBps"] = self.audio_bitrate_bps or 64_000
         if self.sample_rate_hz:
             audio_stream["audioStream"]["sampleRateHertz"] = self.sample_rate_hz
         if self.channels:
