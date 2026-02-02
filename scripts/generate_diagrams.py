@@ -116,32 +116,32 @@ flowchart LR
 
 # Diagram 4: Agent Iteration Loop
 iteration = """
-flowchart TD
-    A(("fa:fa-user User Request"))
+flowchart LR
+    A(("fa:fa-user User"))
 
     subgraph analyze["1. ANALYZE"]
-        B["fa:fa-eye Gemini Multimodal<br/>Shot detection • Face tracking • Transcription"]
+        B["fa:fa-eye Gemini Multimodal"]
     end
 
     subgraph edit["2. EDIT"]
-        C["fa:fa-cut Timeline Manipulation<br/>Clips • Timing • Transitions • Music/VO"]
+        C["fa:fa-cut Timeline"]
     end
 
     subgraph preview["3. PREVIEW"]
-        D["fa:fa-bolt Fast Render<br/>quality='low' • fps=15 • range=[start,end]"]
+        D["fa:fa-bolt Fast Render"]
     end
 
     subgraph review["4. REVIEW"]
-        E["fa:fa-brain Agent Watches Output<br/>Auto-registered as asset • getAssetMetadata"]
+        E["fa:fa-brain Watch Output"]
     end
 
-    F{"fa:fa-check Satisfied?"}
+    F{"Satisfied?"}
 
     subgraph deliver["5. DELIVER"]
-        G["fa:fa-film Final Render<br/>quality='studio' • Full resolution"]
+        G["fa:fa-film Final Render"]
     end
 
-    H(("fa:fa-video Video Ready"))
+    H(("fa:fa-video Done"))
 
     A --> B
     B --> C
