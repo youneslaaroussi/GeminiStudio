@@ -439,13 +439,8 @@ def generateMusic(
     mime_type = first.get("mimeType") or "audio/wav"
     logger.info("[LYRIA] Raw audio: %d bytes, mime_type=%s", len(audio_bytes), mime_type)
 
-    # Vertex Lyria returns WAV at 48kHz; convert to MP3 for Telegram / compatibility
-    if mime_type and "wav" in mime_type.lower():
-        logger.info("[LYRIA] Converting WAV to MP3")
-        audio_bytes = _wav_to_mp3(audio_bytes)
-        mime_type = "audio/mpeg"
-
-    # Determine file extension based on final mime_type
+    # Keep WAV as-is; asset service pipeline handles transcoding if needed
+    # Determine file extension based on mime_type
     ext = ".mp3"
     if mime_type:
         if "mp3" in mime_type or "mpeg" in mime_type:
