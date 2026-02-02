@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 from typing import Literal
@@ -8,6 +9,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import ToolMessage
+from langchain_core.tools import StructuredTool
 from langgraph.graph import END, START, MessagesState, StateGraph
 
 from .checkpoint import create_checkpointer
@@ -81,7 +83,17 @@ def create_graph(settings: Settings | None = None):
                         "branch_id": branch_id,
                     }
                     logger.info("[AGENT] Tool args (with context): %s", str(args)[:500])
-                    result = tool.invoke(args, config=config)
+                    # Invoke the tool's function directly with full args so _agent_context
+                    # is passed through. tool.invoke() validates args against the schema and
+                    # strips keys not in the schema (e.g. _agent_context), so tools would
+                    # get _agent_context=None when called via invoke().
+                    if isinstance(tool, StructuredTool) and hasattr(tool, "func"):
+                        sig = inspect.signature(tool.func)
+                        allowed = {k for k in sig.parameters}
+                        filtered = {k: v for k, v in args.items() if k in allowed}
+                        result = tool.func(**filtered)
+                    else:
+                        result = tool.invoke(args, config=config)
                     observation = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
                     logger.info("[AGENT] Tool result: %s", observation[:500] if len(observation) > 500 else observation)
                 except Exception as exc:  # pragma: no cover - surface tool exceptions
