@@ -8,8 +8,10 @@ from typing import Dict
 from langchain_core.tools import BaseTool
 
 from .add_clip_tool import addClipToTimeline
+from .add_transition_tool import addTransition
 from .apply_video_effect_tool import applyVideoEffectToClip, getVideoEffectJobStatus
 from .delete_clip_tool import deleteClipFromTimeline
+from .remove_transition_tool import removeTransition
 from .docs_tool import search_product_docs
 from .generate_image_tool import generateImage
 from .generate_music_tool import generateMusic
@@ -23,6 +25,7 @@ from .plan_narrative_edit_tool import createEditPlan
 from .render_video_tool import renderVideo
 from .search_assets_tool import searchAssets
 from .set_asset_notes_tool import setAssetNotes
+from .set_scene_config_tool import setSceneConfig
 from .subscribe_pipeline_tool import subscribeToAssetPipeline
 from .time_tool import get_current_time_utc
 from .weather_tool import lookup_weather_snapshot
@@ -33,9 +36,11 @@ def get_registered_tools() -> Sequence[BaseTool]:
 
     return (
         addClipToTimeline,
+        addTransition,
         applyVideoEffectToClip,
         getVideoEffectJobStatus,
         deleteClipFromTimeline,
+        removeTransition,
         generateImage,
         generateMusic,
         generateSpeech,
@@ -48,6 +53,7 @@ def get_registered_tools() -> Sequence[BaseTool]:
         createEditPlan,
         searchAssets,
         setAssetNotes,
+        setSceneConfig,
         search_product_docs,
         renderVideo,
         subscribeToAssetPipeline,

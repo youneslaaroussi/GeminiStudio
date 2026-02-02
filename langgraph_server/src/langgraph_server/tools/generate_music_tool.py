@@ -88,7 +88,47 @@ def _pcm_to_mp3(pcm_data: bytes, sample_rate: int = 24000, channels: int = 1) ->
             except OSError:
                 pass
 
-_DURATION_CHOICES = {10, 20, 30, 60}  # seconds
+
+def _wav_to_mp3(wav_data: bytes) -> bytes:
+    """Convert WAV bytes to MP3 using ffmpeg. Telegram sendAudio supports MP3/M4A, not WAV."""
+    import subprocess
+    import tempfile
+    import os
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as wav_file:
+        wav_path = wav_file.name
+        wav_file.write(wav_data)
+
+    mp3_path = wav_path.replace(".wav", ".mp3")
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-i", wav_path,
+                "-codec:a", "libmp3lame",
+                "-qscale:a", "2",
+                mp3_path,
+            ],
+            capture_output=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            logger.error("[LYRIA] ffmpeg WAV->MP3 failed: %s", result.stderr.decode()[:500])
+            return wav_data
+        with open(mp3_path, "rb") as f:
+            return f.read()
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logger.warning("[LYRIA] ffmpeg WAV->MP3 failed: %s, keeping WAV", e)
+        return wav_data
+    finally:
+        for path in [wav_path, mp3_path]:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
+
+_DURATION_CHOICES = {10, 20, 30, 60}  # seconds (Vertex Lyria returns ~30s clips; duration is informational)
 
 
 def _get_gcs_credentials(settings: Settings):
@@ -106,6 +146,16 @@ def _get_gcs_credentials(settings: Settings):
         return service_account.Credentials.from_service_account_info(key_data)
     except json.JSONDecodeError:
         return None
+
+
+def _get_vertex_access_token(settings: Settings) -> str | None:
+    """Get an access token for Vertex AI using the service account (same as GCS)."""
+    creds = _get_gcs_credentials(settings)
+    if not creds:
+        return None
+    from google.auth.transport.requests import Request
+    creds.refresh(Request())
+    return creds.token
 
 
 def _upload_to_asset_service(
@@ -248,9 +298,6 @@ def generateMusic(
     Returns:
         Dict with audioUrl that MUST be included in your response to the user.
     """
-    from google import genai
-    from google.genai import types
-
     settings = get_settings()
 
     if not user_id:
@@ -290,25 +337,46 @@ def generateMusic(
 
     request_id = uuid4().hex
 
-    try:
-        client = genai.Client(api_key=settings.google_api_key)
-        
-        # Generate music using Lyria
-        response = client.models.generate_content(
-            model=settings.lyria_model,
-            contents=prompt.strip(),
-            config=types.GenerateContentConfig(
-                response_modalities=["AUDIO"],
-                speech_config=types.SpeechConfig(
-                    voice_config=types.VoiceConfig(
-                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                            voice_name="Lyria",
-                        )
-                    )
-                ),
-            ),
-        )
+    # Lyria is only available on Vertex AI (predict endpoint), not Gemini generateContent
+    token = _get_vertex_access_token(settings)
+    if not token:
+        logger.warning("[LYRIA] No Vertex AI credentials (FIREBASE_SERVICE_ACCOUNT_KEY)")
+        return {
+            "status": "error",
+            "message": "Music generation requires Vertex AI credentials (service account). Configure FIREBASE_SERVICE_ACCOUNT_KEY with a key that has Vertex AI access.",
+            "reason": "missing_credentials",
+        }
 
+    location = getattr(settings, "lyria_location", None) or "us-central1"
+    model = getattr(settings, "lyria_model", None) or "lyria-002"
+    project_id_vertex = settings.google_project_id
+    predict_url = (
+        f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id_vertex}"
+        f"/locations/{location}/publishers/google/models/{model}:predict"
+    )
+
+    try:
+        response = httpx.post(
+            predict_url,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "instances": [{"prompt": prompt.strip()}],
+                "parameters": {},
+            },
+            timeout=60.0,
+        )
+        response.raise_for_status()
+        body = response.json()
+    except httpx.HTTPStatusError as exc:
+        logger.exception("[LYRIA] Vertex AI request failed: %s", exc.response.text[:500])
+        return {
+            "status": "error",
+            "message": f"Failed to generate music: {exc.response.text[:300]}",
+            "reason": "api_error",
+        }
     except Exception as exc:
         logger.exception("[LYRIA] API request failed")
         return {
@@ -317,56 +385,35 @@ def generateMusic(
             "reason": "api_error",
         }
 
-    # Extract audio data from response
-    audio_data = None
-    mime_type = "audio/mp3"
-    
-    try:
-        for part in response.candidates[0].content.parts:
-            if hasattr(part, 'inline_data') and part.inline_data:
-                audio_data = part.inline_data.data
-                mime_type = part.inline_data.mime_type or "audio/mp3"
-                break
-    except (IndexError, AttributeError) as e:
-        logger.error("[LYRIA] Failed to extract audio from response: %s", e)
+    predictions = body.get("predictions") or []
+    if not predictions:
+        logger.error("[LYRIA] Vertex response had no predictions: %s", body)
         return {
             "status": "error",
             "message": "Lyria did not return audio data. Try a different prompt.",
             "reason": "no_audio_data",
         }
 
-    if not audio_data:
+    first = predictions[0]
+    # Vertex Lyria returns audioContent (doc); some clients use bytesBase64Encoded
+    audio_b64 = first.get("audioContent") or first.get("bytesBase64Encoded")
+    if not audio_b64:
+        logger.error("[LYRIA] Prediction missing audioContent: %s", first)
         return {
             "status": "error",
             "message": "Lyria did not return audio data. Try a different prompt.",
             "reason": "no_audio_data",
         }
 
-    # Decode if base64
-    if isinstance(audio_data, str):
-        audio_bytes = base64.b64decode(audio_data)
-    else:
-        audio_bytes = bytes(audio_data) if not isinstance(audio_data, bytes) else audio_data
-
+    audio_bytes = base64.b64decode(audio_b64)
+    mime_type = first.get("mimeType") or "audio/wav"
     logger.info("[LYRIA] Raw audio: %d bytes, mime_type=%s", len(audio_bytes), mime_type)
 
-    # Check if it's raw PCM (L16 = 16-bit linear PCM) and convert to MP3
-    # Gemini models may return "audio/L16;codec=pcm;rate=24000"
-    # Note: Telegram sendAudio only supports MP3/M4A, not WAV
-    if mime_type and ("L16" in mime_type or "pcm" in mime_type.lower()):
-        # Parse sample rate from mime_type
-        sample_rate = 24000  # default
-        if "rate=" in mime_type:
-            try:
-                rate_str = mime_type.split("rate=")[1].split(";")[0]
-                sample_rate = int(rate_str)
-            except (IndexError, ValueError):
-                pass
-        
-        logger.info("[LYRIA] Converting raw PCM to MP3 (sample_rate=%d)", sample_rate)
-        audio_bytes = _pcm_to_mp3(audio_bytes, sample_rate=sample_rate)
+    # Vertex Lyria returns WAV at 48kHz; convert to MP3 for Telegram / compatibility
+    if mime_type and "wav" in mime_type.lower():
+        logger.info("[LYRIA] Converting WAV to MP3")
+        audio_bytes = _wav_to_mp3(audio_bytes)
         mime_type = "audio/mpeg"
-        logger.info("[LYRIA] MP3 conversion complete: %d bytes", len(audio_bytes))
 
     # Determine file extension based on final mime_type
     ext = ".mp3"

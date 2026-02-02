@@ -198,6 +198,9 @@ services:
       - VEO_PROJECT_ID=${GOOGLE_PROJECT_ID}
       - VEO_LOCATION=${VEO_LOCATION:-us-central1}
       - VEO_MODEL_ID=${VEO_MODEL_ID:-veo-3.0-generate-001}
+      # Lyria music (Vertex AI; uses FIREBASE_SERVICE_ACCOUNT_KEY for auth)
+      - LYRIA_MODEL=${LYRIA_MODEL:-lyria-002}
+      - LYRIA_LOCATION=${LYRIA_LOCATION:-us-central1}
       # Telegram
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET:-}

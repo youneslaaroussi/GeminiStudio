@@ -91,8 +91,9 @@ class Settings(BaseSettings):
     # Banana image generation
     banana_model: str = Field(default="gemini-3-pro-image-preview", alias="BANANA_MODEL")
 
-    # Lyria music generation
-    lyria_model: str = Field(default="lyria-realtime-exp", alias="LYRIA_MODEL")
+    # Lyria music generation (Vertex AI; model lyria-002, predict endpoint)
+    lyria_model: str = Field(default="lyria-002", alias="LYRIA_MODEL")
+    lyria_location: str = Field(default="us-central1", alias="LYRIA_LOCATION")
 
     # TTS (Text-to-Speech)
     tts_model: str = Field(default="gemini-2.5-flash-preview-tts", alias="TTS_MODEL")
