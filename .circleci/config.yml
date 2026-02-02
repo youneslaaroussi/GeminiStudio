@@ -46,7 +46,8 @@ jobs:
                 print(i.get('value', ''))
                 break
             " 2>/dev/null || true)
-            NEW="root:${PUBKEY}"
+            # Use "runner" - same user as GitHub Actions ubuntu-latest, so VM already has this user
+            NEW="runner:${PUBKEY}"
             [ -n "$CUR" ] && NEW="${CUR}"$'\n'"${NEW}"
             gcloud compute instances add-metadata $INSTANCE_NAME --zone=$ZONE --project=$PROJECT_ID --metadata=ssh-keys="$NEW"
             echo "Waiting 15s for SSH key to propagate on instance..."
@@ -64,7 +65,8 @@ jobs:
             gcloud compute scp /tmp/repo.tar.gz \
               $INSTANCE_NAME:/tmp/repo.tar.gz \
               --zone=$ZONE \
-              --project=$PROJECT_ID
+              --project=$PROJECT_ID \
+              --ssh-flag="-l runner"
 
       - run:
           name: Deploy to VM
@@ -72,6 +74,7 @@ jobs:
             gcloud compute ssh $INSTANCE_NAME \
               --zone=$ZONE \
               --project=$PROJECT_ID \
+              --ssh-flag="-l runner" \
               --command='set -e
                 sudo mkdir -p /opt/gemini-studio
                 sudo chown -R $(whoami):$(whoami) /opt/gemini-studio
