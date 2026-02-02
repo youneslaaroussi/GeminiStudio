@@ -10,8 +10,8 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_core.runnables import RunnableConfig
 
 from .agent import graph
-from .agent_status import get_thinking_message, get_tool_status_message
 from .chat import build_dispatcher
+from .status_generator import generate_status_message_pair
 from .config import Settings, get_settings
 from .firebase import (
     fetch_chat_session,
@@ -491,7 +491,8 @@ Media Assets in Project ({len(assets_info)}):
                 "project_id": first_project_id,
                 "branch_id": branch_id,
             }
-            await set_agent_status(get_thinking_message(False), get_thinking_message(True))
+            plain, telegram = await generate_status_message_pair("thinking", settings=settings)
+            await set_agent_status(plain, telegram)
             try:
                 async for event in graph.astream(
                     {"messages": langchain_messages},
@@ -508,10 +509,8 @@ Media Assets in Project ({len(assets_info)}):
                             for tc in last_msg.tool_calls:
                                 name = tc.get("name", "tool")
                                 console.print(f"[yellow]Tool Call:[/yellow] {name}({tc.get('args', {})})")
-                                await set_agent_status(
-                                    get_tool_status_message(name, False),
-                                    get_tool_status_message(name, True),
-                                )
+                                plain, telegram = await generate_status_message_pair("tool", tool_name=name, settings=settings)
+                                await set_agent_status(plain, telegram)
                         else:
                             await set_agent_status(None)
                             text = extract_text_from_content(last_msg.content)

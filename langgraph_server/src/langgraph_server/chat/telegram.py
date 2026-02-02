@@ -1192,8 +1192,9 @@ Assets: {len(assets_info)}"""
         # Show typing indicator and send first status so user sees progress
         await self.send_typing_indicator(chat_id)
         try:
-            from ..agent_status import get_thinking_message
-            await send_telegram_message(chat_id, get_thinking_message(for_telegram=True), self.settings)
+            from ..status_generator import generate_status_message
+            msg = await generate_status_message("thinking", for_telegram=True, settings=self.settings)
+            await send_telegram_message(chat_id, msg, self.settings)
         except Exception as e:
             logger.debug("Failed to send Thinking status to Telegram: %s", e)
 
@@ -1203,7 +1204,6 @@ Assets: {len(assets_info)}"""
                 last_response = None
                 tool_calls_made = []
                 from langchain_core.messages import ToolMessage
-                from ..agent_status import get_tool_status_message
 
                 async for event in graph.astream({"messages": langchain_messages}, config=config, stream_mode="values", context=agent_context):
                     messages = event.get("messages", [])
@@ -1220,9 +1220,8 @@ Assets: {len(assets_info)}"""
                                 logger.info("[TELEGRAM] Tool call: %s(%s)", tool_name, str(tool_args)[:200])
                                 tool_calls_made.append(tool_name)
                                 try:
-                                    await send_telegram_message(
-                                        chat_id, get_tool_status_message(tool_name, for_telegram=True), self.settings
-                                    )
+                                    msg = await generate_status_message("tool", tool_name=tool_name, for_telegram=True, settings=self.settings)
+                                    await send_telegram_message(chat_id, msg, self.settings)
                                 except Exception as e:
                                     logger.debug("Failed to send tool status to Telegram: %s", e)
                         else:

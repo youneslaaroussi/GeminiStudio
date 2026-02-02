@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 
 from langchain_core.tools import tool
@@ -156,6 +157,7 @@ def deleteClipFromTimeline(
         branch_ref.update({
             "automergeState": new_state,
             "commitId": str(uuid.uuid4()),
+            "timestamp": int(time.time() * 1000),
         })
 
         msg_extra = ""

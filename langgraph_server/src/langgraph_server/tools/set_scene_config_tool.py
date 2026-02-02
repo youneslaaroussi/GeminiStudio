@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -152,6 +153,7 @@ def setSceneConfig(
         branch_ref.update({
             "automergeState": new_state,
             "commitId": str(uuid.uuid4()),
+            "timestamp": int(time.time() * 1000),
         })
 
         resolution = project_data.get("resolution", {})
