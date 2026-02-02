@@ -4,7 +4,7 @@ When the user wants a meaningful video (vlog, story, recap, highlight reel) from
 
 0. Plan first (recommended): listProjectAssets to get asset_ids, then createEditPlan(intent="...", asset_ids=[...], target_duration_seconds=...) to get a structured plan (segments with asset_id, offset, duration, timeline_start). Execute the plan by calling addClipToTimeline(asset_id, start=timeline_start, duration=duration, offset=offset) for each segment in order. If the plan includes voiceover_script, call generateSpeech(voiceover_script) and add the returned asset as an audio clip; add music and title cards as needed, then render.
 
-1. Discover content: listProjectAssets, then for each video call getAssetMetadata(assetId) to get transcription, shot-detection, and gemini-analysis (scene breakdown, key moments). If assets are still processing, use subscribeToAssetPipeline(assetId) and wait for the pipeline completion event, then fetch metadata again.
+1. Discover content: listProjectAssets, then for each video call getAssetMetadata(assetId) to get transcription, shot-detection, and gemini-analysis (scene breakdown, key moments). If getAssetMetadata returns no metadata ("No metadata available" / "Pipeline may not have run yet"), call subscribeToAssetPipeline(assetId) and STOP—do not continue until a pipeline completion event is delivered to this conversation; then call getAssetMetadata again and proceed.
 
 2. Use transcript and shots to choose segments:
    - getAssetMetadata returns transcription (full transcript + segments with start times in ms; convert to seconds for offset/duration) and shot-detection (shots with start, end per shot).

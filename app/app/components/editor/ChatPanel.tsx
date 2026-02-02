@@ -155,11 +155,13 @@ export function ChatPanel() {
   } | null>(null);
   const [isCloudMode, setIsCloudMode] = useState(false);
   const [isCloudProcessing, setIsCloudProcessing] = useState(false);
+  const [cloudAgentStatus, setCloudAgentStatus] = useState<string | null>(null);
   const [isListeningToCloud, setIsListeningToCloud] = useState(false);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [isSpeakLoading, setIsSpeakLoading] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const cloudUnsubscribeRef = useRef<(() => void) | null>(null);
+  const teleportAbortRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatInputRef = useRef<ChatInputRef>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -614,6 +616,8 @@ export function ChatPanel() {
 
           const data = snapshot.data();
           const firebaseMessages = data?.messages || [];
+          const agentStatus = data?.agentStatus ?? null;
+          setCloudAgentStatus(agentStatus);
 
           // Only update if there are new messages from the cloud
           if (firebaseMessages.length > currentMessageCount) {
@@ -631,6 +635,7 @@ export function ChatPanel() {
             );
 
             setMessages(newMessages);
+            setIsCloudProcessing(false);
           }
         },
         (error) => {
@@ -651,7 +656,19 @@ export function ChatPanel() {
       cloudUnsubscribeRef.current = null;
     }
     setIsListeningToCloud(false);
+    setCloudAgentStatus(null);
   }, []);
+
+  // Stop: abort cloud teleport if processing (fetch catch will add "Stopped."), otherwise stop local chat
+  const handleStop = useCallback(() => {
+    if (isCloudProcessing) {
+      teleportAbortRef.current?.abort();
+      setIsCloudProcessing(false);
+      setCloudAgentStatus(null);
+    } else {
+      stop?.();
+    }
+  }, [isCloudProcessing, stop]);
 
   // Start a new chat session
   const handleNewChat = useCallback(() => {
@@ -675,12 +692,18 @@ export function ChatPanel() {
     };
   }, []);
 
-  // Start a cloud session - add message, save, teleport
+  // Start a cloud session - add message, save, then teleport in background and listen for updates
   const startCloudSession = useCallback(
     async (text: string) => {
       if (!text.trim() || !user) return;
 
+      // Interrupt any in-flight teleport for this session (server will cancel previous run)
+      teleportAbortRef.current?.abort();
+      teleportAbortRef.current = new AbortController();
+      const signal = teleportAbortRef.current.signal;
+
       setIsCloudProcessing(true);
+      setCloudAgentStatus(null);
 
       // Add user message to local state
       const userMessage = {
@@ -696,47 +719,55 @@ export function ChatPanel() {
         const updatedMessages = [...(messages || []), userMessage];
         const session = await saveChatSession(user.uid, sessionId, name, mode, updatedMessages);
 
-        // Teleport to cloud
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_LANGGRAPH_URL || "http://localhost:8000"}/teleport`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              chat_id: session.id,
-              thread_id: session.id,
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`Teleport failed: ${response.status}`);
-        }
-
-        // Add "processing" message
+        // Add "processing" message and start listening before calling teleport so user sees progress immediately
         const processingMessage = {
           id: `msg-${Date.now()}-processing`,
           role: "assistant" as const,
           parts: [{ type: "text" as const, text: "Cloud agent is processing your request..." }],
         };
         setMessages((prev) => [...prev, processingMessage]);
-
-        // Start listening for real-time updates from the cloud agent
-        // Pass the count of messages in Firebase (before agent responds)
         startCloudListener(user.uid, session.id, updatedMessages.length);
-
-        // Switch back to local mode but keep listening
         setIsCloudMode(false);
+
+        // Teleport in background; listener will update messages and clear processing when agent responds
+        fetch(
+          `${process.env.NEXT_PUBLIC_LANGGRAPH_URL || "http://localhost:8000"}/teleport`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: session.id, thread_id: session.id }), signal }
+        )
+          .then((response) => {
+            if (!response.ok) throw new Error(`Teleport failed: ${response.status}`);
+            return response.json();
+          })
+          .catch((err) => {
+            if (err.name === "AbortError") {
+              setIsCloudProcessing(false);
+              setMessages((prev) =>
+                prev.filter((m) => !m.id?.endsWith("-processing")).concat({
+                  id: `msg-${Date.now()}-stopped`,
+                  role: "assistant" as const,
+                  parts: [{ type: "text" as const, text: "Stopped." }],
+                })
+              );
+              return;
+            }
+            console.error("Cloud session failed:", err);
+            setIsCloudProcessing(false);
+            const errorMessage = {
+              id: `msg-${Date.now()}-error`,
+              role: "assistant" as const,
+              parts: [{ type: "text" as const, text: `Failed to create cloud session: ${error instanceof Error ? error.message : "Unknown error"}` }],
+            };
+            setMessages((prev) => [...prev, errorMessage]);
+          });
       } catch (error) {
         console.error("Cloud session failed:", error);
+        setIsCloudProcessing(false);
         const errorMessage = {
           id: `msg-${Date.now()}-error`,
           role: "assistant" as const,
           parts: [{ type: "text" as const, text: `Failed to create cloud session: ${error instanceof Error ? error.message : "Unknown error"}` }],
         };
         setMessages((prev) => [...prev, errorMessage]);
-      } finally {
-        setIsCloudProcessing(false);
       }
     },
     [user, sessionId, mode, messages, setMessages, startCloudListener]
@@ -958,8 +989,14 @@ export function ChatPanel() {
                 isCloudProcessing ? "bg-blue-500/10" : "bg-muted/60"
               )}>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
-                  <span>{isCloudProcessing ? "Cloud processing..." : "Thinking..."}</span>
+                  <Loader2 className="size-4 animate-spin shrink-0" />
+                  <span>
+                    {isCloudProcessing && cloudAgentStatus
+                      ? cloudAgentStatus
+                      : isCloudProcessing
+                        ? "Cloud processing..."
+                        : "Thinking..."}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1240,8 +1277,9 @@ export function ChatPanel() {
           {isBusy ? (
             <button
               type="button"
-              onClick={() => stop?.()}
+              onClick={handleStop}
               className="shrink-0 rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2 text-destructive hover:bg-destructive/20 transition-colors"
+              title="Stop"
             >
               <Square className="size-4 fill-current" />
             </button>

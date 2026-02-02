@@ -148,11 +148,41 @@ def _get_gcs_credentials(settings: Settings):
         return None
 
 
+# Vertex AI (Lyria) requires cloud-platform scope when minting the access token (same as app Lyria).
+_VERTEX_SCOPE = ["https://www.googleapis.com/auth/cloud-platform"]
+
+
+def _get_credentials_from_key(key_value: str | None) -> service_account.Credentials | None:
+    """Load service account credentials from a file path or JSON string."""
+    if not key_value or not key_value.strip():
+        return None
+    key_value = key_value.strip()
+    path = Path(key_value).expanduser()
+    if path.exists():
+        return service_account.Credentials.from_service_account_file(str(path))
+    try:
+        key_data = json.loads(key_value)
+        return service_account.Credentials.from_service_account_info(key_data)
+    except json.JSONDecodeError:
+        return None
+
+
 def _get_vertex_access_token(settings: Settings) -> str | None:
-    """Get an access token for Vertex AI using the service account (same as GCS)."""
-    creds = _get_gcs_credentials(settings)
+    """Get an access token for Vertex AI with cloud-platform scope (same as app Lyria).
+    Prefer LYRIA_SERVICE_ACCOUNT_KEY then VEO_SERVICE_ACCOUNT_KEY then FIREBASE_SERVICE_ACCOUNT_KEY.
+    """
+    creds = None
+    for key_value in (
+        getattr(settings, "lyria_service_account_key", None),
+        getattr(settings, "veo_service_account_key", None),
+        settings.firebase_service_account_key,
+    ):
+        creds = _get_credentials_from_key(key_value)
+        if creds:
+            break
     if not creds:
         return None
+    creds = creds.with_scopes(_VERTEX_SCOPE)
     from google.auth.transport.requests import Request
     creds.refresh(Request())
     return creds.token

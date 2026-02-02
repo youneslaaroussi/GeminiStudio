@@ -233,6 +233,35 @@ def update_chat_session_branch(
         return False
 
 
+def update_chat_session_agent_status(
+    user_id: str,
+    chat_id: str,
+    status: str | None,
+    settings: Settings,
+) -> bool:
+    """
+    Update the agentStatus field on a chat session for live progress (e.g. "Thinking...", "Calling addClip...").
+    Pass status=None or "" to clear.
+    """
+    import logging
+    from datetime import datetime
+    logger = logging.getLogger(__name__)
+
+    db = get_firestore_client(settings)
+    try:
+        session_ref = db.collection("users").document(user_id).collection("chatSessions").document(chat_id)
+        session_ref.update({
+            "agentStatus": status if status else None,
+            "updatedAt": datetime.utcnow().isoformat() + "Z",
+        })
+        if status:
+            logger.info(f"Updated chat session {chat_id} agentStatus: {status[:80]!r}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to update chat session {chat_id} agentStatus: {e}")
+        return False
+
+
 def create_initial_automerge_state(name: str = "Untitled Project") -> str:
     """
     Create an initial Automerge state for a new empty project timeline.

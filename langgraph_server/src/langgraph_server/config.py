@@ -94,6 +94,9 @@ class Settings(BaseSettings):
     # Lyria music generation (Vertex AI; model lyria-002, predict endpoint)
     lyria_model: str = Field(default="lyria-002", alias="LYRIA_MODEL")
     lyria_location: str = Field(default="us-central1", alias="LYRIA_LOCATION")
+    # Optional: use same key as app Lyria (LYRIA_SERVICE_ACCOUNT_KEY or VEO_SERVICE_ACCOUNT_KEY) for Vertex token
+    lyria_service_account_key: str | None = Field(default=None, alias="LYRIA_SERVICE_ACCOUNT_KEY")
+    veo_service_account_key: str | None = Field(default=None, alias="VEO_SERVICE_ACCOUNT_KEY")
 
     # TTS (Text-to-Speech)
     tts_model: str = Field(default="gemini-2.5-flash-preview-tts", alias="TTS_MODEL")

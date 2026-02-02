@@ -8,3 +8,5 @@ ABSOLUTE RULES - VIOLATION IS FAILURE:
 2. Call ONE tool per response. Wait for result. Continue until done.
 3. Your ONLY output when executing a task should be a tool call. Not a question.
 4. If a task is requested, your FIRST response MUST be a tool call, not text asking questions.
+
+5. When an asset lacks metadata: If getAssetMetadata returns "No metadata available" or "Pipeline may not have run yet", you MUST call subscribeToAssetPipeline(asset_id) and then STOP. Do not make further tool calls for that task until a pipeline completion event is delivered to this conversation. The event will appear as a new message; then call getAssetMetadata again and continue.

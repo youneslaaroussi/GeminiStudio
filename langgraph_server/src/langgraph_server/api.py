@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Iterable
@@ -16,6 +17,7 @@ from .firebase import (
     fetch_user_projects,
     update_chat_session_messages,
     update_chat_session_branch,
+    update_chat_session_agent_status,
     create_branch_for_chat,
     get_telegram_chat_id_for_user,
     send_telegram_message,
@@ -26,6 +28,10 @@ from .schemas import HealthResponse, InvokeRequest, InvokeResponse, MessageEnvel
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
+# Per-chat task registry: cancel previous agent run when a new teleport request arrives for the same chat
+_teleport_tasks: dict[str, asyncio.Task] = {}
+_teleport_lock = asyncio.Lock()
 
 
 def _coerce_content(value) -> str:
@@ -409,117 +415,163 @@ Media Assets in Project ({len(assets_info)}):
         "thread_id": thread_id,
     }
 
-    try:
-        import time
-        from datetime import datetime
+    import time
+    from datetime import datetime
 
-        # Track messages for Firebase updates
-        current_messages = list(session.get("messages", []))
+    current_messages = list(session.get("messages", []))
 
-        def extract_text_from_content(content) -> str:
-            """Extract text from AI message content (string or list format)."""
-            if isinstance(content, str):
-                return content
-            elif isinstance(content, list):
-                text_parts = []
-                for block in content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        text_parts.append(block.get("text", ""))
-                    elif isinstance(block, str):
-                        text_parts.append(block)
-                return "\n".join(text_parts)
-            return ""
+    def extract_text_from_content(content) -> str:
+        """Extract text from AI message content (string or list format)."""
+        if isinstance(content, str):
+            return content
+        elif isinstance(content, list):
+            text_parts = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    text_parts.append(block.get("text", ""))
+                elif isinstance(block, str):
+                    text_parts.append(block)
+            return "\n".join(text_parts)
+        return ""
 
-        # Check if user has Telegram linked (only send if session is NOT from Telegram)
-        is_telegram_session = session.get("source") == "telegram" or payload.chat_id.startswith("telegram-")
-        telegram_chat_id = None
-        if not is_telegram_session:
-            telegram_chat_id = get_telegram_chat_id_for_user(session.get("userId"), settings)
+    is_telegram_session = session.get("source") == "telegram" or payload.chat_id.startswith("telegram-")
+    telegram_chat_id = None
+    if not is_telegram_session:
+        telegram_chat_id = get_telegram_chat_id_for_user(session.get("userId"), settings)
 
-        async def send_to_telegram_async(text: str):
-            """Send message to Telegram if linked."""
-            if telegram_chat_id:
-                await send_telegram_message(telegram_chat_id, text, settings)
+    async def send_to_telegram_async(text: str):
+        if telegram_chat_id:
+            await send_telegram_message(telegram_chat_id, text, settings)
 
-        async def write_message_to_firebase(text: str):
-            """Write an intermediate message to Firebase for real-time updates."""
-            if not text or not session.get("userId"):
-                return
-            nonlocal current_messages
-            new_message = {
-                "id": f"msg-{int(time.time() * 1000)}-agent",
-                "role": "assistant",
-                "parts": [{"type": "text", "text": text}],
-                "createdAt": datetime.utcnow().isoformat() + "Z",
-            }
-            current_messages = current_messages + [new_message]
-            update_chat_session_messages(
-                user_id=session["userId"],
-                chat_id=payload.chat_id,
-                messages=current_messages,
-                settings=settings
+    async def set_agent_status(status: str | None):
+        if session.get("userId"):
+            update_chat_session_agent_status(
+                session["userId"], payload.chat_id, status, settings
             )
-            console.print(f"[dim]Wrote to Firebase: {text[:50]}...[/dim]")
+        if status and telegram_chat_id:
+            try:
+                await send_to_telegram_async(status)
+            except Exception as e:
+                console.print(f"[yellow]Failed to send status to Telegram: {e}[/yellow]")
 
-            # Also send to Telegram if user has it linked
-            if telegram_chat_id:
-                try:
-                    await send_to_telegram_async(text)
-                    console.print(f"[dim]Sent to Telegram: {telegram_chat_id}[/dim]")
-                except Exception as e:
-                    console.print(f"[yellow]Failed to send to Telegram: {e}[/yellow]")
-
-        # Stream the graph to get intermediate responses (branch_id enforces chat-only branch)
-        last_response = None
-        agent_context = {
-            "thread_id": thread_id,
-            "user_id": session.get("userId"),
-            "project_id": first_project_id,
-            "branch_id": branch_id,
+    async def write_message_to_firebase(text: str):
+        if not text or not session.get("userId"):
+            return
+        nonlocal current_messages
+        new_message = {
+            "id": f"msg-{int(time.time() * 1000)}-agent",
+            "role": "assistant",
+            "parts": [{"type": "text", "text": text}],
+            "createdAt": datetime.utcnow().isoformat() + "Z",
         }
-        async for event in graph.astream({"messages": langchain_messages}, config=config, stream_mode="values", context=agent_context):
-            messages = event.get("messages", [])
-            if not messages:
-                continue
-
-            last_msg = messages[-1]
-
-            if isinstance(last_msg, AIMessage):
-                # Check for tool calls
-                if hasattr(last_msg, 'tool_calls') and last_msg.tool_calls:
-                    for tc in last_msg.tool_calls:
-                        console.print(f"[yellow]Tool Call:[/yellow] {tc.get('name', 'unknown')}({tc.get('args', {})})")
-                else:
-                    # AI response without tool calls - this is a response to show user
-                    text = extract_text_from_content(last_msg.content)
-                    if text:
-                        console.print(f"[green]AI:[/green] {text[:200]}{'...' if len(text) > 200 else ''}")
-                        # Write intermediate response to Firebase
-                        await write_message_to_firebase(text)
-                        last_response = text
-
-            elif isinstance(last_msg, ToolMessage):
-                content = last_msg.content
-                preview = content[:150] if isinstance(content, str) else str(content)[:150]
-                console.print(f"[cyan]Tool Result:[/cyan] {preview}{'...' if len(str(content)) > 150 else ''}")
-
-        console.print(Panel.fit(
-            f"[bold green]Agent Complete[/bold green]\n\n{last_response[:500] if last_response else 'No response'}{'...' if last_response and len(last_response) > 500 else ''}",
-            border_style="green"
-        ))
-
-        return TeleportResponse(
-            success=True,
+        current_messages = current_messages + [new_message]
+        update_chat_session_messages(
+            user_id=session["userId"],
             chat_id=payload.chat_id,
-            message=last_response or "Agent completed without response"
+            messages=current_messages,
+            settings=settings
         )
-    except Exception as exc:
-        console.print(f"[bold red]Agent failed:[/bold red] {exc}")
+        console.print(f"[dim]Wrote to Firebase: {text[:50]}...[/dim]")
+        if telegram_chat_id:
+            try:
+                await send_to_telegram_async(text)
+                console.print(f"[dim]Sent to Telegram: {telegram_chat_id}[/dim]")
+            except Exception as e:
+                console.print(f"[yellow]Failed to send to Telegram: {e}[/yellow]")
+
+    async def run_teleport_agent() -> TeleportResponse:
+        """Run the graph stream; can be cancelled when a new teleport arrives for the same chat."""
+        try:
+            last_response = None
+            agent_context = {
+                "thread_id": thread_id,
+                "user_id": session.get("userId"),
+                "project_id": first_project_id,
+                "branch_id": branch_id,
+            }
+            await set_agent_status("Thinking...")
+            try:
+                async for event in graph.astream(
+                    {"messages": langchain_messages},
+                    config=config,
+                    stream_mode="values",
+                    context=agent_context,
+                ):
+                    messages = event.get("messages", [])
+                    if not messages:
+                        continue
+                    last_msg = messages[-1]
+                    if isinstance(last_msg, AIMessage):
+                        if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+                            for tc in last_msg.tool_calls:
+                                name = tc.get("name", "tool")
+                                console.print(f"[yellow]Tool Call:[/yellow] {name}({tc.get('args', {})})")
+                                await set_agent_status(f"Calling {name}...")
+                        else:
+                            await set_agent_status(None)
+                            text = extract_text_from_content(last_msg.content)
+                            if text:
+                                console.print(f"[green]AI:[/green] {text[:200]}{'...' if len(text) > 200 else ''}")
+                                await write_message_to_firebase(text)
+                                last_response = text
+                    elif isinstance(last_msg, ToolMessage):
+                        content = last_msg.content
+                        preview = content[:150] if isinstance(content, str) else str(content)[:150]
+                        console.print(f"[cyan]Tool Result:[/cyan] {preview}{'...' if len(str(content)) > 150 else ''}")
+            finally:
+                await set_agent_status(None)
+            console.print(Panel.fit(
+                f"[bold green]Agent Complete[/bold green]\n\n{last_response[:500] if last_response else 'No response'}{'...' if last_response and len(last_response) > 500 else ''}",
+                border_style="green"
+            ))
+            return TeleportResponse(
+                success=True,
+                chat_id=payload.chat_id,
+                message=last_response or "Agent completed without response"
+            )
+        except asyncio.CancelledError:
+            if session.get("userId"):
+                update_chat_session_agent_status(
+                    session["userId"], payload.chat_id, None, settings
+                )
+            logger.info("Teleport run cancelled for chat_id=%s", payload.chat_id)
+            raise
+        except Exception as exc:
+            console.print(f"[bold red]Agent failed:[/bold red] {exc}")
+            if session.get("userId"):
+                update_chat_session_agent_status(
+                    session["userId"], payload.chat_id, None, settings
+                )
+            return TeleportResponse(
+                success=False,
+                chat_id=payload.chat_id,
+                message=f"Agent failed: {str(exc)}"
+            )
+
+    chat_key = payload.chat_id
+    async with _teleport_lock:
+        if chat_key in _teleport_tasks:
+            old_task = _teleport_tasks[chat_key]
+            old_task.cancel()
+            try:
+                await old_task
+            except asyncio.CancelledError:
+                pass
+        task = asyncio.create_task(run_teleport_agent())
+        _teleport_tasks[chat_key] = task
+
+    try:
+        return await task
+    except asyncio.CancelledError:
         return TeleportResponse(
             success=False,
             chat_id=payload.chat_id,
-            message=f"Agent failed: {str(exc)}"
+            message="Run cancelled (new message or stop)."
         )
+    finally:
+        async with _teleport_lock:
+            if _teleport_tasks.get(chat_key) is task:
+                del _teleport_tasks[chat_key]
 
 
 @router.post("/providers/telegram/webhook")

@@ -55,6 +55,9 @@ class TelegramProvider(ChatProvider):
         self._mg_events: dict[tuple[str, str], asyncio.Event] = {}
         self._mg_tasks: dict[tuple[str, str], asyncio.Task] = {}
         self._mg_lock = asyncio.Lock()
+        # Per-chat agent run: cancel previous run when user sends another message
+        self._agent_tasks: dict[str, asyncio.Task] = {}
+        self._agent_lock = asyncio.Lock()
 
     async def send_typing_indicator(self, chat_id: str) -> None:
         """Send typing indicator to show the bot is processing."""
@@ -1186,82 +1189,103 @@ Assets: {len(assets_info)}"""
         logger.info("[TELEGRAM] user_id=%s, project_id=%s, branch_id=%s, thread_id=%s", user_id, active_project_id, branch_id, session_id)
         logger.info("[TELEGRAM] Total messages to agent: %d", len(langchain_messages))
 
-        # Show typing indicator while processing
+        # Show typing indicator and send first status so user sees progress
         await self.send_typing_indicator(chat_id)
+        try:
+            await send_telegram_message(chat_id, "Thinking...", self.settings)
+        except Exception as e:
+            logger.debug("Failed to send Thinking status to Telegram: %s", e)
+
+        async def run_agent() -> str:
+            try:
+                last_response = None
+                tool_calls_made = []
+                from langchain_core.messages import ToolMessage
+
+                async for event in graph.astream({"messages": langchain_messages}, config=config, stream_mode="values", context=agent_context):
+                    messages = event.get("messages", [])
+                    if not messages:
+                        continue
+                    last_msg = messages[-1]
+                    if isinstance(last_msg, ToolMessage):
+                        logger.info("[TELEGRAM] Tool result for %s: %s", last_msg.name if hasattr(last_msg, 'name') else 'unknown', str(last_msg.content)[:500])
+                    if isinstance(last_msg, AIMessage):
+                        if hasattr(last_msg, 'tool_calls') and last_msg.tool_calls:
+                            for tc in last_msg.tool_calls:
+                                tool_name = tc.get("name", "unknown")
+                                tool_args = tc.get("args", {})
+                                logger.info("[TELEGRAM] Tool call: %s(%s)", tool_name, str(tool_args)[:200])
+                                tool_calls_made.append(tool_name)
+                                try:
+                                    await send_telegram_message(
+                                        chat_id, f"Calling {tool_name}...", self.settings
+                                    )
+                                except Exception as e:
+                                    logger.debug("Failed to send tool status to Telegram: %s", e)
+                        else:
+                            content = last_msg.content
+                            if isinstance(content, str):
+                                last_response = content
+                            elif isinstance(content, list):
+                                text_parts = []
+                                for block in content:
+                                    if isinstance(block, dict) and block.get("type") == "text":
+                                        text_parts.append(block.get("text", ""))
+                                last_response = "\n".join(text_parts)
+
+                logger.info("[TELEGRAM] Tool calls made: %s", tool_calls_made if tool_calls_made else "none")
+                logger.info("[TELEGRAM] Response length: %d chars", len(last_response) if last_response else 0)
+                if last_response:
+                    logger.info("[TELEGRAM] Response preview: %s", last_response[:300])
+
+                if last_response:
+                    assistant_message = {
+                        "id": f"msg-{int(time.time() * 1000)}-assistant",
+                        "role": "assistant",
+                        "parts": [{"type": "text", "text": last_response}],
+                        "createdAt": datetime.utcnow().isoformat() + "Z",
+                    }
+                    current_messages.append(assistant_message)
+                    update_chat_session_messages(user_id, session_id, current_messages, self.settings)
+                    bot_message_count += 1
+                    from ..firebase import get_firestore_client
+                    db = get_firestore_client(self.settings)
+                    session_ref = db.collection("users").document(user_id).collection("chatSessions").document(session_id)
+                    session_ref.update({"botMessageCount": bot_message_count})
+                    FEEDBACK_REMINDER_INTERVAL = 10
+                    if bot_message_count == 1 or bot_message_count % FEEDBACK_REMINDER_INTERVAL == 0:
+                        reminder = "\n\n💡 React with an emoji to give feedback on this response!"
+                        return last_response + reminder
+                    return last_response
+
+                logger.warning("[TELEGRAM] No response from agent")
+                return "I processed your message but have no response."
+            except asyncio.CancelledError:
+                logger.info("[TELEGRAM] Agent run cancelled for chat_id=%s", chat_id)
+                raise
+            except Exception as e:
+                logger.exception("[TELEGRAM] Agent invocation failed: %s", str(e))
+                return f"Error: {str(e)}"
+
+        async with self._agent_lock:
+            if chat_id in self._agent_tasks:
+                old_task = self._agent_tasks[chat_id]
+                old_task.cancel()
+                try:
+                    await old_task
+                except asyncio.CancelledError:
+                    pass
+            task = asyncio.create_task(run_agent())
+            self._agent_tasks[chat_id] = task
 
         try:
-            last_response = None
-            tool_calls_made = []
-            
-            # Use async streaming to avoid blocking the event loop
-            async for event in graph.astream({"messages": langchain_messages}, config=config, stream_mode="values", context=agent_context):
-                messages = event.get("messages", [])
-                if not messages:
-                    continue
-
-                last_msg = messages[-1]
-                
-                # Log tool results (ToolMessage)
-                from langchain_core.messages import ToolMessage
-                if isinstance(last_msg, ToolMessage):
-                    logger.info("[TELEGRAM] Tool result for %s: %s", last_msg.name if hasattr(last_msg, 'name') else 'unknown', str(last_msg.content)[:500])
-                
-                if isinstance(last_msg, AIMessage):
-                    # Log tool calls
-                    if hasattr(last_msg, 'tool_calls') and last_msg.tool_calls:
-                        for tc in last_msg.tool_calls:
-                            tool_name = tc.get("name", "unknown")
-                            tool_args = tc.get("args", {})
-                            logger.info("[TELEGRAM] Tool call: %s(%s)", tool_name, str(tool_args)[:200])
-                            tool_calls_made.append(tool_name)
-                    else:
-                        content = last_msg.content
-                        if isinstance(content, str):
-                            last_response = content
-                        elif isinstance(content, list):
-                            text_parts = []
-                            for block in content:
-                                if isinstance(block, dict) and block.get("type") == "text":
-                                    text_parts.append(block.get("text", ""))
-                            last_response = "\n".join(text_parts)
-
-            logger.info("[TELEGRAM] Tool calls made: %s", tool_calls_made if tool_calls_made else "none")
-            logger.info("[TELEGRAM] Response length: %d chars", len(last_response) if last_response else 0)
-            if last_response:
-                logger.info("[TELEGRAM] Response preview: %s", last_response[:300])
-
-            if last_response:
-                # Add assistant message to session
-                assistant_message = {
-                    "id": f"msg-{int(time.time() * 1000)}-assistant",
-                    "role": "assistant",
-                    "parts": [{"type": "text", "text": last_response}],
-                    "createdAt": datetime.utcnow().isoformat() + "Z",
-                }
-                current_messages.append(assistant_message)
-                update_chat_session_messages(user_id, session_id, current_messages, self.settings)
-
-                # Update bot message count and check for feedback reminder
-                bot_message_count += 1
-                from ..firebase import get_firestore_client
-                db = get_firestore_client(self.settings)
-                session_ref = db.collection("users").document(user_id).collection("chatSessions").document(session_id)
-                session_ref.update({"botMessageCount": bot_message_count})
-                
-                # Show feedback reminder every 10 messages (after first message, then every 10th)
-                FEEDBACK_REMINDER_INTERVAL = 10
-                if bot_message_count == 1 or bot_message_count % FEEDBACK_REMINDER_INTERVAL == 0:
-                    reminder = "\n\n💡 React with an emoji to give feedback on this response!"
-                    return last_response + reminder
-
-                return last_response
-
-            logger.warning("[TELEGRAM] No response from agent")
-            return "I processed your message but have no response."
-
-        except Exception as e:
-            logger.exception("[TELEGRAM] Agent invocation failed: %s", str(e))
-            return f"Error: {str(e)}"
+            return await task
+        except asyncio.CancelledError:
+            return "Run cancelled (new message sent)."
+        finally:
+            async with self._agent_lock:
+                if self._agent_tasks.get(chat_id) is task:
+                    del self._agent_tasks[chat_id]
 
     async def handle_reaction(self, payload: dict) -> None:
         """Handle emoji reactions to bot messages."""
