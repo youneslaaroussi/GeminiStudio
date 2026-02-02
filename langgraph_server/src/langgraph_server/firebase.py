@@ -744,10 +744,13 @@ def _convert_to_telegram_markdown(text: str) -> str:
         return text
 
 
-async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> bool | dict:
+async def send_telegram_message(
+    chat_id: str, text: str, settings: Settings, *, italic: bool = False
+) -> bool | dict:
     """Send a message to a Telegram chat. Auto-detects and embeds media URLs.
     
     Converts standard Markdown to Telegram MarkdownV2 format before sending.
+    If italic=True, wraps the message in MarkdownV2 italics (_..._).
     
     Returns:
         bool: True if sent successfully, False otherwise (for backwards compatibility)
@@ -782,6 +785,8 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
             # Convert caption to MarkdownV2
             if caption:
                 caption = _convert_to_telegram_markdown(caption)
+                if italic:
+                    caption = "_" + caption + "_"
             
             if media_type == 'video':
                 endpoint = f"{telegram_base_url}/sendVideo"
@@ -798,6 +803,8 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
             else:
                 endpoint = f"{telegram_base_url}/sendMessage"
                 formatted_text = _convert_to_telegram_markdown(text)
+                if italic:
+                    formatted_text = "_" + formatted_text + "_"
                 payload = {"chat_id": chat_id, "text": formatted_text, "parse_mode": "MarkdownV2"}
             
             # Remove None values
@@ -833,6 +840,8 @@ async def send_telegram_message(chat_id: str, text: str, settings: Settings) -> 
         
         # Send as text message with MarkdownV2
         formatted_text = _convert_to_telegram_markdown(text)
+        if italic:
+            formatted_text = "_" + formatted_text + "_"
         response = await client.post(
             f"{telegram_base_url}/sendMessage",
             json={"chat_id": chat_id, "text": formatted_text, "parse_mode": "MarkdownV2"},

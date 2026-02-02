@@ -1197,7 +1197,7 @@ Assets: {len(assets_info)}"""
                 from ..status_generator import generate_status_message
                 msg = await generate_status_message("thinking", for_telegram=True, settings=self.settings)
                 if msg:
-                    await send_telegram_message(chat_id, msg, self.settings)
+                    await send_telegram_message(chat_id, msg, self.settings, italic=True)
             except Exception as e:
                 logger.debug("Failed to send Thinking status to Telegram: %s", e)
 
@@ -1229,7 +1229,7 @@ Assets: {len(assets_info)}"""
                                         from ..status_generator import generate_status_message
                                         msg = await generate_status_message("tool", tool_name=tool_name, for_telegram=True, settings=self.settings)
                                         if msg:
-                                            await send_telegram_message(chat_id, msg, self.settings)
+                                            await send_telegram_message(chat_id, msg, self.settings, italic=True)
                                     except Exception as e:
                                         logger.debug("Failed to send tool status to Telegram: %s", e)
                                 asyncio.create_task(_send_tool_status())

@@ -452,7 +452,9 @@ Media Assets in Project ({len(assets_info)}):
             )
         if telegram_chat_id and status_plain is not None and (status_telegram or status_plain):
             try:
-                await send_to_telegram_async(status_telegram or status_plain)
+                await send_telegram_message(
+                    telegram_chat_id, status_telegram or status_plain, settings, italic=True
+                )
             except Exception as e:
                 console.print(f"[yellow]Failed to send status to Telegram: {e}[/yellow]")
 

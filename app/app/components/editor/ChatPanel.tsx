@@ -992,7 +992,7 @@ export function ChatPanel() {
                   <Loader2 className="size-4 animate-spin shrink-0" />
                   <span>
                     {isCloudProcessing && cloudAgentStatus
-                      ? cloudAgentStatus
+                      ? <span className="italic">{cloudAgentStatus}</span>
                       : isCloudProcessing
                         ? "Cloud processing..."
                         : "Thinking..."}
