@@ -27,6 +27,14 @@ jobs:
             gcloud config set project $PROJECT_ID
 
       - run:
+          name: Generate SSH keys for gcloud (non-interactive)
+          command: |
+            mkdir -p /root/.ssh
+            ssh-keygen -t rsa -f /root/.ssh/google_compute_engine -N "" -q
+            chmod 700 /root/.ssh
+            chmod 600 /root/.ssh/google_compute_engine
+
+      - run:
           name: Copy code to VM
           command: |
             tar --exclude='.git' \
