@@ -454,6 +454,7 @@ async def configure_index(settings: Settings | None = None) -> bool:
             "searchableAttributes": [
                 "name",
                 "description",
+                "notes",
                 "labels",
                 "transcript",
                 "geminiAnalysis",
