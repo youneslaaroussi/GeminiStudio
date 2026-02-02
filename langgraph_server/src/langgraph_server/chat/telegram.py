@@ -1189,14 +1189,19 @@ Assets: {len(assets_info)}"""
         logger.info("[TELEGRAM] user_id=%s, project_id=%s, branch_id=%s, thread_id=%s", user_id, active_project_id, branch_id, session_id)
         logger.info("[TELEGRAM] Total messages to agent: %d", len(langchain_messages))
 
-        # Show typing indicator and send first status so user sees progress
+        # Show typing indicator and send first status so user sees progress (fire-and-forget so agent starts immediately)
         await self.send_typing_indicator(chat_id)
-        try:
-            from ..status_generator import generate_status_message
-            msg = await generate_status_message("thinking", for_telegram=True, settings=self.settings)
-            await send_telegram_message(chat_id, msg, self.settings)
-        except Exception as e:
-            logger.debug("Failed to send Thinking status to Telegram: %s", e)
+
+        async def _send_thinking_status() -> None:
+            try:
+                from ..status_generator import generate_status_message
+                msg = await generate_status_message("thinking", for_telegram=True, settings=self.settings)
+                if msg:
+                    await send_telegram_message(chat_id, msg, self.settings)
+            except Exception as e:
+                logger.debug("Failed to send Thinking status to Telegram: %s", e)
+
+        asyncio.create_task(_send_thinking_status())
 
         async def run_agent() -> str:
             nonlocal bot_message_count
@@ -1219,11 +1224,15 @@ Assets: {len(assets_info)}"""
                                 tool_args = tc.get("args", {})
                                 logger.info("[TELEGRAM] Tool call: %s(%s)", tool_name, str(tool_args)[:200])
                                 tool_calls_made.append(tool_name)
-                                try:
-                                    msg = await generate_status_message("tool", tool_name=tool_name, for_telegram=True, settings=self.settings)
-                                    await send_telegram_message(chat_id, msg, self.settings)
-                                except Exception as e:
-                                    logger.debug("Failed to send tool status to Telegram: %s", e)
+                                async def _send_tool_status() -> None:
+                                    try:
+                                        from ..status_generator import generate_status_message
+                                        msg = await generate_status_message("tool", tool_name=tool_name, for_telegram=True, settings=self.settings)
+                                        if msg:
+                                            await send_telegram_message(chat_id, msg, self.settings)
+                                    except Exception as e:
+                                        logger.debug("Failed to send tool status to Telegram: %s", e)
+                                asyncio.create_task(_send_tool_status())
                         else:
                             content = last_msg.content
                             if isinstance(content, str):

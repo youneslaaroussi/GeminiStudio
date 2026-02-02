@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Iterable
+from typing import Iterable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -456,6 +456,26 @@ Media Assets in Project ({len(assets_info)}):
             except Exception as e:
                 console.print(f"[yellow]Failed to send status to Telegram: {e}[/yellow]")
 
+    def _schedule_status(context: Literal["thinking", "tool"], tool_name: str | None = None) -> None:
+        """Fire-and-forget: generate status and set it. Does not block the agent."""
+        async def _generate_and_set() -> None:
+            try:
+                plain, telegram = await generate_status_message_pair(
+                    context, tool_name=tool_name, settings=settings
+                )
+                await set_agent_status(plain, telegram)
+            except Exception as e:
+                logger.debug("Status update failed: %s", e)
+
+        task = asyncio.create_task(_generate_and_set())
+        def _done(t: asyncio.Task) -> None:
+            if t.cancelled():
+                return
+            exc = t.exception()
+            if exc:
+                logger.debug("Status task failed: %s", exc)
+        task.add_done_callback(_done)
+
     async def write_message_to_firebase(text: str):
         if not text or not session.get("userId"):
             return
@@ -491,8 +511,7 @@ Media Assets in Project ({len(assets_info)}):
                 "project_id": first_project_id,
                 "branch_id": branch_id,
             }
-            plain, telegram = await generate_status_message_pair("thinking", settings=settings)
-            await set_agent_status(plain, telegram)
+            _schedule_status("thinking")
             try:
                 async for event in graph.astream(
                     {"messages": langchain_messages},
@@ -509,8 +528,7 @@ Media Assets in Project ({len(assets_info)}):
                             for tc in last_msg.tool_calls:
                                 name = tc.get("name", "tool")
                                 console.print(f"[yellow]Tool Call:[/yellow] {name}({tc.get('args', {})})")
-                                plain, telegram = await generate_status_message_pair("tool", tool_name=name, settings=settings)
-                                await set_agent_status(plain, telegram)
+                                _schedule_status("tool", name)
                         else:
                             await set_agent_status(None)
                             text = extract_text_from_content(last_msg.content)

@@ -1,8 +1,7 @@
-"""Generate short status messages (Thinking…, Calling X…) using a small Gemini model.
+"""Generate short status messages (Thinking…, Calling X…) using the status Gemini model.
 
-When GEMINI_STATUS_MODEL is set (e.g. gemini-2.5-flash), calls the model with
-thinking/tool context and returns a short, friendly message. Otherwise falls
-back to static messages from agent_status.
+Always uses GEMINI_STATUS_MODEL (default gemini-2.5-flash). No fallbacks: if the model
+is unavailable or the call fails, returns an empty string.
 """
 
 from __future__ import annotations
@@ -14,7 +13,6 @@ from typing import Literal
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 
-from .agent_status import get_thinking_message, get_tool_status_message
 from .config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
@@ -36,11 +34,40 @@ def _build_status_model(settings: Settings) -> ChatGoogleGenerativeAI | None:
 
 
 def _sanitize(msg: str) -> str:
-    """Single line, strip, cap length."""
     if not msg or not isinstance(msg, str):
         return ""
     msg = re.sub(r"\s+", " ", msg).strip()
     return msg[:80] if len(msg) > 80 else msg
+
+
+async def _call_model(
+    context: Literal["thinking", "tool"],
+    tool_name: str | None,
+    settings: Settings,
+) -> str | None:
+    model = _build_status_model(settings)
+    if not model:
+        logger.warning("GEMINI_STATUS_MODEL not set; status messages will be empty")
+        return None
+    try:
+        if context == "thinking":
+            prompt = _STATUS_PROMPT_THINKING
+        else:
+            prompt = _STATUS_PROMPT_TOOL.format(tool_name=tool_name or "tool")
+        response = await model.ainvoke([HumanMessage(content=prompt)])
+        content = getattr(response, "content", None)
+        if isinstance(content, str):
+            text = content
+        elif isinstance(content, list) and content:
+            part = content[0]
+            text = part.get("text", str(part)) if isinstance(part, dict) else str(part)
+        else:
+            text = str(content) if content else ""
+        msg = _sanitize(text)
+        return msg if msg else None
+    except Exception as e:
+        logger.debug("Status model call failed: %s", e)
+        return None
 
 
 async def generate_status_message(
@@ -49,43 +76,10 @@ async def generate_status_message(
     for_telegram: bool = False,
     settings: Settings | None = None,
 ) -> str:
-    """Generate a short status message (LLM if configured, else static).
-
-    Returns a single string suitable for Firebase (plain) or Telegram (caller
-    can use the same or request for_telegram for italic hint; we use static
-    for_telegram variant only when using fallback).
-    """
+    """Generate a short status message using the status model. Returns empty string if model unavailable or call fails."""
     resolved = settings or get_settings()
-    model = _build_status_model(resolved)
-
-    if model is None:
-        if context == "thinking":
-            return get_thinking_message(for_telegram=for_telegram)
-        return get_tool_status_message(tool_name or "tool", for_telegram=for_telegram)
-
-    try:
-        if context == "thinking":
-            prompt = _STATUS_PROMPT_THINKING
-        else:
-            prompt = _STATUS_PROMPT_TOOL.format(tool_name=tool_name or "tool")
-        response = await model.ainvoke([HumanMessage(content=prompt)])
-        content = getattr(response, "content", None)
-        if isinstance(content, str):
-            text = content
-        elif isinstance(content, list) and content:
-            part = content[0]
-            text = part.get("text", str(part)) if isinstance(part, dict) else str(part)
-        else:
-            text = str(content) if content else ""
-        msg = _sanitize(text)
-        if msg:
-            return msg
-    except Exception as e:
-        logger.debug("Status generator failed, using static message: %s", e)
-
-    if context == "thinking":
-        return get_thinking_message(for_telegram=for_telegram)
-    return get_tool_status_message(tool_name or "tool", for_telegram=for_telegram)
+    msg = await _call_model(context, tool_name, resolved)
+    return msg or ""
 
 
 async def generate_status_message_pair(
@@ -93,35 +87,7 @@ async def generate_status_message_pair(
     tool_name: str | None = None,
     settings: Settings | None = None,
 ) -> tuple[str, str]:
-    """Return (plain, telegram) status message. Use when you need both (e.g. Firebase + Telegram)."""
+    """Return (plain, telegram) status message. Same text for both. Empty strings if model unavailable or call fails."""
     resolved = settings or get_settings()
-    model = _build_status_model(resolved)
-
-    if model is None:
-        plain = get_thinking_message(False) if context == "thinking" else get_tool_status_message(tool_name or "tool", False)
-        telegram = get_thinking_message(True) if context == "thinking" else get_tool_status_message(tool_name or "tool", True)
-        return (plain, telegram)
-
-    try:
-        if context == "thinking":
-            prompt = _STATUS_PROMPT_THINKING
-        else:
-            prompt = _STATUS_PROMPT_TOOL.format(tool_name=tool_name or "tool")
-        response = await model.ainvoke([HumanMessage(content=prompt)])
-        content = getattr(response, "content", None)
-        if isinstance(content, str):
-            text = content
-        elif isinstance(content, list) and content:
-            part = content[0]
-            text = part.get("text", str(part)) if isinstance(part, dict) else str(part)
-        else:
-            text = str(content) if content else ""
-        msg = _sanitize(text)
-        if msg:
-            return (msg, msg)
-    except Exception as e:
-        logger.debug("Status generator failed, using static message: %s", e)
-
-    plain = get_thinking_message(False) if context == "thinking" else get_tool_status_message(tool_name or "tool", False)
-    telegram = get_thinking_message(True) if context == "thinking" else get_tool_status_message(tool_name or "tool", True)
-    return (plain, telegram)
+    msg = await _call_model(context, tool_name, resolved)
+    return (msg or "", msg or "")

@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     google_project_id: str = Field(..., alias="GOOGLE_PROJECT_ID")
     google_api_key: str = Field(..., alias="GOOGLE_API_KEY")
     gemini_model: str = Field(default="gemini-3-pro-preview", alias="GEMINI_MODEL")
-    # Optional smaller model for generating short status messages (e.g. gemini-2.5-flash). If unset, use static messages.
-    gemini_status_model: str | None = Field(default=None, alias="GEMINI_STATUS_MODEL")
+    # Smaller model for generating short status messages (Thinking…, Calling X…). Default gemini-2.5-flash; set empty to use static messages.
+    gemini_status_model: str | None = Field(default="gemini-2.5-flash", alias="GEMINI_STATUS_MODEL")
 
     langsmith_api_key: str | None = Field(default=None, alias="LANGSMITH_API_KEY")
     langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", alias="LANGSMITH_ENDPOINT")
