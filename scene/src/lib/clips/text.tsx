@@ -74,24 +74,21 @@ function createTitleCard(
   sceneHeight: number
 ): TextEntry {
   const ref = createRef<Txt>();
-  const containerRef = createRef<Node>();
+  const containerRef = createRef<Rect>();
   const fontSize = clip.fontSize ?? 72;
   const fill = clip.fill ?? '#ffffff';
   const backgroundColor = clip.backgroundColor ?? '#1a1a2e';
   const effectShaders = getEffectShaderConfig(clip.effect);
 
   view.add(
-    <Node
+    <Rect
       key={`title-card-container-${clip.id}`}
       ref={containerRef}
+      width={sceneWidth}
+      height={sceneHeight}
+      fill={backgroundColor}
       opacity={0}
     >
-      {/* Full screen background */}
-      <Rect
-        width={sceneWidth}
-        height={sceneHeight}
-        fill={backgroundColor}
-      />
       {/* Title text */}
       <Txt
         ref={ref}
@@ -126,7 +123,7 @@ function createTitleCard(
           y={50}
         />
       )}
-    </Node>
+    </Rect>
   );
 
   return { clip, ref, containerRef };
@@ -140,7 +137,7 @@ function createLowerThird(
   sceneHeight: number
 ): TextEntry {
   const ref = createRef<Txt>();
-  const containerRef = createRef<Node>();
+  const containerRef = createRef<Rect>();
   const fontSize = clip.fontSize ?? 36;
   const fill = clip.fill ?? '#ffffff';
   const backgroundColor = clip.backgroundColor ?? 'rgba(0,0,0,0.85)';
@@ -150,60 +147,56 @@ function createLowerThird(
   const yPosition = sceneHeight / 2 - 120;
 
   view.add(
-    <Node
+    <Rect
       key={`lower-third-container-${clip.id}`}
       ref={containerRef}
+      layout
+      direction="row"
+      alignItems="stretch"
+      gap={0}
       y={yPosition}
       opacity={0}
+      shadowBlur={30}
+      shadowColor="rgba(0,0,0,0.6)"
     >
-      {/* Horizontal layout: accent bar + content */}
+      {/* Accent bar on left */}
+      <Rect
+        width={6}
+        fill="#3b82f6"
+        radius={[4, 0, 0, 4]}
+      />
+      {/* Background bar with content */}
       <Rect
         layout
-        direction="row"
-        alignItems="stretch"
-        gap={0}
-        shadowBlur={30}
-        shadowColor="rgba(0,0,0,0.6)"
+        direction="column"
+        alignItems="start"
+        padding={[16, 24]}
+        fill={backgroundColor}
+        radius={[0, 8, 8, 0]}
       >
-        {/* Accent bar on left */}
-        <Rect
-          width={6}
-          fill="#3b82f6"
-          radius={[4, 0, 0, 4]}
+        {/* Name/Title */}
+        <Txt
+          ref={ref}
+          text={clip.text}
+          fontFamily={settings.fontFamily}
+          fontWeight={600}
+          fontSize={fontSize}
+          fill={fill}
+          shaders={effectShaders}
         />
-        {/* Background bar with content */}
-        <Rect
-          layout
-          direction="column"
-          alignItems="start"
-          padding={[16, 24]}
-          fill={backgroundColor}
-          radius={[0, 8, 8, 0]}
-        >
-          {/* Name/Title */}
+        {/* Subtitle */}
+        {clip.subtitle && (
           <Txt
-            ref={ref}
-            text={clip.text}
+            text={clip.subtitle}
             fontFamily={settings.fontFamily}
-            fontWeight={600}
-            fontSize={fontSize}
-            fill={fill}
-            shaders={effectShaders}
+            fontWeight={400}
+            fontSize={fontSize * 0.65}
+            fill={`${fill}99`}
+            marginTop={4}
           />
-          {/* Subtitle */}
-          {clip.subtitle && (
-            <Txt
-              text={clip.subtitle}
-              fontFamily={settings.fontFamily}
-              fontWeight={400}
-              fontSize={fontSize * 0.65}
-              fill={`${fill}99`}
-              marginTop={4}
-            />
-          )}
-        </Rect>
+        )}
       </Rect>
-    </Node>
+    </Rect>
   );
 
   return { clip, ref, containerRef };
@@ -211,41 +204,37 @@ function createLowerThird(
 
 function createCaptionStyle(clip: TextClip, view: Node, settings: TextClipSettings): TextEntry {
   const ref = createRef<Txt>();
-  const containerRef = createRef<Node>();
+  const containerRef = createRef<Rect>();
   const fontSize = clip.fontSize ?? 32;
   const fill = clip.fill ?? '#ffffff';
   const backgroundColor = clip.backgroundColor ?? 'rgba(0,0,0,0.9)';
   const effectShaders = getEffectShaderConfig(clip.effect);
 
   view.add(
-    <Node
+    <Rect
       key={`caption-style-container-${clip.id}`}
       ref={containerRef}
+      layout
+      padding={[12, 24]}
+      fill={backgroundColor}
+      radius={999}
       x={clip.position.x}
       y={clip.position.y}
       scale={clip.scale}
       opacity={0}
+      shadowBlur={20}
+      shadowColor="rgba(0,0,0,0.5)"
     >
-      {/* Pill background */}
-      <Rect
-        layout
-        padding={[12, 24]}
-        fill={backgroundColor}
-        radius={999}
-        shadowBlur={20}
-        shadowColor="rgba(0,0,0,0.5)"
-      >
-        <Txt
-          ref={ref}
-          text={clip.text}
-          fontFamily={settings.fontFamily}
-          fontWeight={settings.fontWeight}
-          fontSize={fontSize}
-          fill={fill}
-          shaders={effectShaders}
-        />
-      </Rect>
-    </Node>
+      <Txt
+        ref={ref}
+        text={clip.text}
+        fontFamily={settings.fontFamily}
+        fontWeight={settings.fontWeight}
+        fontSize={fontSize}
+        fill={fill}
+        shaders={effectShaders}
+      />
+    </Rect>
   );
 
   return { clip, ref, containerRef };

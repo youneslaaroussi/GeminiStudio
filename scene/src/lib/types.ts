@@ -1,5 +1,5 @@
 import type { Reference } from '@motion-canvas/core';
-import type { Video, Node, Txt, Img } from '@motion-canvas/2d';
+import type { Video, Node, Txt, Img, Rect } from '@motion-canvas/2d';
 
 export interface Transform {
   x: number;
@@ -191,7 +191,7 @@ export interface VideoEntry {
 export interface TextEntry {
   clip: TextClip;
   ref: Reference<Txt>;
-  containerRef?: Reference<Node>;
+  containerRef?: Reference<Node> | Reference<Rect>;
 }
 
 export interface ImageEntry {
