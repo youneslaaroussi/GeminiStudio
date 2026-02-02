@@ -330,7 +330,7 @@ def renderVideo(
     key: value
     for key, value in {
       "threadId": thread_id,
-      "projectId": (project_id or target_project.get("id")),
+      "projectId": effective_project_id,
       "userId": effective_user_id,
       "requestId": request_id,
       "branchId": effective_branch_id,
