@@ -172,7 +172,7 @@ This is the full loop: **ingest → perceive → reason → generate → render.
 
 ### The Iteration Loop
 
-![Agent Iteration Loop](assets/iteration_diagram.png)
+<img src="assets/iteration_diagram.png" alt="Agent Iteration Loop" height="400" />
 
 ### Why This Matters
 
