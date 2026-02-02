@@ -41,9 +41,6 @@ class Settings(BaseSettings):
     transcoder_location: str = Field(default="us-central1", alias="TRANSCODER_LOCATION")
     transcoder_service_account_key: str | None = Field(default=None, alias="TRANSCODER_SERVICE_ACCOUNT_KEY")
     
-    # Default transcode preset (used when transcode is enabled without specific options)
-    default_transcode_preset: str = Field(default="preset/web-hd", alias="DEFAULT_TRANSCODE_PRESET")
-
     # CloudConvert API (for image/document conversion)
     cloudconvert_api_key: str | None = Field(default=None, alias="CLOUDCONVERT_API_KEY")
     cloudconvert_sandbox: bool = Field(default=False, alias="CLOUDCONVERT_SANDBOX")

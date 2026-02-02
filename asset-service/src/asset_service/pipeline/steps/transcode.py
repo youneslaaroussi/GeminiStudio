@@ -49,25 +49,13 @@ def _config_hash(config: dict[str, Any]) -> str:
 
 
 def _parse_transcode_params(params: dict[str, Any]) -> TranscodeConfig:
-    """Parse transcode parameters from request into TranscodeConfig.
-    Preset 'preset/web-hd' and 'preset/web-sd' are expanded into aspect-preserving
-    custom config (no width/height) so vertical videos stay vertical.
-    """
+    """Parse transcode parameters into TranscodeConfig. No width/height = preserve aspect ratio."""
     config = TranscodeConfig()
-
-    # Expand aspect-preserving presets to custom config (no width/height) so the
-    # Transcoder API uses input dimensions and preserves aspect ratio (e.g. vertical).
-    preset_val = params.get("preset")
-    if preset_val in ("preset/web-hd", "preset/web-sd"):
-        config.preset = None  # Don't use templateId; build custom config
-        if not params.get("videoBitrate") and not params.get("videoBitrateBps"):
-            config.video_bitrate_bps = 2500000 if preset_val == "preset/web-hd" else 550000
-        if not params.get("frameRate"):
-            config.frame_rate = 30.0
-        # Explicitly do not set width/height so API preserves input dimensions
-    elif preset_val:
-        config.preset = preset_val
-        return config
+    # Defaults when no params: aspect-preserving (no width/height), 2.5 Mbps, 30 fps
+    if not params.get("videoBitrate") and not params.get("videoBitrateBps"):
+        config.video_bitrate_bps = 2_500_000
+    if not params.get("frameRate"):
+        config.frame_rate = 30.0
 
     # Output format
     if params.get("outputFormat"):
@@ -153,7 +141,7 @@ async def _poll_until_complete(
             if status == TranscodeJobStatus.SUCCEEDED:
                 output_signed_url = None
                 output_object_name = None
-                output_filename = "hd.mp4" if config_dict.get("usedTemplateId") else "output.mp4"
+                output_filename = "output.mp4"
                 if output_gcs_uri and output_gcs_uri.startswith("gs://"):
                     parts = output_gcs_uri[5:].split("/", 1)
                     if len(parts) > 1:
@@ -396,7 +384,6 @@ async def _transcode_impl(
     Subsequent pipeline steps will use the transcoded version.
     
     Params can include:
-    - preset: Use a preset (e.g., "preset/web-hd", "preset/web-sd")
     - outputFormat: "mp4", "hls", "dash"
     - videoCodec: "h264", "h265", "vp9"
     - videoBitrate: Video bitrate in bps or kbps
@@ -409,25 +396,17 @@ async def _transcode_impl(
     """
     settings = get_settings()
 
-    # Parse transcode config from params (default to web-hd preset if no params)
-    if not context.params:
-        context.params = {"preset": "preset/web-hd"}
-    
-    transcode_config = _parse_transcode_params(context.params)
+    transcode_config = _parse_transcode_params(context.params or {})
 
-    # Create config hash for deduplication (use params preset when we expanded to custom for aspect ratio)
-    logical_preset = transcode_config.preset or context.params.get("preset")
-    used_template_id = transcode_config.preset is not None  # True only when we send templateId (preset), not custom config
+    # Create config hash for deduplication
     config_dict = {
-        "preset": logical_preset,
-        "usedTemplateId": used_template_id,  # custom config writes output.mp4, preset template writes hd.mp4
-        "outputFormat": transcode_config.output_format.value if not transcode_config.preset else None,
-        "videoCodec": transcode_config.video_codec.value if not transcode_config.preset else None,
+        "outputFormat": transcode_config.output_format.value,
+        "videoCodec": transcode_config.video_codec.value,
         "videoBitrate": transcode_config.video_bitrate_bps,
         "width": transcode_config.width,
         "height": transcode_config.height,
         "frameRate": transcode_config.frame_rate,
-        "audioCodec": transcode_config.audio_codec.value if not transcode_config.preset else None,
+        "audioCodec": transcode_config.audio_codec.value,
         "audioBitrate": transcode_config.audio_bitrate_bps,
         "sampleRate": transcode_config.sample_rate_hz,
         "channels": transcode_config.channels,
@@ -449,9 +428,7 @@ async def _transcode_impl(
 
             # Build full object name and GCS URI (folder + output filename), not folder only
             output_folder_uri = (existing_job.output_gcs_uri or "").rstrip("/")
-            output_filename = existing_job.output_file_name or (
-                "hd.mp4" if config_dict.get("usedTemplateId", True) else "output.mp4"
-            )
+            output_filename = existing_job.output_file_name or "output.mp4"
             transcoded_object_name = ""
             transcoded_gcs_uri_full = output_folder_uri
             if output_folder_uri.startswith("gs://"):

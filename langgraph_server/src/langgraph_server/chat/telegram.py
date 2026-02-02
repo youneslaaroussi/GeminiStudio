@@ -759,9 +759,9 @@ class TelegramProvider(ChatProvider):
                 is_video = mime_type.startswith("video/") or file_info.get("type") in ("video", "video_note")
                 if is_video and self.settings.transcode_enabled:
                     import json
-                    transcode_opts = {"preset": self.settings.transcode_preset}
+                    transcode_opts: dict[str, object] = {}
                     data["transcodeOptions"] = json.dumps(transcode_opts)
-                    logger.info(f"[TELEGRAM] Adding transcode options for video: {transcode_opts}")
+                    logger.info("[TELEGRAM] Adding transcode options for video (defaults)")
 
                 # Sign request for asset service authentication with file hash
                 from ..hmac_auth import get_asset_service_upload_headers

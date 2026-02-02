@@ -63,16 +63,8 @@ class TranscodeConfig:
     sample_rate_hz: int | None = None  # None = preserve original
     channels: int | None = None  # None = preserve original
 
-    # Presets (overrides individual settings if specified)
-    preset: str | None = None  # e.g., "preset/web-hd", "preset/web-sd"
-
     def to_job_config(self) -> dict[str, Any]:
-        """Convert to Transcoder API job config format."""
-        if self.preset:
-            # Use preset - simplest configuration
-            return {"templateId": self.preset}
-
-        # Build custom config
+        """Convert to Transcoder API job config format (always custom config, aspect-preserving)."""
         config: dict[str, Any] = {
             "elementaryStreams": [],
             "muxStreams": [],

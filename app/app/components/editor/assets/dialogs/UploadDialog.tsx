@@ -46,36 +46,28 @@ interface QueuedFile {
   file: File;
 }
 
-// Transcode options
+// Transcode options (no presets; server uses aspect-preserving defaults)
 interface TranscodeOptions {
   enabled: boolean;
-  preset: string; // "preset/web-hd", "preset/web-sd", "custom"
-  outputFormat: string; // "mp4", "hls", "dash"
-  videoCodec: string; // "h264", "h265", "vp9"
-  videoBitrate: number | null; // kbps
+  outputFormat: string;
+  videoCodec: string;
+  videoBitrate: number | null;
   width: number | null;
   height: number | null;
-  audioCodec: string; // "aac", "mp3"
-  audioBitrate: number | null; // kbps
+  audioCodec: string;
+  audioBitrate: number | null;
 }
 
 const DEFAULT_TRANSCODE_OPTIONS: TranscodeOptions = {
-  enabled: true,  // Transcode by default to ensure proper format for analysis
-  preset: "preset/web-hd",
+  enabled: true,
   outputFormat: "mp4",
   videoCodec: "h264",
-  videoBitrate: 5000, // 5 Mbps
+  videoBitrate: 5000,
   width: null,
   height: null,
   audioCodec: "aac",
-  audioBitrate: 128, // 128 kbps
+  audioBitrate: 128,
 };
-
-const PRESET_OPTIONS = [
-  { value: "preset/web-hd", label: "Web HD (up to 720p)", description: "Aspect preserved, scaled for web" },
-  { value: "preset/web-sd", label: "Web SD (up to 360p)", description: "Aspect preserved, smaller files" },
-  { value: "custom", label: "Custom", description: "Configure your own settings" },
-];
 
 const FORMAT_OPTIONS = [
   { value: "mp4", label: "MP4", description: "Universal compatibility" },
@@ -199,28 +191,19 @@ export function UploadDialog({
 
     // Add transcode options if enabled and there are video files
     if (transcodeOptions.enabled && hasVideoFiles) {
-      const transcodePayload: Record<string, unknown> = {};
-
-      if (transcodeOptions.preset !== "custom") {
-        transcodePayload.preset = transcodeOptions.preset;
-      } else {
-        transcodePayload.outputFormat = transcodeOptions.outputFormat;
-        transcodePayload.videoCodec = transcodeOptions.videoCodec;
-        if (transcodeOptions.videoBitrate) {
-          transcodePayload.videoBitrate = transcodeOptions.videoBitrate * 1000; // Convert to bps
-        }
-        if (transcodeOptions.width) {
-          transcodePayload.width = transcodeOptions.width;
-        }
-        if (transcodeOptions.height) {
-          transcodePayload.height = transcodeOptions.height;
-        }
-        transcodePayload.audioCodec = transcodeOptions.audioCodec;
-        if (transcodeOptions.audioBitrate) {
-          transcodePayload.audioBitrate = transcodeOptions.audioBitrate * 1000; // Convert to bps
-        }
+      const transcodePayload: Record<string, unknown> = {
+        outputFormat: transcodeOptions.outputFormat,
+        videoCodec: transcodeOptions.videoCodec,
+        audioCodec: transcodeOptions.audioCodec,
+      };
+      if (transcodeOptions.videoBitrate) {
+        transcodePayload.videoBitrate = transcodeOptions.videoBitrate * 1000;
       }
-
+      if (transcodeOptions.width) transcodePayload.width = transcodeOptions.width;
+      if (transcodeOptions.height) transcodePayload.height = transcodeOptions.height;
+      if (transcodeOptions.audioBitrate) {
+        transcodePayload.audioBitrate = transcodeOptions.audioBitrate * 1000;
+      }
       formData.append("transcodeOptions", JSON.stringify(transcodePayload));
     }
 
@@ -411,45 +394,17 @@ export function UploadDialog({
 
                 {transcodeOptions.enabled && (
                   <div className="space-y-3 pt-2 border-t border-border">
-                    {/* Preset selection */}
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Quality Preset</Label>
-                      <Select
-                        value={transcodeOptions.preset}
-                        onValueChange={(value) =>
-                          setTranscodeOptions((prev) => ({ ...prev, preset: value }))
-                        }
-                      >
-                        <SelectTrigger className="h-8 text-sm">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PRESET_OPTIONS.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>
-                              <div className="flex flex-col">
-                                <span>{opt.label}</span>
-                                <span className="text-xs text-muted-foreground">{opt.description}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvanced(!showAdvanced)}
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showAdvanced ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+                      {showAdvanced ? "Hide" : "Show"} advanced options
+                    </button>
 
-                    {/* Custom options toggle */}
-                    {transcodeOptions.preset === "custom" && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setShowAdvanced(!showAdvanced)}
-                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          {showAdvanced ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
-                          {showAdvanced ? "Hide" : "Show"} advanced options
-                        </button>
-
-                        {showAdvanced && (
-                          <div className="space-y-3 pt-2">
+                    {showAdvanced && (
+                      <div className="space-y-3 pt-2">
                             {/* Output format */}
                             <div className="grid grid-cols-2 gap-3">
                               <div className="space-y-1.5">
@@ -597,8 +552,6 @@ export function UploadDialog({
                             </div>
                           </div>
                         )}
-                      </>
-                    )}
 
                     <p className="text-xs text-muted-foreground">
                       Transcoded videos will be processed in the background and stored alongside the original.

@@ -85,7 +85,6 @@ async def upload_asset(
     thread_id: str | None = Form(default=None),
     # Transcode options (JSON string or individual fields)
     transcode_options: str | None = Form(default=None, alias="transcodeOptions"),
-    transcode_preset: str | None = Form(default=None, alias="transcodePreset"),
     transcode_format: str | None = Form(default=None, alias="transcodeFormat"),
     transcode_video_bitrate: int | None = Form(default=None, alias="transcodeVideoBitrate"),
     transcode_width: int | None = Form(default=None, alias="transcodeWidth"),
@@ -197,9 +196,7 @@ async def upload_asset(
             parsed_transcode_opts = _json.loads(transcode_options)
         except _json.JSONDecodeError:
             logger.warning(f"Invalid transcode_options JSON: {transcode_options}")
-    elif transcode_preset or transcode_format or transcode_video_bitrate:
-        if transcode_preset:
-            parsed_transcode_opts["preset"] = transcode_preset
+    elif transcode_format or transcode_video_bitrate:
         if transcode_format:
             parsed_transcode_opts["outputFormat"] = transcode_format
         if transcode_video_bitrate:
@@ -227,7 +224,7 @@ async def upload_asset(
     )
 
     if need_transcode_then_pipeline:
-        transcode_params = parsed_transcode_opts or {"preset": "preset/web-hd"}
+        transcode_params = parsed_transcode_opts or {}
         try:
             queue = await get_task_queue()
             agent_metadata = (
@@ -594,7 +591,6 @@ async def delete_asset_by_id(
 
 
 class TranscodeRequest(BaseModel):
-    preset: str | None = None
     outputFormat: str | None = None
     videoCodec: str | None = None
     videoBitrate: int | None = None
@@ -646,8 +642,6 @@ async def transcode_asset(
 
     # Build transcode params
     transcode_params: dict[str, Any] = {}
-    if body.preset:
-        transcode_params["preset"] = body.preset
     if body.outputFormat:
         transcode_params["outputFormat"] = body.outputFormat
     if body.videoCodec:
@@ -668,9 +662,6 @@ async def transcode_asset(
         transcode_params["sampleRate"] = body.sampleRate
     if body.channels:
         transcode_params["channels"] = body.channels
-
-    if not transcode_params:
-        transcode_params["preset"] = "preset/web-hd"
 
     try:
         queue = await get_task_queue()

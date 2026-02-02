@@ -104,7 +104,6 @@ class Settings(BaseSettings):
     tts_model: str = Field(default="gemini-2.5-flash-preview-tts", alias="TTS_MODEL")
 
     transcode_enabled: bool = Field(default=True, alias="TRANSCODE_ENABLED")
-    transcode_preset: str = Field(default="preset/web-hd", alias="TRANSCODE_PRESET")
 
 
 @lru_cache
