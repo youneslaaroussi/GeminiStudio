@@ -22,10 +22,15 @@ from .config import Settings
 
 logger = logging.getLogger(__name__)
 
-# In-memory store for subscribed assets
-# Key: asset_id, Value: set of subscription info dicts
+# In-memory store for subscribed assets (pipeline completion)
+# Key: asset_id, Value: subscription info dict
 _subscribed_assets: Dict[str, Dict[str, Any]] = {}
 _subscription_lock = asyncio.Lock()
+
+# In-memory store for transcode subscriptions
+# Key: asset_id, Value: subscription info dict
+_transcode_subscribed_assets: Dict[str, Dict[str, Any]] = {}
+_transcode_subscription_lock = asyncio.Lock()
 
 
 async def subscribe_to_asset_pipeline(
@@ -83,6 +88,64 @@ async def get_subscribed_asset(asset_id: str) -> Dict[str, Any] | None:
     """Get subscription info for an asset, if subscribed."""
     async with _subscription_lock:
         return _subscribed_assets.get(asset_id)
+
+
+async def subscribe_to_asset_transcode(
+    asset_id: str,
+    thread_id: str,
+    user_id: str,
+    project_id: str,
+    asset_name: str | None = None,
+    branch_id: str | None = None,
+) -> None:
+    """
+    Register interest in an asset's transcode completion.
+
+    When the transcode completes, the agent will be notified.
+    This happens BEFORE the full pipeline runs.
+
+    Args:
+        asset_id: Asset ID to watch
+        thread_id: Thread ID for the agent conversation
+        user_id: User ID
+        project_id: Project ID
+        asset_name: Optional asset name for display
+        branch_id: Optional branch ID for timeline operations
+    """
+    async with _transcode_subscription_lock:
+        _transcode_subscribed_assets[asset_id] = {
+            "threadId": thread_id,
+            "userId": user_id,
+            "projectId": project_id,
+            "branchId": branch_id,
+            "assetName": asset_name,
+            "subscribedAt": datetime.utcnow().isoformat() + "Z",
+        }
+    logger.info(
+        "[TRANSCODE_EVENTS] Agent subscribed to asset %s transcode (thread=%s)",
+        asset_id,
+        thread_id,
+    )
+
+
+async def unsubscribe_from_asset_transcode(asset_id: str) -> bool:
+    """
+    Unsubscribe from an asset's transcode completion.
+
+    Returns True if was subscribed, False otherwise.
+    """
+    async with _transcode_subscription_lock:
+        if asset_id in _transcode_subscribed_assets:
+            del _transcode_subscribed_assets[asset_id]
+            logger.info("[TRANSCODE_EVENTS] Unsubscribed from asset %s transcode", asset_id)
+            return True
+    return False
+
+
+async def get_transcode_subscribed_asset(asset_id: str) -> Dict[str, Any] | None:
+    """Get transcode subscription info for an asset, if subscribed."""
+    async with _transcode_subscription_lock:
+        return _transcode_subscribed_assets.get(asset_id)
 
 
 class PipelineEventSubscriber:
@@ -181,23 +244,34 @@ class PipelineEventSubscriber:
             logger.debug("Skipping pipeline event without assetId")
             return
 
-        # Check if agent subscribed to this asset
-        subscription = await get_subscribed_asset(asset_id)
-        if not subscription:
-            logger.debug(
-                "Skipping pipeline event for asset %s - no subscription",
-                asset_id,
-            )
-            return
+        # Check subscriptions based on event type
+        if event_type == "transcode.completed":
+            subscription = await get_transcode_subscribed_asset(asset_id)
+            if not subscription:
+                logger.debug(
+                    "Skipping transcode event for asset %s - no subscription",
+                    asset_id,
+                )
+                return
+            # Remove subscription after processing (one-time notification)
+            await unsubscribe_from_asset_transcode(asset_id)
+        else:
+            # Pipeline events (completed, failed)
+            subscription = await get_subscribed_asset(asset_id)
+            if not subscription:
+                logger.debug(
+                    "Skipping pipeline event for asset %s - no subscription",
+                    asset_id,
+                )
+                return
+            # Remove subscription after processing (one-time notification)
+            await unsubscribe_from_asset_pipeline(asset_id)
 
         # Get agent context from subscription
         thread_id = subscription.get("threadId")
         if not thread_id:
             logger.warning("Subscription for asset %s has no threadId", asset_id)
             return
-
-        # Remove subscription after processing (one-time notification)
-        await unsubscribe_from_asset_pipeline(asset_id)
 
         # Build messages for the agent
         messages = self._build_messages(
@@ -331,7 +405,7 @@ class PipelineEventSubscriber:
     ) -> list:
         """Build messages for the agent based on event type."""
         display_name = asset_name or asset_id[:16]
-        
+
         succeeded = sum(1 for s in steps_summary if s.get("status") == "succeeded")
         failed = sum(1 for s in steps_summary if s.get("status") == "failed")
         total = len(steps_summary)
@@ -345,13 +419,18 @@ class PipelineEventSubscriber:
             if failed > 0:
                 failed_names = [s.get("label", s.get("id")) for s in steps_summary if s.get("status") == "failed"]
                 details.append(f"Failed steps: {', '.join(failed_names)}")
-            
+
             # Include useful metadata
             meta_agent = metadata.get("agent", {})
             if meta_agent:
                 details.append(f"Asset ID: {asset_id}")
 
             body = "Asset pipeline completed:\n" + "\n".join(f"- {item}" for item in details)
+            system_prompt = (
+                "Asset pipeline status update received. Craft a concise message for the user "
+                "summarizing the outcome. If successful, mention that the asset is now ready "
+                "to use and any metadata that was extracted. If failed, briefly explain what went wrong."
+            )
 
         elif event_type == "pipeline.failed":
             details = [
@@ -366,16 +445,34 @@ class PipelineEventSubscriber:
                 details.append(f"  - {label}: {error[:100]}")
 
             body = "Asset pipeline failed:\n" + "\n".join(f"- {item}" for item in details)
+            system_prompt = (
+                "Asset pipeline status update received. Craft a concise message for the user "
+                "summarizing the outcome. If failed, briefly explain what went wrong."
+            )
+
+        elif event_type == "transcode.completed":
+            details = [
+                f"Asset: {display_name}",
+                f"Asset ID: {asset_id}",
+                "Status: transcode completed",
+            ]
+            # Include any transcode metadata if available
+            transcode_result = metadata.get("transcodeResult", {})
+            if transcode_result:
+                if transcode_result.get("outputFormat"):
+                    details.append(f"Format: {transcode_result.get('outputFormat')}")
+
+            body = "Asset transcode completed:\n" + "\n".join(f"- {item}" for item in details)
+            system_prompt = (
+                "Asset transcode completed. The video file has been transcoded and is now ready to use. "
+                "Inform the user their video is ready. The full analysis (metadata, transcription, etc.) "
+                "is still processing in the background and will be available soon. "
+                "If the user asked about the video content, let them know you can help once analysis completes."
+            )
 
         else:
             logger.debug("[PIPELINE_EVENTS] Ignoring unsupported event type: %s", event_type)
             return []
-
-        system_prompt = (
-            "Asset pipeline status update received. Craft a concise message for the user "
-            "summarizing the outcome. If successful, mention that the asset is now ready "
-            "to use and any metadata that was extracted. If failed, briefly explain what went wrong."
-        )
 
         return [
             SystemMessage(content=system_prompt),

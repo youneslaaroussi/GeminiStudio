@@ -232,13 +232,35 @@ class PipelineWorker:
         trigger_pipeline_after = payload.get("trigger_pipeline_after", False)
 
         from ..pipeline.types import StepStatus
+        from ..pubsub import publish_pipeline_event
 
         result = await run_transcode_for_asset(user_id, project_id, asset_id, params)
 
-        if trigger_pipeline_after and result.status == StepStatus.SUCCEEDED:
+        if result.status == StepStatus.SUCCEEDED:
+            # Fetch fresh asset data after transcode
             settings = get_settings()
-            fresh_asset = await asyncio.to_thread(get_asset, user_id, project_id, asset_id, settings)
-            if fresh_asset:
+            fresh_asset = await asyncio.to_thread(
+                get_asset, user_id, project_id, asset_id, settings
+            )
+            asset_name = fresh_asset.get("name") if fresh_asset else None
+
+            # Publish transcode.completed event so consumers can act on the asset
+            # before the full pipeline finishes
+            publish_pipeline_event(
+                event_type="transcode.completed",
+                user_id=user_id,
+                project_id=project_id,
+                asset_id=asset_id,
+                asset_name=asset_name,
+                metadata={
+                    "agent": payload.get("agent_metadata") or {},
+                    "transcodeResult": result.metadata or {},
+                },
+            )
+            logger.info(f"Published transcode.completed event for asset {asset_id}")
+
+            # Queue pipeline if requested
+            if trigger_pipeline_after and fresh_asset:
                 await self.queue.enqueue_pipeline(
                     user_id=user_id,
                     project_id=project_id,

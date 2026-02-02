@@ -513,7 +513,6 @@ Media Assets in Project ({len(assets_info)}):
                 "project_id": first_project_id,
                 "branch_id": branch_id,
             }
-            _schedule_status("thinking")
             try:
                 async for event in graph.astream(
                     {"messages": langchain_messages},

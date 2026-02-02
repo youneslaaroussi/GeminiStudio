@@ -202,8 +202,8 @@ export function AssetDetailsDialog({
                 )}
               </div>
               <div className="space-y-2">
-                {pipelineLoading ? (
-                  // Loading skeleton
+                {pipelineLoading && pipelineSteps.length === 0 ? (
+                  // Skeleton only when we have no data yet (first load)
                   <>
                     {[1, 2, 3, 4].map((i) => (
                       <div

@@ -27,6 +27,7 @@ from .search_assets_tool import searchAssets
 from .set_asset_notes_tool import setAssetNotes
 from .set_scene_config_tool import setSceneConfig
 from .subscribe_pipeline_tool import subscribeToAssetPipeline
+from .subscribe_transcode_tool import subscribeToAssetTranscode
 from .time_tool import get_current_time_utc
 from .weather_tool import lookup_weather_snapshot
 
@@ -57,6 +58,7 @@ def get_registered_tools() -> Sequence[BaseTool]:
         search_product_docs,
         renderVideo,
         subscribeToAssetPipeline,
+        subscribeToAssetTranscode,
         lookup_weather_snapshot,
     )
 
