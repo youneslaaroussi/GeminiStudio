@@ -182,7 +182,7 @@ const defaultProject: Project = ensureAssistantChatState({
   resolution: { width: 1920, height: 1080 },
   fps: 30,
   renderScale: 1,
-  background: '#141417',
+  background: '#000000',
   layers: [],
   transcriptions: {},
   transitions: {},

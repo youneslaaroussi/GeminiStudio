@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { Player } from '@motion-canvas/core';
 import { useProjectStore } from '@/app/lib/store/project-store';
+import { getSceneNodeKey } from '@/app/lib/scene-node-key';
 import { clsx } from 'clsx';
 
 interface SceneNode {
@@ -46,12 +47,6 @@ interface ScreenRect {
   height: number;
 }
 
-function getNodeKey(clipId: string, type: string): string | null {
-  if (type === 'text') return `text-clip-${clipId}`;
-  if (type === 'video') return `video-clip-${clipId}`;
-  if (type === 'image') return `image-clip-${clipId}`;
-  return null;
-}
 
 const OPTIMISTIC_TIMEOUT_MS = 500;
 
@@ -117,7 +112,7 @@ export function SelectionOverlay({
       return;
     }
 
-    const nodeKey = getNodeKey(selectedClipId, selectedClip.type);
+    const nodeKey = getSceneNodeKey(selectedClip);
     if (!nodeKey) {
       setSceneRect(null);
       return;
