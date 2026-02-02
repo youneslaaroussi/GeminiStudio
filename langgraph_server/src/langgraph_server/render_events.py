@@ -269,6 +269,7 @@ class RenderEventSubscriber:
         extra_meta = metadata.get("extra") or {}
         project_name = extra_meta.get("projectName")
         timestamp = event.get("timestamp")
+        asset_id = event.get("assetId")
 
         if event_type == "render.completed":
             result = event.get("result") or {}
@@ -280,7 +281,7 @@ class RenderEventSubscriber:
             ]
             if project_name:
                 details.append(f"Project: {project_name}")
-            
+
             # Generate signed download URL if we have a GCS path
             if gcs_path:
                 download_url = _generate_signed_download_url(gcs_path, self._settings)
@@ -290,7 +291,12 @@ class RenderEventSubscriber:
                     details.append(f"GCS Path: {gcs_path}")
             elif output_path:
                 details.append(f"Output path: {output_path}")
-            
+
+            # Include asset ID for agent iteration
+            if asset_id:
+                details.append(f"Asset ID: {asset_id}")
+                details.append("You can use getAssetMetadata with this asset ID to review the rendered video and iterate if needed.")
+
             if timestamp:
                 details.append(f"Completed at: {timestamp}")
 

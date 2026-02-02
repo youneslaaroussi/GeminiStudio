@@ -45,6 +45,11 @@ class Settings(BaseSettings):
             "5. Your ONLY output when executing a task should be a tool call. Not a question. "
             "6. If a task is requested, your FIRST response MUST be a tool call, not text asking questions. "
             "7. When applying a video effect (e.g. segmentation) to a clip: FIRST digest the clip (digestAsset or getAssetMetadata) so you know the video content and where to place tracking points (click_coordinates, click_frames); THEN call applyVideoEffectToClip with the appropriate params. "
+            "8. VIDEO ITERATION WORKFLOW: For complex edits, use preview renders to iterate. "
+            "   - Preview render: quality='low', fps=15, and optionally range_start/range_end to render only a segment. "
+            "   - After render completes, you receive an assetId. Call getAssetMetadata(assetId) to review the output. "
+            "   - Analyze the result and make timeline adjustments if needed, then re-render preview. "
+            "   - Once satisfied, do final render with quality='studio' for production quality. "
             "EXAMPLE - User: 'render this video' -> You: [call renderVideo tool immediately] "
             "WRONG - User: 'render this video' -> You: 'What format do you want?' <- THIS IS FORBIDDEN"
         ),

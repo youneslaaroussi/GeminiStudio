@@ -189,12 +189,29 @@ def renderVideo(
   quality: str = "web",
   upload_url: str | None = None,
   include_audio: bool = True,
+  range_start: float | None = None,
+  range_end: float | None = None,
   project_id: str | None = None,
   user_id: str | None = None,
   branch_id: str | None = None,
   _agent_context: Annotated[Optional[Dict[str, Any]], InjectedToolArg] = None,
 ) -> dict:
-  """Queue a timeline render for the active project and notify when it completes."""
+  """Queue a timeline render for the active project and notify when it completes.
+
+  Args:
+      format: Output format - 'mp4', 'webm', or 'gif'. Defaults to 'mp4'.
+      fps: Frames per second. Use lower values (e.g., 15) for fast previews.
+      width: Output width in pixels. Use lower values (e.g., 640) for fast previews.
+      height: Output height in pixels. Use lower values (e.g., 360) for fast previews.
+      quality: Quality preset - 'low', 'web', 'social', or 'studio'. Use 'low' for previews.
+      upload_url: Optional custom upload URL.
+      include_audio: Whether to include audio in the output.
+      range_start: Start time in seconds for partial render. Use with range_end for previews.
+      range_end: End time in seconds for partial render. Use with range_start for previews.
+      project_id: Project ID (auto-injected from context).
+      user_id: User ID (auto-injected from context).
+      branch_id: Branch ID (auto-injected from context).
+  """
 
   context = _agent_context or {}
   settings = get_settings()
@@ -301,6 +318,8 @@ def renderVideo(
   }
   if effective_upload_url:
     output_payload["uploadUrl"] = effective_upload_url
+  if range_start is not None and range_end is not None:
+    output_payload["range"] = [range_start, range_end]
 
   thread_id = context.get("thread_id")
   if not thread_id:

@@ -13,6 +13,8 @@ export interface RendererConfig {
   gcpProjectId?: string;
   renderEventTopic: string;
   taskTimeoutMs: number;
+  assetServiceUrl?: string;
+  assetServiceSharedSecret?: string;
 }
 
 export const loadConfig = (): RendererConfig => {
@@ -27,6 +29,8 @@ export const loadConfig = (): RendererConfig => {
     RENDERER_EVENT_TOPIC,
     GOOGLE_PROJECT_ID,
     RENDERER_TASK_TIMEOUT_MS,
+    ASSET_SERVICE_URL,
+    ASSET_SERVICE_SHARED_SECRET,
   } = process.env;
 
   return {
@@ -40,5 +44,7 @@ export const loadConfig = (): RendererConfig => {
     gcpProjectId: GOOGLE_PROJECT_ID,
     renderEventTopic: RENDERER_EVENT_TOPIC ?? 'gemini-render-events',
     taskTimeoutMs: Number(RENDERER_TASK_TIMEOUT_MS ?? 600000), // 10 minutes default
+    assetServiceUrl: ASSET_SERVICE_URL,
+    assetServiceSharedSecret: ASSET_SERVICE_SHARED_SECRET,
   };
 };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { Film, Download, Loader2, AlertCircle, CheckCircle, X } from "lucide-react";
+import { Film, Download, Loader2, AlertCircle, CheckCircle, X, Scissors } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +37,36 @@ const QUALITY_OPTIONS: { value: RenderQuality; label: string; description: strin
   { value: "studio", label: "Studio", description: "Highest quality" },
 ];
 
+// Helper to format seconds as MM:SS
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+}
+
+// Helper to parse MM:SS to seconds
+function parseTime(timeStr: string): number | null {
+  const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const mins = parseInt(match[1], 10);
+  const secs = parseInt(match[2], 10);
+  if (secs >= 60) return null;
+  return mins * 60 + secs;
+}
+
+// Calculate timeline duration from project
+function getTimelineDuration(project: Project): number {
+  let maxEnd = 0;
+  for (const layer of project.layers) {
+    for (const clip of layer.clips) {
+      const speed = clip.speed || 1;
+      const end = clip.start + clip.duration / Math.max(speed, 0.0001);
+      maxEnd = Math.max(maxEnd, end);
+    }
+  }
+  return maxEnd;
+}
+
 export function RenderDialog({
   open,
   onOpenChange,
@@ -45,6 +75,11 @@ export function RenderDialog({
 }: RenderDialogProps) {
   const [format, setFormat] = useState<RenderFormat>("mp4");
   const [quality, setQuality] = useState<RenderQuality>("web");
+  const [useRange, setUseRange] = useState(false);
+  const [rangeStartStr, setRangeStartStr] = useState("00:00");
+  const [rangeEndStr, setRangeEndStr] = useState("00:00");
+
+  const timelineDuration = useMemo(() => getTimelineDuration(project), [project]);
 
   const {
     isRendering,
@@ -66,17 +101,38 @@ export function RenderDialog({
       const timeout = setTimeout(() => {
         setFormat("mp4");
         setQuality("web");
+        setUseRange(false);
+        setRangeStartStr("00:00");
+        setRangeEndStr(formatTime(timelineDuration));
       }, 200);
       return () => clearTimeout(timeout);
     }
-  }, [open, isRendering]);
+  }, [open, isRendering, timelineDuration]);
+
+  // Initialize range end when dialog opens
+  useEffect(() => {
+    if (open) {
+      setRangeEndStr(formatTime(timelineDuration));
+    }
+  }, [open, timelineDuration]);
 
   const handleStartRender = useCallback(async () => {
     // Autosave project before rendering
     saveProject();
     analytics.renderStarted({ project_id: projectId, format, quality });
-    await startRender(project, projectId, { format, quality });
-  }, [startRender, project, projectId, format, quality, saveProject, analytics]);
+
+    // Build render options with optional range
+    const options: { format: RenderFormat; quality: RenderQuality; range?: [number, number] } = { format, quality };
+    if (useRange) {
+      const start = parseTime(rangeStartStr);
+      const end = parseTime(rangeEndStr);
+      if (start !== null && end !== null && end > start) {
+        options.range = [start, end];
+      }
+    }
+
+    await startRender(project, projectId, options);
+  }, [startRender, project, projectId, format, quality, useRange, rangeStartStr, rangeEndStr, saveProject, analytics]);
 
   const handleClose = useCallback(
     (nextOpen: boolean) => {
@@ -193,6 +249,44 @@ export function RenderDialog({
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="useRange"
+                  checked={useRange}
+                  onChange={(e) => setUseRange(e.target.checked)}
+                  className="size-4 rounded border-border"
+                />
+                <label htmlFor="useRange" className="text-sm font-medium flex items-center gap-1.5">
+                  <Scissors className="size-3.5" />
+                  Render partial range
+                </label>
+              </div>
+              {useRange && (
+                <div className="flex items-center gap-2 pl-6">
+                  <input
+                    type="text"
+                    value={rangeStartStr}
+                    onChange={(e) => setRangeStartStr(e.target.value)}
+                    placeholder="00:00"
+                    className="w-20 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-center font-mono"
+                  />
+                  <span className="text-muted-foreground">to</span>
+                  <input
+                    type="text"
+                    value={rangeEndStr}
+                    onChange={(e) => setRangeEndStr(e.target.value)}
+                    placeholder="00:00"
+                    className="w-20 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-center font-mono"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    (max {formatTime(timelineDuration)})
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="rounded-md bg-muted/50 p-3 text-sm space-y-1">

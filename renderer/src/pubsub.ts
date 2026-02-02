@@ -30,6 +30,7 @@ interface RenderEventBase {
 export interface RenderCompletedEvent extends RenderEventBase {
   type: 'render.completed';
   result: RenderResult | null;
+  assetId?: string | null; // ID of the registered asset for agent iteration
 }
 
 export interface RenderFailedEvent extends RenderEventBase {

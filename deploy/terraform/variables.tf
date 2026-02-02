@@ -93,6 +93,20 @@ variable "algolia_admin_key" {
   sensitive   = true
 }
 
+variable "asset_service_shared_secret" {
+  description = "HMAC shared secret for asset service auth (only used if use_secret_manager=false)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "renderer_shared_secret" {
+  description = "HMAC shared secret for renderer auth (only used if use_secret_manager=false)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 # =============================================================================
 # Feature Flags
 # =============================================================================

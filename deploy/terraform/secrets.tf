@@ -40,6 +40,22 @@ data "google_secret_manager_secret_version" "algolia_admin_key" {
   depends_on = [google_project_service.secretmanager]
 }
 
+data "google_secret_manager_secret_version" "asset_service_shared_secret" {
+  count   = var.use_secret_manager ? 1 : 0
+  secret  = "asset-service-shared-secret"
+  project = var.project_id
+
+  depends_on = [google_project_service.secretmanager]
+}
+
+data "google_secret_manager_secret_version" "renderer_shared_secret" {
+  count   = var.use_secret_manager ? 1 : 0
+  secret  = "renderer-shared-secret"
+  project = var.project_id
+
+  depends_on = [google_project_service.secretmanager]
+}
+
 # Local values for secrets (uses Secret Manager or falls back to variables)
 locals {
   gemini_api_key = var.use_secret_manager ? (
@@ -61,8 +77,20 @@ locals {
   ) : var.replicate_api_token
 
   algolia_admin_key = var.use_secret_manager && var.enable_algolia ? (
-    length(data.google_secret_manager_secret_version.algolia_admin_key) > 0 
-    ? data.google_secret_manager_secret_version.algolia_admin_key[0].secret_data 
+    length(data.google_secret_manager_secret_version.algolia_admin_key) > 0
+    ? data.google_secret_manager_secret_version.algolia_admin_key[0].secret_data
     : ""
   ) : var.algolia_admin_key
+
+  asset_service_shared_secret = var.use_secret_manager ? (
+    length(data.google_secret_manager_secret_version.asset_service_shared_secret) > 0
+    ? data.google_secret_manager_secret_version.asset_service_shared_secret[0].secret_data
+    : ""
+  ) : var.asset_service_shared_secret
+
+  renderer_shared_secret = var.use_secret_manager ? (
+    length(data.google_secret_manager_secret_version.renderer_shared_secret) > 0
+    ? data.google_secret_manager_secret_version.renderer_shared_secret[0].secret_data
+    : ""
+  ) : var.renderer_shared_secret
 }

@@ -125,6 +125,8 @@ services:
       - DEBUG=${DEBUG:-false}
       - APP_HOST=0.0.0.0
       - APP_PORT=8081
+      # HMAC auth for service-to-service communication
+      - SHARED_SECRET=${ASSET_SERVICE_SHARED_SECRET:-}
     volumes:
       - ./secrets:/app/secrets:ro
     depends_on:
@@ -232,6 +234,9 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/google-service-account.json
       - RENDERER_EVENT_TOPIC=${RENDER_EVENT_TOPIC:-gemini-render-events}
       - RENDERER_TASK_TIMEOUT_MS=${RENDERER_TASK_TIMEOUT_MS:-600000}
+      # Asset service integration for agent iteration
+      - ASSET_SERVICE_URL=http://asset-service:8081
+      - ASSET_SERVICE_SHARED_SECRET=${ASSET_SERVICE_SHARED_SECRET:-}
     volumes:
       - ./secrets:/app/secrets:ro
       - renderer-tmp:/tmp/gemini-renderer

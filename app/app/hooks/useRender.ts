@@ -14,6 +14,7 @@ export interface RenderOptions {
   format: RenderFormat;
   quality: RenderQuality;
   fps?: number;
+  range?: [number, number]; // [startSeconds, endSeconds] for partial render
 }
 
 export interface RenderJobStatus {

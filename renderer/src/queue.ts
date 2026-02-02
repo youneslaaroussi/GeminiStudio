@@ -1,5 +1,6 @@
 import { Queue, Worker, JobsOptions, Job, QueueEvents } from 'bullmq';
 import { Redis } from 'ioredis';
+import crypto from 'crypto';
 import type { RenderJobData } from './jobs/render-job.js';
 import { renderJobSchema } from './jobs/render-job.js';
 import { logger } from './logger.js';
@@ -9,6 +10,84 @@ import type { RenderEventMetadata } from './pubsub.js';
 import type { RenderResult } from './services/render-runner.js';
 
 const cfg = loadConfig();
+
+/**
+ * Sign an asset service request with HMAC-SHA256.
+ */
+const signAssetServiceRequest = (body: string, timestamp: number): string => {
+  if (!cfg.assetServiceSharedSecret) return '';
+  const payload = `${timestamp}.${body}`;
+  return crypto.createHmac('sha256', cfg.assetServiceSharedSecret).update(payload).digest('hex');
+};
+
+/**
+ * Register a rendered video as an asset in the asset service.
+ * Returns the assetId if successful, null otherwise.
+ */
+const registerRenderAsAsset = async (
+  gcsPath: string,
+  metadata: RenderEventMetadata | undefined,
+): Promise<string | null> => {
+  if (!cfg.assetServiceUrl) {
+    logger.debug('Asset service URL not configured, skipping asset registration');
+    return null;
+  }
+
+  const agent = metadata?.agent;
+  const userId = agent?.userId;
+  const projectId = agent?.projectId;
+  const threadId = agent?.threadId;
+
+  if (!userId || !projectId) {
+    logger.debug({ userId, projectId }, 'Missing userId or projectId, skipping asset registration');
+    return null;
+  }
+
+  const endpoint = `${cfg.assetServiceUrl.replace(/\/$/, '')}/api/assets/${userId}/${projectId}/register-gcs`;
+
+  const requestBody = JSON.stringify({
+    gcsUri: gcsPath,
+    name: `Render ${new Date().toISOString()}`,
+    source: 'render',
+    runPipeline: true,
+    threadId: threadId || null,
+  });
+
+  const timestamp = Date.now();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (cfg.assetServiceSharedSecret) {
+    headers['X-Signature'] = signAssetServiceRequest(requestBody, timestamp);
+    headers['X-Timestamp'] = timestamp.toString();
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: requestBody,
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      logger.error({ status: response.status, text }, 'Failed to register render as asset');
+      return null;
+    }
+
+    const data = (await response.json()) as { asset?: { id?: string } };
+    const assetId = data.asset?.id;
+    if (assetId) {
+      logger.info({ assetId, gcsPath }, 'Registered render as asset');
+      return assetId;
+    }
+    return null;
+  } catch (err) {
+    logger.error({ err }, 'Error registering render as asset');
+    return null;
+  }
+};
 
 export const RENDER_QUEUE_NAME = 'gemini-render';
 
@@ -62,11 +141,20 @@ renderQueueEvents.on('completed', async ({ jobId, returnvalue }) => {
     const metadata: RenderEventMetadata | undefined = job?.data.metadata
       ? { ...job.data.metadata }
       : undefined;
+    const result = coerceReturnValue(returnvalue);
+
+    // Register rendered video as asset for agent iteration
+    let assetId: string | null = null;
+    if (result?.gcsPath) {
+      assetId = await registerRenderAsAsset(result.gcsPath, metadata);
+    }
+
     await publishRenderEvent({
       type: 'render.completed',
       jobId,
-      result: coerceReturnValue(returnvalue),
+      result,
       metadata,
+      assetId,
     });
   } catch (err) {
     logger.error({ err, jobId }, 'Failed to publish render completed event');

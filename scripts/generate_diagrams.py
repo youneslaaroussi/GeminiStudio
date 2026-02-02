@@ -114,10 +114,50 @@ flowchart LR
     understanding --> library
 """
 
+# Diagram 4: Agent Iteration Loop
+iteration = """
+flowchart TD
+    A(("fa:fa-user User Request"))
+
+    subgraph analyze["1. ANALYZE"]
+        B["fa:fa-eye Gemini Multimodal<br/>Shot detection • Face tracking • Transcription"]
+    end
+
+    subgraph edit["2. EDIT"]
+        C["fa:fa-cut Timeline Manipulation<br/>Clips • Timing • Transitions • Music/VO"]
+    end
+
+    subgraph preview["3. PREVIEW"]
+        D["fa:fa-bolt Fast Render<br/>quality='low' • fps=15 • range=[start,end]"]
+    end
+
+    subgraph review["4. REVIEW"]
+        E["fa:fa-brain Agent Watches Output<br/>Auto-registered as asset • getAssetMetadata"]
+    end
+
+    F{"fa:fa-check Satisfied?"}
+
+    subgraph deliver["5. DELIVER"]
+        G["fa:fa-film Final Render<br/>quality='studio' • Full resolution"]
+    end
+
+    H(("fa:fa-video Video Ready"))
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F -->|"No"| C
+    F -->|"Yes"| G
+    G --> H
+"""
+
 diagrams = [
     ("infra_diagram", infra),
     ("flow_diagram", flow),
     ("asset_pipeline_diagram", pipeline),
+    ("iteration_diagram", iteration),
 ]
 
 for name, content in diagrams:
@@ -144,4 +184,3 @@ for name, content in diagrams:
         print(f"✗ {name}: {result.stderr}")
 
 os.remove("assets/mermaid-config.json")
-print("\nDone! Diagrams use official Gemini 3 terminology.")

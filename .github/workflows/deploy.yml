@@ -106,9 +106,9 @@ jobs:
               echo "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=710851187455" >> .env
               echo "NEXT_PUBLIC_FIREBASE_APP_ID=1:710851187455:web:ba077c89c5b61fb24c72ca" >> .env
               
-              # Shared secrets (fetch from Secret Manager or use defaults)
-              echo "RENDERER_SHARED_SECRET=$(gcloud secrets versions access latest --secret=renderer-shared-secret 2>/dev/null || echo '619e7779bd8dc6ecd277099b5529681025e7177a4e5323809c286b6675aaa410')" >> .env
-              echo "ASSET_SERVICE_SHARED_SECRET=$(gcloud secrets versions access latest --secret=asset-service-shared-secret 2>/dev/null || echo '619e7779bd8dc6ecd277099b5529681025e7177a4e5323809c286b6675aaa410')" >> .env
+              # Shared secrets (from Secret Manager)
+              echo "RENDERER_SHARED_SECRET=$(gcloud secrets versions access latest --secret=renderer-shared-secret)" >> .env
+              echo "ASSET_SERVICE_SHARED_SECRET=$(gcloud secrets versions access latest --secret=asset-service-shared-secret)" >> .env
               
               # CloudConvert (optional)
               echo "CLOUDCONVERT_API_KEY=$(gcloud secrets versions access latest --secret=cloudconvert-api-key 2>/dev/null || echo '')" >> .env

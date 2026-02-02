@@ -290,6 +290,160 @@ async def upload_asset(
     )
 
 
+class RegisterGcsRequest(BaseModel):
+    """Request body for registering an existing GCS file as an asset."""
+
+    gcsUri: str  # e.g., gs://bucket/path/to/file.mp4
+    name: str | None = None  # Optional display name
+    source: str = "render"  # Source identifier
+    runPipeline: bool = True  # Whether to run the analysis pipeline
+    threadId: str | None = None  # For agent notifications
+
+
+@router.post("/{user_id}/{project_id}/register-gcs", response_model=UploadResponse)
+async def register_gcs_asset(
+    user_id: str,
+    project_id: str,
+    body: RegisterGcsRequest,
+):
+    """
+    Register an existing GCS file as an asset.
+
+    This is used by the renderer to register rendered videos as assets
+    so they can be analyzed by the agent pipeline.
+    """
+    settings = get_settings()
+
+    # Parse GCS URI
+    if not body.gcsUri.startswith("gs://"):
+        raise HTTPException(status_code=400, detail="Invalid GCS URI format")
+
+    parts = body.gcsUri[5:].split("/", 1)
+    if len(parts) != 2:
+        raise HTTPException(status_code=400, detail="Invalid GCS URI format")
+
+    bucket_name, object_name = parts
+
+    # Generate asset ID
+    asset_id = str(uuid.uuid4())
+
+    # Extract filename from object name
+    filename = object_name.split("/")[-1] if "/" in object_name else object_name
+    display_name = body.name or filename
+
+    # Guess MIME type from extension
+    mime_type, _ = mimetypes.guess_type(filename)
+    mime_type = mime_type or "application/octet-stream"
+
+    # Determine asset type
+    asset_type = determine_asset_type(mime_type, filename)
+
+    # Get file size and metadata from GCS
+    from google.cloud import storage as gcs_storage
+
+    try:
+        client = gcs_storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(object_name)
+        blob.reload()  # Fetch metadata
+        file_size = blob.size or 0
+    except Exception as e:
+        logger.error(f"Failed to get GCS file info: {e}")
+        raise HTTPException(status_code=404, detail="GCS file not found")
+
+    # Generate signed URL
+    signed_url = await asyncio.to_thread(
+        create_signed_url, object_name, bucket=bucket_name, settings=settings
+    )
+
+    # Extract video metadata if it's a video
+    metadata: dict[str, Any] = {}
+    temp_path = None
+
+    if asset_type == "video":
+        try:
+            # Download to temp file for ffprobe
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as tmp:
+                blob.download_to_file(tmp)
+                temp_path = tmp.name
+
+            extracted = await asyncio.to_thread(extract_metadata, temp_path)
+            if extracted.width:
+                metadata["width"] = extracted.width
+            if extracted.height:
+                metadata["height"] = extracted.height
+            if extracted.duration:
+                metadata["duration"] = extracted.duration
+            if extracted.codec:
+                metadata["videoCodec"] = extracted.codec
+        except Exception as e:
+            logger.warning(f"Failed to extract metadata from GCS file: {e}")
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                os.unlink(temp_path)
+
+    # Create asset data
+    now = datetime.utcnow().isoformat() + "Z"
+    asset_data = {
+        "id": asset_id,
+        "name": display_name,
+        "fileName": filename,
+        "mimeType": mime_type,
+        "size": file_size,
+        "type": asset_type,
+        "uploadedAt": now,
+        "updatedAt": now,
+        "source": body.source,
+        "gcsUri": body.gcsUri,
+        "bucket": bucket_name,
+        "objectName": object_name,
+        "signedUrl": signed_url,
+        **metadata,
+    }
+
+    saved_asset = await asyncio.to_thread(save_asset, user_id, project_id, asset_data, settings)
+
+    # Queue pipeline if requested
+    pipeline_started = False
+    if body.runPipeline:
+        try:
+            queue = await get_task_queue()
+            agent_metadata = (
+                {"threadId": body.threadId, "userId": user_id, "projectId": project_id}
+                if body.threadId
+                else None
+            )
+            await queue.enqueue_pipeline(
+                user_id=user_id,
+                project_id=project_id,
+                asset_id=asset_id,
+                asset_data=saved_asset,
+                asset_path="",  # Already in GCS
+                agent_metadata=agent_metadata,
+            )
+            pipeline_started = True
+            logger.info(f"Queued pipeline for registered GCS asset {asset_id}")
+        except Exception as e:
+            logger.error(f"Failed to queue pipeline: {e}")
+
+    # Index to Algolia
+    try:
+        await index_asset(
+            user_id=user_id,
+            project_id=project_id,
+            asset_data=saved_asset,
+            pipeline_state=None,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to index registered asset to Algolia: {e}")
+
+    return UploadResponse(
+        asset=AssetResponse(**saved_asset),
+        pipelineStarted=pipeline_started,
+        transcodeStarted=False,
+    )
+
+
 @router.get("/{user_id}/{project_id}", response_model=list[AssetResponse])
 async def list_project_assets(user_id: str, project_id: str):
     """List all assets for a project."""

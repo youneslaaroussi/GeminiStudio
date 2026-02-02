@@ -22,6 +22,7 @@ interface RenderRequest {
     format: "mp4" | "webm" | "gif";
     quality: "low" | "web" | "social" | "studio";
     fps?: number;
+    range?: [number, number]; // [startSeconds, endSeconds] for partial render
   };
 }
 
@@ -379,6 +380,9 @@ export async function POST(request: NextRequest) {
     // Calculate timeline duration
     const timelineDuration = calculateTimelineDuration(transformedProject);
 
+    // Use provided range or default to full timeline
+    const renderRange: [number, number] = output.range ?? [0, timelineDuration];
+
     // Call renderer API
     const rendererPayload = {
       project: transformedProject,
@@ -389,7 +393,7 @@ export async function POST(request: NextRequest) {
         size: project.resolution,
         quality: output.quality,
         destination: `/tmp/render-${timestamp}.${extension}`,
-        range: [0, timelineDuration],
+        range: renderRange,
         includeAudio: true,
         uploadUrl,
       },

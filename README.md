@@ -166,6 +166,40 @@ This is the full loop: **ingest → perceive → reason → generate → render.
 
 ---
 
+## Autonomous Video Production: The Agent Can Watch Its Own Work
+
+**This is the moat.** Gemini Studio is the first platform where an AI agent can autonomously iterate on video edits without human intervention.
+
+### The Iteration Loop
+
+![Agent Iteration Loop](assets/iteration_diagram.png)
+
+### Why This Matters
+
+**Traditional AI video tools:** Generate → Done. No feedback loop. No iteration.
+
+**Gemini Studio:** Generate → Watch → Critique → Adjust → Repeat → Deliver.
+
+The agent has:
+- **Eyes** (Gemini multimodal can analyze video content)
+- **Hands** (18 tools for timeline manipulation)
+- **Judgment** (can evaluate pacing, cuts, transitions)
+- **Memory** (maintains context across iterations)
+
+This is the difference between a tool that produces output and an agent that produces *quality* output.
+
+### Render Quality Controls
+
+The agent intelligently chooses render settings based on intent:
+
+| Mode | Settings | Use Case |
+|------|----------|----------|
+| **Preview** | `quality='low'`, `fps=15`, `range=[start,end]` | Fast iteration, reviewing segments |
+| **Draft** | `quality='web'`, full timeline | Near-final review |
+| **Production** | `quality='studio'`, full timeline | Final delivery |
+
+---
+
 ## Tech stack
 
 ![Infrastructure](assets/infra_diagram.png)
