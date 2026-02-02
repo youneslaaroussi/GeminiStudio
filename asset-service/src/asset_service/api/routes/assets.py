@@ -57,6 +57,7 @@ class AssetResponse(BaseModel):
     source: str = "api"
     sortOrder: int | None = None
     description: str | None = None  # AI-generated short description
+    notes: str | None = None  # User notes (what the asset is for)
 
 
 class ReorderBody(BaseModel):
@@ -543,6 +544,19 @@ async def update_asset_by_id(
     updated = await asyncio.to_thread(update_asset, user_id, project_id, asset_id, updates, settings)
     if not updated:
         raise HTTPException(status_code=404, detail="Asset not found")
+
+    # Re-index in Algolia when notes (or other searchable fields) change
+    if "notes" in updates or "name" in updates or "description" in updates:
+        try:
+            await update_asset_index(
+                user_id=user_id,
+                project_id=project_id,
+                asset_id=asset_id,
+                updates={k: v for k, v in updates.items() if k in ("notes", "name", "description")},
+                settings=settings,
+            )
+        except Exception as e:
+            logger.warning("Failed to update Algolia index after asset update: %s", e)
 
     return AssetResponse(**updated)
 

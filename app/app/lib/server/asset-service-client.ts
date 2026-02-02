@@ -61,6 +61,7 @@ export interface AssetServiceAsset {
   source?: string;
   sortOrder?: number;
   description?: string; // AI-generated short description
+  notes?: string; // User notes (what the asset is for)
 }
 
 export interface UploadResponse {
@@ -198,7 +199,7 @@ export async function updateAssetFromService(
   userId: string,
   projectId: string,
   assetId: string,
-  updates: { name?: string; sortOrder?: number }
+  updates: { name?: string; sortOrder?: number; notes?: string }
 ): Promise<AssetServiceAsset> {
   const body = JSON.stringify(updates);
   const response = await fetch(

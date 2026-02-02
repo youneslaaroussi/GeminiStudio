@@ -22,6 +22,7 @@ from .list_project_assets_tool import listProjectAssets
 from .plan_narrative_edit_tool import createEditPlan
 from .render_video_tool import renderVideo
 from .search_assets_tool import searchAssets
+from .set_asset_notes_tool import setAssetNotes
 from .subscribe_pipeline_tool import subscribeToAssetPipeline
 from .time_tool import get_current_time_utc
 from .weather_tool import lookup_weather_snapshot
@@ -46,6 +47,7 @@ def get_registered_tools() -> Sequence[BaseTool]:
         listProjectAssets,
         createEditPlan,
         searchAssets,
+        setAssetNotes,
         search_product_docs,
         renderVideo,
         subscribeToAssetPipeline,

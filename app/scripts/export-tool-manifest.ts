@@ -21,6 +21,7 @@ const LANGGRAPH_TOOL_MAP: Record<string, string> = {
   generateSpeech: "generateSpeech",
   veoGenerate: "generateVeoVideo",
   applyVideoEffectToClip: "applyVideoEffectToClip",
+  setAssetNotes: "setAssetNotes",
 };
 
 /**

@@ -41,6 +41,7 @@ function toRemoteAsset(asset: AssetServiceAsset, projectId: string): RemoteAsset
     gcsUri: asset.gcsUri,
     signedUrl: asset.signedUrl,
     description: asset.description,
+    notes: asset.notes,
   };
 }
 

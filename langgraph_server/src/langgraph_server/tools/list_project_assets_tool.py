@@ -108,6 +108,7 @@ def listProjectAssets(
             "width": a.get("width"),
             "height": a.get("height"),
             "signedUrl": a.get("signedUrl"),
+            "notes": a.get("notes"),
         }
         for a in assets
     ]

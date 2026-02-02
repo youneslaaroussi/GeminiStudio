@@ -91,6 +91,7 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
     fetchAssets,
     addAssets,
     renameAsset,
+    updateAssetNotes,
     reorderAssets,
     deleteAsset,
     deleteAssets,
@@ -616,6 +617,7 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
         pipelineLoading={pipelineLoading && !pipelineState}
         transcription={detailsDialogTranscription}
         onPipelineRefresh={fetchAssets}
+        onUpdateNotes={updateAssetNotes}
       />
 
       <VidovaModal open={vidovaModalOpen} onOpenChange={setVidovaModalOpen} />

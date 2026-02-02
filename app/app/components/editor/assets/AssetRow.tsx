@@ -15,6 +15,7 @@ import {
   Pencil,
   Download,
   Check,
+  StickyNote,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
@@ -303,6 +304,14 @@ export const AssetRow = memo(function AssetRow({
               </div>
             )}
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              {asset.notes ? (
+                <span
+                  className="shrink-0 text-amber-600 dark:text-amber-500"
+                  title={asset.notes}
+                >
+                  <StickyNote className="size-3.5 inline" />
+                </span>
+              ) : null}
               <span className="uppercase">{asset.type}</span>
               <span>•</span>
               <span>{formatBytes(asset.size)}</span>

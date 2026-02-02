@@ -28,6 +28,8 @@ function toRemoteAsset(asset: AssetServiceAsset, projectId: string): RemoteAsset
     duration: asset.duration,
     gcsUri: asset.gcsUri,
     signedUrl: asset.signedUrl,
+    description: asset.description,
+    notes: asset.notes,
   };
 }
 

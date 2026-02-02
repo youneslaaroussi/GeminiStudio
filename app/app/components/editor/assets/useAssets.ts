@@ -70,7 +70,8 @@ export function useAssets() {
           if (existing) {
             return {
               ...serverAsset,
-              description: serverAsset.description || existing.description,
+              description: serverAsset.description ?? existing.description,
+              notes: serverAsset.notes ?? existing.notes,
             };
           }
           return serverAsset;
@@ -168,6 +169,48 @@ export function useAssets() {
     [projectId]
   );
 
+  const updateAssetNotes = useCallback(
+    async (assetId: string, notes: string): Promise<boolean> => {
+      if (!projectId) {
+        toast.error("No project selected");
+        return false;
+      }
+      setAssets((prev) => {
+        previousAssetsRef.current = prev;
+        return prev.map((a) =>
+          a.id === assetId ? { ...a, notes: notes || undefined } : a
+        );
+      });
+      try {
+        const authHeaders = await getAuthHeaders();
+        const url = new URL(`/api/assets/${assetId}`, window.location.origin);
+        url.searchParams.set("projectId", projectId);
+        const response = await fetch(url.toString(), {
+          method: "PATCH",
+          headers: { ...authHeaders, "Content-Type": "application/json" },
+          body: JSON.stringify({ notes: notes || null }),
+        });
+        if (!response.ok) {
+          const data = (await response.json()) as { error?: string };
+          throw new Error(data.error || "Failed to update notes");
+        }
+        previousAssetsRef.current = null;
+        return true;
+      } catch (err) {
+        console.error("Failed to update asset notes", err);
+        if (previousAssetsRef.current) {
+          setAssets(previousAssetsRef.current);
+          previousAssetsRef.current = null;
+        }
+        toast.error("Failed to update notes", {
+          description: err instanceof Error ? err.message : "Unknown error",
+        });
+        return false;
+      }
+    },
+    [projectId]
+  );
+
   const reorderAssets = useCallback(
     async (orderedIds: string[]): Promise<boolean> => {
       if (!projectId) {
@@ -204,7 +247,8 @@ export function useAssets() {
             if (existing) {
               return {
                 ...serverAsset,
-                description: serverAsset.description || existing.description,
+                description: serverAsset.description ?? existing.description,
+                notes: serverAsset.notes ?? existing.notes,
               };
             }
             return serverAsset;
@@ -547,6 +591,7 @@ export function useAssets() {
     fetchAssets,
     addAssets,
     renameAsset,
+    updateAssetNotes,
     reorderAssets,
     deleteAsset,
     deleteAssets,

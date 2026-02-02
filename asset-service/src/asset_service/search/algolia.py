@@ -97,6 +97,7 @@ def build_searchable_content(
     searchable_parts = [
         asset_data.get("name", ""),
         asset_data.get("description", ""),
+        asset_data.get("notes", ""),
         gemini_analysis,
         transcript,
     ]
@@ -118,6 +119,7 @@ def build_searchable_content(
         "height": asset_data.get("height"),
         "duration": asset_data.get("duration"),
         "description": asset_data.get("description", ""),
+        "notes": asset_data.get("notes", ""),
         "geminiAnalysis": gemini_analysis[:5000] if gemini_analysis else "",  # Truncate long analysis
         "transcript": transcript[:5000] if transcript else "",  # Truncate long transcripts
         "labels": labels[:100],  # Limit labels

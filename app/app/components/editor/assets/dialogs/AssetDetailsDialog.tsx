@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { Copy, ExternalLink, Loader2, ChevronDown, ChevronRight, Camera, RotateCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Copy, ExternalLink, Loader2, ChevronDown, ChevronRight, Camera, RotateCw, StickyNote } from "lucide-react";
 import { getAuthToken } from "@/app/lib/hooks/useAuthFetch";
 import {
   Dialog,
@@ -11,6 +11,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import type { RemoteAsset } from "@/app/types/assets";
 import type { PipelineStepState } from "@/app/types/pipeline";
 import type { ProjectTranscription } from "@/app/types/transcription";
@@ -27,6 +28,7 @@ interface AssetDetailsDialogProps {
   pipelineLoading?: boolean;
   transcription?: ProjectTranscription;
   onPipelineRefresh?: () => void;
+  onUpdateNotes?: (assetId: string, notes: string) => Promise<boolean>;
 }
 
 export function AssetDetailsDialog({
@@ -38,6 +40,7 @@ export function AssetDetailsDialog({
   pipelineLoading,
   transcription,
   onPipelineRefresh,
+  onUpdateNotes,
 }: AssetDetailsDialogProps) {
   const copyToClipboard = useCallback(async (value: string, label: string) => {
     try {
@@ -120,6 +123,19 @@ export function AssetDetailsDialog({
                 onCopy={() => copyToClipboard(asset.url, "URL")}
               />
             </div>
+          </section>
+
+          {/* Notes */}
+          <section className="space-y-3">
+            <h4 className="text-sm font-semibold flex items-center gap-2">
+              <StickyNote className="size-4 text-muted-foreground" />
+              Notes
+            </h4>
+            <AssetNotesEditor
+              assetId={asset.id}
+              notes={asset.notes ?? ""}
+              onSave={onUpdateNotes}
+            />
           </section>
 
           {/* Cloud Storage */}
@@ -248,6 +264,77 @@ export function AssetDetailsDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+const MIN_SAVE_INDICATOR_MS = 400;
+
+function AssetNotesEditor({
+  assetId,
+  notes,
+  onSave,
+}: {
+  assetId: string;
+  notes: string;
+  onSave?: (assetId: string, notes: string) => Promise<boolean>;
+}) {
+  const [value, setValue] = useState(notes);
+  const [saving, setSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState(notes);
+
+  useEffect(() => {
+    setValue(notes);
+    setLastSaved(notes);
+  }, [assetId, notes]);
+
+  const handleSave = useCallback(async () => {
+    if (!onSave || value === lastSaved) return;
+    setSaving(true);
+    const startedAt = Date.now();
+    let ok = false;
+    try {
+      ok = await onSave(assetId, value.trim());
+    } finally {
+      const elapsed = Date.now() - startedAt;
+      const remaining = Math.max(0, MIN_SAVE_INDICATOR_MS - elapsed);
+      await new Promise((r) => setTimeout(r, remaining));
+      if (ok) setLastSaved(value.trim());
+      setSaving(false);
+    }
+  }, [assetId, value, lastSaved, onSave]);
+
+  const showSaveRow = (onSave && value !== lastSaved) || saving;
+
+  return (
+    <div className="space-y-2">
+      <Textarea
+        placeholder="What is this asset for? Add notes to remember later..."
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => void handleSave()}
+        className="min-h-[80px] resize-y text-sm"
+        disabled={!onSave}
+      />
+      {showSaveRow && (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void handleSave()}
+            disabled={saving}
+          >
+            {saving ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                Saving...
+              </>
+            ) : (
+              "Save notes"
+            )}
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -16,6 +16,7 @@ export interface RemoteAsset {
   gcsUri?: string;
   signedUrl?: string;
   description?: string; // AI-generated short description
+  notes?: string; // User notes (what the asset is for)
 }
 
 export interface AssetDragPayload {

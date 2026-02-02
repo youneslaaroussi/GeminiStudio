@@ -31,6 +31,7 @@ import { veoGenerateTool, veoJobStatusTool } from "./veo-generate";
 import { digestAssetTool } from "./digest-asset";
 import { applyVideoEffectToClipTool } from "./apply-video-effect-to-clip";
 import { searchAssetsTool } from "./search-assets";
+import { setAssetNotesTool } from "./set-asset-notes";
 
 type AnyToolDefinition = ToolDefinition<any, Project>;
 
@@ -76,6 +77,7 @@ toolRegistry.register(veoJobStatusTool);
 toolRegistry.register(digestAssetTool);
 toolRegistry.register(applyVideoEffectToClipTool);
 toolRegistry.register(searchAssetsTool);
+toolRegistry.register(setAssetNotesTool);
 
 type ToolInput = Record<string, unknown>;
 

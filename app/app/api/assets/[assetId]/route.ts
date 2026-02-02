@@ -5,6 +5,7 @@ import {
   isAssetServiceEnabled,
   getAssetFromService,
   deleteAssetFromService,
+  updateAssetFromService,
 } from "@/app/lib/server/asset-service-client";
 
 export const runtime = "nodejs";
@@ -123,30 +124,30 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   const { assetId } = await context.params;
-  const body = await request.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
-  const ASSET_SERVICE_URL = process.env.ASSET_SERVICE_URL || "http://localhost:8081";
+  // Only allow updating name, sortOrder, notes
+  const updates: { name?: string; sortOrder?: number; notes?: string } = {};
+  if (typeof body.name === "string") updates.name = body.name;
+  if (typeof body.sortOrder === "number") updates.sortOrder = body.sortOrder;
+  if (typeof body.notes === "string" || body.notes === null) updates.notes = body.notes ?? undefined;
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: "No valid updates (allowed: name, sortOrder, notes)" }, { status: 400 });
+  }
 
   try {
-    const response = await fetch(
-      `${ASSET_SERVICE_URL}/api/assets/${userId}/${projectId}/${assetId}`,
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }
-    );
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        return NextResponse.json({ error: "Asset not found" }, { status: 404 });
-      }
-      throw new Error(`Asset service returned ${response.status}`);
-    }
-
-    const asset = await response.json();
+    const asset = await updateAssetFromService(userId, projectId, assetId, updates);
     return NextResponse.json({ asset });
   } catch (error) {
+    if (error instanceof Error && error.message === "Asset not found") {
+      return NextResponse.json({ error: "Asset not found" }, { status: 404 });
+    }
     console.error("Failed to update asset:", error);
     return NextResponse.json({ error: "Failed to update asset" }, { status: 500 });
   }
