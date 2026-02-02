@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     transcoder_project_id: str | None = Field(default=None, alias="TRANSCODER_PROJECT_ID")
     transcoder_location: str = Field(default="us-central1", alias="TRANSCODER_LOCATION")
     transcoder_service_account_key: str | None = Field(default=None, alias="TRANSCODER_SERVICE_ACCOUNT_KEY")
+    # Target height for transcoding - width auto-calculated to preserve aspect ratio
+    # Common values: 720 (HD), 1080 (Full HD), 480 (SD). If None, preserves original dimensions.
+    transcode_target_height: int | None = Field(default=None, alias="TRANSCODE_TARGET_HEIGHT")
     
     # CloudConvert API (for image/document conversion)
     cloudconvert_api_key: str | None = Field(default=None, alias="CLOUDCONVERT_API_KEY")

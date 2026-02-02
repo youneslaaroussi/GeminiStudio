@@ -75,8 +75,6 @@ export interface TranscodeOptions {
   outputFormat?: string; // "mp4", "hls", "dash"
   videoCodec?: string; // "h264", "h265", "vp9"
   videoBitrate?: number; // bps
-  width?: number;
-  height?: number;
   frameRate?: number;
   audioCodec?: string; // "aac", "mp3", "opus"
   audioBitrate?: number; // bps

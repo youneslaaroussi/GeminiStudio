@@ -46,15 +46,18 @@ class AudioCodec(str, Enum):
 
 @dataclass
 class TranscodeConfig:
-    """Configuration for a transcode job."""
+    """Configuration for a transcode job.
+
+    Only target_height is supported for resolution - width is auto-calculated
+    to preserve the original aspect ratio. This ensures vertical videos stay vertical.
+    """
     # Output format
     output_format: OutputFormat = OutputFormat.MP4
 
     # Video settings
     video_codec: VideoCodec = VideoCodec.H264
     video_bitrate_bps: int | None = None  # None = auto
-    width: int | None = None  # None = preserve original
-    height: int | None = None  # None = preserve original
+    target_height: int | None = None  # Only height - width auto-calculated to preserve aspect ratio
     frame_rate: float | None = None  # None = preserve original
 
     # Audio settings
@@ -129,44 +132,38 @@ class TranscodeConfig:
         return {"config": config}
 
     def _build_h264_config(self) -> dict[str, Any]:
-        """Build H264 video config. Omit width/height to preserve input aspect ratio (e.g. vertical)."""
+        """Build H264 video config. Only heightPixels set = auto-calculate width to preserve aspect ratio."""
         cfg: dict[str, Any] = {
             "profile": "high",
             "preset": "medium",
             "bitrateBps": self.video_bitrate_bps or 2_500_000,
             "frameRate": self.frame_rate or 30.0,
         }
-        if self.width:
-            cfg["widthPixels"] = self.width
-        if self.height:
-            cfg["heightPixels"] = self.height
+        if self.target_height:
+            cfg["heightPixels"] = self.target_height
         return cfg
 
     def _build_h265_config(self) -> dict[str, Any]:
-        """Build H265/HEVC video config. Omit width/height to preserve input aspect ratio."""
+        """Build H265/HEVC video config. Only heightPixels set = auto-calculate width to preserve aspect ratio."""
         cfg: dict[str, Any] = {
             "profile": "main",
             "preset": "medium",
             "bitrateBps": self.video_bitrate_bps or 2_500_000,
             "frameRate": self.frame_rate or 30.0,
         }
-        if self.width:
-            cfg["widthPixels"] = self.width
-        if self.height:
-            cfg["heightPixels"] = self.height
+        if self.target_height:
+            cfg["heightPixels"] = self.target_height
         return cfg
 
     def _build_vp9_config(self) -> dict[str, Any]:
-        """Build VP9 video config. Omit width/height to preserve input aspect ratio."""
+        """Build VP9 video config. Only heightPixels set = auto-calculate width to preserve aspect ratio."""
         cfg: dict[str, Any] = {
             "profile": "profile0",
             "bitrateBps": self.video_bitrate_bps or 2_500_000,
             "frameRate": self.frame_rate or 30.0,
         }
-        if self.width:
-            cfg["widthPixels"] = self.width
-        if self.height:
-            cfg["heightPixels"] = self.height
+        if self.target_height:
+            cfg["heightPixels"] = self.target_height
         return cfg
 
 

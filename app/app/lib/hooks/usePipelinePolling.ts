@@ -10,6 +10,8 @@ export interface PipelineState {
   updatedAt: string;
 }
 
+const DEFAULT_MIN_REFRESH_LOADING_MS = 400;
+
 interface UsePipelinePollingOptions {
   /** Polling interval in milliseconds. Default: 3000 */
   interval?: number;
@@ -17,6 +19,8 @@ interface UsePipelinePollingOptions {
   enabled?: boolean;
   /** Stop polling when all steps are complete. Default: true */
   stopOnComplete?: boolean;
+  /** Minimum duration to show loading when refresh() is called (avoids flash). Default: 400 */
+  minRefreshLoadingMs?: number;
 }
 
 interface UsePipelinePollingResult {
@@ -43,6 +47,7 @@ export function usePipelinePolling(
     interval = 3000,
     enabled = true,
     stopOnComplete = true,
+    minRefreshLoadingMs = DEFAULT_MIN_REFRESH_LOADING_MS,
   } = options;
 
   const [state, setState] = useState<PipelineState | null>(null);
@@ -51,37 +56,56 @@ export function usePipelinePolling(
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const fetchState = useCallback(async () => {
-    if (!assetId || !projectId) return;
+  const fetchState = useCallback(
+    async (opts?: { minLoadingMs?: number }) => {
+      if (!assetId || !projectId) return;
 
-    setIsLoading(true);
-    setError(null);
+      const start = Date.now();
+      setIsLoading(true);
+      setError(null);
 
-    try {
-      const authHeaders = await getAuthHeaders();
-      const url = new URL(`/api/assets/${assetId}/pipeline`, window.location.origin);
-      url.searchParams.set("projectId", projectId);
+      try {
+        const authHeaders = await getAuthHeaders();
+        const url = new URL(`/api/assets/${assetId}/pipeline`, window.location.origin);
+        url.searchParams.set("projectId", projectId);
 
-      const response = await fetch(url.toString(), {
-        headers: authHeaders,
-      });
+        const response = await fetch(url.toString(), {
+          headers: authHeaders,
+        });
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error("Unauthorized");
+        if (!response.ok) {
+          if (response.status === 401) {
+            throw new Error("Unauthorized");
+          }
+          throw new Error("Failed to fetch pipeline state");
         }
-        throw new Error("Failed to fetch pipeline state");
-      }
 
-      const data = await response.json();
-      setState(data);
-    } catch (err) {
-      console.error("Pipeline polling error:", err);
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [assetId, projectId]);
+        const data = await response.json();
+        setState(data);
+      } catch (err) {
+        console.error("Pipeline polling error:", err);
+        setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        const minMs = opts?.minLoadingMs;
+        if (minMs != null && minMs > 0) {
+          const remaining = minMs - (Date.now() - start);
+          if (remaining > 0) {
+            setTimeout(() => setIsLoading(false), remaining);
+          } else {
+            setIsLoading(false);
+          }
+        } else {
+          setIsLoading(false);
+        }
+      }
+    },
+    [assetId, projectId]
+  );
+
+  const refresh = useCallback(
+    () => fetchState({ minLoadingMs: minRefreshLoadingMs }),
+    [fetchState, minRefreshLoadingMs]
+  );
 
   // Determine if pipeline is complete
   const isComplete = state?.steps.every(
@@ -138,6 +162,6 @@ export function usePipelinePolling(
     error,
     isComplete,
     hasRunningSteps,
-    refresh: fetchState,
+    refresh,
   };
 }

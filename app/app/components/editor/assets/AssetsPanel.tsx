@@ -314,11 +314,10 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
     : null;
 
   // Fetch pipeline state for the asset details dialog
-  const { state: pipelineState, isLoading: pipelineLoading } = usePipelinePolling(
-    detailsDialogAssetId,
-    projectId,
-    { enabled: !!detailsDialogAssetId }
-  );
+  const { state: pipelineState, isLoading: pipelineLoading, refresh: refreshPipelineState } =
+    usePipelinePolling(detailsDialogAssetId, projectId, {
+      enabled: !!detailsDialogAssetId,
+    });
   const detailsDialogSteps = pipelineState?.steps ?? [];
 
   const detailsDialogTranscription = detailsDialogAssetId
@@ -614,9 +613,10 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
         asset={detailsDialogAsset ?? null}
         projectId={projectId}
         pipelineSteps={detailsDialogSteps}
-        pipelineLoading={pipelineLoading && !pipelineState}
+        pipelineLoading={pipelineLoading}
         transcription={detailsDialogTranscription}
         onPipelineRefresh={fetchAssets}
+        onRefreshPipeline={refreshPipelineState}
         onUpdateNotes={updateAssetNotes}
       />
 

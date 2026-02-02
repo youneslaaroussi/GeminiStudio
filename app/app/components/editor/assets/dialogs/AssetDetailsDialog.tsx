@@ -28,6 +28,8 @@ interface AssetDetailsDialogProps {
   pipelineLoading?: boolean;
   transcription?: ProjectTranscription;
   onPipelineRefresh?: () => void;
+  /** Refresh pipeline state from server (with minimum loading duration) */
+  onRefreshPipeline?: () => void | Promise<void>;
   onUpdateNotes?: (assetId: string, notes: string) => Promise<boolean>;
 }
 
@@ -40,6 +42,7 @@ export function AssetDetailsDialog({
   pipelineLoading,
   transcription,
   onPipelineRefresh,
+  onRefreshPipeline,
   onUpdateNotes,
 }: AssetDetailsDialogProps) {
   const copyToClipboard = useCallback(async (value: string, label: string) => {
@@ -178,7 +181,26 @@ export function AssetDetailsDialog({
           {/* Pipeline Steps */}
           {(pipelineSteps.length > 0 || pipelineLoading) && (
             <section className="space-y-3">
-              <h4 className="text-sm font-semibold">Pipeline</h4>
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-sm font-semibold">Pipeline</h4>
+                {onRefreshPipeline && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1.5 text-muted-foreground hover:text-foreground"
+                    onClick={() => void onRefreshPipeline()}
+                    disabled={pipelineLoading}
+                    aria-busy={pipelineLoading}
+                  >
+                    <RotateCw
+                      className={cn("size-3.5 shrink-0", pipelineLoading && "animate-spin")}
+                    />
+                    <span className="text-xs">
+                      {pipelineLoading ? "Refreshing…" : "Refresh"}
+                    </span>
+                  </Button>
+                )}
+              </div>
               <div className="space-y-2">
                 {pipelineLoading ? (
                   // Loading skeleton

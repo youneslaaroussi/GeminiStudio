@@ -87,8 +87,7 @@ async def upload_asset(
     transcode_options: str | None = Form(default=None, alias="transcodeOptions"),
     transcode_format: str | None = Form(default=None, alias="transcodeFormat"),
     transcode_video_bitrate: int | None = Form(default=None, alias="transcodeVideoBitrate"),
-    transcode_width: int | None = Form(default=None, alias="transcodeWidth"),
-    transcode_height: int | None = Form(default=None, alias="transcodeHeight"),
+    # Note: width/height params removed - always preserve original aspect ratio
 ):
     """
     Upload a new asset.
@@ -201,10 +200,6 @@ async def upload_asset(
             parsed_transcode_opts["outputFormat"] = transcode_format
         if transcode_video_bitrate:
             parsed_transcode_opts["videoBitrate"] = transcode_video_bitrate
-        if transcode_width:
-            parsed_transcode_opts["width"] = transcode_width
-        if transcode_height:
-            parsed_transcode_opts["height"] = transcode_height
 
     def _is_unsupported_video_format(mime: str, filename: str) -> bool:
         if mime in ("video/quicktime", "video/x-msvideo"):
@@ -594,8 +589,6 @@ class TranscodeRequest(BaseModel):
     outputFormat: str | None = None
     videoCodec: str | None = None
     videoBitrate: int | None = None
-    width: int | None = None
-    height: int | None = None
     frameRate: float | None = None
     audioCodec: str | None = None
     audioBitrate: int | None = None
@@ -648,10 +641,6 @@ async def transcode_asset(
         transcode_params["videoCodec"] = body.videoCodec
     if body.videoBitrate:
         transcode_params["videoBitrate"] = body.videoBitrate
-    if body.width:
-        transcode_params["width"] = body.width
-    if body.height:
-        transcode_params["height"] = body.height
     if body.frameRate:
         transcode_params["frameRate"] = body.frameRate
     if body.audioCodec:

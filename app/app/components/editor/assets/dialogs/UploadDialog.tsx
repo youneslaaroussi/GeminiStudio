@@ -52,8 +52,6 @@ interface TranscodeOptions {
   outputFormat: string;
   videoCodec: string;
   videoBitrate: number | null;
-  width: number | null;
-  height: number | null;
   audioCodec: string;
   audioBitrate: number | null;
 }
@@ -63,8 +61,6 @@ const DEFAULT_TRANSCODE_OPTIONS: TranscodeOptions = {
   outputFormat: "mp4",
   videoCodec: "h264",
   videoBitrate: 5000,
-  width: null,
-  height: null,
   audioCodec: "aac",
   audioBitrate: 128,
 };
@@ -95,13 +91,6 @@ const BITRATE_PRESETS = [
   { value: 15000, label: "15 Mbps", description: "High quality" },
 ];
 
-const RESOLUTION_PRESETS = [
-  { width: null, height: null, label: "Original" },
-  { width: 640, height: 360, label: "360p" },
-  { width: 854, height: 480, label: "480p" },
-  { width: 1280, height: 720, label: "720p" },
-  { width: 1920, height: 1080, label: "1080p" },
-];
 
 interface UploadDialogProps {
   open: boolean;
@@ -199,8 +188,6 @@ export function UploadDialog({
       if (transcodeOptions.videoBitrate) {
         transcodePayload.videoBitrate = transcodeOptions.videoBitrate * 1000;
       }
-      if (transcodeOptions.width) transcodePayload.width = transcodeOptions.width;
-      if (transcodeOptions.height) transcodePayload.height = transcodeOptions.height;
       if (transcodeOptions.audioBitrate) {
         transcodePayload.audioBitrate = transcodeOptions.audioBitrate * 1000;
       }
@@ -466,40 +453,6 @@ export function UploadDialog({
                                   {BITRATE_PRESETS.map((opt) => (
                                     <SelectItem key={opt.value} value={String(opt.value)}>
                                       {opt.label} - {opt.description}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-
-                            {/* Resolution */}
-                            <div className="space-y-1.5">
-                              <Label className="text-xs text-muted-foreground">Resolution</Label>
-                              <Select
-                                value={
-                                  transcodeOptions.width
-                                    ? `${transcodeOptions.width}x${transcodeOptions.height}`
-                                    : "original"
-                                }
-                                onValueChange={(value) => {
-                                  if (value === "original") {
-                                    setTranscodeOptions((prev) => ({ ...prev, width: null, height: null }));
-                                  } else {
-                                    const [w, h] = value.split("x").map(Number);
-                                    setTranscodeOptions((prev) => ({ ...prev, width: w, height: h }));
-                                  }
-                                }}
-                              >
-                                <SelectTrigger className="h-8 text-sm">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {RESOLUTION_PRESETS.map((opt) => (
-                                    <SelectItem
-                                      key={opt.label}
-                                      value={opt.width ? `${opt.width}x${opt.height}` : "original"}
-                                    >
-                                      {opt.label}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>

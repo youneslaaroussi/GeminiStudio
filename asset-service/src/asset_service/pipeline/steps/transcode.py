@@ -49,9 +49,19 @@ def _config_hash(config: dict[str, Any]) -> str:
 
 
 def _parse_transcode_params(params: dict[str, Any]) -> TranscodeConfig:
-    """Parse transcode parameters into TranscodeConfig. No width/height = preserve aspect ratio."""
+    """Parse transcode parameters into TranscodeConfig.
+
+    Note: width/height params are intentionally ignored to ALWAYS preserve aspect ratio.
+    The target height is controlled by TRANSCODE_TARGET_HEIGHT envvar (e.g. 720 or 1080).
+    """
+    settings = get_settings()
     config = TranscodeConfig()
-    # Defaults when no params: aspect-preserving (no width/height), 2.5 Mbps, 30 fps
+
+    # Set target height from envvar (only height - width auto-calculated to preserve aspect ratio)
+    if settings.transcode_target_height:
+        config.target_height = settings.transcode_target_height
+
+    # Defaults when no params: aspect-preserving, 2.5 Mbps, 30 fps
     if not params.get("videoBitrate") and not params.get("videoBitrateBps"):
         config.video_bitrate_bps = 2_500_000
     if not params.get("frameRate"):
@@ -85,10 +95,6 @@ def _parse_transcode_params(params: dict[str, Any]) -> TranscodeConfig:
             bitrate = bitrate * 1000
         config.video_bitrate_bps = bitrate
 
-    if params.get("width"):
-        config.width = int(params["width"])
-    if params.get("height"):
-        config.height = int(params["height"])
     if params.get("frameRate"):
         config.frame_rate = float(params["frameRate"])
 
@@ -374,20 +380,22 @@ async def _transcode_impl(
 ) -> PipelineResult:
     """
     Transcode video and update asset to use transcoded version.
-    
+
     This step:
     1. Starts a transcode job via Google Cloud Transcoder API
     2. Polls until the job completes (blocking)
     3. Updates the asset record to use the transcoded URL
     4. Backs up the original URL in the asset record
-    
+
     Subsequent pipeline steps will use the transcoded version.
-    
+
+    Target height is controlled by TRANSCODE_TARGET_HEIGHT envvar (e.g. 720 or 1080).
+    Width is auto-calculated to preserve the original aspect ratio.
+
     Params can include:
     - outputFormat: "mp4", "hls", "dash"
     - videoCodec: "h264", "h265", "vp9"
     - videoBitrate: Video bitrate in bps or kbps
-    - width/height: Output dimensions
     - frameRate: Output frame rate
     - audioCodec: "aac", "mp3", "opus"
     - audioBitrate: Audio bitrate in bps or kbps
@@ -403,8 +411,7 @@ async def _transcode_impl(
         "outputFormat": transcode_config.output_format.value,
         "videoCodec": transcode_config.video_codec.value,
         "videoBitrate": transcode_config.video_bitrate_bps,
-        "width": transcode_config.width,
-        "height": transcode_config.height,
+        "targetHeight": transcode_config.target_height,
         "frameRate": transcode_config.frame_rate,
         "audioCodec": transcode_config.audio_codec.value,
         "audioBitrate": transcode_config.audio_bitrate_bps,
