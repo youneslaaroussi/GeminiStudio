@@ -1192,15 +1192,18 @@ Assets: {len(assets_info)}"""
         # Show typing indicator and send first status so user sees progress
         await self.send_typing_indicator(chat_id)
         try:
-            await send_telegram_message(chat_id, "Thinking...", self.settings)
+            from ..agent_status import get_thinking_message
+            await send_telegram_message(chat_id, get_thinking_message(for_telegram=True), self.settings)
         except Exception as e:
             logger.debug("Failed to send Thinking status to Telegram: %s", e)
 
         async def run_agent() -> str:
+            nonlocal bot_message_count
             try:
                 last_response = None
                 tool_calls_made = []
                 from langchain_core.messages import ToolMessage
+                from ..agent_status import get_tool_status_message
 
                 async for event in graph.astream({"messages": langchain_messages}, config=config, stream_mode="values", context=agent_context):
                     messages = event.get("messages", [])
@@ -1218,7 +1221,7 @@ Assets: {len(assets_info)}"""
                                 tool_calls_made.append(tool_name)
                                 try:
                                     await send_telegram_message(
-                                        chat_id, f"Calling {tool_name}...", self.settings
+                                        chat_id, get_tool_status_message(tool_name, for_telegram=True), self.settings
                                     )
                                 except Exception as e:
                                     logger.debug("Failed to send tool status to Telegram: %s", e)

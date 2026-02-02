@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_core.runnables import RunnableConfig
 
 from .agent import graph
+from .agent_status import get_thinking_message, get_tool_status_message
 from .chat import build_dispatcher
 from .config import Settings, get_settings
 from .firebase import (
@@ -443,14 +444,15 @@ Media Assets in Project ({len(assets_info)}):
         if telegram_chat_id:
             await send_telegram_message(telegram_chat_id, text, settings)
 
-    async def set_agent_status(status: str | None):
+    async def set_agent_status(status_plain: str | None, status_telegram: str | None = None):
+        """Write intermediary status to Firebase (plain) and Telegram (italic+emoji)."""
         if session.get("userId"):
             update_chat_session_agent_status(
-                session["userId"], payload.chat_id, status, settings
+                session["userId"], payload.chat_id, status_plain, settings
             )
-        if status and telegram_chat_id:
+        if telegram_chat_id and status_plain is not None and (status_telegram or status_plain):
             try:
-                await send_to_telegram_async(status)
+                await send_to_telegram_async(status_telegram or status_plain)
             except Exception as e:
                 console.print(f"[yellow]Failed to send status to Telegram: {e}[/yellow]")
 
@@ -489,7 +491,7 @@ Media Assets in Project ({len(assets_info)}):
                 "project_id": first_project_id,
                 "branch_id": branch_id,
             }
-            await set_agent_status("Thinking...")
+            await set_agent_status(get_thinking_message(False), get_thinking_message(True))
             try:
                 async for event in graph.astream(
                     {"messages": langchain_messages},
@@ -506,7 +508,10 @@ Media Assets in Project ({len(assets_info)}):
                             for tc in last_msg.tool_calls:
                                 name = tc.get("name", "tool")
                                 console.print(f"[yellow]Tool Call:[/yellow] {name}({tc.get('args', {})})")
-                                await set_agent_status(f"Calling {name}...")
+                                await set_agent_status(
+                                    get_tool_status_message(name, False),
+                                    get_tool_status_message(name, True),
+                                )
                         else:
                             await set_agent_status(None)
                             text = extract_text_from_content(last_msg.content)
