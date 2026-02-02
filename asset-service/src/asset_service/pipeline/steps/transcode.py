@@ -153,7 +153,7 @@ async def _poll_until_complete(
             if status == TranscodeJobStatus.SUCCEEDED:
                 output_signed_url = None
                 output_object_name = None
-                output_filename = "hd.mp4" if config_dict.get("preset") else "output.mp4"
+                output_filename = "hd.mp4" if config_dict.get("usedTemplateId") else "output.mp4"
                 if output_gcs_uri and output_gcs_uri.startswith("gs://"):
                     parts = output_gcs_uri[5:].split("/", 1)
                     if len(parts) > 1:
@@ -417,8 +417,10 @@ async def _transcode_impl(
 
     # Create config hash for deduplication (use params preset when we expanded to custom for aspect ratio)
     logical_preset = transcode_config.preset or context.params.get("preset")
+    used_template_id = transcode_config.preset is not None  # True only when we send templateId (preset), not custom config
     config_dict = {
         "preset": logical_preset,
+        "usedTemplateId": used_template_id,  # custom config writes output.mp4, preset template writes hd.mp4
         "outputFormat": transcode_config.output_format.value if not transcode_config.preset else None,
         "videoCodec": transcode_config.video_codec.value if not transcode_config.preset else None,
         "videoBitrate": transcode_config.video_bitrate_bps,
@@ -448,7 +450,7 @@ async def _transcode_impl(
             # Build full object name and GCS URI (folder + output filename), not folder only
             output_folder_uri = (existing_job.output_gcs_uri or "").rstrip("/")
             output_filename = existing_job.output_file_name or (
-                "hd.mp4" if config_dict.get("preset") else "output.mp4"
+                "hd.mp4" if config_dict.get("usedTemplateId", True) else "output.mp4"
             )
             transcoded_object_name = ""
             transcoded_gcs_uri_full = output_folder_uri
