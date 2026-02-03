@@ -397,7 +397,7 @@ def renderVideo(
   return {
     "status": "queued",
     "jobId": job_id,
-    "projectId": project_id or target_project.get("id"),
+    "projectId": effective_project_id or target_project.get("id"),
     "eventTopic": settings.render_event_topic,
     "eventSubscription": settings.render_event_subscription,
     "message": (

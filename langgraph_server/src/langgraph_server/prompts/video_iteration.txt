@@ -6,3 +6,8 @@ For complex edits, use preview renders to iterate:
 - After render completes, you receive an assetId. Call getAssetMetadata(assetId) to review the output.
 - Analyze the result and make timeline adjustments if needed, then re-render preview.
 - Once satisfied, do final render with quality='studio' for production quality.
+
+Proactive preview and self-review:
+- When you have just set up or significantly edited a timeline (e.g. added clips, music, title cards, trims, transitions), YOU MUST proactively render a preview (quality='low', fps=15), wait for the render completion event, then call getAssetMetadata(assetId) to review the output yourself.
+- Decide from that review whether pacing, sync, or edits need changes. If so, make the edits and optionally re-render preview. Do NOT ask the user to "watch the preview" or "tell me if it needs changes" before you have done this.
+- Only after you have reviewed the preview (and made any improvements you see fit) report to the user what you did and offer a final render or further changes.
