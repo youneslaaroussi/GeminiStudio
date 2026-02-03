@@ -11,6 +11,7 @@ import type {
   ClipTransition,
   TransitionType,
 } from "@/app/types/timeline";
+import { DEFAULT_COLOR_GRADING } from "@/app/types/timeline";
 import type { ToolDefinition, ToolOutput } from "./types";
 
 const vectorSchema = z.object({
@@ -158,7 +159,7 @@ function buildUpdates(
         if (focus !== undefined) videoUpdates.focus = focus;
         if (colorGrading !== undefined) {
           const current = (clip as VideoClip).colorGrading ?? {};
-          videoUpdates.colorGrading = { ...current, ...colorGrading };
+          videoUpdates.colorGrading = { ...DEFAULT_COLOR_GRADING, ...current, ...colorGrading };
         }
       }
       return { ...updates, ...videoUpdates };
@@ -179,7 +180,7 @@ function buildUpdates(
         if (height !== undefined) imageUpdates.height = height;
         if (colorGrading !== undefined) {
           const current = (clip as ImageClip).colorGrading ?? {};
-          imageUpdates.colorGrading = { ...current, ...colorGrading };
+          imageUpdates.colorGrading = { ...DEFAULT_COLOR_GRADING, ...current, ...colorGrading };
         }
       }
       return { ...updates, ...imageUpdates };
