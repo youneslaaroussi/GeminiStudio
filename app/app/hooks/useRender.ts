@@ -37,7 +37,7 @@ interface StoredRenderJob {
 }
 
 const STORAGE_KEY = "gemini-render-jobs";
-const POLL_INTERVAL = 2000;
+const POLL_INTERVAL = 10000;
 const JOB_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function loadStoredJobs(): StoredRenderJob[] {

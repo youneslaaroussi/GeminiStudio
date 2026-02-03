@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 import { extractMetadataFromUrl } from "@/app/lib/media/mediabunny";
 
-const TRANSCODE_POLL_MS = 2500;
+const TRANSCODE_POLL_MS = 10000;
 
 export interface SearchResult {
   id: string;

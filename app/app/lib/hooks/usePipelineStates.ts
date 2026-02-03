@@ -12,7 +12,7 @@ export interface PipelineState {
 }
 
 interface UsePipelineStatesOptions {
-  /** Polling interval in milliseconds. Default: 5000 */
+  /** Polling interval in milliseconds. Default: 20000 */
   interval?: number;
   /** Whether polling is enabled. Default: true */
   enabled?: boolean;
@@ -35,7 +35,7 @@ export function usePipelineStates(
   projectId: string | null,
   options: UsePipelineStatesOptions = {}
 ): UsePipelineStatesResult {
-  const { interval = 5000, enabled = true } = options;
+  const { interval = 20000, enabled = true } = options;
 
   const [states, setStates] = useState<Record<string, PipelineStepState[]>>({});
   const [isLoading, setIsLoading] = useState(false);

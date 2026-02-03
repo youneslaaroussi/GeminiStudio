@@ -191,7 +191,7 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
     if (hasPendingJobs && !veoPollingRef.current) {
       veoPollingRef.current = setInterval(() => {
         void pollVeoJobs();
-      }, 3000);
+      }, 12000);
     } else if (!hasPendingJobs && veoPollingRef.current) {
       clearInterval(veoPollingRef.current);
       veoPollingRef.current = null;
@@ -250,7 +250,7 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
   useEffect(() => {
     if (!projectId) return;
     void fetchVeoJobsForProject();
-    const interval = setInterval(fetchVeoJobsForProject, 10000);
+    const interval = setInterval(fetchVeoJobsForProject, 40000);
     return () => clearInterval(interval);
   }, [projectId, fetchVeoJobsForProject]);
 
@@ -305,7 +305,7 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
     );
     if (hasPending && !videoEffectPollingRef.current) {
       void pollVideoEffectJobs();
-      videoEffectPollingRef.current = setInterval(pollVideoEffectJobs, 5000);
+      videoEffectPollingRef.current = setInterval(pollVideoEffectJobs, 20000);
     } else if (!hasPending && videoEffectPollingRef.current) {
       clearInterval(videoEffectPollingRef.current);
       videoEffectPollingRef.current = null;

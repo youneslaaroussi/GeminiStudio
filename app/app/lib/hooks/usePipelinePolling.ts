@@ -13,7 +13,7 @@ export interface PipelineState {
 const DEFAULT_MIN_REFRESH_LOADING_MS = 400;
 
 interface UsePipelinePollingOptions {
-  /** Polling interval in milliseconds. Default: 3000 */
+  /** Polling interval in milliseconds. Default: 12000 */
   interval?: number;
   /** Whether polling is enabled. Default: true */
   enabled?: boolean;
@@ -44,7 +44,7 @@ export function usePipelinePolling(
   options: UsePipelinePollingOptions = {}
 ): UsePipelinePollingResult {
   const {
-    interval = 3000,
+    interval = 12000,
     enabled = true,
     stopOnComplete = true,
     minRefreshLoadingMs = DEFAULT_MIN_REFRESH_LOADING_MS,

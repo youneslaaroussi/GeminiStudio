@@ -181,7 +181,7 @@ export function VideoEffectsPanel({ clip }: VideoEffectsPanelProps) {
       void pollJob(job.id);
       const handle = window.setInterval(() => {
         void pollJob(job.id);
-      }, 5000);
+      }, 20000);
       pollersRef.current.set(job.id, handle);
     },
     [pollJob, stopPolling]
