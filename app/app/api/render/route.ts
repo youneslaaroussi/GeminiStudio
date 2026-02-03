@@ -24,6 +24,8 @@ interface RenderRequest {
     fps?: number;
     range?: [number, number]; // [startSeconds, endSeconds] for partial render
   };
+  /** Preview mode: low-res (360p), low fps (10), low quality for fast agent review */
+  preview?: boolean;
 }
 
 interface RendererJobResponse {
@@ -330,7 +332,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as RenderRequest;
-    const { project, projectId, output } = body;
+    const { project, projectId, output, preview } = body;
 
     if (!project || !projectId) {
       return NextResponse.json(
@@ -339,9 +341,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const cost = getCreditsForAction("render");
+    // Preview renders use reduced credits (1/4 of normal cost)
+    const baseCost = getCreditsForAction("render");
+    const cost = preview ? Math.max(1, Math.floor(baseCost / 4)) : baseCost;
     try {
-      await deductCredits(userId, cost, "render");
+      await deductCredits(userId, cost, preview ? "render_preview" : "render");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Insufficient credits";
       return NextResponse.json({ error: msg, required: cost }, { status: 402 });
@@ -368,7 +372,8 @@ export async function POST(request: NextRequest) {
     // Generate output path and signed upload URL
     const timestamp = Date.now();
     const extension = output.format === "gif" ? "gif" : output.format === "webm" ? "webm" : "mp4";
-    const outputObjectName = `renders/${projectId}/${timestamp}.${extension}`;
+    const previewPrefix = preview ? "previews" : "renders";
+    const outputObjectName = `${previewPrefix}/${projectId}/${timestamp}.${extension}`;
 
     const uploadUrl = createV4SignedUrl({
       bucket: GCS_BUCKET,
@@ -383,20 +388,35 @@ export async function POST(request: NextRequest) {
     // Use provided range or default to full timeline
     const renderRange: [number, number] = output.range ?? [0, timelineDuration];
 
+    // Preview mode settings: low resolution (360p), low fps, low quality for fast rendering
+    const previewSettings = preview
+      ? {
+          fps: 10,
+          quality: "low" as const,
+          resolutionScale: 0.33, // 1080p -> ~360p
+        }
+      : null;
+
     // Call renderer API
     const rendererPayload = {
       project: transformedProject,
       timelineDuration,
       output: {
         format: output.format,
-        fps: output.fps || project.fps || 30,
+        fps: previewSettings?.fps ?? output.fps ?? project.fps ?? 30,
         size: project.resolution,
-        quality: output.quality,
+        quality: previewSettings?.quality ?? output.quality,
         destination: `/tmp/render-${timestamp}.${extension}`,
         range: renderRange,
         includeAudio: true,
         uploadUrl,
       },
+      // Add options with resolutionScale for preview renders
+      ...(previewSettings && {
+        options: {
+          resolutionScale: previewSettings.resolutionScale,
+        },
+      }),
     };
 
     // Sign the request for renderer authentication
@@ -434,6 +454,7 @@ export async function POST(request: NextRequest) {
       jobId: rendererResult.jobId,
       status: "queued",
       outputPath: `gs://${GCS_BUCKET}/${outputObjectName}`,
+      preview: preview ?? false,
     });
   } catch (error) {
     console.error("Render API error:", error);

@@ -111,11 +111,12 @@ def digestAsset(
     media_resolution: Optional[Literal["low", "medium", "high"]] = None,
     _agent_context: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
-    """Analyze an asset (video, image, or audio) using Gemini's multimodal capabilities.
+    """DEPRECATED: Use watchAsset instead for context-aware analysis.
 
-    Returns a detailed description of the content. Use listProjectAssets first to get
-    asset IDs. For videos: use start_offset and end_offset to analyze only a segment
-    (e.g. when the user asks about a specific part, or to reduce tokens on long videos).
+    This tool analyzes media in isolation WITHOUT conversation context. Only use this
+    if you specifically need isolated analysis without considering prior discussion.
+
+    Prefer watchAsset which returns media directly so you can see it with full context.
 
     Args:
         asset_id: The ID of the asset to analyze.

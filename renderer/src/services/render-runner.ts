@@ -156,7 +156,7 @@ const buildHeadlessPayload = (
       size: job.output.size,
       range,
       background: project.background ?? '#000000',
-      resolutionScale: 1,
+      resolutionScale: job.options?.resolutionScale ?? 1,
       format: job.output.format,
       quality,
       includeAudio,

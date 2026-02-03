@@ -64,8 +64,8 @@ export async function GET(
         const objectName = gcsMatch[1];
 
         // SECURITY: Validate that the render output belongs to a project the user owns
-        // Renders are stored at: renders/{projectId}/{filename}
-        const pathMatch = objectName.match(/^renders\/([^/]+)\//);
+        // Renders are stored at: renders/{projectId}/{filename} or previews/{projectId}/{filename}
+        const pathMatch = objectName.match(/^(?:renders|previews)\/([^/]+)\//);
         if (!pathMatch) {
           return NextResponse.json({ error: "Invalid render path" }, { status: 403 });
         }

@@ -1,13 +1,29 @@
 # Video iteration workflow
 
-For complex edits, use preview renders to iterate:
+## Self-Critique with watchVideo (PREFERRED)
 
-- Preview render: quality='low', fps=15, and optionally range_start/range_end to render only a segment.
-- After render completes, you receive an assetId. Call getAssetMetadata(assetId) to review the output.
-- Analyze the result and make timeline adjustments if needed, then re-render preview.
-- Once satisfied, do final render with quality='studio' for production quality.
+Use **watchVideo()** to render a fast preview (360p @ 10fps) and watch it directly:
 
-Proactive preview and self-review:
-- When you have just set up or significantly edited a timeline (e.g. added clips, music, title cards, trims, transitions), YOU MUST proactively render a preview (quality='low', fps=15), wait for the render completion event, then call getAssetMetadata(assetId) to review the output yourself.
-- Decide from that review whether pacing, sync, or edits need changes. If so, make the edits and optionally re-render preview. Do NOT ask the user to "watch the preview" or "tell me if it needs changes" before you have done this.
-- Only after you have reviewed the preview (and made any improvements you see fit) report to the user what you did and offer a final render or further changes.
+- Call watchVideo() after making significant edits (clips, music, transitions, trims)
+- The preview renders quickly and you receive the video to analyze
+- Check for: timing issues, awkward cuts, music sync, pacing problems
+- If issues found, make adjustments and call watchVideo() again to verify
+- Once satisfied, report to the user and offer a final production render
+
+This single tool handles render + watching in one step.
+
+## Manual render workflow (for fine control)
+
+For specific render settings or partial renders:
+
+- renderVideo(quality='low', fps=15, range_start=X, range_end=Y) for custom previews
+- After render completes, call watchAsset(assetId) to view the output
+- Once satisfied, do final render with quality='studio' for production quality
+
+## Self-Review Rules (IMPORTANT)
+
+- When you have just set up or significantly edited a timeline, YOU MUST proactively call watchVideo() to review your own work.
+- Analyze the preview yourself: check pacing, sync, transitions, overall quality.
+- Make improvements if needed, then re-render to verify.
+- Do NOT ask the user to "watch the preview" or "tell me if it needs changes" before you have done this review yourself.
+- Only after you have reviewed (and fixed any issues you found) report to the user.

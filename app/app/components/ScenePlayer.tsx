@@ -7,7 +7,7 @@ import type { ProjectTranscription } from '@/app/types/transcription';
 import { useDrag } from '@/app/hooks/use-drag';
 import { SelectionOverlay } from './SelectionOverlay';
 import { useProjectStore } from '@/app/lib/store/project-store';
-import { EditorSkeleton } from '@/app/components/editor/EditorSkeleton';
+import { PreviewSkeleton } from '@/app/components/editor/PreviewSkeleton';
 import { motion, AnimatePresence } from 'motion/react';
 
 export interface ScenePlayerHandle {
@@ -275,19 +275,19 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
       const scene = player.playback.currentScene as SceneGraph | null;
       if (!scene?.getNode) return;
 
-      // Check clips in reverse order (top layers first) for hit detection
+      // Check clips in forward order (bottom layers first) for hit detection
       // Only check clips that are active at current time
       const currentSeconds = currentTime;
       let foundClipId: string | null = null;
 
-      // Iterate layers in reverse (top to bottom visually)
-      for (let i = layers.length - 1; i >= 0 && !foundClipId; i--) {
+      // Iterate layers forward (bottom to top visually)
+      for (let i = 0; i < layers.length && !foundClipId; i++) {
         const layer = layers[i];
         // Skip audio layers
         if (layer.type === 'audio') continue;
 
-        // Check clips in reverse order
-        for (let j = layer.clips.length - 1; j >= 0 && !foundClipId; j--) {
+        // Check clips in forward order
+        for (let j = 0; j < layer.clips.length && !foundClipId; j++) {
           const clip = layer.clips[j] as TimelineClip;
           const speed = clip.speed ?? 1;
           const safeSpeed = Math.max(speed, 0.0001);
@@ -677,7 +677,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25 }}
           >
-            <EditorSkeleton />
+            <PreviewSkeleton />
           </motion.div>
         )}
         {project && !hasRenderedFirstFrame && !error && layers.some(layer => layer.clips.length > 0) && (

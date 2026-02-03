@@ -97,6 +97,25 @@ function appendContentFromToolOutput(content: ContentEntry[], output: ToolOutput
       });
       break;
     }
+    case "file": {
+      // Return file as multimodal content for the model to process
+      // Per AI SDK docs: Gemini Files API URLs (https://generativelanguage.googleapis.com/v1beta/files/...)
+      // are passed through directly without downloading
+      if (output.displayName) {
+        content.push({
+          type: "text",
+          text: `Asset: ${output.displayName}`,
+        });
+      }
+      // Use 'media' type which has both data (URL) and mediaType
+      // The AI SDK should pass Gemini Files API URLs through to the model
+      content.push({
+        type: "media",
+        data: output.fileUri,
+        mediaType: output.mimeType,
+      });
+      break;
+    }
     default: {
       content.push({
         type: "text",
@@ -123,6 +142,9 @@ function flattenListOutput(items: ToolOutput[], depth = 0): string[] {
         break;
       case "list":
         lines.push(...flattenListOutput(item.items, depth + 1));
+        break;
+      case "file":
+        lines.push(`${prefix}${item.displayName ?? "File"} (${item.mimeType})`);
         break;
     }
   });

@@ -23,7 +23,13 @@ export type ToolOutput =
   | { type: "text"; text: string }
   | { type: "json"; data: unknown }
   | { type: "image"; url: string; alt?: string; width?: number; height?: number }
-  | { type: "list"; title?: string; items: ToolOutput[] };
+  | { type: "list"; title?: string; items: ToolOutput[] }
+  | {
+      type: "file";
+      fileUri: string;
+      mimeType: string;
+      displayName?: string;
+    };
 
 export interface ToolExecutionSuccess {
   status: "success";

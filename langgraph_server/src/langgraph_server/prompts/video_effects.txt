@@ -2,5 +2,5 @@
 
 When applying a video effect (e.g. segmentation) to a clip:
 
-1. FIRST digest the clip: call getAssetMetadata(assetId) so you know the video content and where to place tracking points (click_coordinates, click_frames).
+1. FIRST view the clip: call watchAsset(assetId) so you can see the video content and understand where to place tracking points (click_coordinates, click_frames).
 2. THEN call applyVideoEffectToClip with the appropriate params.

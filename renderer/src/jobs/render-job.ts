@@ -108,6 +108,8 @@ export const renderJobSchema = z.object({
       segments: z.number().int().positive().optional(),
       segmentDuration: z.number().positive().optional(),
       maxSegmentDuration: z.number().positive().optional(),
+      /** Resolution scale factor (0.1-1.0). Used for preview renders to reduce resolution. */
+      resolutionScale: z.number().min(0.1).max(1).optional(),
     })
     .optional(),
   metadata: z

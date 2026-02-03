@@ -17,9 +17,9 @@ const digestAssetSchema = z.object({
 
 export const digestAssetTool: ToolDefinition<typeof digestAssetSchema, Project> = {
   name: "digestAsset",
-  label: "Digest Asset",
+  label: "Digest Asset (Deprecated)",
   description:
-    "Analyze an asset (video, image, or audio) using Gemini's multimodal capabilities. Returns a detailed description of the content. For videos: use startOffset and endOffset to analyze only a segment (e.g. when the user asks about a specific part, or to reduce tokens on long videos).",
+    "DEPRECATED: Use watchAsset instead for context-aware analysis. This tool analyzes media in isolation without conversation context. Only use this if you specifically need isolated analysis without considering prior discussion.",
   runLocation: "client",
   inputSchema: digestAssetSchema,
   fields: [

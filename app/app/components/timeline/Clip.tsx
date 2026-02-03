@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ClipType, TimelineClip, VideoClip, AudioClip } from "@/app/types/timeline";
+import type { ClipType, TimelineClip, VideoClip, AudioClip, ImageClip } from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { cn } from "@/lib/utils";
 import { useWaveform } from "@/app/hooks/use-waveform";
@@ -337,13 +337,24 @@ export function Clip({ clip, layerId }: ClipProps) {
               <img
                 src={filmstripDataUrl}
                 alt=""
-                className="h-full w-full object-cover object-top"
+                className="h-full w-full object-cover object-center"
               />
             ) : (
               filmstripLoading && (
                 <div className="h-full w-full animate-pulse bg-white/10" />
               )
             )}
+          </div>
+        )}
+
+        {/* Image thumbnail on strip */}
+        {clip.type === "image" && (clip as ImageClip).src && (
+          <div className="pointer-events-none absolute inset-[2px] rounded-sm overflow-hidden bg-black/30">
+            <img
+              src={(clip as ImageClip).src}
+              alt=""
+              className="h-full w-full object-cover object-center"
+            />
           </div>
         )}
 

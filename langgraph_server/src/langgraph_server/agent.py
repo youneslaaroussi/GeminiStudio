@@ -3,10 +3,10 @@ from __future__ import annotations
 import inspect
 import json
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import StructuredTool
@@ -18,6 +18,49 @@ from .prompts import get_system_prompt
 from .tools import get_registered_tools, get_tools_by_name
 
 logger = logging.getLogger(__name__)
+
+
+def _build_media_message(result: dict[str, Any]) -> HumanMessage | None:
+    """Build a HumanMessage with media content for injection after tool result.
+    
+    When a tool returns _injectMedia: True, we need to inject the media as a
+    HumanMessage because Gemini doesn't support multimodal content in function
+    responses (tool results). This workaround appends the media as a user message.
+    
+    Returns HumanMessage with media, or None if not a media injection result.
+    """
+    if not result.get("_injectMedia") or not result.get("fileUri"):
+        return None
+    
+    file_uri = result["fileUri"]
+    mime_type = result.get("mimeType", "application/octet-stream")
+    asset_name = result.get("assetName", "asset")
+    start_offset = result.get("startOffset")
+    end_offset = result.get("endOffset")
+    
+    # Build text description
+    if start_offset or end_offset:
+        text = f"Here is the video segment ({start_offset or '0s'} - {end_offset or 'end'}) for '{asset_name}':"
+    else:
+        text = f"Here is the media '{asset_name}':"
+    
+    # Build content with file reference
+    # For Gemini Files API, use media type with file_uri
+    content: list[dict[str, Any]] = [
+        {"type": "text", "text": text},
+        {
+            "type": "media",
+            "mime_type": mime_type,
+            "file_uri": file_uri,
+        },
+    ]
+    
+    # Add video metadata for time range if specified
+    # Note: This may require langchain-google-genai support for videoMetadata
+    if start_offset or end_offset:
+        logger.info("[AGENT] Media injection with time range: %s - %s", start_offset, end_offset)
+    
+    return HumanMessage(content=content)
 
 
 def build_model(settings: Settings) -> ChatGoogleGenerativeAI:
@@ -47,7 +90,8 @@ def create_graph(settings: Settings | None = None):
         return {"messages": [response]}
 
     def call_tool(state: MessagesState, config: RunnableConfig):
-        tool_outputs = []
+        tool_outputs: list[ToolMessage | HumanMessage] = []
+        media_to_inject: list[HumanMessage] = []
         last_message = state["messages"][-1]
         
         # Extract context from runtime (passed via graph.stream(..., context={...}))
@@ -94,12 +138,30 @@ def create_graph(settings: Settings | None = None):
                         result = tool.func(**filtered)
                     else:
                         result = tool.invoke(args, config=config)
-                    observation = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
-                    logger.info("[AGENT] Tool result: %s", observation[:500] if len(observation) > 500 else observation)
+                    
+                    # Check if this result needs media injection (Gemini workaround)
+                    # We inject media as HumanMessage after ToolMessage because Gemini
+                    # doesn't support multimodal content in function responses
+                    if isinstance(result, dict) and result.get("_injectMedia"):
+                        media_msg = _build_media_message(result)
+                        if media_msg:
+                            media_to_inject.append(media_msg)
+                            logger.info("[AGENT] Media injection queued for: %s", result.get("assetName"))
+                        # Return text-only observation for the ToolMessage
+                        observation = result.get("message", "Asset loaded.")
+                    else:
+                        observation = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+                    logger.info("[AGENT] Tool result: %s", str(observation)[:500] if len(str(observation)) > 500 else observation)
                 except Exception as exc:  # pragma: no cover - surface tool exceptions
                     logger.exception("[AGENT] Tool execution failed: %s", tool_name)
                     observation = f"Tool '{tool_name}' failed: {exc}"
             tool_outputs.append(ToolMessage(content=observation, tool_call_id=tool_call["id"]))
+        
+        # Append media messages after tool outputs so model sees them in next turn
+        if media_to_inject:
+            logger.info("[AGENT] Injecting %d media message(s)", len(media_to_inject))
+            tool_outputs.extend(media_to_inject)
+        
         return {"messages": tool_outputs}
 
     def should_continue(state: MessagesState) -> Literal["tool_node", END]:

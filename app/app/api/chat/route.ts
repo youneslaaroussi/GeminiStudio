@@ -1,4 +1,6 @@
 import { randomUUID } from "crypto";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { google } from "@ai-sdk/google";
 import {
   convertToModelMessages,
@@ -96,7 +98,9 @@ function createToolboxTools(): ToolMap {
   const toolboxEntries = toolRegistry.list();
 
   return toolboxEntries.reduce<ToolMap>((acc, definition) => {
-    acc[definition.name] = tool<any, ToolResultOutput>({
+    // Return raw ToolExecutionResult so prepareStep can access meta (for _injectMedia)
+    // toModelOutput transforms it for the model
+    acc[definition.name] = tool<any, ToolExecutionResult>({
       description: definition.description,
       inputSchema: definition.inputSchema,
       async execute(
@@ -125,10 +129,11 @@ function createToolboxTools(): ToolMap {
             throw new Error(result.error ?? "Client tool execution failed.");
           }
           logger.info(
-            { ...context, summary: summarizeExecutionResult(result) },
+            { ...context, summary: summarizeExecutionResult(result), hasMeta: !!result.meta },
             "Client tool execution completed"
           );
-          return toolResultOutputFromExecution(result);
+          // Return raw result - prepareStep needs meta._injectMedia, toModelOutput transforms for model
+          return result;
         }
 
         const context = {
@@ -148,9 +153,21 @@ function createToolboxTools(): ToolMap {
           throw new Error(result.error ?? "Tool execution failed.");
         }
         logger.info(
-          { ...context, summary: summarizeExecutionResult(result) },
+          { ...context, summary: summarizeExecutionResult(result), hasMeta: !!result.meta },
           "Tool execution completed"
         );
+        // Return raw result - toModelOutput transforms for model
+        return result;
+      },
+      // Transform raw ToolExecutionResult to ToolResultOutput for the model
+      // (prepareStep already extracted meta._injectMedia for media injection)
+      toModelOutput({ output }): ToolResultOutput {
+        // output is a ToolExecutionResult, transform it for the model
+        const result = output as ToolExecutionResult | undefined;
+        if (!result) {
+          return { type: "text", value: "No output" };
+        }
+        // Use the adapter to transform to ToolResultOutput
         return toolResultOutputFromExecution(result);
       },
     });
@@ -210,6 +227,8 @@ export async function POST(req: Request) {
         partsCount: Array.isArray(m.parts) ? m.parts.length : 0,
         hasContent: !!(m as { content?: string }).content,
         keys: Object.keys(m ?? {}),
+        metadataKeys: m.metadata ? Object.keys(m.metadata) : [],
+        assetMentionsCount: (m.metadata as ChatMessageMetadata | undefined)?.assetMentions?.length ?? 0,
       })),
     },
     "Incoming chat request"
@@ -241,6 +260,7 @@ export async function POST(req: Request) {
         ? existingMetadata.mode
         : fallbackMode,
       attachments: existingMetadata?.attachments,
+      assetMentions: existingMetadata?.assetMentions,
     };
     return {
       ...message,
@@ -329,6 +349,60 @@ export async function POST(req: Request) {
     stopWhen: stepCountIs(5),
     toolChoice: activeMode === "ask" ? "none" : undefined,
     tools,
+    // Inject media as user message when watchAsset returns _injectMedia flag
+    // This is needed because Gemini doesn't support multimodal tool results
+    prepareStep: async ({ stepNumber, steps, messages }) => {
+      if (stepNumber > 0 && steps.length > 0) {
+        const lastStep = steps[steps.length - 1];
+        for (const toolResult of lastStep.toolResults) {
+          // Check if tool result has _injectMedia flag in meta (output is raw ToolExecutionResult)
+          const output = toolResult.output as { meta?: { _injectMedia?: boolean; fileUri?: string; mimeType?: string; startOffset?: string; endOffset?: string; assetName?: string } } | undefined;
+          const meta = output?.meta;
+          if (meta?._injectMedia && meta?.fileUri) {
+            logger.info({ assetName: meta.assetName, startOffset: meta.startOffset, endOffset: meta.endOffset }, "Injecting media as user message");
+            
+            // Build file content with optional videoMetadata for time range
+            const fileContent: Record<string, unknown> = {
+              type: "file",
+              data: meta.fileUri,
+              mediaType: meta.mimeType,
+            };
+            
+            // Add videoMetadata for time range if specified
+            if (meta.startOffset || meta.endOffset) {
+              fileContent.providerOptions = {
+                google: {
+                  videoMetadata: {
+                    startOffset: meta.startOffset,
+                    endOffset: meta.endOffset,
+                  },
+                },
+              };
+            }
+            
+            // Append media as user message
+            return {
+              messages: [
+                ...messages,
+                {
+                  role: "user" as const,
+                  content: [
+                    { 
+                      type: "text" as const, 
+                      text: meta.startOffset || meta.endOffset
+                        ? `Here is the video segment (${meta.startOffset || '0s'} - ${meta.endOffset || 'end'}) for "${meta.assetName || 'asset'}":`
+                        : `Here is the media "${meta.assetName || 'asset'}":`,
+                    },
+                    fileContent as { type: "file"; data: string; mediaType: string },
+                  ],
+                },
+              ],
+            };
+          }
+        }
+      }
+      return {};
+    },
   });
 
   return result.toUIMessageStreamResponse({
@@ -353,10 +427,54 @@ function isChatMode(value: unknown): value is ChatMode {
 }
 
 /**
- * Inject attachment content parts into user messages
+ * Build context text for asset mentions so the agent knows the actual assetIds
+ */
+function buildAssetMentionContext(metadata: ChatMessageMetadata | undefined): string | null {
+  logger.info({
+    hasMetadata: !!metadata,
+    metadataKeys: metadata ? Object.keys(metadata) : [],
+    assetMentions: metadata?.assetMentions,
+    assetMentionsCount: metadata?.assetMentions?.length ?? 0,
+  }, "buildAssetMentionContext called");
+
+  const mentions = metadata?.assetMentions;
+  if (!mentions || mentions.length === 0) {
+    logger.info("No asset mentions found in metadata");
+    return null;
+  }
+
+  logger.info({ mentions }, "Building context for asset mentions");
+
+  const lines = mentions.map((mention) => {
+    const parts = [
+      `• Asset: "${mention.name}"`,
+      `  assetId: "${mention.id}"`,
+      `  type: ${mention.type}`,
+    ];
+    if (mention.description) {
+      parts.push(`  description: ${mention.description}`);
+    }
+    return parts.join("\n");
+  });
+
+  const context = [
+    "━━━ REFERENCED ASSETS ━━━",
+    "The user mentioned these assets. Use the assetId values below with watchAsset() or other tools:",
+    "",
+    ...lines,
+    "━━━━━━━━━━━━━━━━━━━━━━━━━",
+  ].join("\n");
+
+  logger.info({ contextLength: context.length }, "Built asset mention context");
+  return context;
+}
+
+/**
+ * Inject attachment content parts and asset mention context into user messages
  *
  * This converts ChatAttachment metadata into actual content parts
- * that the ai SDK can convert to Gemini API format.
+ * that the ai SDK can convert to Gemini API format, and adds context
+ * about @mentioned assets so the agent knows their actual assetIds.
  */
 function injectAttachmentParts(
   messages: TimelineChatMessage[]
@@ -366,11 +484,15 @@ function injectAttachmentParts(
 
     const metadata = message.metadata as ChatMessageMetadata | undefined;
     const attachments = metadata?.attachments;
+    const assetMentionContext = buildAssetMentionContext(metadata);
 
-    if (!attachments || attachments.length === 0) return message;
+    // If no attachments and no asset mentions, return as-is
+    if ((!attachments || attachments.length === 0) && !assetMentionContext) {
+      return message;
+    }
 
     // Build attachment parts (media should come before text per Gemini best practices)
-    const attachmentParts = attachments.map((attachment) => {
+    const attachmentParts = (attachments ?? []).map((attachment) => {
       const geminiPart = attachmentToGeminiPart(attachment);
 
       // Convert to ai SDK part format
@@ -403,8 +525,13 @@ function injectAttachmentParts(
       return [];
     })();
 
-    // Combine: attachments first, then existing parts (per Gemini best practices)
-    const parts = [...attachmentParts, ...existingParts];
+    // Add asset mention context as a text part if present
+    const contextParts = assetMentionContext
+      ? [{ type: "text" as const, text: assetMentionContext }]
+      : [];
+
+    // Combine: attachments first, then context, then existing parts (per Gemini best practices)
+    const parts = [...attachmentParts, ...contextParts, ...existingParts];
     // Gemini requires at least one part per user message; avoid empty contents
     const safeParts =
       parts.length > 0 ? parts : [{ type: "text" as const, text: " " }];
@@ -416,18 +543,21 @@ function injectAttachmentParts(
   });
 }
 
+// Load base system prompt from file
+const BASE_SYSTEM_PROMPT = (() => {
+  try {
+    const promptPath = join(process.cwd(), "app/lib/server/prompts/chat-system.txt");
+    return readFileSync(promptPath, "utf-8");
+  } catch {
+    throw new Error("System prompt file not found");
+  }
+})();
+
 function createSystemPrompt(currentMode: ChatMode) {
   return [
-    "You are the Gemini Studio AI assistant that collaborates with a user while editing creative timelines.",
-    "You operate with three explicit modes and you must honor their constraints:",
-    `- ${MODE_DESCRIPTIONS.ask}`,
-    `- ${MODE_DESCRIPTIONS.agent}`,
-    `- ${MODE_DESCRIPTIONS.plan}`,
+    BASE_SYSTEM_PROMPT,
     "",
-    `The current mode for this turn is: ${currentMode.toUpperCase()}. Treat this as an internal detail—follow its rules but never reveal or explain the mode name to the user.`,
-    "When in Ask Mode you must not call any tool and simply answer clearly.",
-    "When in Agent Mode you may call any available tool to gather data, reflect, or take action on behalf of the user.",
-    "When in Plan Mode you are limited to the planning tools. Use them to create, update, and maintain the shared task list so the user can see progress. Do not execute other tools while planning.",
+    `The current mode for this turn is: ${currentMode.toUpperCase()}.`,
   ].join("\n");
 }
 

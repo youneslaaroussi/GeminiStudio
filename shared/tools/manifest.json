@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-03T15:58:34.978Z",
+  "generatedAt": "2026-02-03T22:24:43.747Z",
   "tools": {
     "captureAsset": {
       "name": "captureAsset",
@@ -1908,8 +1908,8 @@
     },
     "digestAsset": {
       "name": "digestAsset",
-      "label": "Digest Asset",
-      "description": "Analyze an asset (video, image, or audio) using Gemini's multimodal capabilities. Returns a detailed description of the content. For videos: use startOffset and endOffset to analyze only a segment (e.g. when the user asks about a specific part, or to reduce tokens on long videos).",
+      "label": "Digest Asset (Deprecated)",
+      "description": "DEPRECATED: Use watchAsset instead for context-aware analysis. This tool analyzes media in isolation without conversation context. Only use this if you specifically need isolated analysis without considering prior discussion.",
       "runLocation": "client",
       "implementations": {
         "app": true,
@@ -2027,6 +2027,67 @@
             "required": [
               "assetId"
             ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "watchAsset": {
+      "name": "watchAsset",
+      "label": "Watch Asset",
+      "description": "Load an asset (video, image, or audio) so you can see/hear it directly. Use this when you need to analyze media with awareness of the conversation context. For example: comparing to previously discussed styles, answering follow-up questions about media, or when the user wants you to 'look at' or 'watch' something. The asset will be returned as multimodal content that you can perceive directly.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": false
+      },
+      "fields": [
+        {
+          "name": "assetId",
+          "label": "Asset ID",
+          "type": "text",
+          "placeholder": "e.g. asset_abc123",
+          "description": "The ID of the asset to watch/view.",
+          "required": true
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/watchAssetInput",
+        "definitions": {
+          "watchAssetInput": {
+            "type": "object",
+            "properties": {
+              "assetId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "assetId"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "watchVideo": {
+      "name": "watchVideo",
+      "label": "Watch Video",
+      "description": "Render a preview of the current timeline and watch it. This triggers a fast low-resolution render (360p @ 10fps), waits for completion, then returns the video so you can see it directly with full conversation context. Use this to review your edits and critique your own work. Takes 10-60 seconds.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": false
+      },
+      "fields": [],
+      "inputSchema": {
+        "$ref": "#/definitions/watchVideoInput",
+        "definitions": {
+          "watchVideoInput": {
+            "type": "object",
+            "properties": {},
             "additionalProperties": false
           }
         },
