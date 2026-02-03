@@ -652,6 +652,28 @@ def create_project(user_id: str, name: str, settings: Settings) -> dict[str, Any
     }
 
 
+def update_project_name(
+    user_id: str,
+    project_id: str,
+    name: str,
+    settings: Settings,
+) -> None:
+    """Update a project's display name in Firestore metadata."""
+    import time
+
+    db = get_firestore_client(settings)
+    project_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection("projects")
+        .document(project_id)
+    )
+    project_ref.update({
+        "name": name,
+        "lastModified": int(time.time() * 1000),
+    })
+
+
 def _extract_media_url(text: str, base_url: str | None = None) -> tuple[str | None, str | None]:
     """Extract media URL from text. Returns (url, media_type) or (None, None).
     

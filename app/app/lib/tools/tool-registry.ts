@@ -37,6 +37,7 @@ import { searchAssetsTool } from "./search-assets";
 import { setAssetNotesTool } from "./set-asset-notes";
 import { setSceneConfigTool } from "./set-scene-config";
 import { applyChromaKeyToClipTool } from "./apply-chroma-key-to-clip";
+import { sleepTool } from "./sleep";
 
 type AnyToolDefinition = ToolDefinition<any, Project>;
 
@@ -88,6 +89,7 @@ toolRegistry.register(searchAssetsTool);
 toolRegistry.register(setAssetNotesTool);
 toolRegistry.register(setSceneConfigTool);
 toolRegistry.register(applyChromaKeyToClipTool);
+toolRegistry.register(sleepTool);
 
 type ToolInput = Record<string, unknown>;
 

@@ -22,7 +22,9 @@ from .firebase import (
     create_branch_for_chat,
     get_telegram_chat_id_for_user,
     send_telegram_message,
+    update_project_name,
 )
+from .title_generator import generate_project_title
 from .credits import deduct_credits, get_credits_for_action, InsufficientCreditsError
 from .schemas import HealthResponse, InvokeRequest, InvokeResponse, MessageEnvelope, TeleportRequest, TeleportResponse
 
@@ -239,6 +241,28 @@ async def teleport(
                     first_project_id = first_proj.get("id")
                     branch_info = first_proj.get("_branch", {})
                     project_data = first_proj.get("_projectData", {})
+
+                    # Auto-generate project title from first message(s) if still default
+                    proj_name = first_proj.get("name") or ""
+                    if proj_name in ("New Project", "Untitled Project") and user_id and first_project_id:
+                        user_texts = []
+                        for msg in session.get("messages", []):
+                            if msg.get("role") != "user":
+                                continue
+                            for part in msg.get("parts", []):
+                                if isinstance(part, dict) and part.get("type") == "text":
+                                    user_texts.append(part.get("text", ""))
+                        context_str = "\n\n".join(t for t in user_texts if (t or "").strip())
+                        if context_str.strip():
+                            try:
+                                title_result = await generate_project_title(context_str, settings)
+                                if title_result.get("accepted") and title_result.get("title"):
+                                    new_name = title_result["title"]
+                                    update_project_name(user_id, first_project_id, new_name, settings)
+                                    first_proj["name"] = new_name
+                                    console.print(f"[bold green]Auto-titled project:[/bold green] {new_name}")
+                            except Exception as e:
+                                console.print(f"[dim]Title generation skipped: {e}[/dim]")
 
                     # Build project context for the agent
                     if project_data:

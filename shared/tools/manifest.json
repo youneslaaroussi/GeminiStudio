@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-03T22:24:43.747Z",
+  "generatedAt": "2026-02-03T23:35:19.118Z",
   "tools": {
     "captureAsset": {
       "name": "captureAsset",
@@ -2036,7 +2036,7 @@
     "watchAsset": {
       "name": "watchAsset",
       "label": "Watch Asset",
-      "description": "Load an asset (video, image, or audio) so you can see/hear it directly. Use this when you need to analyze media with awareness of the conversation context. For example: comparing to previously discussed styles, answering follow-up questions about media, or when the user wants you to 'look at' or 'watch' something. The asset will be returned as multimodal content that you can perceive directly.",
+      "description": "Load an asset (video, image, or audio) so you can see/hear it directly. Use startTime/endTime (in seconds) to focus on a specific segment of video. Use this when you need to analyze media with conversation context, compare to discussed styles, answer follow-up questions, or when the user wants you to 'look at' or 'watch' something.",
       "runLocation": "client",
       "implementations": {
         "app": true,
@@ -2050,6 +2050,22 @@
           "placeholder": "e.g. asset_abc123",
           "description": "The ID of the asset to watch/view.",
           "required": true
+        },
+        {
+          "name": "startTime",
+          "label": "Start Time",
+          "type": "text",
+          "placeholder": "e.g. 2.5",
+          "description": "Optional start time in seconds for video segment.",
+          "required": false
+        },
+        {
+          "name": "endTime",
+          "label": "End Time",
+          "type": "text",
+          "placeholder": "e.g. 10",
+          "description": "Optional end time in seconds for video segment.",
+          "required": false
         }
       ],
       "inputSchema": {
@@ -2061,6 +2077,14 @@
               "assetId": {
                 "type": "string",
                 "minLength": 1
+              },
+              "startTime": {
+                "type": "string",
+                "description": "Start time in seconds (e.g. '2.5' or '10') to view a specific segment"
+              },
+              "endTime": {
+                "type": "string",
+                "description": "End time in seconds (e.g. '5.0' or '15') to view a specific segment"
               }
             },
             "required": [
@@ -2529,6 +2553,44 @@
               "clipId",
               "color"
             ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "sleep": {
+      "name": "sleep",
+      "label": "Sleep",
+      "description": "Wait for a specified number of seconds.",
+      "runLocation": "server",
+      "implementations": {
+        "app": true,
+        "langgraph": false
+      },
+      "fields": [
+        {
+          "name": "seconds",
+          "label": "Seconds",
+          "type": "number",
+          "placeholder": "5",
+          "description": "How long to wait (1-25 seconds).",
+          "required": true
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/sleepInput",
+        "definitions": {
+          "sleepInput": {
+            "type": "object",
+            "properties": {
+              "seconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 25,
+                "default": 5
+              }
+            },
             "additionalProperties": false
           }
         },

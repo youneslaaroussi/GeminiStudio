@@ -10,7 +10,7 @@ from typing import Any
 from langchain_core.tools import tool
 
 from ..config import get_settings
-from ..firebase import get_firestore_client, ensure_main_branch_exists
+from ..firebase import get_firestore_client, ensure_main_branch_exists, update_project_name
 
 from .add_clip_tool import (
     _get_project_data,
@@ -146,6 +146,8 @@ def setSceneConfig(
             project_data["background"] = background
         if name is not None:
             project_data["name"] = name or "Untitled Project"
+            # Keep Firestore project metadata in sync so app shows the name
+            update_project_name(user_id, project_id, project_data["name"], settings)
 
         _set_project_data(doc, project_data)
         new_state = _save_automerge_doc(doc)

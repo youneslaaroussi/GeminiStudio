@@ -123,6 +123,7 @@ function createToolboxTools(): ToolMap {
           const result = await waitForClientToolResult({
             toolCallId: options.toolCallId,
             toolName: definition.name,
+            timeoutMs: definition.name === "watchVideo" ? 300_000 : undefined,
           });
           if (result.status === "error") {
             logger.error({ ...context, error: result.error }, "Client tool execution failed");

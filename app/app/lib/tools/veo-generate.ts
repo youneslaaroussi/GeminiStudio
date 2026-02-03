@@ -215,7 +215,13 @@ export const veoJobStatusTool: ToolDefinition<typeof veoJobStatusSchema, Project
         };
       }
 
-      const response = await fetch(`/api/veo/${encodeURIComponent(input.jobId.trim())}`);
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(
+        `/api/veo/${encodeURIComponent(input.jobId.trim())}`,
+        {
+          headers: authHeaders,
+        }
+      );
 
       if (response.status === 404) {
         return {

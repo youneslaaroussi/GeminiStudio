@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     gemini_model: str = Field(default="gemini-3-pro-preview", alias="GEMINI_MODEL")
     # Smaller model for generating short status messages (Thinking…, Calling X…). Default gemini-2.5-flash; set empty to use static messages.
     gemini_status_model: str | None = Field(default="gemini-2.5-flash", alias="GEMINI_STATUS_MODEL")
+    # Smaller model for auto-generating project title from first message (e.g. gemini-2.5-flash).
+    gemini_title_model: str = Field(default="gemini-2.5-flash-preview", alias="GEMINI_TITLE_MODEL")
 
     langsmith_api_key: str | None = Field(default=None, alias="LANGSMITH_API_KEY")
     langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", alias="LANGSMITH_ENDPOINT")

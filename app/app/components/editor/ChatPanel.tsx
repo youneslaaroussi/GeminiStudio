@@ -79,6 +79,7 @@ import type {
 import type { Project } from "@/app/types/timeline";
 import type { VideoEffectJob } from "@/app/types/video-effects";
 import { useProjectStore } from "@/app/lib/store/project-store";
+import { useProjectsListStore } from "@/app/lib/store/projects-list-store";
 import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { useVideoEffectsStore } from "@/app/lib/store/video-effects-store";
 import { requestAssetHighlight } from "@/app/lib/store/asset-highlight-store";
@@ -198,12 +199,58 @@ export function ChatPanel() {
     [mode, sessionId]
   );
 
+  const project = useProjectStore((state) => state.project);
+  const projectId = useProjectStore((state) => state.projectId);
+  const updateProjectSettings = useProjectStore((state) => state.updateProjectSettings);
+  const updateProjectInList = useProjectsListStore((state) => state.updateProject);
+
+  const messagesRef = useRef<TimelineChatMessage[]>([]);
+
   const { messages, sendMessage, setMessages, status, error, clearError, stop } =
     useChat<TimelineChatMessage>({
       transport: chatTransport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
       id: sessionId,
       messages: initialMessages,
+      onFinish: useCallback(
+        async () => {
+          const msgs = messagesRef.current;
+          const userTexts = msgs
+            .filter((m) => m.role === "user")
+            .map((m) =>
+              (m.parts ?? [])
+                .filter((p): p is { type: "text"; text: string } => p.type === "text")
+                .map((p) => p.text)
+                .join(" ")
+            )
+            .filter(Boolean)
+            .join("\n\n");
+          if (!userTexts.trim() || !user?.uid || !projectId) return;
+          const name = project?.name ?? "";
+          const isDefaultName =
+            name === "New Project" || name === "Untitled Project";
+          if (!isDefaultName) return;
+          try {
+            const headers = await getAuthHeaders();
+            const res = await fetch("/api/chat/generate-title", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", ...headers },
+              body: JSON.stringify({ context: userTexts.trim() }),
+            });
+            if (!res.ok) return;
+            const data = (await res.json()) as {
+              accepted?: boolean;
+              title?: string;
+            };
+            if (!data.accepted || !data.title) return;
+            updateProjectSettings({ name: data.title });
+            await updateProjectInList(projectId, { name: data.title }, user.uid);
+          } catch {
+            /* ignore */
+          }
+        },
+        [user?.uid, projectId, project?.name, updateProjectSettings, updateProjectInList]
+      ),
       onError: useCallback(
         (err: Error) => {
           try {
@@ -225,11 +272,12 @@ export function ChatPanel() {
       ),
     });
 
+  useEffect(() => {
+    messagesRef.current = messages ?? [];
+  }, [messages]);
+
   const isBusy = status === "submitted" || status === "streaming" || isCloudProcessing;
   const hasMessages = messages && messages.length > 0;
-
-  const project = useProjectStore((state) => state.project);
-  const projectId = useProjectStore((state) => state.projectId);
 
   // Handle file selection and upload
   const handleFileSelect = useCallback(
