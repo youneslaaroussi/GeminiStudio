@@ -465,6 +465,33 @@ gcloud storage buckets add-iam-policy-binding gs://${BUCKET} \
 
 Use the same bucket as `GOOGLE_CLOUD_STORAGE_BUCKET` (or `ASSET_GCS_BUCKET`) in your deploy config. After applying, re-run a render; no container restart needed.
 
+**Render download / Telegram video 403 (storage.objects.get)**:
+
+When sending the rendered video to Telegram (or when anyone opens the "Download Video" link), the client fetches the signed **GET** URL. The same service account that generates those URLs must have **read** access to the bucket. If you see:
+
+```
+Access denied. ... does not have storage.objects.get access to the Google Cloud Storage object.
+```
+
+or Telegram reports "failed to get HTTP URL content" / "wrong type of the web page content", grant that service account **Storage Object Viewer** on the bucket:
+
+```bash
+BUCKET="your-bucket-name"
+SA_EMAIL="your-service-account@your-project.iam.gserviceaccount.com"  # same as above, from client_email in your JSON key
+
+gcloud storage buckets add-iam-policy-binding gs://${BUCKET} \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/storage.objectViewer"
+```
+
+For both upload and download to work, the SA needs **Object Creator** (for signed PUT) and **Object Viewer** (for signed GET). You can grant both in one go:
+
+```bash
+gcloud storage buckets add-iam-policy-binding gs://${BUCKET} \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/storage.objectAdmin"
+```
+
 **Secret Manager errors**:
 
 ```bash
