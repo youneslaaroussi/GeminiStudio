@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-02T19:38:08.745Z",
+  "generatedAt": "2026-02-03T04:55:52.928Z",
   "tools": {
     "captureAsset": {
       "name": "captureAsset",
@@ -942,7 +942,7 @@
     "timelineUpdateClip": {
       "name": "timelineUpdateClip",
       "label": "Update Timeline Clip",
-      "description": "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s). For video/image clips, use videoSettings.colorGrading or imageSettings.colorGrading for color correction (exposure, contrast, saturation, temperature, tint, highlights, shadows).",
+      "description": "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s).",
       "runLocation": "client",
       "implementations": {
         "app": true,
@@ -1012,8 +1012,8 @@
           "name": "imageSettings",
           "label": "Image Settings",
           "type": "json",
-          "placeholder": "{\"width\":1920,\"height\":1080,\"colorGrading\":{\"exposure\":0,\"contrast\":0,\"saturation\":0,\"temperature\":0,\"tint\":0,\"highlights\":0,\"shadows\":0}}",
-          "description": "Do not pass src—media URL is derived from clip's assetId. colorGrading for color correction (same keys as video)."
+          "placeholder": "{\"width\":1920,\"height\":1080}",
+          "description": "Do not pass src—media URL is derived from clip's assetId."
         },
         {
           "name": "textSettings",
@@ -1144,13 +1144,41 @@
                   "colorGrading": {
                     "type": "object",
                     "properties": {
-                      "exposure": { "type": "number", "minimum": -2, "maximum": 2 },
-                      "contrast": { "type": "number", "minimum": -100, "maximum": 100 },
-                      "saturation": { "type": "number", "minimum": -100, "maximum": 100 },
-                      "temperature": { "type": "number", "minimum": -100, "maximum": 100 },
-                      "tint": { "type": "number", "minimum": -100, "maximum": 100 },
-                      "highlights": { "type": "number", "minimum": -100, "maximum": 100 },
-                      "shadows": { "type": "number", "minimum": -100, "maximum": 100 }
+                      "exposure": {
+                        "type": "number",
+                        "minimum": -2,
+                        "maximum": 2
+                      },
+                      "contrast": {
+                        "type": "number",
+                        "minimum": -100,
+                        "maximum": 100
+                      },
+                      "saturation": {
+                        "type": "number",
+                        "minimum": -100,
+                        "maximum": 100
+                      },
+                      "temperature": {
+                        "type": "number",
+                        "minimum": -100,
+                        "maximum": 100
+                      },
+                      "tint": {
+                        "type": "number",
+                        "minimum": -100,
+                        "maximum": 100
+                      },
+                      "highlights": {
+                        "type": "number",
+                        "minimum": -100,
+                        "maximum": 100
+                      },
+                      "shadows": {
+                        "type": "number",
+                        "minimum": -100,
+                        "maximum": 100
+                      }
                     },
                     "additionalProperties": false
                   }
@@ -1180,17 +1208,7 @@
                     "exclusiveMinimum": 0
                   },
                   "colorGrading": {
-                    "type": "object",
-                    "properties": {
-                      "exposure": { "type": "number", "minimum": -2, "maximum": 2 },
-                      "contrast": { "type": "number", "minimum": -100, "maximum": 100 },
-                      "saturation": { "type": "number", "minimum": -100, "maximum": 100 },
-                      "temperature": { "type": "number", "minimum": -100, "maximum": 100 },
-                      "tint": { "type": "number", "minimum": -100, "maximum": 100 },
-                      "highlights": { "type": "number", "minimum": -100, "maximum": 100 },
-                      "shadows": { "type": "number", "minimum": -100, "maximum": 100 }
-                    },
-                    "additionalProperties": false
+                    "$ref": "#/definitions/timelineUpdateClipInput/properties/videoSettings/properties/colorGrading"
                   }
                 },
                 "additionalProperties": false
@@ -1342,46 +1360,6 @@
             "required": [
               "clipIds"
             ],
-            "additionalProperties": false
-          }
-        },
-        "$schema": "http://json-schema.org/draft-07/schema#"
-      }
-    },
-    "reorderLayers": {
-      "name": "reorderLayers",
-      "label": "Reorder Timeline Layers",
-      "description": "Reorder timeline layers so the draw order is correct. First layer in the list is bottom (back), last is top (front). Use when the user says the title should be on top or layers are reversed. Call getTimelineState first to get layer IDs, then pass the desired order (e.g. video layer ID first, then text/title layer ID).",
-      "runLocation": "server",
-      "implementations": {
-        "app": false,
-        "langgraph": true,
-        "langgraphName": "reorderLayers"
-      },
-      "fields": [
-        {
-          "name": "layerIds",
-          "label": "Layer IDs (ordered)",
-          "type": "json",
-          "placeholder": "[\"layer-video-1\", \"layer-text-1\"]",
-          "description": "Ordered list of layer IDs. First = bottom, last = top.",
-          "required": true
-        }
-      ],
-      "inputSchema": {
-        "$ref": "#/definitions/reorderLayersInput",
-        "definitions": {
-          "reorderLayersInput": {
-            "type": "object",
-            "properties": {
-              "layerIds": {
-                "type": "array",
-                "items": { "type": "string", "minLength": 1 },
-                "minItems": 1,
-                "description": "Layer IDs in desired order (first = bottom, last = top)"
-              }
-            },
-            "required": ["layerIds"],
             "additionalProperties": false
           }
         },
@@ -2328,6 +2306,81 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
     },
+    "setSceneConfig": {
+      "name": "setSceneConfig",
+      "label": "Set Scene Config",
+      "description": "Set the project scene configuration: dimensions (width x height), frame rate (fps), background color, or project name. Only provided fields are updated.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": true,
+        "langgraphName": "setSceneConfig"
+      },
+      "fields": [
+        {
+          "name": "width",
+          "label": "Width",
+          "type": "number",
+          "description": "Output width in pixels (min 320). Use with height to set resolution."
+        },
+        {
+          "name": "height",
+          "label": "Height",
+          "type": "number",
+          "description": "Output height in pixels (min 240). Use with width to set resolution."
+        },
+        {
+          "name": "fps",
+          "label": "FPS",
+          "type": "number",
+          "description": "Frames per second (1–240). Common values: 24, 25, 30, 50, 60."
+        },
+        {
+          "name": "background",
+          "label": "Background",
+          "type": "text",
+          "placeholder": "#000000",
+          "description": "Background color as hex (e.g. #000000 for black)."
+        },
+        {
+          "name": "name",
+          "label": "Project Name",
+          "type": "text",
+          "description": "Project display name."
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/setSceneConfigInput",
+        "definitions": {
+          "setSceneConfigInput": {
+            "type": "object",
+            "properties": {
+              "width": {
+                "type": "integer",
+                "minimum": 320
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 240
+              },
+              "fps": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 240
+              },
+              "background": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
     "listProjectAssets": {
       "name": "listProjectAssets",
       "label": "List Project Assets",
@@ -2363,6 +2416,19 @@
         "app": false,
         "langgraph": true,
         "langgraphName": "getVideoEffectJobStatus"
+      },
+      "fields": [],
+      "inputSchema": null
+    },
+    "reorderLayers": {
+      "name": "reorderLayers",
+      "label": "Reorder Timeline Layers",
+      "description": "Reorder timeline layers (first = bottom, last = top). Use when the user says the title should be on top or layers are reversed.",
+      "runLocation": "server",
+      "implementations": {
+        "app": false,
+        "langgraph": true,
+        "langgraphName": "reorderLayers"
       },
       "fields": [],
       "inputSchema": null

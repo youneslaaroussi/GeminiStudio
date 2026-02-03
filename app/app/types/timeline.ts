@@ -17,16 +17,33 @@ export type TransitionType =
   | 'blur'
   | 'dip-to-black';
 
+export type CaptionStyleType =
+  | 'pill'
+  | 'karaoke-lime'
+  | 'karaoke-magenta'
+  | 'karaoke-cyan'
+  | 'outlined'
+  | 'bold-outline'
+  | 'minimal'
+  | 'word-highlight'
+  | 'pink-pill'
+  | 'dark-pill-lime'
+  | 'cloud-blob';
+
 export interface CaptionSettings {
   fontFamily: 'Inter Variable' | 'Roboto' | 'Montserrat' | 'Poppins';
   fontWeight: 400 | 500 | 700;
+  fontSize: number; // base font size (scaled by resolution)
   distanceFromBottom: number; // pixels from bottom
+  style?: CaptionStyleType;
 }
 
 export const DEFAULT_CAPTION_SETTINGS: CaptionSettings = {
   fontFamily: 'Inter Variable',
   fontWeight: 400,
+  fontSize: 18,
   distanceFromBottom: 140,
+  style: 'pill',
 };
 
 /** Project-level defaults for text clips (font etc.). Reuses same font options as captions. */

@@ -11,11 +11,126 @@ import {
 } from '@motion-canvas/core';
 
 import gaussianBlur from '../shaders/gaussianBlur.glsl';
+import type { CaptionStyleType } from '../lib/types';
 
 export interface TranscriptionEntry {
   start: number;
   speech: string;
 }
+
+/** Per-style colors and layout (default = unspoken, highlight = current word). Use shadow for outline so layout stays consistent. */
+const CAPTION_STYLE_CONFIG: Record<
+  CaptionStyleType,
+  {
+    /** Show dark pill background */
+    showPill: boolean;
+    pillFill: string;
+    fillDefault: string;
+    fillHighlight: string;
+    shadowBlur: number;
+    shadowColor: string;
+    /** Background under current word only (word-highlight style) */
+    wordBackground?: boolean;
+    wordBackgroundFill?: string;
+  }
+> = {
+  pill: {
+    showPill: true,
+    pillFill: 'rgba(0,0,0,0.9)',
+    fillDefault: 'rgba(255,255,255,0.5)',
+    fillHighlight: 'rgba(255,255,255,1)',
+    shadowBlur: 20,
+    shadowColor: 'rgba(255,255,255,0.75)',
+  },
+  'karaoke-lime': {
+    showPill: false,
+    pillFill: 'rgba(0,0,0,0)',
+    fillDefault: 'rgba(255,255,255,1)',
+    fillHighlight: 'rgba(180,255,0,1)',
+    shadowBlur: 10,
+    shadowColor: 'rgba(0,0,0,1)',
+  },
+  'karaoke-magenta': {
+    showPill: false,
+    pillFill: 'rgba(0,0,0,0)',
+    fillDefault: 'rgba(255,255,255,0.9)',
+    fillHighlight: 'rgba(255,0,128,1)',
+    shadowBlur: 10,
+    shadowColor: 'rgba(0,0,0,1)',
+  },
+  'karaoke-cyan': {
+    showPill: false,
+    pillFill: 'rgba(0,0,0,0)',
+    fillDefault: 'rgba(255,255,255,1)',
+    fillHighlight: 'rgba(0,220,255,1)',
+    shadowBlur: 10,
+    shadowColor: 'rgba(0,0,0,1)',
+  },
+  outlined: {
+    showPill: false,
+    pillFill: 'rgba(0,0,0,0)',
+    fillDefault: 'rgba(255,255,255,1)',
+    fillHighlight: 'rgba(255,255,255,1)',
+    shadowBlur: 14,
+    shadowColor: 'rgba(0,0,0,1)',
+  },
+  'bold-outline': {
+    showPill: false,
+    pillFill: 'rgba(0,0,0,0)',
+    fillDefault: 'rgba(255,255,255,1)',
+    fillHighlight: 'rgba(255,255,255,1)',
+    shadowBlur: 18,
+    shadowColor: 'rgba(0,0,0,1)',
+  },
+  minimal: {
+    showPill: false,
+    pillFill: 'rgba(0,0,0,0)',
+    fillDefault: 'rgba(255,255,255,0.95)',
+    fillHighlight: 'rgba(255,255,255,1)',
+    shadowBlur: 4,
+    shadowColor: 'rgba(0,0,0,0.4)',
+  },
+  'word-highlight': {
+    showPill: false,
+    pillFill: 'rgba(0,0,0,0)',
+    fillDefault: 'rgba(255,255,255,0.9)',
+    fillHighlight: 'rgba(255,255,255,1)',
+    shadowBlur: 6,
+    shadowColor: 'rgba(0,0,0,0.5)',
+    wordBackground: true,
+    wordBackgroundFill: 'rgba(255,220,100,0.45)',
+  },
+  'pink-pill': {
+    showPill: false,
+    pillFill: 'rgba(0,0,0,0)',
+    fillDefault: 'rgba(255,255,255,1)',
+    fillHighlight: 'rgba(255,255,255,1)',
+    shadowBlur: 8,
+    shadowColor: 'rgba(0,0,0,0.6)',
+    wordBackground: true,
+    wordBackgroundFill: 'rgba(255,20,147,0.85)', // Bright pink/magenta
+  },
+  'dark-pill-lime': {
+    showPill: false,
+    pillFill: 'rgba(0,0,0,0)',
+    fillDefault: 'rgba(255,255,255,0.9)',
+    fillHighlight: 'rgba(180,255,0,1)', // Lime green
+    shadowBlur: 6,
+    shadowColor: 'rgba(0,0,0,0.4)',
+    wordBackground: true,
+    wordBackgroundFill: 'rgba(60,60,60,0.85)', // Dark grey
+  },
+  'cloud-blob': {
+    showPill: false,
+    pillFill: 'rgba(0,0,0,0)',
+    fillDefault: 'rgba(255,255,255,0.95)',
+    fillHighlight: 'rgba(0,220,255,1)', // Cyan
+    shadowBlur: 12,
+    shadowColor: 'rgba(0,0,0,0.3)',
+    wordBackground: true,
+    wordBackgroundFill: 'rgba(255,248,220,0.75)', // Light yellow/beige
+  },
+};
 
 export interface AnimatedCaptionsProps extends NodeProps {
   ShowCaptions: SignalValue<boolean>;
@@ -26,6 +141,8 @@ export interface AnimatedCaptionsProps extends NodeProps {
   SceneWidth: SignalValue<number>;
   CaptionsFontFamily: SignalValue<string>;
   CaptionsFontWeight: SignalValue<number>;
+  CaptionsFontSize?: SignalValue<number>;
+  CaptionsStyle?: SignalValue<CaptionStyleType>;
 }
 
 const GO_UP = 8 / 30;
@@ -64,6 +181,14 @@ export class AnimatedCaptions extends Node {
   @signal()
   public declare readonly CaptionsFontWeight: SimpleSignal<number, this>;
 
+  @initial(18)
+  @signal()
+  public declare readonly CaptionsFontSize: SimpleSignal<number, this>;
+
+  @initial('pill')
+  @signal()
+  public declare readonly CaptionsStyle: SimpleSignal<CaptionStyleType, this>;
+
   private readonly CaptionText = createSignal('');
   private readonly Opacity = createSignal(0);
   private readonly Blur = createSignal(0);
@@ -99,49 +224,93 @@ export class AnimatedCaptions extends Node {
           },
         ]}
       >
-        <Rect
-          fill={'rgba(0,0,0,0.9)'}
-          shadowBlur={50}
-          shadowColor={'rgba(0,0,0,0.8)'}
-          layout
-          alignItems={'center'}
-          justifyContent={'center'}
-          paddingTop={() => 10 * this.CaptionsSize() * ScaleFactor()}
-          paddingBottom={() => 6 * this.CaptionsSize() * ScaleFactor()}
-          paddingLeft={() => 14 * this.CaptionsSize() * ScaleFactor()}
-          paddingRight={() => 14 * this.CaptionsSize() * ScaleFactor()}
-          radius={() => 10 * this.CaptionsSize() * ScaleFactor()}
-        >
-          {() =>
-            this.CaptionText()
-              .split('*')
-              .map((caption, index) => {
-                if (!caption) return null;
-                const [, secondary] = this.CaptionText().split('*');
-                return (
-                  <Txt
-                    key={`${caption}-${index}`}
-                    shadowBlur={20}
-                    shadowColor={
-                      index === 0 ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0)'
-                    }
-                    fill={
-                      index === 1
-                        ? 'rgba(255,255,255,0.5)'
-                        : 'rgba(255,255,255,1)'
-                    }
-                    fontWeight={this.CaptionsFontWeight()}
-                    fontFamily={this.CaptionsFontFamily()}
-                    text={caption.trim()}
-                    paddingRight={
-                      index === 0 && secondary ? 5 * this.CaptionsSize() * ScaleFactor() : 0
-                    }
-                    fontSize={() => this.CaptionsSize() * ScaleFactor() * 18}
-                  />
-                );
-              })
-          }
-        </Rect>
+        {() => {
+          const style = this.CaptionsStyle();
+          const config = CAPTION_STYLE_CONFIG[style] ?? CAPTION_STYLE_CONFIG.pill;
+          const scale = () => this.CaptionsSize() * ScaleFactor();
+          // Always use same padding/radius so layout never collapses when switching styles
+          return (
+            <Rect
+              fill={config.pillFill}
+              shadowBlur={config.showPill ? 50 : 0}
+              shadowColor={config.showPill ? 'rgba(0,0,0,0.8)' : 'rgba(0,0,0,0)'}
+              layout
+              alignItems={'center'}
+              justifyContent={'center'}
+              paddingTop={() => 10 * scale()}
+              paddingBottom={() => 6 * scale()}
+              paddingLeft={() => 14 * scale()}
+              paddingRight={() => 14 * scale()}
+              radius={() => 10 * scale()}
+            >
+              {(() => {
+                const parts = this.CaptionText().split('*');
+                // Format: "before* current* after" → 3 parts (current word highlighted)
+                // Format: "* all words" → 2 parts (all words in default, initial state)
+                // parts[0] = before (default), parts[1] = current (highlight if 3 parts), parts[2] = after (default)
+                const hasThreeParts = parts.length === 3;
+                return parts.map((caption, index) => {
+                  if (!caption.trim()) return null;
+                  // Only highlight middle segment if we have 3 parts (two asterisks)
+                  const isCurrent = hasThreeParts && index === 1;
+                  const fill = isCurrent ? config.fillHighlight : config.fillDefault;
+                  const hasNext = index < parts.length - 1 && parts[index + 1]?.trim().length > 0;
+                  
+                  // For word-highlight styles, wrap current word in a background Rect
+                  if (config.wordBackground && isCurrent) {
+                    const style = this.CaptionsStyle();
+                    // Different radius for different styles
+                    const radiusValue = style === 'cloud-blob' 
+                      ? () => 20 * scale() // Very rounded for blob effect
+                      : style === 'pink-pill'
+                      ? () => 4 * scale()  // More rectangular
+                      : () => 12 * scale(); // Rounded pill
+                    
+                    return (
+                      <Rect
+                        key={`word-bg-${index}`}
+                        layout
+                        paddingLeft={() => 8 * scale()}
+                        paddingRight={() => 8 * scale()}
+                        paddingTop={() => 5 * scale()}
+                        paddingBottom={() => 5 * scale()}
+                        radius={radiusValue}
+                        fill={config.wordBackgroundFill ?? 'rgba(255,220,100,0.45)'}
+                        marginRight={hasNext ? () => 4 * scale() : 0}
+                        shadowBlur={style === 'cloud-blob' ? 8 : 0}
+                        shadowColor={style === 'cloud-blob' ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0)'}
+                      >
+                        <Txt
+                          shadowBlur={config.shadowBlur}
+                          shadowColor={config.shadowColor}
+                          fill={fill}
+                          fontWeight={this.CaptionsFontWeight()}
+                          fontFamily={this.CaptionsFontFamily()}
+                          text={caption.trim()}
+                          fontSize={() => this.CaptionsSize() * ScaleFactor() * this.CaptionsFontSize()}
+                        />
+                      </Rect>
+                    );
+                  }
+                  
+                  return (
+                    <Txt
+                      key={`${caption}-${index}`}
+                      shadowBlur={config.shadowBlur}
+                      shadowColor={config.shadowColor}
+                      fill={fill}
+                      fontWeight={this.CaptionsFontWeight()}
+                      fontFamily={this.CaptionsFontFamily()}
+                      text={caption.trim()}
+                      paddingRight={hasNext ? () => 5 * this.CaptionsSize() * ScaleFactor() : 0}
+                      fontSize={() => this.CaptionsSize() * ScaleFactor() * this.CaptionsFontSize()}
+                    />
+                  );
+                });
+              })()}
+            </Rect>
+          );
+        }}
       </Rect>,
     );
   }
@@ -216,12 +385,10 @@ export class AnimatedCaptions extends Node {
 
       let i = 0;
       for (const [startSeconds, caption] of shortcut.entries()) {
-        const text =
-          Array.from(shortcut.values()).slice(0, i).join(' ') +
-          ` ${caption}*` +
-          Array.from(shortcut.values())
-            .slice(i + 1)
-            .join(' ');
+        // Build text with format: "before* current* after" for three segments
+        const before = Array.from(shortcut.values()).slice(0, i).join(' ');
+        const after = Array.from(shortcut.values()).slice(i + 1).join(' ');
+        const text = before + (before ? '*' : '') + ` ${caption}*` + (after ? after : '');
 
         this.CaptionText(text);
 

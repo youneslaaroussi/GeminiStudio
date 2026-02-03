@@ -121,7 +121,9 @@ const buildVariables = (job: RenderJobData, computedDuration: number) => {
       job.variables?.captionSettings ?? job.project.captionSettings ?? {
         fontFamily: 'Inter Variable',
         fontWeight: 400,
+        fontSize: 18,
         distanceFromBottom: 140,
+        style: 'pill',
       },
     textClipSettings:
       job.variables?.textClipSettings ?? job.project.textClipSettings ?? {

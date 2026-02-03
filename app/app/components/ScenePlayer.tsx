@@ -38,10 +38,12 @@ interface ScenePlayerProps {
   onTimeUpdate?: (time: number) => void;
   transcriptions?: Record<string, ProjectTranscription>;
   transitions?: Record<string, any>;
-  captionSettings?: {
+      captionSettings?: {
     fontFamily: string;
     fontWeight: number;
+    fontSize?: number;
     distanceFromBottom: number;
+    style?: string;
   };
   textClipSettings?: {
     fontFamily: string;
@@ -470,7 +472,9 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
       captionSettings: latestCaptionSettingsRef.current ?? {
         fontFamily: 'Inter Variable',
         fontWeight: 400,
+        fontSize: 18,
         distanceFromBottom: 140,
+        style: 'pill',
       },
       textClipSettings: latestTextClipSettingsRef.current ?? {
         fontFamily: 'Inter Variable',
@@ -555,7 +559,9 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
       captionSettings: captionSettings ?? {
         fontFamily: 'Inter Variable',
         fontWeight: 400,
+        fontSize: 18,
         distanceFromBottom: 140,
+        style: 'pill',
       },
       textClipSettings: textClipSettings ?? {
         fontFamily: 'Inter Variable',

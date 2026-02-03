@@ -4,7 +4,7 @@ import { Volume2 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { EditableInput } from "@/app/components/ui/EditableInput";
 import type { AudioClip } from "@/app/types/timeline";
-import { DEFAULT_CAPTION_SETTINGS } from "@/app/types/timeline";
+import { DEFAULT_CAPTION_SETTINGS, type CaptionStyleType } from "@/app/types/timeline";
 import {
   toNumber,
   inputClassName,
@@ -65,6 +65,29 @@ export function AudioClipSettings({ clip, onUpdate }: AudioClipSettingsProps) {
         <h3 className="text-xs font-medium mb-3">Caption Settings</h3>
 
         <div>
+          <label className={labelClassName}>Style</label>
+          <select
+            value={captionSettings.style ?? "pill"}
+            onChange={(e) => updateProjectSettings({
+              captionSettings: { ...captionSettings, style: e.target.value as CaptionStyleType }
+            })}
+            className={inputClassName}
+          >
+            <option value="pill">Pill (default)</option>
+            <option value="karaoke-lime">Karaoke Lime</option>
+            <option value="karaoke-magenta">Karaoke Magenta</option>
+            <option value="karaoke-cyan">Karaoke Cyan</option>
+            <option value="outlined">Outlined</option>
+            <option value="bold-outline">Bold Outline</option>
+            <option value="minimal">Minimal</option>
+            <option value="word-highlight">Word Highlight</option>
+            <option value="pink-pill">Pink Pill</option>
+            <option value="dark-pill-lime">Dark Pill Lime</option>
+            <option value="cloud-blob">Cloud Blob</option>
+          </select>
+        </div>
+
+        <div className="pt-2">
           <label className={labelClassName}>Font Family</label>
           <select
             value={captionSettings.fontFamily}
@@ -93,6 +116,24 @@ export function AudioClipSettings({ clip, onUpdate }: AudioClipSettingsProps) {
             <option value="500">Medium</option>
             <option value="700">Bold</option>
           </select>
+        </div>
+
+        <div className="pt-2">
+          <label className={labelClassName}>Font Size</label>
+          <EditableInput
+            type="number"
+            value={captionSettings.fontSize ?? 18}
+            min={10}
+            max={48}
+            className={inputClassName}
+            onValueCommit={(val) => {
+              const next = toNumber(val);
+              if (next === null) return;
+              updateProjectSettings({
+                captionSettings: { ...captionSettings, fontSize: Math.max(10, Math.min(48, next)) }
+              });
+            }}
+          />
         </div>
 
         <div className="pt-2">

@@ -8,10 +8,25 @@ export type TransitionType =
   | 'slide-up'
   | 'slide-down';
 
+export type CaptionStyleType =
+  | 'pill'
+  | 'karaoke-lime'
+  | 'karaoke-magenta'
+  | 'karaoke-cyan'
+  | 'outlined'
+  | 'bold-outline'
+  | 'minimal'
+  | 'word-highlight'
+  | 'pink-pill'
+  | 'dark-pill-lime'
+  | 'cloud-blob';
+
 export interface CaptionSettings {
   fontFamily: 'Inter Variable' | 'Roboto' | 'Montserrat' | 'Poppins';
   fontWeight: 400 | 500 | 700;
-  distanceFromBottom: number;
+  fontSize: number; // base font size (scaled by resolution)
+  distanceFromBottom: number; // pixels from bottom
+  style?: CaptionStyleType;
 }
 
 export interface TextClipSettings {

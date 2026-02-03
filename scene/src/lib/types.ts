@@ -167,10 +167,26 @@ export interface SceneTranscription {
   segments?: RawSegment[];
 }
 
+/** Caption visual style (pill, karaoke highlights, TikTok-style outlined, etc.) */
+export type CaptionStyleType =
+  | 'pill'           // Dark pill, white/dim karaoke (default)
+  | 'karaoke-lime'   // White text, lime green highlight, black outline
+  | 'karaoke-magenta'// Magenta/pink highlight, outline
+  | 'karaoke-cyan'   // Cyan highlight, outline
+  | 'outlined'       // No pill, white text, thick black outline (TikTok)
+  | 'bold-outline'   // Thick outline, bright fill
+  | 'minimal'        // Light shadow, no box
+  | 'word-highlight' // Background pill under current spoken word only
+  | 'pink-pill'      // Bright pink rectangular background under current word
+  | 'dark-pill-lime' // Dark grey rounded pill with lime green current word
+  | 'cloud-blob';    // Cloud-like blob background under current word
+
 export interface CaptionSettings {
   fontFamily: string;
   fontWeight: number;
+  fontSize: number;
   distanceFromBottom: number;
+  style?: CaptionStyleType;
 }
 
 export interface TextClipSettings {

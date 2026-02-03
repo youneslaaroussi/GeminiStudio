@@ -33,6 +33,7 @@ import { digestAssetTool } from "./digest-asset";
 import { applyVideoEffectToClipTool } from "./apply-video-effect-to-clip";
 import { searchAssetsTool } from "./search-assets";
 import { setAssetNotesTool } from "./set-asset-notes";
+import { setSceneConfigTool } from "./set-scene-config";
 
 type AnyToolDefinition = ToolDefinition<any, Project>;
 
@@ -80,6 +81,7 @@ toolRegistry.register(digestAssetTool);
 toolRegistry.register(applyVideoEffectToClipTool);
 toolRegistry.register(searchAssetsTool);
 toolRegistry.register(setAssetNotesTool);
+toolRegistry.register(setSceneConfigTool);
 
 type ToolInput = Record<string, unknown>;
 

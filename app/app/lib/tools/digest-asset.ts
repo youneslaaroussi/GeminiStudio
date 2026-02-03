@@ -19,7 +19,7 @@ export const digestAssetTool: ToolDefinition<typeof digestAssetSchema, Project> 
   name: "digestAsset",
   label: "Digest Asset",
   description:
-    "Analyze an asset (video, image, or audio) using Gemini's multimodal capabilities. Returns a detailed description of the content.",
+    "Analyze an asset (video, image, or audio) using Gemini's multimodal capabilities. Returns a detailed description of the content. For videos: use startOffset and endOffset to analyze only a segment (e.g. when the user asks about a specific part, or to reduce tokens on long videos).",
   runLocation: "client",
   inputSchema: digestAssetSchema,
   fields: [
@@ -55,14 +55,16 @@ export const digestAssetTool: ToolDefinition<typeof digestAssetSchema, Project> 
       label: "Start Time (optional)",
       type: "text",
       placeholder: "e.g. 30s or 1m30s",
-      description: "For videos: Start analyzing from this timestamp.",
+      description:
+        "For videos only: analyze from this timestamp. Use when the user asks about a specific part of a video or to limit analysis to a segment. Format: 30s, 1m30s, 2m.",
     },
     {
       name: "endOffset",
       label: "End Time (optional)",
       type: "text",
       placeholder: "e.g. 60s or 2m",
-      description: "For videos: Stop analyzing at this timestamp.",
+      description:
+        "For videos only: stop analyzing at this timestamp. Use with startOffset to analyze only a segment (e.g. 30s to 2m). Saves tokens on long videos.",
     },
     {
       name: "mediaResolution",

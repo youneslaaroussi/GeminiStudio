@@ -23,6 +23,7 @@ const LANGGRAPH_TOOL_MAP: Record<string, string> = {
   veoGenerate: "generateVeoVideo",
   applyVideoEffectToClip: "applyVideoEffectToClip",
   setAssetNotes: "setAssetNotes",
+  setSceneConfig: "setSceneConfig",
 };
 
 /**

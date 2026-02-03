@@ -32,14 +32,18 @@ export default makeScene2D(function* (view) {
   const scene = useScene();
   const { width, height } = scene.getSize();
 
-  // Get variables from the player
-  const layers = scene.variables.get<Layer[]>('layers', [])();
-  const transitions = scene.variables.get<Record<string, ClipTransition>>('transitions', {})();
-  const captionSettings = scene.variables.get<CaptionSettings>('captionSettings', {
+  const defaultCaptionSettings: CaptionSettings = {
     fontFamily: 'Inter Variable',
     fontWeight: 400,
+    fontSize: 18,
     distanceFromBottom: 140,
-  })();
+    style: 'pill',
+  };
+
+  // Get variables from the player (read once for layout; style read reactively below)
+  const layers = scene.variables.get<Layer[]>('layers', [])();
+  const transitions = scene.variables.get<Record<string, ClipTransition>>('transitions', {})();
+  const captionSettings = scene.variables.get<CaptionSettings>('captionSettings', defaultCaptionSettings)();
   const textClipSettings = scene.variables.get<TextClipSettings>('textClipSettings', {
     fontFamily: 'Inter Variable',
     fontWeight: 400,
@@ -130,6 +134,8 @@ export default makeScene2D(function* (view) {
         TranscriptionData={() => normalized}
         CaptionsFontFamily={captionSettings.fontFamily}
         CaptionsFontWeight={captionSettings.fontWeight}
+        CaptionsFontSize={() => scene.variables.get<CaptionSettings>('captionSettings', defaultCaptionSettings)().fontSize ?? 18}
+        CaptionsStyle={() => scene.variables.get<CaptionSettings>('captionSettings', defaultCaptionSettings)().style ?? 'pill'}
         zIndex={1000}
       />
     );

@@ -11743,6 +11743,109 @@ var __decorateClass = (decorators, target, key, kind) => {
   if (result) __defProp2(target, key, result);
   return result;
 };
+const CAPTION_STYLE_CONFIG = {
+  pill: {
+    showPill: true,
+    pillFill: "rgba(0,0,0,0.9)",
+    fillDefault: "rgba(255,255,255,0.5)",
+    fillHighlight: "rgba(255,255,255,1)",
+    shadowBlur: 20,
+    shadowColor: "rgba(255,255,255,0.75)"
+  },
+  "karaoke-lime": {
+    showPill: false,
+    pillFill: "rgba(0,0,0,0)",
+    fillDefault: "rgba(255,255,255,1)",
+    fillHighlight: "rgba(180,255,0,1)",
+    shadowBlur: 10,
+    shadowColor: "rgba(0,0,0,1)"
+  },
+  "karaoke-magenta": {
+    showPill: false,
+    pillFill: "rgba(0,0,0,0)",
+    fillDefault: "rgba(255,255,255,0.9)",
+    fillHighlight: "rgba(255,0,128,1)",
+    shadowBlur: 10,
+    shadowColor: "rgba(0,0,0,1)"
+  },
+  "karaoke-cyan": {
+    showPill: false,
+    pillFill: "rgba(0,0,0,0)",
+    fillDefault: "rgba(255,255,255,1)",
+    fillHighlight: "rgba(0,220,255,1)",
+    shadowBlur: 10,
+    shadowColor: "rgba(0,0,0,1)"
+  },
+  outlined: {
+    showPill: false,
+    pillFill: "rgba(0,0,0,0)",
+    fillDefault: "rgba(255,255,255,1)",
+    fillHighlight: "rgba(255,255,255,1)",
+    shadowBlur: 14,
+    shadowColor: "rgba(0,0,0,1)"
+  },
+  "bold-outline": {
+    showPill: false,
+    pillFill: "rgba(0,0,0,0)",
+    fillDefault: "rgba(255,255,255,1)",
+    fillHighlight: "rgba(255,255,255,1)",
+    shadowBlur: 18,
+    shadowColor: "rgba(0,0,0,1)"
+  },
+  minimal: {
+    showPill: false,
+    pillFill: "rgba(0,0,0,0)",
+    fillDefault: "rgba(255,255,255,0.95)",
+    fillHighlight: "rgba(255,255,255,1)",
+    shadowBlur: 4,
+    shadowColor: "rgba(0,0,0,0.4)"
+  },
+  "word-highlight": {
+    showPill: false,
+    pillFill: "rgba(0,0,0,0)",
+    fillDefault: "rgba(255,255,255,0.9)",
+    fillHighlight: "rgba(255,255,255,1)",
+    shadowBlur: 6,
+    shadowColor: "rgba(0,0,0,0.5)",
+    wordBackground: true,
+    wordBackgroundFill: "rgba(255,220,100,0.45)"
+  },
+  "pink-pill": {
+    showPill: false,
+    pillFill: "rgba(0,0,0,0)",
+    fillDefault: "rgba(255,255,255,1)",
+    fillHighlight: "rgba(255,255,255,1)",
+    shadowBlur: 8,
+    shadowColor: "rgba(0,0,0,0.6)",
+    wordBackground: true,
+    wordBackgroundFill: "rgba(255,20,147,0.85)"
+    // Bright pink/magenta
+  },
+  "dark-pill-lime": {
+    showPill: false,
+    pillFill: "rgba(0,0,0,0)",
+    fillDefault: "rgba(255,255,255,0.9)",
+    fillHighlight: "rgba(180,255,0,1)",
+    // Lime green
+    shadowBlur: 6,
+    shadowColor: "rgba(0,0,0,0.4)",
+    wordBackground: true,
+    wordBackgroundFill: "rgba(60,60,60,0.85)"
+    // Dark grey
+  },
+  "cloud-blob": {
+    showPill: false,
+    pillFill: "rgba(0,0,0,0)",
+    fillDefault: "rgba(255,255,255,0.95)",
+    fillHighlight: "rgba(0,220,255,1)",
+    // Cyan
+    shadowBlur: 12,
+    shadowColor: "rgba(0,0,0,0.3)",
+    wordBackground: true,
+    wordBackgroundFill: "rgba(255,248,220,0.75)"
+    // Light yellow/beige
+  }
+};
 const GO_UP = 8 / 30;
 const GO_DOWN = 5 / 30;
 class AnimatedCaptions extends Node {
@@ -11773,40 +11876,84 @@ class AnimatedCaptions extends Node {
               }
             }
           ],
-          children: /* @__PURE__ */ jsx(
-            Rect,
-            {
-              fill: "rgba(0,0,0,0.9)",
-              shadowBlur: 50,
-              shadowColor: "rgba(0,0,0,0.8)",
-              layout: true,
-              alignItems: "center",
-              justifyContent: "center",
-              paddingTop: () => 10 * this.CaptionsSize() * ScaleFactor(),
-              paddingBottom: () => 6 * this.CaptionsSize() * ScaleFactor(),
-              paddingLeft: () => 14 * this.CaptionsSize() * ScaleFactor(),
-              paddingRight: () => 14 * this.CaptionsSize() * ScaleFactor(),
-              radius: () => 10 * this.CaptionsSize() * ScaleFactor(),
-              children: () => this.CaptionText().split("*").map((caption, index) => {
-                if (!caption) return null;
-                const [, secondary] = this.CaptionText().split("*");
-                return /* @__PURE__ */ jsx(
-                  Txt,
-                  {
-                    shadowBlur: 20,
-                    shadowColor: index === 0 ? "rgba(255,255,255,0.75)" : "rgba(0,0,0,0)",
-                    fill: index === 1 ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,1)",
-                    fontWeight: this.CaptionsFontWeight(),
-                    fontFamily: this.CaptionsFontFamily(),
-                    text: caption.trim(),
-                    paddingRight: index === 0 && secondary ? 5 * this.CaptionsSize() * ScaleFactor() : 0,
-                    fontSize: () => this.CaptionsSize() * ScaleFactor() * 18
-                  },
-                  `${caption}-${index}`
-                );
-              })
-            }
-          )
+          children: () => {
+            const style = this.CaptionsStyle();
+            const config2 = CAPTION_STYLE_CONFIG[style] ?? CAPTION_STYLE_CONFIG.pill;
+            const scale = () => this.CaptionsSize() * ScaleFactor();
+            return /* @__PURE__ */ jsx(
+              Rect,
+              {
+                fill: config2.pillFill,
+                shadowBlur: config2.showPill ? 50 : 0,
+                shadowColor: config2.showPill ? "rgba(0,0,0,0.8)" : "rgba(0,0,0,0)",
+                layout: true,
+                alignItems: "center",
+                justifyContent: "center",
+                paddingTop: () => 10 * scale(),
+                paddingBottom: () => 6 * scale(),
+                paddingLeft: () => 14 * scale(),
+                paddingRight: () => 14 * scale(),
+                radius: () => 10 * scale(),
+                children: (() => {
+                  const parts = this.CaptionText().split("*");
+                  const hasThreeParts = parts.length === 3;
+                  return parts.map((caption, index) => {
+                    var _a2;
+                    if (!caption.trim()) return null;
+                    const isCurrent = hasThreeParts && index === 1;
+                    const fill = isCurrent ? config2.fillHighlight : config2.fillDefault;
+                    const hasNext = index < parts.length - 1 && ((_a2 = parts[index + 1]) == null ? void 0 : _a2.trim().length) > 0;
+                    if (config2.wordBackground && isCurrent) {
+                      const style2 = this.CaptionsStyle();
+                      const radiusValue = style2 === "cloud-blob" ? () => 20 * scale() : style2 === "pink-pill" ? () => 4 * scale() : () => 12 * scale();
+                      return /* @__PURE__ */ jsx(
+                        Rect,
+                        {
+                          layout: true,
+                          paddingLeft: () => 8 * scale(),
+                          paddingRight: () => 8 * scale(),
+                          paddingTop: () => 5 * scale(),
+                          paddingBottom: () => 5 * scale(),
+                          radius: radiusValue,
+                          fill: config2.wordBackgroundFill ?? "rgba(255,220,100,0.45)",
+                          marginRight: hasNext ? () => 4 * scale() : 0,
+                          shadowBlur: style2 === "cloud-blob" ? 8 : 0,
+                          shadowColor: style2 === "cloud-blob" ? "rgba(0,0,0,0.2)" : "rgba(0,0,0,0)",
+                          children: /* @__PURE__ */ jsx(
+                            Txt,
+                            {
+                              shadowBlur: config2.shadowBlur,
+                              shadowColor: config2.shadowColor,
+                              fill,
+                              fontWeight: this.CaptionsFontWeight(),
+                              fontFamily: this.CaptionsFontFamily(),
+                              text: caption.trim(),
+                              fontSize: () => this.CaptionsSize() * ScaleFactor() * this.CaptionsFontSize()
+                            }
+                          )
+                        },
+                        `word-bg-${index}`
+                      );
+                    }
+                    return /* @__PURE__ */ jsx(
+                      Txt,
+                      {
+                        shadowBlur: config2.shadowBlur,
+                        shadowColor: config2.shadowColor,
+                        fill,
+                        fontWeight: this.CaptionsFontWeight(),
+                        fontFamily: this.CaptionsFontFamily(),
+                        text: caption.trim(),
+                        paddingRight: hasNext ? () => 5 * this.CaptionsSize() * ScaleFactor() : 0,
+                        fontSize: () => this.CaptionsSize() * ScaleFactor() * this.CaptionsFontSize()
+                      },
+                      `${caption}-${index}`
+                    );
+                  });
+                })()
+              }
+            );
+          }
         }
       )
     );
@@ -11860,7 +12007,9 @@ class AnimatedCaptions extends Node {
       }
       let i = 0;
       for (const [startSeconds, caption] of shortcut.entries()) {
-        const text = Array.from(shortcut.values()).slice(0, i).join(" ") + ` ${caption}*` + Array.from(shortcut.values()).slice(i + 1).join(" ");
+        const before = Array.from(shortcut.values()).slice(0, i).join(" ");
+        const after = Array.from(shortcut.values()).slice(i + 1).join(" ");
+        const text = before + (before ? "*" : "") + ` ${caption}*` + (after ? after : "");
         this.CaptionText(text);
         yield* waitFor(startSeconds - prevSeconds);
         prevSeconds = startSeconds;
@@ -11913,6 +12062,14 @@ __decorateClass([
   initial(400),
   signal()
 ], AnimatedCaptions.prototype, "CaptionsFontWeight");
+__decorateClass([
+  initial(18),
+  signal()
+], AnimatedCaptions.prototype, "CaptionsFontSize");
+__decorateClass([
+  initial("pill"),
+  signal()
+], AnimatedCaptions.prototype, "CaptionsStyle");
 const toVector = (transform) => new Vector2(transform.x, transform.y);
 function parseTimeToMs(time) {
   if (typeof time === "number") return time;
@@ -13313,13 +13470,16 @@ function* playAudio({ entry, captionRunner }) {
 const description = makeScene2D(function* (view) {
   const scene = useScene();
   const { width, height } = scene.getSize();
-  const layers = scene.variables.get("layers", [])();
-  const transitions = scene.variables.get("transitions", {})();
-  const captionSettings = scene.variables.get("captionSettings", {
+  const defaultCaptionSettings = {
     fontFamily: "Inter Variable",
     fontWeight: 400,
-    distanceFromBottom: 140
-  })();
+    fontSize: 18,
+    distanceFromBottom: 140,
+    style: "pill"
+  };
+  const layers = scene.variables.get("layers", [])();
+  const transitions = scene.variables.get("transitions", {})();
+  const captionSettings = scene.variables.get("captionSettings", defaultCaptionSettings)();
   const textClipSettings = scene.variables.get("textClipSettings", {
     fontFamily: "Inter Variable",
     fontWeight: 400,
@@ -13396,6 +13556,8 @@ const description = makeScene2D(function* (view) {
           TranscriptionData: () => normalized,
           CaptionsFontFamily: captionSettings.fontFamily,
           CaptionsFontWeight: captionSettings.fontWeight,
+          CaptionsFontSize: () => scene.variables.get("captionSettings", defaultCaptionSettings)().fontSize ?? 18,
+          CaptionsStyle: () => scene.variables.get("captionSettings", defaultCaptionSettings)().style ?? "pill",
           zIndex: 1e3
         },
         `captions-${clip.id}`

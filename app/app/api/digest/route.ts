@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
     const systemPrompt = buildSystemPrompt(category, body.assetName, depth);
     const isVideo = category === "video";
 
-    // Build video metadata if provided (using snake_case for REST API)
+    // Build video metadata if provided (Gemini supports start/end offset natively).
     const videoMetadata: GeminiContentPart["video_metadata"] = {};
     if (isVideo) {
       if (body.startOffset) videoMetadata.start_offset = body.startOffset;
