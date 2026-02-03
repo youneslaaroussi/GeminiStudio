@@ -442,8 +442,8 @@ Look for log messages like:
 
 ```bash
 gcloud projects add-iam-policy-binding PROJECT_ID \
-  --member="serviceAccount:SA@PROJECT.iam.gserviceaccount.com" \
-  --role="roles/secretmanager.secretAccessor"
+   --member="serviceAccount:SA@PROJECT.iam.gserviceaccount.com" \
+   --role="roles/secretmanager.secretAccessor"
 ```
 
 ### Can't connect to services
