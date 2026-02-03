@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 PROMPT_SECTION_ORDER = (
     "base",
     "render_and_defaults",
+    "timeline_layers",
     "video_iteration",
     "video_effects",
     "narrative",

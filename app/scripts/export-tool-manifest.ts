@@ -65,6 +65,13 @@ const LANGGRAPH_ONLY_TOOLS: Array<{
     description: "Check the status of a video effect job started by applyVideoEffectToClip.",
     langgraphName: "getVideoEffectJobStatus",
   },
+  {
+    name: "reorderLayers",
+    label: "Reorder Timeline Layers",
+    description:
+      "Reorder timeline layers (first = bottom, last = top). Use when the user says the title should be on top or layers are reversed.",
+    langgraphName: "reorderLayers",
+  },
 ];
 
 interface ToolImplementations {

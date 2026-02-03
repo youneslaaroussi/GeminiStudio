@@ -1,0 +1,10 @@
+# Timeline layers and title cards
+
+## Layer order (what appears on top)
+- Layers are ordered in a list. The FIRST layer in the list is drawn at the BOTTOM (back). The LAST layer is drawn on TOP (front).
+- So for a title card to appear on top of video: the title layer must come AFTER the video layer in the list. If the user says "title should be on top" or "layers are reversed", call reorderLayers with the desired order (e.g. video layer ID first, then text/title layer ID second).
+- Use getTimelineState to see current layer order and layer IDs, then call reorderLayers with the correct order.
+
+## Title cards and transitions
+- When you add a title card (text clip with template "title-card"), you MUST add both enterTransition and exitTransition so it fades or slides in and out. For example: enter_transition={"type":"fade","duration":0.5}, exit_transition={"type":"fade","duration":0.5}. Without these, the title will pop in/out abruptly.
+- Same for lower-third and other overlay text: prefer adding enter and exit transitions for a polished look.

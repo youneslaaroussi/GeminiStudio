@@ -942,7 +942,7 @@
     "timelineUpdateClip": {
       "name": "timelineUpdateClip",
       "label": "Update Timeline Clip",
-      "description": "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s).",
+      "description": "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s). For video/image clips, use videoSettings.colorGrading or imageSettings.colorGrading for color correction (exposure, contrast, saturation, temperature, tint, highlights, shadows).",
       "runLocation": "client",
       "implementations": {
         "app": true,
@@ -998,8 +998,8 @@
           "name": "videoSettings",
           "label": "Video Settings",
           "type": "json",
-          "placeholder": "{\"width\":1920,\"height\":1080,\"objectFit\":\"contain\",\"focus\":{...}}",
-          "description": "Do not pass src—media URL is derived from clip's assetId."
+          "placeholder": "{\"width\":1920,\"height\":1080,\"objectFit\":\"contain\",\"focus\":{...},\"colorGrading\":{\"exposure\":0,\"contrast\":0,\"saturation\":0,\"temperature\":0,\"tint\":0,\"highlights\":0,\"shadows\":0}}",
+          "description": "Do not pass src—media URL is derived from clip's assetId. colorGrading: exposure (-2 to 2), contrast/saturation/temperature/tint/highlights/shadows (-100 to 100) for color correction."
         },
         {
           "name": "audioSettings",
@@ -1012,8 +1012,8 @@
           "name": "imageSettings",
           "label": "Image Settings",
           "type": "json",
-          "placeholder": "{\"width\":1920,\"height\":1080}",
-          "description": "Do not pass src—media URL is derived from clip's assetId."
+          "placeholder": "{\"width\":1920,\"height\":1080,\"colorGrading\":{\"exposure\":0,\"contrast\":0,\"saturation\":0,\"temperature\":0,\"tint\":0,\"highlights\":0,\"shadows\":0}}",
+          "description": "Do not pass src—media URL is derived from clip's assetId. colorGrading for color correction (same keys as video)."
         },
         {
           "name": "textSettings",
@@ -1140,6 +1140,19 @@
                       "padding"
                     ],
                     "additionalProperties": false
+                  },
+                  "colorGrading": {
+                    "type": "object",
+                    "properties": {
+                      "exposure": { "type": "number", "minimum": -2, "maximum": 2 },
+                      "contrast": { "type": "number", "minimum": -100, "maximum": 100 },
+                      "saturation": { "type": "number", "minimum": -100, "maximum": 100 },
+                      "temperature": { "type": "number", "minimum": -100, "maximum": 100 },
+                      "tint": { "type": "number", "minimum": -100, "maximum": 100 },
+                      "highlights": { "type": "number", "minimum": -100, "maximum": 100 },
+                      "shadows": { "type": "number", "minimum": -100, "maximum": 100 }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "additionalProperties": false
@@ -1165,6 +1178,19 @@
                   "height": {
                     "type": "number",
                     "exclusiveMinimum": 0
+                  },
+                  "colorGrading": {
+                    "type": "object",
+                    "properties": {
+                      "exposure": { "type": "number", "minimum": -2, "maximum": 2 },
+                      "contrast": { "type": "number", "minimum": -100, "maximum": 100 },
+                      "saturation": { "type": "number", "minimum": -100, "maximum": 100 },
+                      "temperature": { "type": "number", "minimum": -100, "maximum": 100 },
+                      "tint": { "type": "number", "minimum": -100, "maximum": 100 },
+                      "highlights": { "type": "number", "minimum": -100, "maximum": 100 },
+                      "shadows": { "type": "number", "minimum": -100, "maximum": 100 }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "additionalProperties": false
@@ -1316,6 +1342,46 @@
             "required": [
               "clipIds"
             ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "reorderLayers": {
+      "name": "reorderLayers",
+      "label": "Reorder Timeline Layers",
+      "description": "Reorder timeline layers so the draw order is correct. First layer in the list is bottom (back), last is top (front). Use when the user says the title should be on top or layers are reversed. Call getTimelineState first to get layer IDs, then pass the desired order (e.g. video layer ID first, then text/title layer ID).",
+      "runLocation": "server",
+      "implementations": {
+        "app": false,
+        "langgraph": true,
+        "langgraphName": "reorderLayers"
+      },
+      "fields": [
+        {
+          "name": "layerIds",
+          "label": "Layer IDs (ordered)",
+          "type": "json",
+          "placeholder": "[\"layer-video-1\", \"layer-text-1\"]",
+          "description": "Ordered list of layer IDs. First = bottom, last = top.",
+          "required": true
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/reorderLayersInput",
+        "definitions": {
+          "reorderLayersInput": {
+            "type": "object",
+            "properties": {
+              "layerIds": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 },
+                "minItems": 1,
+                "description": "Layer IDs in desired order (first = bottom, last = top)"
+              }
+            },
+            "required": ["layerIds"],
             "additionalProperties": false
           }
         },

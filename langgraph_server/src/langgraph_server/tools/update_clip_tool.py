@@ -69,6 +69,8 @@ def updateClipInTimeline(
     # Enter/exit transitions (in/out effects)
     enter_transition: str | None = None,
     exit_transition: str | None = None,
+    # Color correction (video/image clips only)
+    color_grading: str | None = None,
     _agent_context: dict | None = None,
 ) -> dict:
     """Update an existing clip on the project timeline.
@@ -79,6 +81,8 @@ def updateClipInTimeline(
     Use enter_transition and exit_transition (JSON: {"type":"fade","duration":0.5})
     to set in/out effects. Types: fade, slide-left, slide-right, slide-up, slide-down,
     zoom, dip-to-black. Duration 0.1-5s. Use type "none" to clear.
+    For video/image clips, use color_grading (JSON) to set exposure, contrast, saturation,
+    temperature, tint, highlights, shadows (values typically -100 to 100; exposure can be -2 to 2).
 
     Args:
         clip_id: The clip ID to update (e.g. "clip-abc12345")
@@ -99,6 +103,7 @@ def updateClipInTimeline(
         text_settings: Optional JSON string with text settings (overrides flat params)
         enter_transition: Optional JSON {"type":"fade","duration":0.5} for in transition
         exit_transition: Optional JSON {"type":"fade","duration":0.5} for out transition
+        color_grading: Optional JSON for video/image clips: {"exposure":0,"contrast":0,"saturation":0,"temperature":0,"tint":0,"highlights":0,"shadows":0}. Values -100 to 100 (exposure often -2 to 2).
 
     Returns:
         Status dict with updated clip info or error message.
@@ -213,7 +218,29 @@ def updateClipInTimeline(
             except (json.JSONDecodeError, TypeError):
                 pass
 
-    if not updates and not transition_clears:
+    # Color grading (video/image clips only) - applied in _apply_updates when clip type is video/image
+    color_grading_updates: dict[str, Any] = {}
+    if color_grading:
+        try:
+            cg = json.loads(color_grading) if isinstance(color_grading, str) else color_grading
+            if isinstance(cg, dict):
+                for key in ("exposure", "contrast", "saturation", "temperature", "tint", "highlights", "shadows"):
+                    if key in cg and cg[key] is not None:
+                        v = cg[key]
+                        if isinstance(v, (int, float)):
+                            if key == "exposure" and -2 <= v <= 2:
+                                color_grading_updates[key] = float(v)
+                            elif key != "exposure" and -100 <= v <= 100:
+                                color_grading_updates[key] = float(v)
+                if color_grading_updates:
+                    updates["colorGrading"] = color_grading_updates
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Merge colorGrading with existing clip values when we apply (see below)
+    color_grading_merge = updates.pop("colorGrading", None)
+
+    if not updates and not transition_clears and not color_grading_merge:
         return {
             "status": "error",
             "message": "No valid updates provided.",
@@ -286,6 +313,10 @@ def updateClipInTimeline(
                     updates["offset"] = max(0, source_duration - 0.1)
 
         _apply_updates(clip, updates)
+        if color_grading_merge is not None and clip.get("type") in ("video", "image"):
+            existing = clip.get("colorGrading") or {}
+            merged = {**existing, **color_grading_merge}
+            clip["colorGrading"] = merged
         for k in transition_clears:
             clip.pop(k, None)
         _set_project_data(doc, project_data)

@@ -24,6 +24,7 @@ from .list_assets_tool import listAssets
 from .list_project_assets_tool import listProjectAssets
 from .plan_narrative_edit_tool import createEditPlan
 from .render_video_tool import renderVideo
+from .reorder_layers_tool import reorderLayers
 from .search_assets_tool import searchAssets
 from .set_asset_notes_tool import setAssetNotes
 from .set_scene_config_tool import setSceneConfig
@@ -59,6 +60,7 @@ def get_registered_tools() -> Sequence[BaseTool]:
         setSceneConfig,
         search_product_docs,
         renderVideo,
+        reorderLayers,
         subscribeToAssetPipeline,
         subscribeToAssetTranscode,
         lookup_weather_snapshot,

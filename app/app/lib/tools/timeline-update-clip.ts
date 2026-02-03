@@ -26,6 +26,19 @@ const focusSchema: z.ZodType<Focus> = z.object({
   padding: z.number().min(0),
 });
 
+/** Color grading: -100 to 100 (exposure often -2 to 2) */
+const colorGradingSchema = z
+  .object({
+    exposure: z.number().min(-2).max(2).optional(),
+    contrast: z.number().min(-100).max(100).optional(),
+    saturation: z.number().min(-100).max(100).optional(),
+    temperature: z.number().min(-100).max(100).optional(),
+    tint: z.number().min(-100).max(100).optional(),
+    highlights: z.number().min(-100).max(100).optional(),
+    shadows: z.number().min(-100).max(100).optional(),
+  })
+  .optional();
+
 const transitionTypeSchema = z.enum([
   "none", "fade", "slide-left", "slide-right", "slide-up", "slide-down",
   "cross-dissolve", "zoom", "blur", "dip-to-black",
@@ -61,6 +74,7 @@ const clipUpdateSchema = z.object({
       height: z.number().positive().optional(),
       objectFit: z.enum(["contain", "cover", "fill"]).optional(),
       focus: focusSchema.optional(),
+      colorGrading: colorGradingSchema,
     })
     .optional(),
   audioSettings: z
@@ -76,6 +90,7 @@ const clipUpdateSchema = z.object({
     .object({
       width: z.number().positive().optional(),
       height: z.number().positive().optional(),
+      colorGrading: colorGradingSchema,
     })
     .optional(),
   textSettings: z
@@ -136,11 +151,15 @@ function buildUpdates(
     case "video": {
       const videoUpdates: Partial<VideoClip> = {};
       if (input.videoSettings) {
-        const { width, height, objectFit, focus } = input.videoSettings;
+        const { width, height, objectFit, focus, colorGrading } = input.videoSettings;
         if (width !== undefined) videoUpdates.width = width;
         if (height !== undefined) videoUpdates.height = height;
         if (objectFit !== undefined) videoUpdates.objectFit = objectFit;
         if (focus !== undefined) videoUpdates.focus = focus;
+        if (colorGrading !== undefined) {
+          const current = (clip as VideoClip).colorGrading ?? {};
+          videoUpdates.colorGrading = { ...current, ...colorGrading };
+        }
       }
       return { ...updates, ...videoUpdates };
     }
@@ -155,9 +174,13 @@ function buildUpdates(
     case "image": {
       const imageUpdates: Partial<ImageClip> = {};
       if (input.imageSettings) {
-        const { width, height } = input.imageSettings;
+        const { width, height, colorGrading } = input.imageSettings;
         if (width !== undefined) imageUpdates.width = width;
         if (height !== undefined) imageUpdates.height = height;
+        if (colorGrading !== undefined) {
+          const current = (clip as ImageClip).colorGrading ?? {};
+          imageUpdates.colorGrading = { ...current, ...colorGrading };
+        }
       }
       return { ...updates, ...imageUpdates };
     }
@@ -239,8 +262,10 @@ export const timelineUpdateClipTool: ToolDefinition<
       name: "videoSettings",
       label: "Video Settings",
       type: "json",
-      placeholder: '{"width":1920,"height":1080,"objectFit":"contain","focus":{...}}',
-      description: "Do not pass src—media URL is derived from clip's assetId.",
+      placeholder:
+        '{"width":1920,"height":1080,"objectFit":"contain","focus":{...},"colorGrading":{"exposure":0,"contrast":0,"saturation":0,"temperature":0,"tint":0,"highlights":0,"shadows":0}}',
+      description:
+        "Do not pass src—media URL is derived from clip's assetId. colorGrading: exposure (-2 to 2), contrast/saturation/temperature/tint/highlights/shadows (-100 to 100) for color correction.",
     },
     {
       name: "audioSettings",
