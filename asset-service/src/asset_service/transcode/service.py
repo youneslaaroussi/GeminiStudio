@@ -66,6 +66,9 @@ class TranscodeConfig:
     sample_rate_hz: int | None = None  # None = preserve original
     channels: int | None = None  # None = preserve original
 
+    # Whether input has audio (set False to skip audio stream for video-only files)
+    has_audio: bool = True
+
     def to_job_config(self) -> dict[str, Any]:
         """Convert to Transcoder API job config format (always custom config, aspect-preserving)."""
         config: dict[str, Any] = {
@@ -88,32 +91,37 @@ class TranscodeConfig:
 
         config["elementaryStreams"].append(video_stream)
 
-        # Audio stream
-        audio_stream: dict[str, Any] = {
-            "key": "audio-stream0",
-            "audioStream": {}
-        }
+        # Elementary streams to include in mux
+        mux_elementary_streams = ["video-stream0"]
 
-        if self.audio_codec == AudioCodec.AAC:
-            audio_stream["audioStream"]["codec"] = "aac"
-        elif self.audio_codec == AudioCodec.MP3:
-            audio_stream["audioStream"]["codec"] = "mp3"
-        elif self.audio_codec == AudioCodec.OPUS:
-            audio_stream["audioStream"]["codec"] = "opus"
+        # Audio stream (only if input has audio)
+        if self.has_audio:
+            audio_stream: dict[str, Any] = {
+                "key": "audio-stream0",
+                "audioStream": {}
+            }
 
-        # Transcoder API requires audio bitrateBps
-        audio_stream["audioStream"]["bitrateBps"] = self.audio_bitrate_bps or 64_000
-        if self.sample_rate_hz:
-            audio_stream["audioStream"]["sampleRateHertz"] = self.sample_rate_hz
-        if self.channels:
-            audio_stream["audioStream"]["channelCount"] = self.channels
+            if self.audio_codec == AudioCodec.AAC:
+                audio_stream["audioStream"]["codec"] = "aac"
+            elif self.audio_codec == AudioCodec.MP3:
+                audio_stream["audioStream"]["codec"] = "mp3"
+            elif self.audio_codec == AudioCodec.OPUS:
+                audio_stream["audioStream"]["codec"] = "opus"
 
-        config["elementaryStreams"].append(audio_stream)
+            # Transcoder API requires audio bitrateBps
+            audio_stream["audioStream"]["bitrateBps"] = self.audio_bitrate_bps or 64_000
+            if self.sample_rate_hz:
+                audio_stream["audioStream"]["sampleRateHertz"] = self.sample_rate_hz
+            if self.channels:
+                audio_stream["audioStream"]["channelCount"] = self.channels
+
+            config["elementaryStreams"].append(audio_stream)
+            mux_elementary_streams.append("audio-stream0")
 
         # Mux stream (output container)
         mux_stream = {
             "key": "output0",
-            "elementaryStreams": ["video-stream0", "audio-stream0"],
+            "elementaryStreams": mux_elementary_streams,
         }
 
         if self.output_format == OutputFormat.MP4:

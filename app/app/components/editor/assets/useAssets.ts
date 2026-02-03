@@ -83,12 +83,15 @@ export function useAssets() {
         prev.forEach((id) => {
           const asset = list.find((a) => a.id === id);
           if (!asset) return;
-          const name = asset.name?.toLowerCase() ?? "";
-          // Video transcode complete: name ends with .mp4
-          // Image convert complete: name ends with .png or mimeType changed to png
-          const isTranscodeComplete = name.endsWith(".mp4");
-          const isConvertComplete = name.endsWith(".png") || asset.mimeType === "image/png";
-          if (isTranscodeComplete || isConvertComplete) {
+          // Use server-side transcodeStatus to determine completion/failure
+          const transcodeStatus = asset.transcodeStatus;
+          if (transcodeStatus === "completed" || transcodeStatus === "error") {
+            // Transcode finished (successfully or with error)
+            next.delete(id);
+            return;
+          }
+          // Fallback: also check mimeType for image conversion (no transcodeStatus for images)
+          if (asset.type === "image" && asset.mimeType === "image/png") {
             next.delete(id);
           }
         });

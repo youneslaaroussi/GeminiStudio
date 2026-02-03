@@ -62,6 +62,9 @@ export interface AssetServiceAsset {
   sortOrder?: number;
   description?: string; // AI-generated short description
   notes?: string; // User notes (what the asset is for)
+  // Transcode status fields
+  transcodeStatus?: "pending" | "processing" | "completed" | "error";
+  transcodeError?: string;
 }
 
 export interface UploadResponse {

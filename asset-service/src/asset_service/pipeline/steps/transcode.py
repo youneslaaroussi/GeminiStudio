@@ -48,14 +48,22 @@ def _config_hash(config: dict[str, Any]) -> str:
     return hashlib.md5(config_str.encode()).hexdigest()[:12]
 
 
-def _parse_transcode_params(params: dict[str, Any]) -> TranscodeConfig:
+def _parse_transcode_params(params: dict[str, Any], *, has_audio: bool = True) -> TranscodeConfig:
     """Parse transcode parameters into TranscodeConfig.
 
     Note: width/height params are intentionally ignored to ALWAYS preserve aspect ratio.
     The target height is controlled by TRANSCODE_TARGET_HEIGHT envvar (e.g. 720 or 1080).
+
+    Args:
+        params: Transcode parameters dict
+        has_audio: Whether the input file has an audio track. If False, audio stream
+                   will be omitted from the transcode config to avoid API errors.
     """
     settings = get_settings()
     config = TranscodeConfig()
+
+    # Set whether input has audio
+    config.has_audio = has_audio
 
     # Set target height from envvar (only height - width auto-calculated to preserve aspect ratio)
     if settings.transcode_target_height:
@@ -98,7 +106,7 @@ def _parse_transcode_params(params: dict[str, Any]) -> TranscodeConfig:
     if params.get("frameRate"):
         config.frame_rate = float(params["frameRate"])
 
-    # Audio settings
+    # Audio settings (only relevant if has_audio is True)
     if params.get("audioCodec"):
         codec_map = {
             "aac": AudioCodec.AAC,
@@ -206,6 +214,34 @@ async def _poll_until_complete(
 def _mp4_display_name(original_name: str) -> str:
     base, _ = os.path.splitext(original_name or "video")
     return f"{base}.mp4"
+
+
+async def _update_asset_transcode_status(
+    user_id: str,
+    project_id: str,
+    asset_id: str,
+    status: str,
+    error: str | None = None,
+) -> None:
+    """Update the asset document with transcode status.
+
+    Args:
+        user_id: User ID
+        project_id: Project ID
+        asset_id: Asset ID
+        status: One of "pending", "processing", "completed", "error"
+        error: Error message (only set when status is "error")
+    """
+    settings = get_settings()
+    updates: dict[str, Any] = {"transcodeStatus": status}
+    if error:
+        updates["transcodeError"] = error
+    elif status in ("completed", "processing", "pending"):
+        # Clear previous error when status is not error
+        updates["transcodeError"] = None
+
+    await asyncio.to_thread(update_asset, user_id, project_id, asset_id, updates, settings)
+    logger.info(f"Updated asset {asset_id} transcodeStatus={status}" + (f", error={error}" if error else ""))
 
 
 async def _reextract_and_save_metadata(
@@ -333,6 +369,8 @@ async def _update_asset_with_transcoded_url(
         "mimeType": "video/mp4",
         "transcoded": True,
         "transcodedAt": datetime.utcnow().isoformat() + "Z",
+        "transcodeStatus": "completed",
+        "transcodeError": None,  # Clear any previous error
     }
     if current_file_name:
         display_name = _mp4_display_name(current_file_name)
@@ -341,6 +379,55 @@ async def _update_asset_with_transcoded_url(
 
     await asyncio.to_thread(update_asset, user_id, project_id, asset_id, updates, settings)
     logger.info(f"Updated asset {asset_id} with transcoded URL, backed up original")
+
+
+async def _detect_has_audio(asset_doc: dict[str, Any], settings) -> bool:
+    """
+    Detect if an asset has an audio track.
+    
+    First checks if audioCodec is already in the asset document (from previous metadata extraction).
+    If not present, downloads the file from GCS and probes it with ffprobe.
+    
+    Returns True if audio track is detected, False otherwise.
+    """
+    import tempfile
+    
+    # Check if already extracted
+    if asset_doc.get("audioCodec"):
+        logger.info(f"Asset {asset_doc['id']} has audio (from metadata: {asset_doc['audioCodec']})")
+        return True
+    
+    # If audioCodec is explicitly None or not present, we need to probe the file
+    gcs_uri = asset_doc.get("gcsUri")
+    if not gcs_uri:
+        logger.warning(f"Asset {asset_doc['id']} has no GCS URI, assuming has audio")
+        return True  # Default to true to avoid breaking existing behavior
+    
+    try:
+        logger.info(f"Probing asset {asset_doc['id']} for audio track")
+        content = await asyncio.to_thread(download_from_gcs, gcs_uri, settings)
+        
+        # Write to temp file and probe
+        suffix = os.path.splitext(asset_doc.get("fileName", "video"))[1] or ".mp4"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(content)
+            temp_path = tmp.name
+        
+        try:
+            extracted = extract_metadata(temp_path)
+            has_audio = extracted.audio_codec is not None
+            logger.info(
+                f"Asset {asset_doc['id']} audio probe result: "
+                f"has_audio={has_audio}, audio_codec={extracted.audio_codec}"
+            )
+            return has_audio
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+                
+    except Exception as e:
+        logger.warning(f"Failed to probe asset {asset_doc['id']} for audio: {e}, assuming has audio")
+        return True  # Default to true on error to avoid breaking
 
 
 async def run_transcode_for_asset(
@@ -361,6 +448,13 @@ async def run_transcode_for_asset(
         raise ValueError(f"Asset {asset_id} not found")
     asset = StoredAsset.from_dict(asset_doc)
     asset_type = AssetType(asset_doc.get("type", "video"))
+
+    # Detect if asset has audio track (probes file if not in metadata)
+    has_audio = await _detect_has_audio(asset_doc, settings)
+
+    # Merge has_audio info into params for _transcode_impl
+    merged_params = {**(params or {}), "_has_audio": has_audio}
+
     context = PipelineContext(
         asset=asset,
         asset_path="",
@@ -368,7 +462,7 @@ async def run_transcode_for_asset(
         step_state=PipelineStepState(id="transcode", label="Transcode video", status=StepStatus.IDLE),
         user_id=user_id,
         project_id=project_id,
-        params=params or {},
+        params=merged_params,
     )
     return await _transcode_impl(context, update_cloud_upload_metadata=False)
 
@@ -404,7 +498,12 @@ async def _transcode_impl(
     """
     settings = get_settings()
 
-    transcode_config = _parse_transcode_params(context.params or {})
+    # Check if input file has audio (passed via params or default to True for backward compat)
+    has_audio = context.params.get("_has_audio", True)
+    if not has_audio:
+        logger.info(f"Asset {context.asset.id} has no audio track, creating video-only transcode config")
+
+    transcode_config = _parse_transcode_params(context.params or {}, has_audio=has_audio)
 
     # Create config hash for deduplication
     config_dict = {
@@ -413,11 +512,14 @@ async def _transcode_impl(
         "videoBitrate": transcode_config.video_bitrate_bps,
         "targetHeight": transcode_config.target_height,
         "frameRate": transcode_config.frame_rate,
-        "audioCodec": transcode_config.audio_codec.value,
-        "audioBitrate": transcode_config.audio_bitrate_bps,
-        "sampleRate": transcode_config.sample_rate_hz,
-        "channels": transcode_config.channels,
+        "hasAudio": transcode_config.has_audio,
     }
+    # Only add audio settings to config hash if has_audio is True
+    if transcode_config.has_audio:
+        config_dict["audioCodec"] = transcode_config.audio_codec.value
+        config_dict["audioBitrate"] = transcode_config.audio_bitrate_bps
+        config_dict["sampleRate"] = transcode_config.sample_rate_hz
+        config_dict["channels"] = transcode_config.channels
     config_dict = {k: v for k, v in config_dict.items() if v is not None}
     config_hash = _config_hash(config_dict)
 
@@ -554,10 +656,15 @@ async def _transcode_impl(
                 
                 return PipelineResult(status=StepStatus.SUCCEEDED, metadata=metadata)
             else:
+                # Update asset with error status
+                error_msg = metadata.get("error", metadata.get("message", "Unknown transcode error"))
+                await _update_asset_transcode_status(
+                    context.user_id, context.project_id, context.asset.id, "error", error_msg
+                )
                 return PipelineResult(
                     status=StepStatus.FAILED,
                     metadata=metadata,
-                    error=metadata.get("error", metadata.get("message")),
+                    error=error_msg,
                 )
 
     # No existing job - start a new one
@@ -579,6 +686,10 @@ async def _transcode_impl(
     except Exception as e:
         error_msg = f"Failed to create transcode job: {e}"
         logger.exception(error_msg)
+        # Update asset with error status
+        await _update_asset_transcode_status(
+            context.user_id, context.project_id, context.asset.id, "error", error_msg
+        )
         return PipelineResult(
             status=StepStatus.FAILED,
             metadata={"message": error_msg, "config": config_dict},
@@ -606,6 +717,11 @@ async def _transcode_impl(
 
     await save_transcode_job(job)
     logger.info(f"Started transcode job {job.id} for asset {context.asset.id}")
+
+    # Mark asset as processing
+    await _update_asset_transcode_status(
+        context.user_id, context.project_id, context.asset.id, "processing"
+    )
 
     # Poll until complete (blocking)
     success, metadata = await _poll_until_complete(
@@ -667,8 +783,13 @@ async def _transcode_impl(
             )
         return PipelineResult(status=StepStatus.SUCCEEDED, metadata=metadata)
     else:
+        # Update asset with error status
+        error_msg = metadata.get("error", metadata.get("message", "Unknown transcode error"))
+        await _update_asset_transcode_status(
+            context.user_id, context.project_id, context.asset.id, "error", error_msg
+        )
         return PipelineResult(
             status=StepStatus.FAILED,
             metadata=metadata,
-            error=metadata.get("error", metadata.get("message")),
+            error=error_msg,
         )

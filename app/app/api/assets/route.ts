@@ -42,6 +42,8 @@ function toRemoteAsset(asset: AssetServiceAsset, projectId: string): RemoteAsset
     signedUrl: asset.signedUrl,
     description: asset.description,
     notes: asset.notes,
+    transcodeStatus: asset.transcodeStatus as RemoteAsset["transcodeStatus"],
+    transcodeError: asset.transcodeError,
   };
 }
 

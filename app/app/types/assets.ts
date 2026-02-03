@@ -1,5 +1,7 @@
 export type AssetType = "video" | "audio" | "image" | "other";
 
+export type TranscodeStatus = "pending" | "processing" | "completed" | "error";
+
 export interface RemoteAsset {
   id: string;
   name: string;
@@ -17,6 +19,9 @@ export interface RemoteAsset {
   signedUrl?: string;
   description?: string; // AI-generated short description
   notes?: string; // User notes (what the asset is for)
+  // Transcode status (set when transcoding is triggered)
+  transcodeStatus?: TranscodeStatus;
+  transcodeError?: string; // Error message if transcodeStatus is "error"
 }
 
 export interface AssetDragPayload {

@@ -16,6 +16,7 @@ import {
   Download,
   Check,
   StickyNote,
+  AlertCircle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
@@ -169,6 +170,7 @@ export const AssetRow = memo(function AssetRow({
   const canTranscribe = asset.type === "audio" || asset.type === "video";
   const isTranscribing = transcription?.status === "processing" || transcription?.status === "pending";
   const hasTranscript = transcription?.status === "completed";
+  const hasTranscodeError = asset.transcodeStatus === "error";
   const isProcessing = isDeleting || isDownloading || isTranscoding;
 
   useEffect(() => {
@@ -212,7 +214,8 @@ export const AssetRow = memo(function AssetRow({
             "group relative flex items-center gap-2 p-2 hover:bg-muted/50 transition-colors rounded-md",
             isTranscoding ? "cursor-not-allowed opacity-90" : "cursor-grab",
             isDragOver && "bg-primary/10 ring-1 ring-primary/30",
-            isHighlighted && "highlight-flash"
+            isHighlighted && "highlight-flash",
+            hasTranscodeError && "bg-destructive/5 border border-destructive/20"
           )}
           draggable={!isProcessing}
           onClick={handleRowClick}
@@ -331,6 +334,17 @@ export const AssetRow = memo(function AssetRow({
               <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
                 <Loader2 className="size-3 animate-spin" />
                 <span>Transcribing...</span>
+              </div>
+            )}
+            {hasTranscodeError && (
+              <div
+                className="flex items-center gap-1 text-xs text-destructive mt-0.5"
+                title={asset.transcodeError || "Transcode failed"}
+              >
+                <AlertCircle className="size-3" />
+                <span className="truncate max-w-[180px]">
+                  {asset.transcodeError || "Transcode failed"}
+                </span>
               </div>
             )}
           </div>
