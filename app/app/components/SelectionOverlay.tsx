@@ -366,6 +366,55 @@ export function SelectionOverlay({
             break;
         }
 
+        // When Shift is held, preserve aspect ratio (scale both axes uniformly)
+        if (e.shiftKey && startRect) {
+          const cornerHandles: ResizeHandle[] = ['se', 'sw', 'ne', 'nw'];
+          const edgeXHandles: ResizeHandle[] = ['e', 'w'];
+          const edgeYHandles: ResizeHandle[] = ['n', 's'];
+
+          if (cornerHandles.includes(isResizing)) {
+            const scaleFactor = Math.max(
+              newScaleX / start.scale.x,
+              newScaleY / start.scale.y
+            );
+            newScaleX = Math.max(minScale, start.scale.x * scaleFactor);
+            newScaleY = Math.max(minScale, start.scale.y * scaleFactor);
+            // Recompute position from fixed corner
+            switch (isResizing) {
+              case 'se':
+                newPos.x = start.position.x + (worldW * (newScaleX - start.scale.x)) / 2;
+                newPos.y = start.position.y + (worldH * (newScaleY - start.scale.y)) / 2;
+                break;
+              case 'sw':
+                newPos.x = start.position.x + (worldW * (start.scale.x - newScaleX)) / 2;
+                newPos.y = start.position.y + (worldH * (newScaleY - start.scale.y)) / 2;
+                break;
+              case 'ne':
+                newPos.x = start.position.x + (worldW * (newScaleX - start.scale.x)) / 2;
+                newPos.y = start.position.y + (worldH * (start.scale.y - newScaleY)) / 2;
+                break;
+              case 'nw':
+                newPos.x = start.position.x + (worldW * (start.scale.x - newScaleX)) / 2;
+                newPos.y = start.position.y + (worldH * (start.scale.y - newScaleY)) / 2;
+                break;
+            }
+          } else if (edgeXHandles.includes(isResizing)) {
+            newScaleY = start.scale.y * (newScaleX / start.scale.x);
+            newPos.x = start.position.x + (worldW * (newScaleX - start.scale.x)) / 2;
+          } else if (edgeYHandles.includes(isResizing)) {
+            newScaleX = start.scale.x * (newScaleY / start.scale.y);
+            newPos.y = start.position.y + (worldH * (newScaleY - start.scale.y)) / 2;
+          }
+
+          // Recompute optimistic rect from new scale and position
+          optW = startRect.width * (newScaleX / start.scale.x);
+          optH = startRect.height * (newScaleY / start.scale.y);
+          const screenCenterX = containerSize.width / 2 + transform.x + newPos.x * zoom;
+          const screenCenterY = containerSize.height / 2 + transform.y + newPos.y * zoom;
+          optX = screenCenterX - optW / 2;
+          optY = screenCenterY - optH / 2;
+        }
+
         updateClip(selectedClipId, {
           position: newPos,
           scale: { x: newScaleX, y: newScaleY },
@@ -382,7 +431,7 @@ export function SelectionOverlay({
         }
       }
     },
-    [isDragging, isResizing, selectedClipId, transform.zoom, updateClip]
+    [isDragging, isResizing, selectedClipId, transform, containerSize, updateClip]
   );
 
   const handleMouseUp = useCallback(() => {

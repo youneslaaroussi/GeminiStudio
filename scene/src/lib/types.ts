@@ -6,12 +6,11 @@ export interface Transform {
   y: number;
 }
 
+/** Focus/zoom region: center (0–1) and zoom ratio (1 = full frame, 2 = 2x zoom). */
 export interface Focus {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  padding: number;
+  x: number;  // center X, 0–1
+  y: number;  // center Y, 0–1
+  zoom: number;  // 1 = full frame, >1 = zoom in
 }
 
 export type MaskMode = 'include' | 'exclude';
@@ -43,6 +42,16 @@ export interface ColorGradingSettings {
   shadows: number;       // -100 to 100
 }
 
+/** Chroma key (green screen) settings: key color and tolerance */
+export interface ChromaKeySettings {
+  /** Key color as hex, e.g. "#00ff00" for green */
+  color: string;
+  /** Tolerance 0–1: how much color match to key (higher = more pixels transparent) */
+  threshold: number;
+  /** Edge softness 0–1 (optional, default 0.1) */
+  smoothness?: number;
+}
+
 export interface VideoClip {
   id: string;
   type: 'video';
@@ -52,6 +61,10 @@ export interface VideoClip {
   duration: number;
   offset: number;
   speed: number;
+  /** Source video width in pixels (from asset metadata) */
+  width?: number;
+  /** Source video height in pixels (from asset metadata) */
+  height?: number;
   position: Transform;
   scale: Transform;
   focus?: Focus;
@@ -64,6 +77,8 @@ export interface VideoClip {
   effect?: VisualEffectType;
   /** Color grading settings */
   colorGrading?: ColorGradingSettings;
+  /** Chroma key (green screen): key color and threshold to make that color transparent */
+  chromaKey?: ChromaKeySettings;
   /** Transition when clip enters (starts playing) */
   enterTransition?: ClipTransition;
   /** Transition when clip exits (stops playing) */
@@ -134,6 +149,8 @@ export interface ImageClip {
   effect?: VisualEffectType;
   /** Color grading settings */
   colorGrading?: ColorGradingSettings;
+  /** Chroma key (green screen) for image clips */
+  chromaKey?: ChromaKeySettings;
   /** Transition when clip enters (starts playing) */
   enterTransition?: ClipTransition;
   /** Transition when clip exits (stops playing) */
@@ -202,6 +219,8 @@ export interface VideoEntry {
   ref: Reference<Video>;
   maskRef?: Reference<Video>;
   containerRef?: Reference<Node>;
+  /** Clipping container for focus/zoom (video scales inside, container clips at scene bounds) */
+  focusContainerRef?: Reference<Rect>;
 }
 
 export interface TextEntry {

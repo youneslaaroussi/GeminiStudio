@@ -34,6 +34,7 @@ import { applyVideoEffectToClipTool } from "./apply-video-effect-to-clip";
 import { searchAssetsTool } from "./search-assets";
 import { setAssetNotesTool } from "./set-asset-notes";
 import { setSceneConfigTool } from "./set-scene-config";
+import { applyChromaKeyToClipTool } from "./apply-chroma-key-to-clip";
 
 type AnyToolDefinition = ToolDefinition<any, Project>;
 
@@ -82,6 +83,7 @@ toolRegistry.register(applyVideoEffectToClipTool);
 toolRegistry.register(searchAssetsTool);
 toolRegistry.register(setAssetNotesTool);
 toolRegistry.register(setSceneConfigTool);
+toolRegistry.register(applyChromaKeyToClipTool);
 
 type ToolInput = Record<string, unknown>;
 

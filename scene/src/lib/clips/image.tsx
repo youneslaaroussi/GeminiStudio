@@ -1,7 +1,7 @@
 import { Img, Node } from '@motion-canvas/2d';
 import { createRef, waitFor, type ThreadGenerator } from '@motion-canvas/core';
 import type { ImageClip, ImageEntry } from '../types';
-import { getEffectShaderConfig, getColorGradingShaderConfig } from '../effectShaders';
+import { getEffectShaderConfig, getColorGradingShaderConfig, getChromaKeyShaderConfig } from '../effectShaders';
 import { applyEnterTransition, applyExitTransition, getTransitionAdjustedTiming } from './transitions';
 
 interface CreateImageElementsOptions {
@@ -16,7 +16,7 @@ export function createImageElements({ clips, view }: CreateImageElementsOptions)
     const ref = createRef<Img>();
     const imgWidth = clip.width ?? 1920;
     const imgHeight = clip.height ?? 1080;
-    const effectShaders = getEffectShaderConfig(clip.effect);
+    const effectShaders = getChromaKeyShaderConfig(clip.chromaKey) ?? getEffectShaderConfig(clip.effect);
     const colorGradingConfig = getColorGradingShaderConfig(clip.colorGrading);
 
     entries.push({ clip, ref });

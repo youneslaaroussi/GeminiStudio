@@ -28,6 +28,7 @@ from .reorder_layers_tool import reorderLayers
 from .search_assets_tool import searchAssets
 from .set_asset_notes_tool import setAssetNotes
 from .set_scene_config_tool import setSceneConfig
+from .apply_chroma_key_tool import applyChromaKeyToClip
 from .subscribe_pipeline_tool import subscribeToAssetPipeline
 from .subscribe_transcode_tool import subscribeToAssetTranscode
 from .time_tool import get_current_time_utc
@@ -58,6 +59,7 @@ def get_registered_tools() -> Sequence[BaseTool]:
         searchAssets,
         setAssetNotes,
         setSceneConfig,
+        applyChromaKeyToClip,
         search_product_docs,
         renderVideo,
         reorderLayers,

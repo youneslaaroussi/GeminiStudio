@@ -1,8 +1,8 @@
-import { Video, Node } from '@motion-canvas/2d';
+import { Video, Node, Rect } from '@motion-canvas/2d';
 import { Vector2, createRef, createSignal, waitFor, all, easeOutCubic, easeInCubic, easeInOutCubic, type ThreadGenerator, type SimpleSignal } from '@motion-canvas/core';
 import type { VideoClip, VideoEntry, ClipTransition } from '../types';
 import { toVector } from '../helpers';
-import { getEffectShaderConfig, getColorGradingShaderConfig } from '../effectShaders';
+import { getEffectShaderConfig, getColorGradingShaderConfig, getChromaKeyShaderConfig } from '../effectShaders';
 import luminanceToAlpha from '../../shaders/luminanceToAlpha.glsl';
 import blurTransition from '../../shaders/blurTransition.glsl';
 import zoomTransition from '../../shaders/zoomTransition.glsl';
@@ -15,6 +15,8 @@ interface VideoEntryWithSignals extends VideoEntry {
   zoomDirectionSignal?: SimpleSignal<number>;
   dissolveSignal?: SimpleSignal<number>;
   colorGradingContainerRef?: ReturnType<typeof createRef<Node>>;
+  /** Clipping container for focus/zoom (video scales inside, container clips at scene bounds) */
+  focusContainerRef?: ReturnType<typeof createRef<Rect>>;
 }
 
 interface CreateVideoElementsOptions {
@@ -39,10 +41,12 @@ export function createVideoElements({ clips, view, transitions }: CreateVideoEle
     const zoomDirectionSignal = needsZoom ? createSignal(1) : undefined;
     const dissolveSignal = needsDissolve ? createSignal(0) : undefined;
 
-    // Build shader config: visual effect takes precedence over transition
+    // Build shader config: chroma key takes precedence, then visual effect, then transition
     type ShaderConfig = { fragment: string; uniforms: Record<string, SimpleSignal<number>> };
-    let shaders: ShaderConfig | undefined = getEffectShaderConfig(clip.effect);
-
+    let shaders: ShaderConfig | undefined = getChromaKeyShaderConfig(clip.chromaKey);
+    if (!shaders) {
+      shaders = getEffectShaderConfig(clip.effect);
+    }
     if (!shaders) {
       if (needsBlur && blurSignal) {
         shaders = {
@@ -128,21 +132,47 @@ export function createVideoElements({ clips, view, transitions }: CreateVideoEle
         view.add(maskedContent);
       }
     } else {
-      entries.push({ clip, ref, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal, colorGradingContainerRef });
+      // Create focus container for clips with zoom/focus (clips content to scene bounds)
+      const hasFocus = !!(clip.focus && clip.focus.zoom >= 1);
+      const focusContainerRef = hasFocus ? createRef<Rect>() : undefined;
 
+      entries.push({ clip, ref, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal, colorGradingContainerRef, focusContainerRef });
+
+      // When using focus container: video starts at origin with unit scale, 
+      // container handles position/scale. Otherwise video handles them directly.
+      // NOTE: The `video-clip-${clip.id}` key goes on whichever element should receive
+      // hit detection - the container when focused, the video otherwise.
       const videoElement = (
         <Video
-          key={`video-clip-${clip.id}`}
+          key={hasFocus ? `video-inner-${clip.id}` : `video-clip-${clip.id}`}
           ref={ref}
           src={clip.src}
           width={1920}
           height={1080}
-          opacity={0}
-          position={toVector(clip.position)}
-          scale={toVector(clip.scale)}
+          opacity={hasFocus ? 1 : 0}
+          position={hasFocus ? undefined : toVector(clip.position)}
+          scale={hasFocus ? undefined : toVector(clip.scale)}
           shaders={shaders}
         />
       );
+
+      // Wrap in focus container if clip has focus/zoom (clips content to bounds)
+      // The container gets the `video-clip-${clip.id}` key for hit detection
+      let wrappedElement = videoElement;
+      if (focusContainerRef) {
+        wrappedElement = (
+          <Rect
+            key={`video-clip-${clip.id}`}
+            ref={focusContainerRef}
+            clip
+            position={toVector(clip.position)}
+            scale={toVector(clip.scale)}
+            opacity={0}
+          >
+            {videoElement}
+          </Rect>
+        );
+      }
 
       // Wrap in color grading node if needed
       if (colorGradingConfig && colorGradingContainerRef) {
@@ -156,11 +186,11 @@ export function createVideoElements({ clips, view, transitions }: CreateVideoEle
               uniforms: colorGradingConfig.uniforms,
             }}
           >
-            {videoElement}
+            {wrappedElement}
           </Node>
         );
       } else {
-        view.add(videoElement);
+        view.add(wrappedElement);
       }
     }
   }
@@ -183,7 +213,7 @@ export function* playVideo({
   transitions,
   captionRunner,
 }: PlayVideoOptions): ThreadGenerator {
-  const { clip, ref: videoRef, maskRef, containerRef, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal } = entry;
+  const { clip, ref: videoRef, maskRef, containerRef, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal, focusContainerRef } = entry;
   const transInfo = transitions.get(clip.id);
   const enter = transInfo?.enter;
   const exit = transInfo?.exit;
@@ -214,7 +244,9 @@ export function* playVideo({
 
   const maskVideo = maskRef?.();
   const container = containerRef?.();
+  const focusContainer = focusContainerRef?.();
   const isMaskedClip = !!(maskVideo && container);
+  const hasFocusContainer = !!(focusContainer && clip.focus);
 
   const playback = function* () {
     const safeOffset = Math.max(0, offset);
@@ -227,38 +259,54 @@ export function* playVideo({
     }
 
     // Calculate dimensions based on objectFit
+    // - 'fill': stretch to scene dimensions (distorts aspect ratio)
+    // - 'contain': fit within scene maintaining aspect ratio (letterboxing)
+    // - 'cover': cover scene maintaining aspect ratio (cropping)
     const fit = clip.objectFit ?? 'contain';
+    
+    // Get source dimensions: prefer clip metadata, fallback to video element, then default
+    const domVideo = (video as any).video() as HTMLVideoElement | undefined;
+    const srcW = clip.width || domVideo?.videoWidth || 1920;
+    const srcH = clip.height || domVideo?.videoHeight || 1080;
+    
+    // Calculate target dimensions based on fit mode
     let vidW = sceneWidth;
     let vidH = sceneHeight;
 
-    if (fit !== 'fill') {
-      const domVideo = (video as any).video() as HTMLVideoElement | undefined;
-      const srcW = domVideo?.videoWidth || 1920;
-      const srcH = domVideo?.videoHeight || 1080;
+    if (fit === 'fill') {
+      // Stretch to fill - use scene dimensions directly (may distort)
+      vidW = sceneWidth;
+      vidH = sceneHeight;
+    } else if (srcW > 0 && srcH > 0) {
+      // We have source dimensions - calculate proper fit
+      const srcRatio = srcW / srcH;
+      const sceneRatio = sceneWidth / sceneHeight;
 
-      if (srcW > 0 && srcH > 0) {
-        const srcRatio = srcW / srcH;
-        const sceneRatio = sceneWidth / sceneHeight;
-
-        if (fit === 'contain') {
-          if (srcRatio > sceneRatio) {
-            vidW = sceneWidth;
-            vidH = sceneWidth / srcRatio;
-          } else {
-            vidH = sceneHeight;
-            vidW = sceneHeight * srcRatio;
-          }
-        } else if (fit === 'cover') {
-          if (srcRatio > sceneRatio) {
-            vidH = sceneHeight;
-            vidW = sceneHeight * srcRatio;
-          } else {
-            vidW = sceneWidth;
-            vidH = sceneWidth / srcRatio;
-          }
+      if (fit === 'contain') {
+        // Fit within scene (smaller scale wins)
+        if (srcRatio > sceneRatio) {
+          // Source is wider - fit to scene width
+          vidW = sceneWidth;
+          vidH = sceneWidth / srcRatio;
+        } else {
+          // Source is taller - fit to scene height
+          vidH = sceneHeight;
+          vidW = sceneHeight * srcRatio;
+        }
+      } else if (fit === 'cover') {
+        // Cover scene (larger scale wins)
+        if (srcRatio > sceneRatio) {
+          // Source is wider - fit to scene height (overflow width)
+          vidH = sceneHeight;
+          vidW = sceneHeight * srcRatio;
+        } else {
+          // Source is taller - fit to scene width (overflow height)
+          vidW = sceneWidth;
+          vidH = sceneWidth / srcRatio;
         }
       }
     }
+    // else: no source dimensions available, use scene dimensions as fallback
 
     video.width(vidW);
     video.height(vidH);
@@ -268,28 +316,63 @@ export function* playVideo({
       maskVideo.height(vidH);
     }
 
-    // Calculate focus transforms
+    // Calculate focus/zoom transforms (center 0–1, zoom ratio >= 1)
+    // When focus container exists, video scales inside a clipped container
     let baseScale = toVector(clip.scale);
     let basePos = toVector(clip.position);
+    let videoInnerScale = new Vector2(1, 1);
+    let videoInnerPos = new Vector2(0, 0);
 
-    if (clip.focus) {
-      const { x, y, width: fw, height: fh, padding } = clip.focus;
-      const sX = vidW / Math.max(1, fw + padding * 2);
-      const sY = vidH / Math.max(1, fh + padding * 2);
-      const s = Math.min(sX, sY);
+    if (hasFocusContainer && clip.focus && clip.focus.zoom >= 1) {
+      const { x, y, zoom } = clip.focus;
+      const zoomFactor = Math.max(1, zoom);
 
-      baseScale = baseScale.mul(s);
+      // Clamp focus x,y so visible area stays within video bounds
+      // Valid range: [0.5/zoom, 1 - 0.5/zoom]
+      const margin = 0.5 / zoomFactor;
+      const clampedX = Math.max(margin, Math.min(1 - margin, x));
+      const clampedY = Math.max(margin, Math.min(1 - margin, y));
 
-      const fvx = (x + fw / 2) - vidW / 2;
-      const fvy = (y + fh / 2) - vidH / 2;
+      // Set up the clipping container at the calculated video size
+      focusContainer.size([vidW, vidH]);
+
+      // Video scales inside the container by zoom factor
+      videoInnerScale = new Vector2(zoomFactor, zoomFactor);
+
+      // Offset video so the focus center appears at container center
+      const cx = clampedX * vidW;
+      const cy = clampedY * vidH;
+      const fvx = cx - vidW / 2;
+      const fvy = cy - vidH / 2;
+      videoInnerPos = new Vector2(-fvx * zoomFactor, -fvy * zoomFactor);
+
+      // Video position/scale relative to container (inner)
+      video.position(videoInnerPos);
+      video.scale(videoInnerScale);
+    } else if (clip.focus && clip.focus.zoom >= 1) {
+      // Fallback: no focus container, apply zoom directly (may overflow)
+      const { x, y, zoom } = clip.focus;
+      const zoomFactor = Math.max(1, zoom);
+
+      // Clamp focus x,y so visible area stays within video bounds
+      const margin = 0.5 / zoomFactor;
+      const clampedX = Math.max(margin, Math.min(1 - margin, x));
+      const clampedY = Math.max(margin, Math.min(1 - margin, y));
+
+      baseScale = baseScale.mul(zoomFactor);
+
+      const cx = clampedX * vidW;
+      const cy = clampedY * vidH;
+      const fvx = cx - vidW / 2;
+      const fvy = cy - vidH / 2;
       const focusOffset = new Vector2(fvx, fvy);
-
       basePos = basePos.sub(focusOffset.mul(baseScale));
     }
 
-    const opacityTarget = isMaskedClip ? container : video;
-    const positionTarget = isMaskedClip ? container : video;
-    const scaleTarget = isMaskedClip ? container : video;
+    // Determine targets: focus container wraps the video when present
+    const opacityTarget = hasFocusContainer ? focusContainer : (isMaskedClip ? container : video);
+    const positionTarget = hasFocusContainer ? focusContainer : (isMaskedClip ? container : video);
+    const scaleTarget = hasFocusContainer ? focusContainer : (isMaskedClip ? container : video);
 
     const initialPos = basePos;
     positionTarget.position(initialPos);

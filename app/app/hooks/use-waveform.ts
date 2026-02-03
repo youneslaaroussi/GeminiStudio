@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getVideoMediaInfo, extractWaveformProgressive } from "@/app/lib/media/video-media-cache";
 
 export interface UseWaveformInput {
   src?: string;
@@ -16,6 +17,11 @@ export interface UseWaveformInput {
    * waveform is rendered.
    */
   durationSeconds?: number;
+  /**
+   * Media type - 'video' uses consolidated cache, 'audio' fetches directly.
+   * Defaults to 'audio' for backwards compatibility.
+   */
+  mediaType?: "video" | "audio";
 }
 
 interface WaveformData {
@@ -185,6 +191,37 @@ async function getWaveformData(cacheKey: string, src: string): Promise<WaveformD
   return loaded;
 }
 
+/**
+ * Get waveform data for video sources using consolidated cache.
+ * This avoids a separate fetch since metadata + waveform are extracted together.
+ */
+async function getVideoWaveformData(cacheKey: string, src: string): Promise<WaveformData | null> {
+  // Check local waveform cache first (in case it was loaded before)
+  const cached = await getCachedWaveform(cacheKey);
+  if (cached) {
+    memoryCache.set(cacheKey, cached);
+    return cached;
+  }
+
+  try {
+    // Use consolidated video media cache
+    const mediaInfo = await getVideoMediaInfo(src);
+    if (!mediaInfo.waveformSamples.length) {
+      return null;
+    }
+    const data: WaveformData = {
+      samples: mediaInfo.waveformSamples,
+      durationSeconds: mediaInfo.waveformDuration,
+    };
+    // Store in waveform cache for future use
+    memoryCache.set(cacheKey, data);
+    await putCachedWaveform(cacheKey, data);
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 export function useWaveform({
   src,
   cacheKey,
@@ -192,6 +229,7 @@ export function useWaveform({
   height,
   offsetSeconds = 0,
   durationSeconds,
+  mediaType = "audio",
 }: UseWaveformInput): UseWaveformResult {
   const [path, setPath] = useState("");
   const [duration, setDuration] = useState<number | null>(null);
@@ -223,11 +261,68 @@ export function useWaveform({
     }
 
     let cancelled = false;
+    let hasSetProgressiveData = false; // Track if THIS extraction set any data
     const requestId = ++latestRequest.current;
+    const controller = new AbortController();
     setIsLoading(true);
 
     (async () => {
-      const data = src && resolvedCacheKey ? await getWaveformData(resolvedCacheKey, src) : null;
+      // Check cache first
+      const cached = resolvedCacheKey ? memoryCache.get(resolvedCacheKey) : null;
+      if (cached) {
+        updatePath(cached);
+        setIsLoading(false);
+        return;
+      }
+
+      // For video, use progressive extraction
+      if (mediaType === "video" && src) {
+        try {
+          const result = await extractWaveformProgressive(
+            src,
+            (samples, progress) => {
+              if (cancelled || requestId !== latestRequest.current) return;
+              hasSetProgressiveData = true;
+              // Update path progressively as samples come in
+              const partialData: WaveformData = {
+                samples,
+                durationSeconds: 0, // Will be set properly at the end
+              };
+              const clipped = clipSamples(partialData, offsetSeconds, durationSeconds);
+              setPath(buildPath(clipped, width, height));
+            },
+            controller.signal
+          );
+
+          if (cancelled || requestId !== latestRequest.current) return;
+
+          const finalData: WaveformData = {
+            samples: result.samples,
+            durationSeconds: result.duration,
+          };
+          memoryCache.set(resolvedCacheKey!, finalData);
+          await putCachedWaveform(resolvedCacheKey!, finalData);
+          updatePath(finalData);
+          setIsLoading(false);
+        } catch (err) {
+          // Check if it's an abort (not a real error)
+          const isAbort = cancelled || controller.signal.aborted;
+          if (!isAbort) {
+            console.error("[useWaveform] Progressive extraction error:", err);
+          }
+          // Only clear if THIS extraction set data (don't wipe out previous successful result)
+          if (!cancelled && requestId === latestRequest.current && hasSetProgressiveData) {
+            setIsLoading(false);
+            setPath("");
+          }
+        }
+        return;
+      }
+
+      // For audio, use direct fetch (non-progressive)
+      const data = src && resolvedCacheKey
+        ? await getWaveformData(resolvedCacheKey, src)
+        : null;
       if (!data || cancelled || requestId !== latestRequest.current) {
         if (!cancelled && requestId === latestRequest.current) {
           setIsLoading(false);
@@ -244,8 +339,9 @@ export function useWaveform({
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [resolvedCacheKey, shouldRender, src, updatePath]);
+  }, [resolvedCacheKey, shouldRender, src, mediaType, updatePath, offsetSeconds, durationSeconds, width, height]);
 
   useEffect(() => {
     if (!shouldRender) return;

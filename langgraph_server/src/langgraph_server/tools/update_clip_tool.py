@@ -71,6 +71,10 @@ def updateClipInTimeline(
     exit_transition: str | None = None,
     # Color correction (video/image clips only)
     color_grading: str | None = None,
+    # Chroma key / green screen (video/image clips only)
+    chroma_key: str | None = None,
+    # Video focus area (crop/ken-burns region; video clips only)
+    focus: str | None = None,
     _agent_context: dict | None = None,
 ) -> dict:
     """Update an existing clip on the project timeline.
@@ -83,6 +87,9 @@ def updateClipInTimeline(
     zoom, dip-to-black. Duration 0.1-5s. Use type "none" to clear.
     For video/image clips, use color_grading (JSON) to set exposure, contrast, saturation,
     temperature, tint, highlights, shadows (values typically -100 to 100; exposure can be -2 to 2).
+    Use chroma_key (JSON) to make a key color transparent: {"color": "#00ff00", "threshold": 0.4, "smoothness": 0.1}.
+    color and threshold are required; smoothness is optional (0-1). Omit or set to null to remove chroma key.
+    For video clips, use focus (JSON) to set focus/zoom: {"x": 0.5, "y": 0.5, "zoom": 1}. x,y = center (0–1), zoom = 1 for full frame, 2 for 2×. Pass null to clear.
 
     Args:
         clip_id: The clip ID to update (e.g. "clip-abc12345")
@@ -104,6 +111,8 @@ def updateClipInTimeline(
         enter_transition: Optional JSON {"type":"fade","duration":0.5} for in transition
         exit_transition: Optional JSON {"type":"fade","duration":0.5} for out transition
         color_grading: Optional JSON for video/image clips: {"exposure":0,"contrast":0,"saturation":0,"temperature":0,"tint":0,"highlights":0,"shadows":0}. Values -100 to 100 (exposure often -2 to 2).
+        chroma_key: Optional JSON for video/image clips: {"color":"#00ff00","threshold":0.4,"smoothness":0.1}. Key color (hex), threshold 0-1, smoothness 0-1. Pass null to remove.
+        focus: Optional JSON for video clips: {"x":0.5,"y":0.5,"zoom":1}. Center (0–1) and zoom ratio. Pass null to clear.
 
     Returns:
         Status dict with updated clip info or error message.
@@ -237,10 +246,50 @@ def updateClipInTimeline(
         except (json.JSONDecodeError, TypeError):
             pass
 
+    # Chroma key (video/image clips only). Clear if "null" or "".
+    chroma_key_clear = False
+    if chroma_key is not None:
+        if isinstance(chroma_key, str) and chroma_key.strip().lower() in ("null", ""):
+            chroma_key_clear = True
+        else:
+            try:
+                ck = json.loads(chroma_key) if isinstance(chroma_key, str) else chroma_key
+                if isinstance(ck, dict) and "color" in ck and "threshold" in ck:
+                    key_color = str(ck["color"]).strip()
+                    threshold = ck.get("threshold", 0.4)
+                    smoothness = ck.get("smoothness", 0.1)
+                    if isinstance(threshold, (int, float)) and 0 <= threshold <= 1:
+                        updates["chromaKey"] = {
+                            "color": key_color,
+                            "threshold": float(threshold),
+                            "smoothness": float(smoothness) if isinstance(smoothness, (int, float)) else 0.1,
+                        }
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+    # Focus/zoom (video clips only). Clear if "null" or "". Format: {"x": 0.5, "y": 0.5, "zoom": 1}.
+    focus_clear = False
+    if focus is not None:
+        if isinstance(focus, str) and focus.strip().lower() in ("null", ""):
+            focus_clear = True
+        else:
+            try:
+                f = json.loads(focus) if isinstance(focus, str) else focus
+                if isinstance(f, dict) and "x" in f and "y" in f and "zoom" in f:
+                    z_val = f.get("zoom", 1)
+                    if isinstance(z_val, (int, float)) and z_val >= 1:
+                        updates["focus"] = {
+                            "x": max(0, min(1, float(f["x"]))),
+                            "y": max(0, min(1, float(f["y"]))),
+                            "zoom": float(z_val),
+                        }
+            except (json.JSONDecodeError, TypeError, KeyError, ValueError):
+                pass
+
     # Merge colorGrading with existing clip values when we apply (see below)
     color_grading_merge = updates.pop("colorGrading", None)
 
-    if not updates and not transition_clears and not color_grading_merge:
+    if not updates and not transition_clears and not color_grading_merge and not chroma_key_clear and not focus_clear:
         return {
             "status": "error",
             "message": "No valid updates provided.",
@@ -319,6 +368,10 @@ def updateClipInTimeline(
             clip["colorGrading"] = merged
         for k in transition_clears:
             clip.pop(k, None)
+        if chroma_key_clear and clip.get("type") in ("video", "image"):
+            clip.pop("chromaKey", None)
+        if focus_clear and clip.get("type") == "video":
+            clip.pop("focus", None)
         _set_project_data(doc, project_data)
         new_state = _save_automerge_doc(doc)
 

@@ -12401,6 +12401,46 @@ void main() {
 
 
 //# sourceURL=src/shaders/colorGrading.glsl`;
+const chromaKeyShader = `#version 300 es
+precision highp float;
+
+in vec2 screenUV;
+in vec2 sourceUV;
+in vec2 destinationUV;
+
+out vec4 outColor;
+
+uniform float time;
+uniform float deltaTime;
+uniform float framerate;
+uniform int frame;
+uniform vec2 resolution;
+uniform sampler2D sourceTexture;
+uniform sampler2D destinationTexture;
+uniform mat4 sourceMatrix;
+uniform mat4 destinationMatrix;
+
+// Key color (RGB 0–1)
+uniform float keyR;
+uniform float keyG;
+uniform float keyB;
+// How much color match to key (0–1). Higher = more pixels become transparent.
+uniform float threshold;
+// Feather at the edge (0–1). Higher = softer edge.
+uniform float smoothness;
+
+void main() {
+  vec4 color = texture(sourceTexture, sourceUV);
+  vec3 key = vec3(keyR, keyG, keyB);
+  float d = distance(color.rgb, key);
+  // Smoothstep: full opacity when d > threshold + smoothness, full transparent when d < threshold - smoothness
+  float halfFeather = max(0.001, smoothness * 0.5);
+  float alpha = 1.0 - smoothstep(threshold - halfFeather, threshold + halfFeather, d);
+  outColor = vec4(color.rgb, color.a * (1.0 - alpha));
+}
+
+
+//# sourceURL=src/shaders/chromaKey.glsl`;
 function getColorGradingShaderConfig(settings2) {
   if (!settings2) return void 0;
   const isDefault = settings2.exposure === 0 && settings2.contrast === 0 && settings2.saturation === 0 && settings2.temperature === 0 && settings2.tint === 0 && settings2.highlights === 0 && settings2.shadows === 0;
@@ -12461,6 +12501,40 @@ function getEffectShaderConfig(effect) {
     default:
       return void 0;
   }
+}
+function hexToRgb(hex) {
+  const s = hex.replace(/^#/, "");
+  if (s.length === 6) {
+    return {
+      r: parseInt(s.slice(0, 2), 16) / 255,
+      g: parseInt(s.slice(2, 4), 16) / 255,
+      b: parseInt(s.slice(4, 6), 16) / 255
+    };
+  }
+  if (s.length === 3) {
+    return {
+      r: parseInt(s[0] + s[0], 16) / 255,
+      g: parseInt(s[1] + s[1], 16) / 255,
+      b: parseInt(s[2] + s[2], 16) / 255
+    };
+  }
+  return { r: 0, g: 1, b: 0 };
+}
+function getChromaKeyShaderConfig(settings2) {
+  if (!(settings2 == null ? void 0 : settings2.color)) return void 0;
+  const { r, g, b } = hexToRgb(settings2.color);
+  const threshold = Math.max(0, Math.min(1, settings2.threshold ?? 0.4));
+  const smoothness = Math.max(0, Math.min(1, settings2.smoothness ?? 0.1));
+  return {
+    fragment: chromaKeyShader,
+    uniforms: {
+      keyR: createSignal(r),
+      keyG: createSignal(g),
+      keyB: createSignal(b),
+      threshold: createSignal(threshold),
+      smoothness: createSignal(smoothness)
+    }
+  };
 }
 const luminanceToAlpha = `#version 300 es
 precision highp float;
@@ -12648,7 +12722,10 @@ function createVideoElements({ clips, view, transitions }) {
     const zoomStrengthSignal = needsZoom ? createSignal(0) : void 0;
     const zoomDirectionSignal = needsZoom ? createSignal(1) : void 0;
     const dissolveSignal = needsDissolve ? createSignal(0) : void 0;
-    let shaders = getEffectShaderConfig(clip.effect);
+    let shaders = getChromaKeyShaderConfig(clip.chromaKey);
+    if (!shaders) {
+      shaders = getEffectShaderConfig(clip.effect);
+    }
     if (!shaders) {
       if (needsBlur && blurSignal) {
         shaders = {
@@ -12737,7 +12814,9 @@ function createVideoElements({ clips, view, transitions }) {
         view.add(maskedContent);
       }
     } else {
-      entries.push({ clip, ref, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal, colorGradingContainerRef });
+      const hasFocus = !!(clip.focus && clip.focus.zoom >= 1);
+      const focusContainerRef = hasFocus ? createRef() : void 0;
+      entries.push({ clip, ref, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal, colorGradingContainerRef, focusContainerRef });
       const videoElement = /* @__PURE__ */ jsx(
         Video,
         {
@@ -12745,13 +12824,28 @@ function createVideoElements({ clips, view, transitions }) {
           src: clip.src,
           width: 1920,
           height: 1080,
-          opacity: 0,
-          position: toVector(clip.position),
-          scale: toVector(clip.scale),
+          opacity: hasFocus ? 1 : 0,
+          position: hasFocus ? void 0 : toVector(clip.position),
+          scale: hasFocus ? void 0 : toVector(clip.scale),
           shaders
         },
-        `video-clip-${clip.id}`
+        hasFocus ? `video-inner-${clip.id}` : `video-clip-${clip.id}`
       );
+      let wrappedElement = videoElement;
+      if (focusContainerRef) {
+        wrappedElement = /* @__PURE__ */ jsx(
+          Rect,
+          {
+            ref: focusContainerRef,
+            clip: true,
+            position: toVector(clip.position),
+            scale: toVector(clip.scale),
+            opacity: 0,
+            children: videoElement
+          },
+          `video-clip-${clip.id}`
+        );
+      }
       if (colorGradingConfig && colorGradingContainerRef) {
         view.add(
           /* @__PURE__ */ jsx(
@@ -12763,13 +12857,13 @@ function createVideoElements({ clips, view, transitions }) {
                 fragment: colorGradingConfig.fragment,
                 uniforms: colorGradingConfig.uniforms
               },
-              children: videoElement
+              children: wrappedElement
             },
             `color-grading-${clip.id}`
           )
         );
       } else {
-        view.add(videoElement);
+        view.add(wrappedElement);
       }
     }
   }
@@ -12782,7 +12876,7 @@ function* playVideo({
   transitions,
   captionRunner
 }) {
-  const { clip, ref: videoRef, maskRef, containerRef, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal } = entry;
+  const { clip, ref: videoRef, maskRef, containerRef, blurSignal, zoomStrengthSignal, zoomDirectionSignal, dissolveSignal, focusContainerRef } = entry;
   const transInfo = transitions.get(clip.id);
   const enter = transInfo == null ? void 0 : transInfo.enter;
   const exit = transInfo == null ? void 0 : transInfo.exit;
@@ -12807,7 +12901,9 @@ function* playVideo({
   if (!video) return;
   const maskVideo = maskRef == null ? void 0 : maskRef();
   const container = containerRef == null ? void 0 : containerRef();
+  const focusContainer = focusContainerRef == null ? void 0 : focusContainerRef();
   const isMaskedClip = !!(maskVideo && container);
+  const hasFocusContainer = !!(focusContainer && clip.focus);
   const playback = function* () {
     const safeOffset = Math.max(0, offset);
     video.seek(safeOffset);
@@ -12817,31 +12913,32 @@ function* playVideo({
       maskVideo.playbackRate(safeSpeed);
     }
     const fit = clip.objectFit ?? "contain";
+    const domVideo = video.video();
+    const srcW = clip.width || (domVideo == null ? void 0 : domVideo.videoWidth) || 1920;
+    const srcH = clip.height || (domVideo == null ? void 0 : domVideo.videoHeight) || 1080;
     let vidW = sceneWidth;
     let vidH = sceneHeight;
-    if (fit !== "fill") {
-      const domVideo = video.video();
-      const srcW = (domVideo == null ? void 0 : domVideo.videoWidth) || 1920;
-      const srcH = (domVideo == null ? void 0 : domVideo.videoHeight) || 1080;
-      if (srcW > 0 && srcH > 0) {
-        const srcRatio = srcW / srcH;
-        const sceneRatio = sceneWidth / sceneHeight;
-        if (fit === "contain") {
-          if (srcRatio > sceneRatio) {
-            vidW = sceneWidth;
-            vidH = sceneWidth / srcRatio;
-          } else {
-            vidH = sceneHeight;
-            vidW = sceneHeight * srcRatio;
-          }
-        } else if (fit === "cover") {
-          if (srcRatio > sceneRatio) {
-            vidH = sceneHeight;
-            vidW = sceneHeight * srcRatio;
-          } else {
-            vidW = sceneWidth;
-            vidH = sceneWidth / srcRatio;
-          }
+    if (fit === "fill") {
+      vidW = sceneWidth;
+      vidH = sceneHeight;
+    } else if (srcW > 0 && srcH > 0) {
+      const srcRatio = srcW / srcH;
+      const sceneRatio = sceneWidth / sceneHeight;
+      if (fit === "contain") {
+        if (srcRatio > sceneRatio) {
+          vidW = sceneWidth;
+          vidH = sceneWidth / srcRatio;
+        } else {
+          vidH = sceneHeight;
+          vidW = sceneHeight * srcRatio;
+        }
+      } else if (fit === "cover") {
+        if (srcRatio > sceneRatio) {
+          vidH = sceneHeight;
+          vidW = sceneHeight * srcRatio;
+        } else {
+          vidW = sceneWidth;
+          vidH = sceneWidth / srcRatio;
         }
       }
     }
@@ -12853,20 +12950,40 @@ function* playVideo({
     }
     let baseScale = toVector(clip.scale);
     let basePos = toVector(clip.position);
-    if (clip.focus) {
-      const { x, y, width: fw, height: fh, padding } = clip.focus;
-      const sX = vidW / Math.max(1, fw + padding * 2);
-      const sY = vidH / Math.max(1, fh + padding * 2);
-      const s = Math.min(sX, sY);
-      baseScale = baseScale.mul(s);
-      const fvx = x + fw / 2 - vidW / 2;
-      const fvy = y + fh / 2 - vidH / 2;
+    let videoInnerScale = new Vector2(1, 1);
+    let videoInnerPos = new Vector2(0, 0);
+    if (hasFocusContainer && clip.focus && clip.focus.zoom >= 1) {
+      const { x, y, zoom } = clip.focus;
+      const zoomFactor = Math.max(1, zoom);
+      const margin = 0.5 / zoomFactor;
+      const clampedX = Math.max(margin, Math.min(1 - margin, x));
+      const clampedY = Math.max(margin, Math.min(1 - margin, y));
+      focusContainer.size([vidW, vidH]);
+      videoInnerScale = new Vector2(zoomFactor, zoomFactor);
+      const cx = clampedX * vidW;
+      const cy = clampedY * vidH;
+      const fvx = cx - vidW / 2;
+      const fvy = cy - vidH / 2;
+      videoInnerPos = new Vector2(-fvx * zoomFactor, -fvy * zoomFactor);
+      video.position(videoInnerPos);
+      video.scale(videoInnerScale);
+    } else if (clip.focus && clip.focus.zoom >= 1) {
+      const { x, y, zoom } = clip.focus;
+      const zoomFactor = Math.max(1, zoom);
+      const margin = 0.5 / zoomFactor;
+      const clampedX = Math.max(margin, Math.min(1 - margin, x));
+      const clampedY = Math.max(margin, Math.min(1 - margin, y));
+      baseScale = baseScale.mul(zoomFactor);
+      const cx = clampedX * vidW;
+      const cy = clampedY * vidH;
+      const fvx = cx - vidW / 2;
+      const fvy = cy - vidH / 2;
       const focusOffset = new Vector2(fvx, fvy);
       basePos = basePos.sub(focusOffset.mul(baseScale));
     }
-    const opacityTarget = isMaskedClip ? container : video;
-    const positionTarget = isMaskedClip ? container : video;
-    const scaleTarget = isMaskedClip ? container : video;
+    const opacityTarget = hasFocusContainer ? focusContainer : isMaskedClip ? container : video;
+    const positionTarget = hasFocusContainer ? focusContainer : isMaskedClip ? container : video;
+    const scaleTarget = hasFocusContainer ? focusContainer : isMaskedClip ? container : video;
     const initialPos = basePos;
     positionTarget.position(initialPos);
     scaleTarget.scale(baseScale);
@@ -13355,7 +13472,7 @@ function createImageElements({ clips, view }) {
     const ref = createRef();
     const imgWidth = clip.width ?? 1920;
     const imgHeight = clip.height ?? 1080;
-    const effectShaders = getEffectShaderConfig(clip.effect);
+    const effectShaders = getChromaKeyShaderConfig(clip.chromaKey) ?? getEffectShaderConfig(clip.effect);
     const colorGradingConfig = getColorGradingShaderConfig(clip.colorGrading);
     entries.push({ clip, ref });
     const imageElement = /* @__PURE__ */ jsx(

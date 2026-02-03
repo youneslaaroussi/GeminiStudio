@@ -86,12 +86,14 @@ export interface Vec2 {
   y: number;
 }
 
+/** Focus/zoom region: center (0–1) and zoom ratio (1 = full frame, 2 = 2x zoom). */
 export interface Focus {
+  /** Center X, normalized 0–1 (0.5 = center). */
   x: number;
+  /** Center Y, normalized 0–1 (0.5 = center). */
   y: number;
-  width: number;
-  height: number;
-  padding: number;
+  /** Zoom level: 1 = full frame, >1 = zoom in (e.g. 2 = 2x). */
+  zoom: number;
 }
 
 export type ObjectFit = 'contain' | 'cover' | 'fill';
@@ -117,6 +119,16 @@ export const DEFAULT_COLOR_GRADING: ColorGradingSettings = {
   highlights: 0,
   shadows: 0,
 };
+
+/** Chroma key (green screen): key color and tolerance to make that color transparent */
+export interface ChromaKeySettings {
+  /** Key color as hex, e.g. "#00ff00" for green */
+  color: string;
+  /** Tolerance 0–1: how much color match to key (higher = more pixels transparent). UI often uses 0–100. */
+  threshold: number;
+  /** Edge softness 0–1 (optional). UI often uses 0–100. */
+  smoothness?: number;
+}
 
 /** Visual effect applied to a clip (glitch, ripple, etc.) */
 export type VisualEffectType =
@@ -171,6 +183,8 @@ export interface VideoClip extends BaseClip {
   effect?: VisualEffectType;
   /** Color grading settings */
   colorGrading?: ColorGradingSettings;
+  /** Chroma key (green screen): key color and threshold */
+  chromaKey?: ChromaKeySettings;
 }
 
 export interface AudioClip extends BaseClip {
@@ -205,6 +219,8 @@ export interface ImageClip extends BaseClip {
   effect?: VisualEffectType;
   /** Color grading settings */
   colorGrading?: ColorGradingSettings;
+  /** Chroma key (green screen) for image clips */
+  chromaKey?: ChromaKeySettings;
 }
 
 export type TimelineClip = VideoClip | AudioClip | TextClip | ImageClip;

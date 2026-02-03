@@ -20,11 +20,9 @@ const vectorSchema = z.object({
 });
 
 const focusSchema: z.ZodType<Focus> = z.object({
-  x: z.number(),
-  y: z.number(),
-  width: z.number().positive(),
-  height: z.number().positive(),
-  padding: z.number().min(0),
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  zoom: z.number().min(1),
 });
 
 /** Color grading: -100 to 100 (exposure often -2 to 2) */
@@ -37,6 +35,15 @@ const colorGradingSchema = z
     tint: z.number().min(-100).max(100).optional(),
     highlights: z.number().min(-100).max(100).optional(),
     shadows: z.number().min(-100).max(100).optional(),
+  })
+  .optional();
+
+/** Chroma key: key color (hex), threshold and smoothness 0–1 */
+const chromaKeySchema = z
+  .object({
+    color: z.string().regex(/^#[0-9a-fA-F]{3,6}$/, "Key color as hex e.g. #00ff00"),
+    threshold: z.number().min(0).max(1),
+    smoothness: z.number().min(0).max(1).optional(),
   })
   .optional();
 
@@ -76,6 +83,7 @@ const clipUpdateSchema = z.object({
       objectFit: z.enum(["contain", "cover", "fill"]).optional(),
       focus: focusSchema.optional(),
       colorGrading: colorGradingSchema,
+      chromaKey: chromaKeySchema,
     })
     .optional(),
   audioSettings: z
@@ -152,7 +160,7 @@ function buildUpdates(
     case "video": {
       const videoUpdates: Partial<VideoClip> = {};
       if (input.videoSettings) {
-        const { width, height, objectFit, focus, colorGrading } = input.videoSettings;
+        const { width, height, objectFit, focus, colorGrading, chromaKey } = input.videoSettings;
         if (width !== undefined) videoUpdates.width = width;
         if (height !== undefined) videoUpdates.height = height;
         if (objectFit !== undefined) videoUpdates.objectFit = objectFit;
@@ -161,6 +169,7 @@ function buildUpdates(
           const current = (clip as VideoClip).colorGrading ?? {};
           videoUpdates.colorGrading = { ...DEFAULT_COLOR_GRADING, ...current, ...colorGrading };
         }
+        if (chromaKey !== undefined) videoUpdates.chromaKey = chromaKey;
       }
       return { ...updates, ...videoUpdates };
     }
@@ -264,9 +273,9 @@ export const timelineUpdateClipTool: ToolDefinition<
       label: "Video Settings",
       type: "json",
       placeholder:
-        '{"width":1920,"height":1080,"objectFit":"contain","focus":{...},"colorGrading":{"exposure":0,"contrast":0,"saturation":0,"temperature":0,"tint":0,"highlights":0,"shadows":0}}',
+        '{"width":1920,"height":1080,"objectFit":"contain","focus":{"x":0.5,"y":0.5,"zoom":1},"colorGrading":{...},"chromaKey":{...}}',
       description:
-        "Do not pass src—media URL is derived from clip's assetId. colorGrading: exposure (-2 to 2), contrast/saturation/temperature/tint/highlights/shadows (-100 to 100) for color correction.",
+        "Do not pass src—media URL is derived from clip's assetId. focus: center (x,y 0–1) and zoom (1 = full frame, 2 = 2×). colorGrading: exposure (-2 to 2), contrast/saturation/temperature/tint/highlights/shadows (-100 to 100). chromaKey: key color (hex), threshold and smoothness 0–1 for green screen.",
     },
     {
       name: "audioSettings",

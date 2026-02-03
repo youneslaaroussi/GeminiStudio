@@ -5,6 +5,7 @@ import type { ClipType, TimelineClip, VideoClip, AudioClip } from "@/app/types/t
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { cn } from "@/lib/utils";
 import { useWaveform } from "@/app/hooks/use-waveform";
+import { useFilmstrip } from "@/app/hooks/use-filmstrip";
 import { Trash2 } from "lucide-react";
 import {
   Dialog,
@@ -139,6 +140,28 @@ export function Clip({ clip, layerId }: ClipProps) {
     cacheKey: hasWaveform ? waveformCacheKey : undefined,
     width: waveformWidth,
     height: clipHeight || 1,
+    offsetSeconds: clip.offset,
+    durationSeconds: clip.duration,
+    // Use consolidated cache for video to share fetch with filmstrip
+    mediaType: clip.type === "video" ? "video" : "audio",
+  });
+
+  const isVideo = clip.type === "video";
+  const videoSrc = isVideo ? (clip as VideoClip).src : undefined;
+  // Use bucketed dimensions for cache key to avoid re-generating on small size changes
+  // Round width to nearest 50px, use fixed height of 40 (standard track height)
+  const filmstripWidth = Math.max(50, Math.ceil(waveformWidth / 50) * 50);
+  const filmstripHeight = 40; // Fixed height for consistent caching
+  const filmstripCacheKey = isVideo
+    ? `${clip.assetId ?? clip.src}-filmstrip-${clip.offset.toFixed(2)}-${clip.duration.toFixed(2)}-${filmstripWidth}`
+    : undefined;
+  // Only request filmstrip when we have a meaningful height
+  const shouldLoadFilmstrip = isVideo && clipHeight >= 10;
+  const { filmstripDataUrl, isLoading: filmstripLoading } = useFilmstrip({
+    src: shouldLoadFilmstrip ? videoSrc : undefined,
+    cacheKey: filmstripCacheKey,
+    width: filmstripWidth,
+    height: filmstripHeight,
     offsetSeconds: clip.offset,
     durationSeconds: clip.duration,
   });
@@ -307,6 +330,23 @@ export function Clip({ clip, layerId }: ClipProps) {
         >
           <Trash2 className="size-3.5" />
         </button>
+        {/* Video filmstrip (Mediabunny) */}
+        {isVideo && (
+          <div className="pointer-events-none absolute inset-[2px] rounded-sm overflow-hidden bg-black/30">
+            {filmstripDataUrl ? (
+              <img
+                src={filmstripDataUrl}
+                alt=""
+                className="h-full w-full object-cover object-top"
+              />
+            ) : (
+              filmstripLoading && (
+                <div className="h-full w-full animate-pulse bg-white/10" />
+              )
+            )}
+          </div>
+        )}
+
         {hasWaveform && (
           <div className="pointer-events-none absolute inset-[2px] rounded-sm bg-black/20">
             {waveformPath ? (

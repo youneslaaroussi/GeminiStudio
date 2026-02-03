@@ -28,12 +28,13 @@ export default makeProject({
         opacity?: number;
         width?: number;
         height?: number;
-        focus?: { x: number; y: number; width: number; height: number; padding: number };
+        focus?: { x: number; y: number; zoom: number };
         objectFit?: 'contain' | 'cover' | 'fill';
         effect?: string;
         maskAssetId?: string;
         maskSrc?: string;
         maskMode?: 'include' | 'exclude';
+        chromaKey?: { color: string; threshold: number; smoothness?: number };
         colorGrading?: {
           exposure: number;
           contrast: number;

@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { EditableInput } from "@/app/components/ui/EditableInput";
-import type { VideoClip, MaskMode, VisualEffectType, ColorGradingSettings } from "@/app/types/timeline";
+import type { VideoClip, MaskMode, VisualEffectType, ColorGradingSettings, ChromaKeySettings } from "@/app/types/timeline";
 import { DEFAULT_COLOR_GRADING } from "@/app/types/timeline";
 
 const VISUAL_EFFECT_OPTIONS: { value: VisualEffectType; label: string }[] = [
@@ -24,7 +24,14 @@ import {
   type ClipUpdateHandler,
 } from "../utils";
 import { Button } from "@/components/ui/button";
-import { Settings, Captions, Layers, Palette, RotateCcw } from "lucide-react";
+import { Settings, Captions, Layers, Palette, RotateCcw, Pipette } from "lucide-react";
+
+const CHROMA_KEY_PRESETS = [
+  { label: "Green", color: "#00ff00" },
+  { label: "Blue", color: "#0000ff" },
+  { label: "Magenta", color: "#ff00ff" },
+  { label: "Custom", color: "" },
+] as const;
 
 interface VideoClipSettingsProps {
   clip: VideoClip;
@@ -228,10 +235,10 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
             </div>
           </div>
 
-          {/* Focus Area */}
+          {/* Focus / Zoom */}
           <div className={cardClassName}>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium">Focus Area</span>
+              <span className="text-xs font-medium">Focus / Zoom</span>
               {!clip.focus ? (
                 <Button
                   variant="ghost"
@@ -239,7 +246,7 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
                   className="h-6 text-xs text-primary"
                   onClick={() =>
                     onUpdate({
-                      focus: { x: 0, y: 0, width: 400, height: 400, padding: 50 },
+                      focus: { x: 0.5, y: 0.5, zoom: 1 },
                     })
                   }
                 >
@@ -256,12 +263,14 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
                 </Button>
               )}
             </div>
-
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Center point (0–1) and zoom ratio. 1 = full frame, 2 = 2× zoom.
+            </p>
             {clip.focus && (
               <div className="space-y-2 pt-2 border-t border-border">
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className={labelClassName}>X</label>
+                    <label className={labelClassName}>Center X</label>
                     <EditableInput
                       type="number"
                       value={clip.focus.x}
@@ -269,12 +278,12 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
                       onValueCommit={(val) => {
                         const next = toNumber(val);
                         if (next === null) return;
-                        onUpdate({ focus: { ...clip.focus!, x: next } });
+                        onUpdate({ focus: { ...clip.focus!, x: Math.max(0, Math.min(1, next)) } });
                       }}
                     />
                   </div>
                   <div>
-                    <label className={labelClassName}>Y</label>
+                    <label className={labelClassName}>Center Y</label>
                     <EditableInput
                       type="number"
                       value={clip.focus.y}
@@ -282,52 +291,36 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
                       onValueCommit={(val) => {
                         const next = toNumber(val);
                         if (next === null) return;
-                        onUpdate({ focus: { ...clip.focus!, y: next } });
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className={labelClassName}>Width</label>
-                    <EditableInput
-                      type="number"
-                      value={clip.focus.width}
-                      min={1}
-                      className={inputClassName}
-                      onValueCommit={(val) => {
-                        const next = toNumber(val);
-                        if (next === null) return;
-                        onUpdate({ focus: { ...clip.focus!, width: Math.max(1, next) } });
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelClassName}>Height</label>
-                    <EditableInput
-                      type="number"
-                      value={clip.focus.height}
-                      min={1}
-                      className={inputClassName}
-                      onValueCommit={(val) => {
-                        const next = toNumber(val);
-                        if (next === null) return;
-                        onUpdate({ focus: { ...clip.focus!, height: Math.max(1, next) } });
+                        onUpdate({ focus: { ...clip.focus!, y: Math.max(0, Math.min(1, next)) } });
                       }}
                     />
                   </div>
                 </div>
                 <div>
-                  <label className={labelClassName}>Padding</label>
+                  <label className={labelClassName}>Zoom</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min={1}
+                      max={3}
+                      step={0.1}
+                      value={clip.focus.zoom}
+                      onChange={(e) =>
+                        onUpdate({ focus: { ...clip.focus!, zoom: Math.max(1, Number(e.target.value)) } })
+                      }
+                      className="flex-1 h-2 rounded accent-primary"
+                    />
+                    <span className="text-xs tabular-nums w-10">{clip.focus.zoom.toFixed(1)}×</span>
+                  </div>
                   <EditableInput
                     type="number"
-                    value={clip.focus.padding}
-                    min={0}
-                    className={inputClassName}
+                    value={clip.focus.zoom}
+                    min={1}
+                    className={inputClassName + " mt-1"}
                     onValueCommit={(val) => {
                       const next = toNumber(val);
                       if (next === null) return;
-                      onUpdate({ focus: { ...clip.focus!, padding: Math.max(0, next) } });
+                      onUpdate({ focus: { ...clip.focus!, zoom: Math.max(1, next) } });
                     }}
                   />
                 </div>
@@ -421,6 +414,119 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Chroma Key (green screen) */}
+          <div className={cardClassName}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Pipette className="size-3.5 text-emerald-400" />
+                <span className="text-xs font-medium">Chroma Key</span>
+              </div>
+              {clip.chromaKey && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs text-destructive"
+                  onClick={() => onUpdate({ chromaKey: undefined })}
+                >
+                  Remove
+                </Button>
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Make a key color transparent (e.g. green screen). Adjust threshold and smoothness for clean edges.
+            </p>
+            {!clip.chromaKey ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 w-full"
+                onClick={() =>
+                  onUpdate({
+                    chromaKey: {
+                      color: "#00ff00",
+                      threshold: 0.4,
+                      smoothness: 0.1,
+                    },
+                  })
+                }
+              >
+                Add Chroma Key
+              </Button>
+            ) : (
+              <div className="space-y-3 pt-2">
+                <div>
+                  <label className={labelClassName}>Key color</label>
+                  <div className="flex gap-2 items-center mt-1">
+                    <input
+                      type="color"
+                      value={clip.chromaKey.color}
+                      onChange={(e) =>
+                        onUpdate({
+                          chromaKey: { ...clip.chromaKey!, color: e.target.value },
+                        })
+                      }
+                      className="h-8 w-12 rounded border border-border cursor-pointer bg-transparent"
+                    />
+                    <input
+                      type="text"
+                      value={clip.chromaKey.color}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (/^#[0-9a-fA-F]{0,6}$/.test(v) || v === "") {
+                          onUpdate({
+                            chromaKey: { ...clip.chromaKey!, color: v || "#00ff00" },
+                          });
+                        }
+                      }}
+                      className={inputClassName + " flex-1 font-mono text-xs"}
+                      placeholder="#00ff00"
+                    />
+                  </div>
+                  <div className="flex gap-1 mt-1.5">
+                    {CHROMA_KEY_PRESETS.filter((p) => p.color).map((preset) => (
+                      <button
+                        key={preset.color}
+                        type="button"
+                        className="h-6 w-6 rounded border border-border shrink-0"
+                        style={{ backgroundColor: preset.color }}
+                        title={preset.label}
+                        onClick={() =>
+                          onUpdate({
+                            chromaKey: { ...clip.chromaKey!, color: preset.color },
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+                <ColorSlider
+                  label="Threshold"
+                  value={Math.round((clip.chromaKey.threshold ?? 0.4) * 100)}
+                  min={0}
+                  max={100}
+                  onChange={(v) =>
+                    onUpdate({
+                      chromaKey: { ...clip.chromaKey!, threshold: v / 100 },
+                    })
+                  }
+                  formatValue={(v) => `${v}%`}
+                />
+                <ColorSlider
+                  label="Smoothness"
+                  value={Math.round((clip.chromaKey.smoothness ?? 0.1) * 100)}
+                  min={0}
+                  max={100}
+                  onChange={(v) =>
+                    onUpdate({
+                      chromaKey: { ...clip.chromaKey!, smoothness: v / 100 },
+                    })
+                  }
+                  formatValue={(v) => `${v}%`}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

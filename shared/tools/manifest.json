@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-03T04:55:52.928Z",
+  "generatedAt": "2026-02-03T15:58:34.978Z",
   "tools": {
     "captureAsset": {
       "name": "captureAsset",
@@ -620,10 +620,10 @@
         },
         {
           "name": "focus",
-          "label": "Focus Area",
+          "label": "Focus / Zoom",
           "type": "json",
-          "placeholder": "{\"x\":0,\"y\":0,\"width\":1,\"height\":1,\"padding\":0}",
-          "description": "Optional video focus region."
+          "placeholder": "{\"x\":0.5,\"y\":0.5,\"zoom\":1}",
+          "description": "Optional video focus: center (x,y 0–1) and zoom ratio (1 = full frame, 2 = 2×)."
         },
         {
           "name": "volume",
@@ -780,30 +780,24 @@
                 "type": "object",
                 "properties": {
                   "x": {
-                    "type": "number"
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
                   },
                   "y": {
-                    "type": "number"
-                  },
-                  "width": {
                     "type": "number",
-                    "exclusiveMinimum": 0
+                    "minimum": 0,
+                    "maximum": 1
                   },
-                  "height": {
+                  "zoom": {
                     "type": "number",
-                    "exclusiveMinimum": 0
-                  },
-                  "padding": {
-                    "type": "number",
-                    "minimum": 0
+                    "minimum": 1
                   }
                 },
                 "required": [
                   "x",
                   "y",
-                  "width",
-                  "height",
-                  "padding"
+                  "zoom"
                 ],
                 "additionalProperties": false
               },
@@ -998,8 +992,8 @@
           "name": "videoSettings",
           "label": "Video Settings",
           "type": "json",
-          "placeholder": "{\"width\":1920,\"height\":1080,\"objectFit\":\"contain\",\"focus\":{...},\"colorGrading\":{\"exposure\":0,\"contrast\":0,\"saturation\":0,\"temperature\":0,\"tint\":0,\"highlights\":0,\"shadows\":0}}",
-          "description": "Do not pass src—media URL is derived from clip's assetId. colorGrading: exposure (-2 to 2), contrast/saturation/temperature/tint/highlights/shadows (-100 to 100) for color correction."
+          "placeholder": "{\"width\":1920,\"height\":1080,\"objectFit\":\"contain\",\"focus\":{\"x\":0.5,\"y\":0.5,\"zoom\":1},\"colorGrading\":{...},\"chromaKey\":{...}}",
+          "description": "Do not pass src—media URL is derived from clip's assetId. focus: center (x,y 0–1) and zoom (1 = full frame, 2 = 2×). colorGrading: exposure (-2 to 2), contrast/saturation/temperature/tint/highlights/shadows (-100 to 100). chromaKey: key color (hex), threshold and smoothness 0–1 for green screen."
         },
         {
           "name": "audioSettings",
@@ -1114,30 +1108,24 @@
                     "type": "object",
                     "properties": {
                       "x": {
-                        "type": "number"
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
                       },
                       "y": {
-                        "type": "number"
-                      },
-                      "width": {
                         "type": "number",
-                        "exclusiveMinimum": 0
+                        "minimum": 0,
+                        "maximum": 1
                       },
-                      "height": {
+                      "zoom": {
                         "type": "number",
-                        "exclusiveMinimum": 0
-                      },
-                      "padding": {
-                        "type": "number",
-                        "minimum": 0
+                        "minimum": 1
                       }
                     },
                     "required": [
                       "x",
                       "y",
-                      "width",
-                      "height",
-                      "padding"
+                      "zoom"
                     ],
                     "additionalProperties": false
                   },
@@ -1180,6 +1168,30 @@
                         "maximum": 100
                       }
                     },
+                    "additionalProperties": false
+                  },
+                  "chromaKey": {
+                    "type": "object",
+                    "properties": {
+                      "color": {
+                        "type": "string",
+                        "pattern": "^#[0-9a-fA-F]{3,6}$"
+                      },
+                      "threshold": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "smoothness": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      }
+                    },
+                    "required": [
+                      "color",
+                      "threshold"
+                    ],
                     "additionalProperties": false
                   }
                 },
@@ -1897,7 +1909,7 @@
     "digestAsset": {
       "name": "digestAsset",
       "label": "Digest Asset",
-      "description": "Analyze an asset (video, image, or audio) using Gemini's multimodal capabilities. Returns a detailed description of the content.",
+      "description": "Analyze an asset (video, image, or audio) using Gemini's multimodal capabilities. Returns a detailed description of the content. For videos: use startOffset and endOffset to analyze only a segment (e.g. when the user asks about a specific part, or to reduce tokens on long videos).",
       "runLocation": "client",
       "implementations": {
         "app": true,
@@ -1945,14 +1957,14 @@
           "label": "Start Time (optional)",
           "type": "text",
           "placeholder": "e.g. 30s or 1m30s",
-          "description": "For videos: Start analyzing from this timestamp."
+          "description": "For videos only: analyze from this timestamp. Use when the user asks about a specific part of a video or to limit analysis to a segment. Format: 30s, 1m30s, 2m."
         },
         {
           "name": "endOffset",
           "label": "End Time (optional)",
           "type": "text",
           "placeholder": "e.g. 60s or 2m",
-          "description": "For videos: Stop analyzing at this timestamp."
+          "description": "For videos only: stop analyzing at this timestamp. Use with startOffset to analyze only a segment (e.g. 30s to 2m). Saves tokens on long videos."
         },
         {
           "name": "mediaResolution",
@@ -2375,6 +2387,87 @@
                 "type": "string"
               }
             },
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "applyChromaKeyToClip": {
+      "name": "applyChromaKeyToClip",
+      "label": "Apply Chroma Key to Clip",
+      "description": "Apply a chroma key (green screen) effect to a video or image clip. Makes the chosen key color transparent so you can composite over another background. Use getTimelineState to find clip IDs.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": true,
+        "langgraphName": "applyChromaKeyToClip"
+      },
+      "fields": [
+        {
+          "name": "clipId",
+          "label": "Clip ID",
+          "type": "text",
+          "required": true,
+          "description": "ID of the video or image clip to key"
+        },
+        {
+          "name": "color",
+          "label": "Key color",
+          "type": "text",
+          "placeholder": "#00ff00",
+          "required": true,
+          "description": "Hex color to make transparent (e.g. #00ff00 green, #0000ff blue)"
+        },
+        {
+          "name": "threshold",
+          "label": "Threshold",
+          "type": "number",
+          "placeholder": "0.4",
+          "description": "0–1: higher = more of the key color becomes transparent (default 0.4)"
+        },
+        {
+          "name": "smoothness",
+          "label": "Smoothness",
+          "type": "number",
+          "placeholder": "0.1",
+          "description": "0–1: edge softness (default 0.1)"
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/applyChromaKeyToClipInput",
+        "definitions": {
+          "applyChromaKeyToClipInput": {
+            "type": "object",
+            "properties": {
+              "clipId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "color": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{3,6}$",
+                "description": "Key color to make transparent (hex)"
+              },
+              "threshold": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "default": 0.4,
+                "description": "Tolerance 0–1: higher = more pixels become transparent"
+              },
+              "smoothness": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "default": 0.1,
+                "description": "Edge softness 0–1 (optional)"
+              }
+            },
+            "required": [
+              "clipId",
+              "color"
+            ],
             "additionalProperties": false
           }
         },

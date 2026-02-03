@@ -1,11 +1,12 @@
 import { createSignal, type SimpleSignal } from '@motion-canvas/core';
-import type { VisualEffectType, ColorGradingSettings } from './types';
+import type { VisualEffectType, ColorGradingSettings, ChromaKeySettings } from './types';
 import glitchShader from '../shaders/glitch.glsl';
 import waveDistortionShader from '../shaders/waveDistortion.glsl';
 import vhsEffectShader from '../shaders/vhsEffect.glsl';
 import pixelateShader from '../shaders/pixelate.glsl';
 import chromaticAberrationShader from '../shaders/chromaticAberration.glsl';
 import colorGradingShader from '../shaders/colorGrading.glsl';
+import chromaKeyShader from '../shaders/chromaKey.glsl';
 
 export type EffectShaderConfig = {
   fragment: string;
@@ -109,4 +110,52 @@ export function getEffectShaderConfig(
     default:
       return undefined;
   }
+}
+
+/** Parse hex color "#rrggbb" or "#rgb" to 0–1 RGB. */
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const s = hex.replace(/^#/, '');
+  if (s.length === 6) {
+    return {
+      r: parseInt(s.slice(0, 2), 16) / 255,
+      g: parseInt(s.slice(2, 4), 16) / 255,
+      b: parseInt(s.slice(4, 6), 16) / 255,
+    };
+  }
+  if (s.length === 3) {
+    return {
+      r: parseInt(s[0] + s[0], 16) / 255,
+      g: parseInt(s[1] + s[1], 16) / 255,
+      b: parseInt(s[2] + s[2], 16) / 255,
+    };
+  }
+  return { r: 0, g: 1, b: 0 }; // default green
+}
+
+export type ChromaKeyShaderConfig = {
+  fragment: string;
+  uniforms: Record<string, SimpleSignal<number>>;
+};
+
+/**
+ * Returns shader config for chroma key (green screen) when clip has chromaKey settings.
+ * Key color is parsed from hex; threshold and smoothness are 0–1.
+ */
+export function getChromaKeyShaderConfig(
+  settings: ChromaKeySettings | undefined
+): ChromaKeyShaderConfig | undefined {
+  if (!settings?.color) return undefined;
+  const { r, g, b } = hexToRgb(settings.color);
+  const threshold = Math.max(0, Math.min(1, settings.threshold ?? 0.4));
+  const smoothness = Math.max(0, Math.min(1, settings.smoothness ?? 0.1));
+  return {
+    fragment: chromaKeyShader,
+    uniforms: {
+      keyR: createSignal(r),
+      keyG: createSignal(g),
+      keyB: createSignal(b),
+      threshold: createSignal(threshold),
+      smoothness: createSignal(smoothness),
+    },
+  };
 }

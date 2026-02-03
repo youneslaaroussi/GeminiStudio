@@ -18,11 +18,9 @@ const vectorSchema = z.object({
 });
 
 const focusSchema: z.ZodType<Focus> = z.object({
-  x: z.number(),
-  y: z.number(),
-  width: z.number().positive("Focus width must be positive"),
-  height: z.number().positive("Focus height must be positive"),
-  padding: z.number().min(0, "Padding must be zero or greater"),
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  zoom: z.number().min(1, "Zoom must be at least 1"),
 });
 
 const transitionTypeSchema = z.enum([
@@ -216,10 +214,10 @@ export const timelineAddClipTool: ToolDefinition<
     },
     {
       name: "focus",
-      label: "Focus Area",
+      label: "Focus / Zoom",
       type: "json",
-      placeholder: '{"x":0,"y":0,"width":1,"height":1,"padding":0}',
-      description: "Optional video focus region.",
+      placeholder: '{"x":0.5,"y":0.5,"zoom":1}',
+      description: "Optional video focus: center (x,y 0–1) and zoom ratio (1 = full frame, 2 = 2×).",
     },
     {
       name: "volume",

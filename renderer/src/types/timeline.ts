@@ -48,12 +48,11 @@ export interface Vec2 {
   y: number;
 }
 
+/** Focus/zoom: center (0–1) and zoom ratio (1 = full frame, >1 = zoom in). */
 export interface Focus {
   x: number;
   y: number;
-  width: number;
-  height: number;
-  padding: number;
+  zoom: number;
 }
 
 export type ObjectFit = 'contain' | 'cover' | 'fill';
@@ -67,6 +66,13 @@ export interface ColorGradingSettings {
   tint: number;
   highlights: number;
   shadows: number;
+}
+
+/** Chroma key (green screen) settings */
+export interface ChromaKeySettings {
+  color: string;
+  threshold: number;
+  smoothness?: number;
 }
 
 /** Visual effect applied to a clip (glitch, ripple, etc.) */
@@ -118,6 +124,8 @@ export interface VideoClip extends BaseClip {
   effect?: VisualEffectType;
   /** Color grading settings */
   colorGrading?: ColorGradingSettings;
+  /** Chroma key (green screen) */
+  chromaKey?: ChromaKeySettings;
 }
 
 export interface AudioClip extends BaseClip {
@@ -151,6 +159,8 @@ export interface ImageClip extends BaseClip {
   effect?: VisualEffectType;
   /** Color grading settings */
   colorGrading?: ColorGradingSettings;
+  /** Chroma key for image clips */
+  chromaKey?: ChromaKeySettings;
 }
 
 export type TimelineClip = VideoClip | AudioClip | TextClip | ImageClip;
