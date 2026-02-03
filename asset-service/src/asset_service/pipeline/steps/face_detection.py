@@ -120,8 +120,35 @@ def _summarize_face_annotation(annotation, index: int) -> dict[str, Any]:
 )
 async def face_detection_step(context: PipelineContext) -> PipelineResult:
     """Detect faces in video."""
-    # Get GCS URI from upload step
+    settings = get_settings()
     state = await get_pipeline_state(context.user_id, context.project_id, context.asset.id)
+
+    # Skip face detection for clips longer than configured max (avoids API timeouts)
+    metadata_step = next((s for s in state.get("steps", []) if s["id"] == "metadata"), None)
+    duration = None
+    if metadata_step:
+        duration = metadata_step.get("metadata", {}).get("duration")
+    if context.asset.duration is not None:
+        duration = context.asset.duration
+    max_sec = settings.face_detection_max_duration_seconds
+    if duration is not None and duration > max_sec:
+        logger.info(
+            "Skipping face detection for asset %s: duration %.1fs exceeds max %ds",
+            context.asset.id,
+            duration,
+            max_sec,
+        )
+        return PipelineResult(
+            status=StepStatus.SUCCEEDED,
+            metadata={
+                "skipped": True,
+                "reason": f"Clip duration ({duration:.1f}s) exceeds max for face detection ({max_sec}s)",
+                "durationSeconds": duration,
+                "maxDurationSeconds": max_sec,
+            },
+        )
+
+    # Get GCS URI from upload step
     upload_step = next((s for s in state.get("steps", []) if s["id"] == "cloud-upload"), None)
     gcs_uri = upload_step.get("metadata", {}).get("gcsUri") if upload_step else None
 

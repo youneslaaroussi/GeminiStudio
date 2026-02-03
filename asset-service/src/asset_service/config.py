@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     # If not set, HMAC verification is disabled (dev mode)
     shared_secret: str | None = Field(default=None, alias="SHARED_SECRET")
 
+    # Face detection: skip for clips longer than this (seconds) to avoid timeouts
+    face_detection_max_duration_seconds: int = Field(default=120, alias="FACE_DETECTION_MAX_DURATION_SECONDS")
+
     # Algolia Search
     algolia_app_id: str | None = Field(default=None, alias="ALGOLIA_APP_ID")
     algolia_admin_api_key: str | None = Field(default=None, alias="ALGOLIA_ADMIN_API_KEY")
