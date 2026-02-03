@@ -60,10 +60,21 @@ export async function GET(request: NextRequest) {
       response.headers.get("content-type") || "application/octet-stream";
     const contentLength = response.headers.get("content-length");
 
-    // Extract filename from URL path
+    // Extract filename from URL path so extension matches actual format (webm, gif, mp4)
     const pathParts = parsedUrl.pathname.split("/");
+    const pathBasename = pathParts[pathParts.length - 1]?.split("?")[0] || "";
+    const ext =
+      contentType.startsWith("video/webm")
+        ? ".webm"
+        : contentType.startsWith("image/gif")
+          ? ".gif"
+          : ".mp4";
     const filename =
-      pathParts[pathParts.length - 1]?.split("?")[0] || "video.mp4";
+      pathBasename && /\.(mp4|webm|gif)$/i.test(pathBasename)
+        ? pathBasename
+        : pathBasename
+          ? pathBasename.replace(/\.[^.]*$/, ext) || `video${ext}`
+          : `video${ext}`;
 
     // Stream the response
     const headers = new Headers({

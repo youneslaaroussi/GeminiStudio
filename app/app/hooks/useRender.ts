@@ -161,7 +161,23 @@ async function fetchDownloadUrl(gcsPath: string): Promise<string | null> {
   return null;
 }
 
-async function downloadInBackground(url: string, filename: string): Promise<void> {
+/** Derive file extension from Content-Type so download filename matches actual format (e.g. webm, gif). */
+function extensionFromContentType(contentType: string): string {
+  const mime = contentType.split(";")[0].trim().toLowerCase();
+  if (mime === "video/webm") return ".webm";
+  if (mime === "image/gif") return ".gif";
+  if (mime === "video/mp4" || mime === "video/quicktime") return ".mp4";
+  return ".mp4";
+}
+
+/** Parse filename from Content-Disposition header (e.g. attachment; filename="video.webm"). */
+function filenameFromContentDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const match = header.match(/filename\*?=(?:UTF-8'')?"?([^";\n]+)"?/i);
+  return match ? decodeURIComponent(match[1].trim()) : null;
+}
+
+async function downloadInBackground(url: string, fallbackFilename?: string): Promise<void> {
   const toastId = toast.loading("Downloading video...");
 
   try {
@@ -172,6 +188,17 @@ async function downloadInBackground(url: string, filename: string): Promise<void
 
     if (!response.ok) {
       throw new Error(`Download failed: ${response.status}`);
+    }
+
+    let filename =
+      filenameFromContentDisposition(response.headers.get("Content-Disposition")) ??
+      fallbackFilename ??
+      null;
+    if (!filename) {
+      const ext = extensionFromContentType(
+        response.headers.get("Content-Type") || "video/mp4"
+      );
+      filename = `render-${Date.now()}${ext}`;
     }
 
     const blob = await response.blob();
@@ -198,8 +225,7 @@ function showCompletionToast(downloadUrl: string) {
     action: {
       label: "Download",
       onClick: () => {
-        const filename = `render-${Date.now()}.mp4`;
-        downloadInBackground(downloadUrl, filename);
+        downloadInBackground(downloadUrl);
       },
     },
   });

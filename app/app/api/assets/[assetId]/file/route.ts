@@ -141,8 +141,20 @@ export async function GET(
     const isDownload = searchParams.get("download") === "1";
     const hasVersion = searchParams.has("v");
 
-    // Safe filename for Content-Disposition (strip path chars, quote if needed)
-    const safeName = (asset.name || "download").replace(/[\\/"[\]:;|*?<>]/g, "_").trim() || "download";
+    // Safe filename for Content-Disposition; ensure extension matches actual type (webm, gif, mp4)
+    const mimeExt =
+      asset.mimeType?.startsWith("video/webm")
+        ? ".webm"
+        : asset.mimeType?.startsWith("image/gif")
+          ? ".gif"
+          : asset.mimeType?.startsWith("video/")
+            ? ".mp4"
+            : "";
+    let safeName = (asset.name || "download").replace(/[\\/"[\]:;|*?<>]/g, "_").trim() || "download";
+    if (mimeExt && !safeName.toLowerCase().endsWith(mimeExt)) {
+      const base = safeName.replace(/\.[^.]*$/, "") || safeName;
+      safeName = base + mimeExt;
+    }
 
     // If version param is present, URL is cache-busted so we can cache aggressively.
     // Otherwise, use no-cache for backwards compatibility with old URLs.

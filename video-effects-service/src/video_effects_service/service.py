@@ -132,8 +132,17 @@ async def _handle_completion(
     logger.info(f"Downloading processed video from {result_url}")
     file_content, mime_type = await download_remote_file(result_url)
 
-    # Upload to asset service
-    filename = f"{definition.label or definition.id}-{job_id[:8]}.mp4"
+    # Use extension that matches actual format (webm, gif, mp4) so download filename is correct
+    ext = ".mp4"
+    if mime_type:
+        mt = mime_type.split(";")[0].strip().lower()
+        if mt == "video/webm":
+            ext = ".webm"
+        elif mt == "image/gif":
+            ext = ".gif"
+        elif mt.startswith("video/"):
+            ext = ".mp4"
+    filename = f"{definition.label or definition.id}-{job_id[:8]}{ext}"
     logger.info(f"Uploading result as {filename}")
 
     result = await upload_to_asset_service(

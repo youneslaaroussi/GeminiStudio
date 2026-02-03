@@ -121,11 +121,14 @@ export function AssetList({
       const downloadUrl = `${base}${sep}download=1`;
       const res = await fetch(downloadUrl, { credentials: "include" });
       if (!res.ok) throw new Error(res.statusText);
+      const cd = res.headers.get("Content-Disposition");
+      const match = cd?.match(/filename\*?=(?:UTF-8'')?"?([^";\n]+)"?/i);
+      const filename = match ? decodeURIComponent(match[1].trim()) : (asset.name || "download");
       const blob = await res.blob();
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
-      link.download = asset.name || "download";
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
