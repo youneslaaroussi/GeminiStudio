@@ -18,6 +18,7 @@ from .generate_image_tool import generateImage
 from .generate_music_tool import generateMusic
 from .generate_tts_tool import generateSpeech
 from .generate_veo_video_tool import generateVeoVideo
+from .digest_asset_tool import digestAsset
 from .get_asset_metadata_tool import getAssetMetadata
 from .get_timeline_state_tool import getTimelineState
 from .list_assets_tool import listAssets
@@ -51,6 +52,7 @@ def get_registered_tools() -> Sequence[BaseTool]:
         generateSpeech,
         generateVeoVideo,
         get_current_time_utc,
+        digestAsset,
         getAssetMetadata,
         getTimelineState,
         listAssets,
