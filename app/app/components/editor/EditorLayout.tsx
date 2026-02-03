@@ -710,7 +710,7 @@ export function EditorLayout() {
                           textClipSettings={project.textClipSettings}
                           sceneConfig={{
                             resolution: project.resolution,
-                            renderScale: project.renderScale,
+                            renderScale: project.previewRenderScale ?? 0.5,
                             background: project.background,
                           }}
                         />

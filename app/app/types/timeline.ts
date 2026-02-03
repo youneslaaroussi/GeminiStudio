@@ -239,6 +239,7 @@ export interface Project {
   fps: number;
   layers: Layer[];
   renderScale: number;
+  previewRenderScale?: number;
   background: string;
   transcriptions?: Record<string, ProjectTranscription>;
   transitions?: Record<TransitionKey, ClipTransition>;

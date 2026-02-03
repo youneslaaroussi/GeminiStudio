@@ -215,27 +215,28 @@ export function ChatPanel() {
       onFinish: useCallback(
         async () => {
           const msgs = messagesRef.current;
-          const userTexts = msgs
-            .filter((m) => m.role === "user")
-            .map((m) =>
-              (m.parts ?? [])
+          const conversationContext = msgs
+            .filter((m) => m.role === "user" || m.role === "assistant")
+            .map((m) => {
+              const textContent = (m.parts ?? [])
                 .filter((p): p is { type: "text"; text: string } => p.type === "text")
                 .map((p) => p.text)
-                .join(" ")
-            )
+                .join(" ");
+              return textContent ? `${m.role}: ${textContent}` : "";
+            })
             .filter(Boolean)
             .join("\n\n");
-          if (!userTexts.trim() || !user?.uid || !projectId) return;
+          if (!conversationContext.trim() || !user?.uid || !projectId) return;
           const name = project?.name ?? "";
           const isDefaultName =
             name === "New Project" || name === "Untitled Project";
           if (!isDefaultName) return;
           try {
             const headers = await getAuthHeaders();
-            const res = await fetch("/api/chat/generate-title", {
+            const res = await fetch("/api/generate-project-title", {
               method: "POST",
               headers: { "Content-Type": "application/json", ...headers },
-              body: JSON.stringify({ context: userTexts.trim() }),
+              body: JSON.stringify({ context: conversationContext.trim() }),
             });
             if (!res.ok) return;
             const data = (await res.json()) as {

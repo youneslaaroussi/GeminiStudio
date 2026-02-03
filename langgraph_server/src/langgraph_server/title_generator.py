@@ -36,7 +36,7 @@ def _build_title_model(settings: Settings) -> ChatGoogleGenerativeAI | None:
     if not settings.google_api_key:
         return None
     return ChatGoogleGenerativeAI(
-        model=settings.gemini_title_model,
+        model=settings.gemini_title_model or "gemini-2.0-flash",
         api_key=settings.google_api_key,
         timeout=15,
         max_retries=1,

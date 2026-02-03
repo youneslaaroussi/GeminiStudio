@@ -242,17 +242,22 @@ async def teleport(
                     branch_info = first_proj.get("_branch", {})
                     project_data = first_proj.get("_projectData", {})
 
-                    # Auto-generate project title from first message(s) if still default
+                    # Auto-generate project title from conversation if still default
                     proj_name = first_proj.get("name") or ""
                     if proj_name in ("New Project", "Untitled Project") and user_id and first_project_id:
-                        user_texts = []
+                        conversation_parts = []
                         for msg in session.get("messages", []):
-                            if msg.get("role") != "user":
+                            role = msg.get("role", "")
+                            if role not in ("user", "assistant"):
                                 continue
+                            text_parts = []
                             for part in msg.get("parts", []):
                                 if isinstance(part, dict) and part.get("type") == "text":
-                                    user_texts.append(part.get("text", ""))
-                        context_str = "\n\n".join(t for t in user_texts if (t or "").strip())
+                                    text_parts.append(part.get("text", ""))
+                            text_content = " ".join(t for t in text_parts if t)
+                            if text_content.strip():
+                                conversation_parts.append(f"{role}: {text_content}")
+                        context_str = "\n\n".join(conversation_parts)
                         if context_str.strip():
                             try:
                                 title_result = await generate_project_title(context_str, settings)

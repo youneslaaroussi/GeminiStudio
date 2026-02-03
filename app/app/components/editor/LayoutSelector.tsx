@@ -26,7 +26,7 @@ export interface LayoutConfig {
 export const LAYOUT_PRESETS: Record<EditorLayoutPreset, LayoutConfig> = {
   agentic: {
     mainPanelSize: 70,
-    rightPanelSize: 30,
+    rightPanelSize: 22,
     assetsPanelSize: 36,
     previewPanelSize: 49,
     settingsPanelSize: 15,
@@ -37,7 +37,7 @@ export const LAYOUT_PRESETS: Record<EditorLayoutPreset, LayoutConfig> = {
   },
   manual: {
     mainPanelSize: 82,
-    rightPanelSize: 18,
+    rightPanelSize: 15,
     assetsPanelSize: 40,
     previewPanelSize: 38,
     settingsPanelSize: 22,
@@ -58,7 +58,7 @@ export const LAYOUT_PRESETS: Record<EditorLayoutPreset, LayoutConfig> = {
   },
   timeline: {
     mainPanelSize: 85,
-    rightPanelSize: 15,
+    rightPanelSize: 12,
     assetsPanelSize: 38,
     previewPanelSize: 42,
     settingsPanelSize: 20,

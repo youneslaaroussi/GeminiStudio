@@ -49,7 +49,7 @@ services:
       - VIDEO_EFFECTS_SERVICE_URL=http://video-effects-service:8082
       - RENDERER_API_URL=http://renderer:4000
       - GOOGLE_GENERATIVE_AI_API_KEY=${GEMINI_API_KEY}
-      - AI_TITLE_GOOGLE_MODEL=${AI_TITLE_GOOGLE_MODEL:-gemini-2.5-flash-preview}
+      - AI_TITLE_GOOGLE_MODEL=${AI_TITLE_GOOGLE_MODEL:-gemini-2.0-flash}
       - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
       - ASSET_GCS_BUCKET=${ASSET_GCS_BUCKET}
       # Service accounts
@@ -191,7 +191,7 @@ services:
       - GOOGLE_GENERATIVE_AI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3-pro-preview}
       - GEMINI_STATUS_MODEL=${GEMINI_STATUS_MODEL:-gemini-2.5-flash}
-      - GEMINI_TITLE_MODEL=${GEMINI_TITLE_MODEL:-gemini-2.5-flash-preview}
+      - GEMINI_TITLE_MODEL=${GEMINI_TITLE_MODEL:-gemini-2.0-flash}
       - GOOGLE_CLOUD_STORAGE_BUCKET=${CHECKPOINT_GCS_BUCKET:-${ASSET_GCS_BUCKET}}
       - ASSET_SERVICE_URL=http://asset-service:8081
       - ASSET_SERVICE_SHARED_SECRET=${ASSET_SERVICE_SHARED_SECRET:-}

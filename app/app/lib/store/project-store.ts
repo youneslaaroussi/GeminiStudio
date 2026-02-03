@@ -64,7 +64,7 @@ interface ProjectStore {
   setPlaybackSpeed: (speed: number) => void;
   splitClipAtTime: (id: string, time: number) => void;
   updateProjectSettings: (
-    settings: Partial<Pick<Project, 'renderScale' | 'background' | 'resolution' | 'fps' | 'name' | 'captionSettings' | 'textClipSettings'>>
+    settings: Partial<Pick<Project, 'renderScale' | 'previewRenderScale' | 'background' | 'resolution' | 'fps' | 'name' | 'captionSettings' | 'textClipSettings'>>
   ) => void;
   setProject: (project: Project, options?: { markSaved?: boolean }) => void;
   upsertProjectTranscription: (transcription: ProjectTranscription) => void;
@@ -182,6 +182,7 @@ const defaultProject: Project = ensureAssistantChatState({
   resolution: { width: 1920, height: 1080 },
   fps: 30,
   renderScale: 1,
+  previewRenderScale: 0.5,
   background: '#000000',
   layers: [],
   transcriptions: {},
@@ -737,6 +738,10 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
               settings.renderScale !== undefined
                 ? Math.max(0.25, Math.min(4, settings.renderScale))
                 : state.project.renderScale,
+            previewRenderScale:
+              settings.previewRenderScale !== undefined
+                ? Math.max(0.25, Math.min(2, settings.previewRenderScale))
+                : state.project.previewRenderScale,
             background:
               settings.background !== undefined
                 ? settings.background

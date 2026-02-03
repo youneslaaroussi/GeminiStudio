@@ -89,6 +89,23 @@ export function SceneSettings() {
             </select>
           </div>
 
+          {/* Preview Quality */}
+          <div>
+            <label className={labelClassName}>Preview Quality</label>
+            <select
+              value={project.previewRenderScale ?? 0.5}
+              onChange={(e) =>
+                updateProjectSettings({ previewRenderScale: Number(e.target.value) })
+              }
+              className={inputClassName}
+            >
+              <option value={0.25}>Quarter (0.25x)</option>
+              <option value={0.5}>Half (0.5x)</option>
+              <option value={1}>Full (1x)</option>
+              <option value={2}>Double (2x)</option>
+            </select>
+          </div>
+
           {/* Background */}
           <div>
             <label className={labelClassName}>Background</label>

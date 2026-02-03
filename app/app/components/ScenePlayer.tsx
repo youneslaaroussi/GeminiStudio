@@ -86,6 +86,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   const latestCaptionSettingsRef = useRef(captionSettings);
   const latestTextClipSettingsRef = useRef(textClipSettings);
   const onVariablesUpdatedRef = useRef(onVariablesUpdated);
+  const latestCurrentTimeRef = useRef(currentTime);
   
   const setSelectedClip = useProjectStore((s) => s.setSelectedClip);
 
@@ -115,6 +116,10 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   useEffect(() => {
     onVariablesUpdatedRef.current = onVariablesUpdated;
   }, [onVariablesUpdated]);
+
+  useEffect(() => {
+    latestCurrentTimeRef.current = currentTime;
+  }, [currentTime]);
 
   // Viewport State
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -421,6 +426,8 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   useEffect(() => {
     if (!project || !canvasWrapperRef.current) return;
 
+    console.log('[ScenePlayer] Creating player', { resolution: sceneConfig.resolution, renderScale: sceneConfig.renderScale, seekToTime: latestCurrentTimeRef.current });
+
     const m = project;
     const meta = m.meta;
     const preview = meta.preview.get();
@@ -435,7 +442,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
       size: initialSize,
       range: [0, duration * PREVIEW_FPS], // Convert to frames
       fps: PREVIEW_FPS,
-      resolutionScale: 1,
+      resolutionScale: sceneConfig.renderScale,
     });
 
     let hasRendered = false;
@@ -450,6 +457,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
         // Mark first frame as rendered
         if (!hasRendered) {
           hasRendered = true;
+          console.log('[ScenePlayer] First frame rendered, removing loader');
           setHasRenderedFirstFrame(true);
         }
       } catch (err) {
@@ -459,7 +467,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
 
     stageInstance.configure({
       size: initialSize,
-      resolutionScale: 1,
+      resolutionScale: sceneConfig.renderScale,
       background: sceneConfig.background,
     });
 
@@ -484,7 +492,14 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
       },
     });
     (playerInstance as unknown as { requestRecalculation?: () => void }).requestRecalculation?.();
-    playerInstance.requestRender();
+    
+    // Seek to current playhead position so we don't reset to frame 0
+    // Use setTimeout to give the player time to initialize before seeking
+    const initialFrame = Math.floor(latestCurrentTimeRef.current * PREVIEW_FPS);
+    const seekTimeout = setTimeout(() => {
+      playerInstance.requestSeek(initialFrame);
+      playerInstance.requestRender();
+    }, 50);
 
     // Style the canvas
     const canvas = stageInstance.finalBuffer;
@@ -500,6 +515,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
     onCanvasReady?.(canvas);
 
     return () => {
+      clearTimeout(seekTimeout);
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
@@ -516,7 +532,8 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
     duration,
     sceneConfig.resolution.width,
     sceneConfig.resolution.height,
-    // Note: renderScale and background are handled by the stage.configure() useEffect below
+    sceneConfig.renderScale,
+    // Note: background is handled by the stage.configure() useEffect below
     // to avoid recreating the player (which resets to frame 0)
   ]);
 
@@ -531,7 +548,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
     if (!stage || !player) return;
     stage.configure({
       size: new Vector2(sceneConfig.resolution.width, sceneConfig.resolution.height),
-      resolutionScale: 1,
+      resolutionScale: sceneConfig.renderScale,
       background: sceneConfig.background,
     });
     if (stage.finalBuffer) {
@@ -544,6 +561,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
     player,
     sceneConfig.resolution.width,
     sceneConfig.resolution.height,
+    sceneConfig.renderScale,
     sceneConfig.background,
   ]);
 
@@ -660,7 +678,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
                 player={player}
                 transform={transform}
                 containerSize={containerSize}
-                renderScale={1}
+                renderScale={sceneConfig.renderScale}
                 onDragEnd={() => {
                   skipNextSceneClickRef.current = true;
                 }}

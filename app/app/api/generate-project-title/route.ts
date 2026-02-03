@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 const API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 const TITLE_MODEL =
-  process.env.AI_TITLE_GOOGLE_MODEL ?? process.env.GEMINI_TITLE_MODEL ?? "gemini-2.5-flash-preview";
+  process.env.AI_TITLE_GOOGLE_MODEL ?? process.env.GEMINI_TITLE_MODEL ?? "gemini-2.0-flash";
 
 const SYSTEM_PROMPT = `You suggest a short project title for a video editing app based on the user's first message or conversation.
 
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     console.error("[generate-title] Gemini API error:", errorText);
     return NextResponse.json(
       { error: "Title generation failed" },
-      { status: response.status }
+      { status: 500 }
     );
   }
 
