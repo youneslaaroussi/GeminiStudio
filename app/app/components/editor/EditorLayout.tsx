@@ -680,7 +680,7 @@ export function EditorLayout() {
                 <ResizablePanel defaultSize={layoutConfig.topAreaSize} minSize={30}>
                   <ResizablePanelGroup key={`layout-top-${currentLayout}`} direction="horizontal" className="h-full">
                     {/* Left: Assets */}
-                    <ResizablePanel defaultSize={layoutConfig.assetsPanelSize} minSize={15} maxSize={30}>
+                    <ResizablePanel defaultSize={layoutConfig.assetsPanelSize} minSize={30} maxSize={50}>
                       <div className="h-full bg-card border-r border-border min-w-0">
                         <AssetsPanel onSetAssetTabReady={handleAssetTabReady} />
                       </div>

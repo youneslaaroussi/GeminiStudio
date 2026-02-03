@@ -83,6 +83,7 @@ export function useAssets() {
         prev.forEach((id) => {
           const asset = list.find((a) => a.id === id);
           if (!asset) return;
+
           // Use server-side transcodeStatus to determine completion/failure
           const transcodeStatus = asset.transcodeStatus;
           if (transcodeStatus === "completed" || transcodeStatus === "error") {
@@ -90,6 +91,20 @@ export function useAssets() {
             next.delete(id);
             return;
           }
+
+          // If transcodeStatus is not set (undefined), check if transcode was never triggered
+          // This handles the case where transcode was disabled or not applicable
+          if (!transcodeStatus) {
+            // Check if asset is already in final form (mp4 for video, png for image)
+            const name = asset.name?.toLowerCase() ?? "";
+            const isVideoComplete = asset.type === "video" && (name.endsWith(".mp4") || asset.mimeType === "video/mp4");
+            const isImageComplete = asset.type === "image" && (name.endsWith(".png") || asset.mimeType === "image/png");
+            if (isVideoComplete || isImageComplete) {
+              next.delete(id);
+              return;
+            }
+          }
+
           // Fallback: also check mimeType for image conversion (no transcodeStatus for images)
           if (asset.type === "image" && asset.mimeType === "image/png") {
             next.delete(id);
