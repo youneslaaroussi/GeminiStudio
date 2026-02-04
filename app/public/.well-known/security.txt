@@ -1,0 +1,11 @@
+# Gemini Studio Security Policy
+# https://www.geminivideo.studio
+
+Contact: hello@youneslaaroussi.ca
+Expires: 2027-12-31T23:59:59.000Z
+Preferred-Languages: en
+Canonical: https://www.geminivideo.studio/.well-known/security.txt
+
+# Security Disclosure Policy
+# Please report security vulnerabilities responsibly.
+# We appreciate coordinated disclosure and will work with you to address issues.

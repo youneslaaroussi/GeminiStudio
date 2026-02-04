@@ -1,0 +1,21 @@
+# robots.txt for Gemini Studio
+# https://www.geminivideo.studio
+
+User-agent: *
+Allow: /
+
+# Disallow API routes and internal endpoints
+Disallow: /api/
+Disallow: /_next/
+Disallow: /editor/
+
+# Allow public pages
+Allow: /
+Allow: /privacy
+Allow: /tos
+
+# Sitemap location
+Sitemap: https://www.geminivideo.studio/sitemap.xml
+
+# Crawl-delay for respectful crawling
+Crawl-delay: 1

@@ -1,0 +1,24 @@
+# humanstxt.org/
+# The humans responsible & technology colophon
+
+# TEAM
+
+    Younes Laaroussi -- hello@youneslaaroussi.ca -- https://github.com/youneslaaroussi/geministudio
+
+# TECHNOLOGY COLOPHON
+
+    Frontend: Next.js 15, React, TypeScript
+    Backend: FastAPI (Python), LangGraph, Gemini 3 Pro
+    Rendering: Motion Canvas, Puppeteer, FFmpeg
+    Storage: Google Cloud Storage, Firestore
+    Queue: BullMQ, Redis
+    Events: Google Cloud Pub/Sub
+    Auth: Firebase
+    AI: Google Gemini 3 Pro, Veo 3, Lyria, Chirp TTS
+
+# SITE
+
+    Last update: 2026/02/04
+    Standards: HTML5, CSS3, JavaScript ES2023
+    Components: React, TypeScript
+    Software: Node.js 20+, Python 3.11+

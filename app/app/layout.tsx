@@ -155,9 +155,67 @@ export const metadata: Metadata = {
   title: "Gemini Studio",
   description: "Local-first creative editor for building AI-assisted video timelines",
   applicationName: "Gemini Studio",
+  keywords: [
+    "video editing",
+    "AI video editor",
+    "agentic video",
+    "Gemini Studio",
+    "AI-assisted editing",
+    "video production",
+    "automated video editing",
+    "semantic video editing",
+    "Gemini 3 Pro",
+    "LangGraph",
+    "Motion Canvas",
+    "video timeline editor",
+    "AI video generation",
+    "Veo 3",
+    "video creation",
+    "video automation",
+  ],
+  authors: [{ name: "Younes Laaroussi" }],
+  creator: "Younes Laaroussi",
+  publisher: "Younes Laaroussi",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
   icons: {
     icon: "/gemini-logo.png",
     apple: "/gemini-logo.png",
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "https://www.geminivideo.studio",
+    siteName: "Gemini Studio",
+    title: "Gemini Studio - The Execution Layer for Agentic Video",
+    description: "Local-first creative editor for building AI-assisted video timelines. The deterministic engine that gives AI agents the hands to edit video.",
+    images: [
+      {
+        url: "https://www.geminivideo.studio/GeminiStudio_Banner_Full.png",
+        width: 1200,
+        height: 630,
+        alt: "Gemini Studio - The Execution Layer for Agentic Video",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Gemini Studio - The Execution Layer for Agentic Video",
+    description: "Local-first creative editor for building AI-assisted video timelines",
+    images: ["https://www.geminivideo.studio/GeminiStudio_Banner_Full.png"],
+    creator: "@geministudio",
+  },
+  alternates: {
+    canonical: "https://www.geminivideo.studio",
   },
   other: {
     "preload:inter": `<link rel="preload" href="/fonts/inter-variable.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />`,
@@ -169,9 +227,44 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "Gemini Studio",
+    applicationCategory: "MultimediaApplication",
+    operatingSystem: "Web",
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "USD",
+    },
+    description: "Local-first creative editor for building AI-assisted video timelines. The deterministic engine that gives AI agents the hands to edit video.",
+    url: "https://www.geminivideo.studio",
+    author: {
+      "@type": "Person",
+      name: "Younes Laaroussi",
+      url: "https://github.com/youneslaaroussi/geministudio",
+      email: "hello@youneslaaroussi.ca",
+    },
+    featureList: [
+      "AI-assisted video editing",
+      "Semantic asset understanding",
+      "Agentic video production",
+      "Git-style branching for video",
+      "Real-time collaboration",
+      "Automated video generation",
+    ],
+    keywords: "video editing, AI video editor, agentic video, Gemini Studio, AI-assisted editing, video production",
+    screenshot: "https://www.geminivideo.studio/GeminiStudio_Banner_Full.png",
+  };
+
   return (
     <html lang="en" className="dark">
       <body className="antialiased bg-background text-foreground">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
         <AnalyticsProvider>
           {children}
           <Copyright />
