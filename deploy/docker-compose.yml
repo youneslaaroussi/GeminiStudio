@@ -179,8 +179,8 @@ services:
   # LangGraph Server - AI agent with tools
   langgraph-server:
     build:
-      context: ../langgraph_server
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: langgraph_server/Dockerfile
     restart: unless-stopped
     # No public ports - only accessible via internal network
     environment:

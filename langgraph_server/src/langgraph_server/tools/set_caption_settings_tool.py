@@ -26,9 +26,11 @@ logger = logging.getLogger(__name__)
 
 def _load_font_families() -> tuple[str, ...]:
     """Load font families from shared/fonts.json (single source of truth with app)."""
-    # langgraph_server/src/langgraph_server/tools/ -> repo root (5 levels up)
-    root = Path(__file__).resolve().parent.parent.parent.parent.parent
-    path = root / "shared" / "fonts.json"
+    # Single path calculation: go up 5 levels from this file to reach base directory
+    # Works in both dev and Docker when structure matches
+    base_path = Path(__file__).resolve().parent.parent.parent.parent.parent
+    path = base_path / "shared" / "fonts.json"
+    
     with open(path) as f:
         data = json.load(f)
     fonts = data["fonts"]

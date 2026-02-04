@@ -22,11 +22,19 @@ WORKDIR /app
 
 RUN pip install "poetry==$POETRY_VERSION"
 
-COPY pyproject.toml poetry.lock* README.md ./
-COPY src ./src
+# Copy to match dev structure: /app/langgraph_server/src/... and /app/shared/...
+COPY langgraph_server/pyproject.toml langgraph_server/poetry.lock* langgraph_server/README.md ./langgraph_server/
+COPY langgraph_server/src ./langgraph_server/src
+COPY shared ./shared
+
+WORKDIR /app/langgraph_server
 
 RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi --only main
+
+ENV PYTHONPATH=/app/langgraph_server/src:$PYTHONPATH
+
+WORKDIR /app
 
 EXPOSE 8080
 
