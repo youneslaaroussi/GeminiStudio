@@ -17,6 +17,7 @@ RUN pnpm install --frozen-lockfile || pnpm install
 # Copy source
 COPY app ./app
 COPY scene ./scene
+COPY shared ./shared
 COPY tsconfig.base.json ./
 
 # Build scene first (dependency)
