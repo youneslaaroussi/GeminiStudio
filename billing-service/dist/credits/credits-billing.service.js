@@ -22,6 +22,9 @@ const config_1 = require("@nestjs/config");
 const common_2 = require("@nestjs/common");
 const firestore_1 = require("firebase-admin/firestore");
 const stripe_1 = __importDefault(require("stripe"));
+const kickbox_service_1 = require("./kickbox.service");
+const SIGNUP_BONUS_CREDITS = 30;
+const SIGNUP_BONUS_CLAIMS = 'signupBonusClaims';
 const PACKS = [
     { id: 'starter', name: 'Starter', credits: 100, priceIdEnv: 'STRIPE_PRICE_STARTER' },
     { id: 'pro', name: 'Pro', credits: 500, priceIdEnv: 'STRIPE_PRICE_PRO' },
@@ -30,6 +33,7 @@ const PACKS = [
 const BILLING_DOC = 'billing';
 let CreditsBillingService = CreditsBillingService_1 = class CreditsBillingService {
     config;
+    kickbox;
     firebaseApp;
     logger = new common_1.Logger(CreditsBillingService_1.name);
     stripe;
@@ -37,8 +41,9 @@ let CreditsBillingService = CreditsBillingService_1 = class CreditsBillingServic
     purchasesRef;
     webhookSecret;
     frontendUrl;
-    constructor(config, firebaseApp) {
+    constructor(config, kickbox, firebaseApp) {
         this.config = config;
+        this.kickbox = kickbox;
         this.firebaseApp = firebaseApp;
         const secret = this.config.get('STRIPE_SECRET_KEY');
         if (!secret) {
@@ -316,6 +321,53 @@ let CreditsBillingService = CreditsBillingService_1 = class CreditsBillingServic
         });
         this.logger.log('Renewal credits added', { userId, packId, credits: creditsPerMonth, subscriptionId });
     }
+    async grantSignupBonus(userId, email) {
+        const normalized = email?.trim().toLowerCase();
+        if (!normalized) {
+            return { granted: false };
+        }
+        const claimsRef = this.db.collection(SIGNUP_BONUS_CLAIMS);
+        const claimDoc = claimsRef.doc(normalized);
+        const existing = await claimDoc.get();
+        if (existing.exists) {
+            this.logger.log('Signup bonus already claimed for email', { email: normalized.slice(0, 3) + '***' });
+            return { granted: false };
+        }
+        const verified = await this.kickbox.verify(normalized);
+        if (!verified) {
+            return { granted: false };
+        }
+        const billingRef = this.db
+            .collection('users')
+            .doc(userId)
+            .collection('settings')
+            .doc(BILLING_DOC);
+        const now = new Date();
+        const nowTs = firestore_1.Timestamp.fromDate(now);
+        await this.db.runTransaction(async (tx) => {
+            const [claimSnap, billingSnap] = await Promise.all([
+                tx.get(claimDoc),
+                tx.get(billingRef),
+            ]);
+            if (claimSnap.exists) {
+                throw new Error('Signup bonus already claimed');
+            }
+            const current = billingSnap.exists ? billingSnap.data() : {};
+            const prev = typeof current.credits === 'number' && Number.isFinite(current.credits) ? current.credits : 0;
+            const next = prev + SIGNUP_BONUS_CREDITS;
+            tx.set(claimDoc, {
+                userId,
+                email: normalized,
+                claimedAt: nowTs,
+            });
+            tx.set(billingRef, {
+                credits: next,
+                updatedAt: nowTs,
+            }, { merge: true });
+        });
+        this.logger.log('Signup bonus granted', { userId, credits: SIGNUP_BONUS_CREDITS });
+        return { granted: true, credits: SIGNUP_BONUS_CREDITS };
+    }
     async createCustomerPortalSession(userId) {
         const billingRef = this.db
             .collection('users')
@@ -338,7 +390,8 @@ let CreditsBillingService = CreditsBillingService_1 = class CreditsBillingServic
 exports.CreditsBillingService = CreditsBillingService;
 exports.CreditsBillingService = CreditsBillingService = CreditsBillingService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __param(1, (0, common_2.Inject)('FIREBASE_ADMIN')),
-    __metadata("design:paramtypes", [config_1.ConfigService, Object])
+    __param(2, (0, common_2.Inject)('FIREBASE_ADMIN')),
+    __metadata("design:paramtypes", [config_1.ConfigService,
+        kickbox_service_1.KickboxService, Object])
 ], CreditsBillingService);
 //# sourceMappingURL=credits-billing.service.js.map

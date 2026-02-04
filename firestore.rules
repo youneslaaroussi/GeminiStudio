@@ -99,5 +99,10 @@ service cloud.firestore {
     match /veoJobs/{jobId} {
       allow read, write: if false;
     }
+
+    // Signup bonus claims - server-side only (billing service), fraud prevention
+    match /signupBonusClaims/{email} {
+      allow read, write: if false;
+    }
   }
 }

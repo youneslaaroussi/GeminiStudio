@@ -9,7 +9,10 @@ import {
   type CollectionReference,
 } from 'firebase-admin/firestore';
 import Stripe from 'stripe';
-import { randomUUID } from 'crypto';
+import { KickboxService } from './kickbox.service';
+
+const SIGNUP_BONUS_CREDITS = 30;
+const SIGNUP_BONUS_CLAIMS = 'signupBonusClaims';
 
 export type SubscriptionTier = 'starter' | 'pro' | 'enterprise';
 
@@ -70,6 +73,7 @@ export class CreditsBillingService {
 
   constructor(
     private readonly config: ConfigService,
+    private readonly kickbox: KickboxService,
     @Inject('FIREBASE_ADMIN') private readonly firebaseApp: App,
   ) {
     const secret = this.config.get<string>('STRIPE_SECRET_KEY');
@@ -402,6 +406,74 @@ export class CreditsBillingService {
     });
 
     this.logger.log('Renewal credits added', { userId, packId, credits: creditsPerMonth, subscriptionId });
+  }
+
+  /**
+   * Grant signup bonus (30 credits) to new users.
+   * Only grants if: email passes Kickbox verification, and email has not received bonus before (fraud prevention).
+   */
+  async grantSignupBonus(userId: string, email: string): Promise<{ granted: boolean; credits?: number }> {
+    const normalized = email?.trim().toLowerCase();
+    if (!normalized) {
+      return { granted: false };
+    }
+
+    const claimsRef = this.db.collection(SIGNUP_BONUS_CLAIMS);
+    const claimDoc = claimsRef.doc(normalized);
+
+    // Check if this email has already received the bonus (fraud prevention: signup -> bonus -> delete -> repeat)
+    const existing = await claimDoc.get();
+    if (existing.exists) {
+      this.logger.log('Signup bonus already claimed for email', { email: normalized.slice(0, 3) + '***' });
+      return { granted: false };
+    }
+
+    // Verify email with Kickbox
+    const verified = await this.kickbox.verify(normalized);
+    if (!verified) {
+      return { granted: false };
+    }
+
+    const billingRef = this.db
+      .collection('users')
+      .doc(userId)
+      .collection('settings')
+      .doc(BILLING_DOC);
+
+    const now = new Date();
+    const nowTs = Timestamp.fromDate(now);
+
+    await this.db.runTransaction(async (tx) => {
+      // All reads must come before any writes in Firestore transactions
+      const [claimSnap, billingSnap] = await Promise.all([
+        tx.get(claimDoc),
+        tx.get(billingRef),
+      ]);
+
+      if (claimSnap.exists) {
+        throw new Error('Signup bonus already claimed');
+      }
+
+      const current = billingSnap.exists ? (billingSnap.data() as { credits?: number }) : {};
+      const prev =
+        typeof current.credits === 'number' && Number.isFinite(current.credits) ? current.credits : 0;
+      const next = prev + SIGNUP_BONUS_CREDITS;
+
+      // All writes after reads
+      tx.set(claimDoc, {
+        userId,
+        email: normalized,
+        claimedAt: nowTs,
+      });
+
+      tx.set(billingRef, {
+        credits: next,
+        updatedAt: nowTs,
+      }, { merge: true });
+    });
+
+    this.logger.log('Signup bonus granted', { userId, credits: SIGNUP_BONUS_CREDITS });
+    return { granted: true, credits: SIGNUP_BONUS_CREDITS };
   }
 
   async createCustomerPortalSession(userId: string): Promise<{ url: string }> {

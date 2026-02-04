@@ -10,6 +10,7 @@ exports.CreditsModule = void 0;
 const common_1 = require("@nestjs/common");
 const credits_controller_1 = require("./credits.controller");
 const credits_billing_service_1 = require("./credits-billing.service");
+const kickbox_service_1 = require("./kickbox.service");
 const auth_module_1 = require("../auth/auth.module");
 let CreditsModule = class CreditsModule {
 };
@@ -18,7 +19,7 @@ exports.CreditsModule = CreditsModule = __decorate([
     (0, common_1.Module)({
         imports: [auth_module_1.AuthModule],
         controllers: [credits_controller_1.CreditsController],
-        providers: [credits_billing_service_1.CreditsBillingService],
+        providers: [credits_billing_service_1.CreditsBillingService, kickbox_service_1.KickboxService],
     })
 ], CreditsModule);
 //# sourceMappingURL=credits.module.js.map

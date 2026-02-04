@@ -45,6 +45,14 @@ let CreditsController = class CreditsController {
             cancelUrl: body.cancelUrl,
         });
     }
+    async claimSignupBonus(req) {
+        const uid = req[firebase_auth_guard_1.FIREBASE_USER]?.uid;
+        const email = req[firebase_auth_guard_1.FIREBASE_USER]?.email;
+        if (!uid || !email) {
+            throw new common_1.BadRequestException('Missing authenticated user or email');
+        }
+        return this.billing.grantSignupBonus(uid, email);
+    }
     async createPortalSession(req) {
         const uid = req[firebase_auth_guard_1.FIREBASE_USER]?.uid;
         if (!uid) {
@@ -107,6 +115,14 @@ __decorate([
     __metadata("design:paramtypes", [Object, CreateCheckoutDto]),
     __metadata("design:returntype", Promise)
 ], CreditsController.prototype, "createCheckout", null);
+__decorate([
+    (0, common_1.Post)('signup-bonus'),
+    (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], CreditsController.prototype, "claimSignupBonus", null);
 __decorate([
     (0, common_1.Post)('portal'),
     (0, common_1.UseGuards)(firebase_auth_guard_1.FirebaseAuthGuard),

@@ -3,7 +3,16 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/lib/hooks/useAuth';
+import { claimSignupBonus } from '@/app/lib/services/billing-api';
 import Image from 'next/image';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,16 +23,18 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [welcomeModalOpen, setWelcomeModalOpen] = useState(false);
+  const [bonusGranted, setBonusGranted] = useState(false);
 
-  // Redirect to app if already logged in
+  // Redirect to app if already logged in (unless we're showing the welcome modal)
   useEffect(() => {
-    if (!authLoading && user) {
+    if (!authLoading && user && !welcomeModalOpen) {
       router.replace('/app');
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, welcomeModalOpen]);
 
   // Show nothing while checking auth or redirecting
-  if (authLoading || user) {
+  if (authLoading || (user && !welcomeModalOpen)) {
     return null;
   }
 
@@ -41,15 +52,23 @@ export default function LoginPage() {
     try {
       if (isSignup) {
         await signup(email, password);
+        setWelcomeModalOpen(true); // Block redirect before claimSignupBonus runs
+        const result = await claimSignupBonus();
+        setBonusGranted(result.granted);
       } else {
         await login(email, password);
+        router.push('/app');
       }
-      router.push('/app');
     } catch (err: any) {
       setLocalError(err.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleWelcomeModalClose = () => {
+    setWelcomeModalOpen(false);
+    router.push('/app');
   };
 
   return (
@@ -133,6 +152,30 @@ export default function LoginPage() {
           </p>
         </div>
       </div>
+
+      {/* Signup welcome modal */}
+      <Dialog open={welcomeModalOpen} onOpenChange={(open) => !open && handleWelcomeModalClose()}>
+        <DialogContent className="bg-slate-900 border-slate-700 text-white sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white">
+              Welcome to Gemini Studio!
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {bonusGranted
+                ? "You've received 30 free credits to get started. Create your first project and start making videos!"
+                : "Your account is ready. Create your first project and start making videos!"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <button
+              onClick={handleWelcomeModalClose}
+              className="px-4 py-2 bg-white text-slate-900 text-sm font-medium rounded-md hover:bg-slate-100 transition-colors"
+            >
+              Get started
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

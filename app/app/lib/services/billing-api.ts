@@ -41,6 +41,18 @@ export async function createCheckout(input: CreateCheckoutInput): Promise<{ url:
   return res.json();
 }
 
+/** Claim signup bonus (30 credits). Only grants if email passes Kickbox verification and has not claimed before. */
+export async function claimSignupBonus(): Promise<{ granted: boolean; credits?: number }> {
+  if (!BASE) return { granted: false };
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${BASE}/credits/signup-bonus`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+  });
+  if (!res.ok) return { granted: false };
+  return res.json();
+}
+
 /** Create a Stripe Customer Portal session for managing subscription and payment method. */
 export async function createPortalSession(): Promise<{ url: string }> {
   if (!BASE) throw new Error('Billing service URL not configured');

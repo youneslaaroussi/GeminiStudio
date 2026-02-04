@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import type { App } from 'firebase-admin/app';
 import { Timestamp } from 'firebase-admin/firestore';
 import Stripe from 'stripe';
+import { KickboxService } from './kickbox.service';
 export type SubscriptionTier = 'starter' | 'pro' | 'enterprise';
 export interface CreditPack {
     id: string;
@@ -32,6 +33,7 @@ export interface CreditPurchaseDoc {
 }
 export declare class CreditsBillingService {
     private readonly config;
+    private readonly kickbox;
     private readonly firebaseApp;
     private readonly logger;
     private readonly stripe;
@@ -39,7 +41,7 @@ export declare class CreditsBillingService {
     private readonly purchasesRef;
     private readonly webhookSecret;
     private readonly frontendUrl;
-    constructor(config: ConfigService, firebaseApp: App);
+    constructor(config: ConfigService, kickbox: KickboxService, firebaseApp: App);
     private resolvePriceId;
     listPacks(): Promise<CreditPack[]>;
     createCheckout(input: CreateCheckoutInput): Promise<{
@@ -53,6 +55,10 @@ export declare class CreditsBillingService {
     handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void>;
     handleSubscriptionDeleted(subscription: Stripe.Subscription): Promise<void>;
     handleInvoicePaid(invoice: Stripe.Invoice): Promise<void>;
+    grantSignupBonus(userId: string, email: string): Promise<{
+        granted: boolean;
+        credits?: number;
+    }>;
     createCustomerPortalSession(userId: string): Promise<{
         url: string;
     }>;

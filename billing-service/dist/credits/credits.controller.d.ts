@@ -19,6 +19,15 @@ export declare class CreditsController {
         url: string;
         sessionId: string;
     }>;
+    claimSignupBonus(req: Request & {
+        [FIREBASE_USER]?: {
+            uid: string;
+            email?: string;
+        };
+    }): Promise<{
+        granted: boolean;
+        credits?: number;
+    }>;
     createPortalSession(req: Request & {
         [FIREBASE_USER]?: {
             uid: string;
