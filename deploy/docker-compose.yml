@@ -70,6 +70,10 @@ services:
       # Shared secrets
       - RENDERER_SHARED_SECRET=${RENDERER_SHARED_SECRET:-}
       - ASSET_SERVICE_SHARED_SECRET=${ASSET_SERVICE_SHARED_SECRET:-}
+      # Magic link configuration for demo access
+      - MAGIC_LINK_SECRET=${MAGIC_LINK_SECRET:-}
+      - DEMO_USER_ID=${DEMO_USER_ID:-}
+      - DEMO_PROJECT_ID=${DEMO_PROJECT_ID:-}
     volumes:
       - ./secrets:/app/secrets:ro
     healthcheck:

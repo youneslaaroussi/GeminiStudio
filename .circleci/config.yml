@@ -105,6 +105,9 @@ jobs:
                 SECRET_FIREBASE_STORAGE_BUCKET=$(gcloud secrets versions access latest --secret=firebase-storage-bucket 2>/dev/null || true)
                 SECRET_FIREBASE_MESSAGING_SENDER_ID=$(gcloud secrets versions access latest --secret=firebase-messaging-sender-id 2>/dev/null || true)
                 SECRET_FIREBASE_APP_ID=$(gcloud secrets versions access latest --secret=firebase-app-id 2>/dev/null || true)
+                SECRET_MAGIC_LINK=$(gcloud secrets versions access latest --secret=magic-link-secret 2>/dev/null || true)
+                SECRET_DEMO_USER_ID=$(gcloud secrets versions access latest --secret=demo-user-id 2>/dev/null || true)
+                SECRET_DEMO_PROJECT_ID=$(gcloud secrets versions access latest --secret=demo-project-id 2>/dev/null || true)
 
                 # Write .env file using printf (secrets in variables, not echoed to logs)
                 {
@@ -148,6 +151,9 @@ jobs:
                   printf "%s\n" "CLOUDCONVERT_API_KEY=${SECRET_CLOUDCONVERT}"
                   printf "%s\n" "TELEGRAM_BOT_TOKEN=${SECRET_TELEGRAM_BOT}"
                   printf "%s\n" "TELEGRAM_WEBHOOK_SECRET=${SECRET_TELEGRAM_WEBHOOK}"
+                  printf "%s\n" "MAGIC_LINK_SECRET=${SECRET_MAGIC_LINK}"
+                  printf "%s\n" "DEMO_USER_ID=${SECRET_DEMO_USER_ID}"
+                  printf "%s\n" "DEMO_PROJECT_ID=${SECRET_DEMO_PROJECT_ID}"
                 } > .env
 
                 sudo docker compose up -d --build
