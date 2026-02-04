@@ -34,8 +34,6 @@ RUN poetry config virtualenvs.create false \
 
 ENV PYTHONPATH=/app/langgraph_server/src:$PYTHONPATH
 
-WORKDIR /app
-
 EXPOSE 8080
 
 CMD ["poetry", "run", "uvicorn", "langgraph_server.main:app", "--host", "0.0.0.0", "--port", "8080"]
