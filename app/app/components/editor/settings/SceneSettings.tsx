@@ -3,7 +3,9 @@
 import { Settings2 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { EditableInput } from "@/app/components/ui/EditableInput";
+import { Combobox } from "@/components/ui/combobox";
 import { DEFAULT_TEXT_CLIP_SETTINGS } from "@/app/types/timeline";
+import { FONT_FAMILIES } from "@/fonts-config";
 import { toNumber, inputClassName, labelClassName, cardClassName } from "./utils";
 import {
   Collapsible,
@@ -135,23 +137,22 @@ export function SceneSettings() {
                 <>
                   <div>
                     <label className={labelClassName}>Font family</label>
-                    <select
+                    <Combobox
+                      items={FONT_FAMILIES}
                       value={textClipSettings.fontFamily}
-                      onChange={(e) =>
+                      onValueChange={(fontFamily) =>
                         updateProjectSettings({
                           textClipSettings: {
                             ...textClipSettings,
-                            fontFamily: e.target.value as typeof textClipSettings.fontFamily,
+                            fontFamily: fontFamily as typeof textClipSettings.fontFamily,
                           },
                         })
                       }
-                      className={inputClassName}
-                    >
-                      <option value="Inter Variable">Inter</option>
-                      <option value="Roboto">Roboto</option>
-                      <option value="Montserrat">Montserrat</option>
-                      <option value="Poppins">Poppins</option>
-                    </select>
+                      placeholder="Select font..."
+                      emptyText="No fonts found."
+                      itemToStringValue={(fontFamily) => fontFamily.replace(' Variable', '')}
+                      itemToFontFamily={(fontFamily) => fontFamily}
+                    />
                   </div>
                   <div className="pt-2">
                     <label className={labelClassName}>Font weight</label>

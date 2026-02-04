@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import type { ComponentPropsWithoutRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,7 +29,7 @@ export function UploadZone({ onFilesSelected, compact }: UploadZoneProps) {
   if (compact) {
     return (
       <div
-        {...getRootProps()}
+        {...(getRootProps() as ComponentPropsWithoutRef<"div">)}
         className={cn(
           "flex items-center gap-2 rounded-lg border border-dashed border-border p-3 cursor-pointer transition-colors min-h-[2.75rem]",
           isDragActive
@@ -47,7 +48,7 @@ export function UploadZone({ onFilesSelected, compact }: UploadZoneProps) {
 
   return (
     <div
-      {...getRootProps()}
+      {...(getRootProps() as React.ComponentPropsWithoutRef<"div">)}
       className={cn(
         "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border p-6 cursor-pointer transition-colors text-center min-w-[12rem] min-h-[8rem]",
         isDragActive

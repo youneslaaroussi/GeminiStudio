@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 from langchain_core.tools import tool
@@ -21,6 +23,26 @@ from .add_clip_tool import (
 
 logger = logging.getLogger(__name__)
 
+
+def _load_font_families() -> tuple[str, ...]:
+    """Load font families from shared/fonts.json (single source of truth with app)."""
+    # langgraph_server/src/langgraph_server/tools/ -> repo root (5 levels up)
+    root = Path(__file__).resolve().parent.parent.parent.parent.parent
+    path = root / "shared" / "fonts.json"
+    with open(path) as f:
+        data = json.load(f)
+    fonts = data["fonts"]
+    family_map: dict[str, dict] = {}
+    for font in fonts:
+        base = font["family"].replace(" Variable", "")
+        existing = family_map.get(base)
+        if existing is None or (
+            font.get("isVariable", False) and not existing.get("isVariable", False)
+        ):
+            family_map[base] = font
+    return tuple(sorted(f["family"] for f in family_map.values()))
+
+
 # Allowed values matching app/scene (CaptionStyleType and font options)
 CAPTION_STYLES = (
     "pill",
@@ -35,7 +57,8 @@ CAPTION_STYLES = (
     "dark-pill-lime",
     "cloud-blob",
 )
-CAPTION_FONT_FAMILIES = ("Inter Variable", "Roboto", "Montserrat", "Poppins")
+CAPTION_FONT_FAMILIES = _load_font_families()
+CAPTION_FONT_FAMILIES_STR = ", ".join(CAPTION_FONT_FAMILIES)
 CAPTION_FONT_WEIGHTS = (400, 500, 700)
 MIN_FONT_SIZE = 10
 MAX_FONT_SIZE = 48
@@ -43,8 +66,23 @@ MIN_DISTANCE = 0
 MAX_DISTANCE = 500
 
 
-@tool
-def setCaptionSettings(
+_SET_CAPTION_DOC = """Set the project's caption settings for audio and video clip captions.
+
+These settings control how transcribed speech is displayed as captions on video and audio clips (pill style, font, position). Use this when the user wants to change how captions look (e.g. "use pill captions", "karaoke style", "minimal captions").
+
+Args:
+    style: Caption style. One of: pill, karaoke-lime, karaoke-magenta, karaoke-cyan, outlined, bold-outline, minimal, word-highlight, pink-pill, dark-pill-lime, cloud-blob.
+    font_family: Font for captions. Available fonts include: """ + CAPTION_FONT_FAMILIES_STR + """.
+    font_size: Base font size for captions (10–48). Default 18.
+    font_weight: Font weight: 400, 500, or 700.
+    distance_from_bottom: Pixels from bottom of frame (0–500). Default 140.
+
+Returns:
+    Status dict with updated caption settings or error message.
+"""
+
+
+def _setCaptionSettings_impl(
     style: str | None = None,
     font_family: str | None = None,
     font_size: int | None = None,
@@ -52,20 +90,6 @@ def setCaptionSettings(
     distance_from_bottom: int | None = None,
     _agent_context: dict | None = None,
 ) -> dict:
-    """Set the project's caption settings for audio and video clip captions.
-
-    These settings control how transcribed speech is displayed as captions on video and audio clips (pill style, font, position). Use this when the user wants to change how captions look (e.g. "use pill captions", "karaoke style", "minimal captions").
-
-    Args:
-        style: Caption style. One of: pill, karaoke-lime, karaoke-magenta, karaoke-cyan, outlined, bold-outline, minimal, word-highlight, pink-pill, dark-pill-lime, cloud-blob.
-        font_family: Font for captions. One of: Inter Variable, Roboto, Montserrat, Poppins.
-        font_size: Base font size for captions (10–48). Default 18.
-        font_weight: Font weight: 400, 500, or 700.
-        distance_from_bottom: Pixels from bottom of frame (0–500). Default 140.
-
-    Returns:
-        Status dict with updated caption settings or error message.
-    """
     context = _agent_context or {}
     user_id = context.get("user_id")
     project_id = context.get("project_id")
@@ -210,3 +234,7 @@ def setCaptionSettings(
             "status": "error",
             "message": str(e),
         }
+
+
+_setCaptionSettings_impl.__doc__ = _SET_CAPTION_DOC
+setCaptionSettings = tool(_setCaptionSettings_impl)

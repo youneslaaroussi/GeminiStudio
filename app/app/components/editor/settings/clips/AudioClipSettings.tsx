@@ -3,8 +3,10 @@
 import { Volume2 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { EditableInput } from "@/app/components/ui/EditableInput";
+import { Combobox } from "@/components/ui/combobox";
 import type { AudioClip } from "@/app/types/timeline";
 import { DEFAULT_CAPTION_SETTINGS, type CaptionStyleType } from "@/app/types/timeline";
+import { FONT_FAMILIES } from "@/fonts-config";
 import {
   toNumber,
   inputClassName,
@@ -89,18 +91,17 @@ export function AudioClipSettings({ clip, onUpdate }: AudioClipSettingsProps) {
 
         <div className="pt-2">
           <label className={labelClassName}>Font Family</label>
-          <select
+          <Combobox
+            items={FONT_FAMILIES}
             value={captionSettings.fontFamily}
-            onChange={(e) => updateProjectSettings({
-              captionSettings: { ...captionSettings, fontFamily: e.target.value as any }
+            onValueChange={(fontFamily) => updateProjectSettings({
+              captionSettings: { ...captionSettings, fontFamily: fontFamily as any }
             })}
-            className={inputClassName}
-          >
-            <option value="Inter Variable">Inter</option>
-            <option value="Roboto">Roboto</option>
-            <option value="Montserrat">Montserrat</option>
-            <option value="Poppins">Poppins</option>
-          </select>
+            placeholder="Select font..."
+            emptyText="No fonts found."
+            itemToStringValue={(fontFamily) => fontFamily.replace(' Variable', '')}
+            itemToFontFamily={(fontFamily) => fontFamily}
+          />
         </div>
 
         <div className="pt-2">

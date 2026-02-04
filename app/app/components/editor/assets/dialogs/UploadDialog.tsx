@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect } from "react";
+import type { ComponentPropsWithoutRef } from "react";
 import { useDropzone } from "react-dropzone";
 import {
   Upload,
@@ -153,6 +154,7 @@ export function UploadDialog({
     onDrop: handleDrop,
     multiple: true,
   });
+  const dropzoneRootProps = dropzone.getRootProps() as ComponentPropsWithoutRef<"div">;
 
   const handleRemove = useCallback((id: string) => {
     setQueuedFiles((prev) => prev.filter((f) => f.id !== id));
@@ -274,7 +276,7 @@ export function UploadDialog({
         </DialogHeader>
 
         <div
-          {...dropzone.getRootProps()}
+          {...dropzoneRootProps}
           className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border p-6 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
         >
           <input {...dropzone.getInputProps()} />
