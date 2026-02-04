@@ -1,9 +1,13 @@
 'use client';
 
-import { doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/app/lib/server/firebase';
+import { ref, get, set, onValue } from 'firebase/database';
+import { dbRealtime } from '@/app/lib/server/firebase';
 import { saveToCacheIDB, loadFromCacheIDB, type AutomergeDoc } from './indexeddb-cache';
 import type { AutomergeProject, BranchHead } from './types';
+
+function branchPath(userId: string, projectId: string, branchId: string): string {
+  return `users/${userId}/projects/${projectId}/branches/${branchId}`;
+}
 
 const loadAutomerge = async () => {
   return import('@automerge/automerge');
@@ -44,14 +48,25 @@ function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
 }
 
 /**
- * ProjectSyncManager handles offline/online sync between Automerge, IndexedDB, and Firestore
+ * ProjectSyncManager handles offline/online sync between Automerge, IndexedDB, and Realtime Database
  */
+/** Debounce delay before syncing to RTDB (reduces write/read volume). */
+const SYNC_DEBOUNCE_MS = 3000;
+
+/** Minimum ms between RTDB writes (throttle). */
+const MIN_WRITE_INTERVAL_MS = 2000;
+
+/** Ignore snapshot events that are from our own write within this window (ms). */
+const OWN_WRITE_WINDOW_MS = 2000;
+
 export class ProjectSyncManager {
   private automergeDoc: any = null;
   private automerge: any = null;
   private unsubscribe?: () => void;
   private isOnline: boolean = typeof navigator !== 'undefined' ? navigator.onLine : true;
   private lastRemoteTimestamp: number = 0;
+  /** Timestamp when we last wrote to RTDB (used to skip re-processing our own snapshot). */
+  private lastSyncToRTDBTimestamp: number = 0;
 
   // Undo/redo stacks
   private undoStack: UndoRedoChange[] = [];
@@ -64,7 +79,7 @@ export class ProjectSyncManager {
     private onUpdate: (doc: any) => void,
     private onFirebaseSync?: () => void
   ) {
-    this.debouncedSyncToFirestore = debounce(this.syncToFirestore.bind(this), 1000);
+    this.debouncedSyncToRTDB = debounce(this.syncToRTDB.bind(this), SYNC_DEBOUNCE_MS);
   }
 
   /**
@@ -92,9 +107,11 @@ export class ProjectSyncManager {
         this.onUpdate(cached);
       }
 
-      // 2. Sync with Firestore if online
+      // 2. Sync with Realtime Database if online (non-blocking: don't block init on RTDB read)
       if (this.isOnline) {
-        await this.syncWithFirestore();
+        this.syncWithRTDB().catch((err) =>
+          console.error(`[SYNC] Background RTDB fetch failed (${this.projectId}/${this.branchId}):`, err)
+        );
       }
 
       // 3. If still no document, create an empty one
@@ -102,8 +119,8 @@ export class ProjectSyncManager {
         this.automergeDoc = Automerge.from({});
       }
 
-      // 4. Setup real-time Firestore listener
-      this.setupFirestoreListener();
+      // 4. Setup real-time RTDB listener
+      this.setupRTDBListener();
 
       // 5. Setup network handlers
       this.setupNetworkHandlers();
@@ -114,82 +131,72 @@ export class ProjectSyncManager {
   }
 
   /**
-   * Fetch latest state from Firestore and merge with local
+   * Fetch latest state from Realtime Database and merge with local
    */
-  private async syncWithFirestore(): Promise<void> {
+  private async syncWithRTDB(): Promise<void> {
     try {
-      const branchRef = doc(
-        db,
-        `users/${this.userId}/projects/${this.projectId}/branches`,
-        this.branchId
-      );
-      const snapshot = await getDoc(branchRef);
+      const branchRef = ref(dbRealtime, branchPath(this.userId, this.projectId, this.branchId));
+      const snapshot = await get(branchRef);
+      const data = snapshot.val() as BranchHead | null;
 
-      if (snapshot.exists()) {
-        const data = snapshot.data() as BranchHead;
+      if (data?.automergeState) {
         const binary = toBytes(data.automergeState);
-        const load = (A: typeof this.automerge, d: Uint8Array) =>
+        const AM = this.automerge!;
+        const load = (A: typeof AM, d: Uint8Array) =>
           (A as { load<T>(x: Uint8Array): T }).load<AutomergeProject>(d);
-        const remoteDoc = load(this.automerge!, binary);
-        this.lastRemoteTimestamp = data.timestamp;
+        const remoteDoc = load(AM, binary);
+        const ts = typeof data.timestamp === 'number' ? data.timestamp : 0;
+        this.lastRemoteTimestamp = ts;
 
         if (this.automergeDoc) {
-          // Merge local + remote using CRDT
           this.automergeDoc = this.automerge.merge(this.automergeDoc, remoteDoc);
         } else {
           this.automergeDoc = remoteDoc;
         }
 
-        // Save merged state to cache
         await saveToCacheIDB(this.projectId, this.branchId, this.automergeDoc);
         this.onUpdate(this.automergeDoc);
       }
     } catch (error) {
-      console.error(`Failed to sync with Firestore (${this.projectId}/${this.branchId}):`, error);
+      console.error(`Failed to sync with RTDB (${this.projectId}/${this.branchId}):`, error);
     }
   }
 
   /**
-   * Setup real-time Firestore listener for collaborative editing
+   * Setup real-time Realtime Database listener for collaborative editing
    */
-  private setupFirestoreListener(): void {
-    const branchRef = doc(
-      db,
-      `users/${this.userId}/projects/${this.projectId}/branches`,
-      this.branchId
-    );
+  private setupRTDBListener(): void {
+    const branchRef = ref(dbRealtime, branchPath(this.userId, this.projectId, this.branchId));
 
-    this.unsubscribe = onSnapshot(branchRef, (snapshot) => {
-      // Skip updates that we just wrote
-      if (snapshot.metadata.hasPendingWrites) {
+    this.unsubscribe = onValue(branchRef, (snapshot) => {
+      const data = snapshot.val() as BranchHead | null;
+      if (!data?.automergeState) return;
+
+      const ts = typeof data.timestamp === 'number' ? data.timestamp : 0;
+      const now = Date.now();
+      if (now - this.lastSyncToRTDBTimestamp < OWN_WRITE_WINDOW_MS && Math.abs(ts - this.lastSyncToRTDBTimestamp) < OWN_WRITE_WINDOW_MS) {
         return;
       }
+      if (ts <= this.lastRemoteTimestamp) return;
 
-      if (snapshot.exists()) {
-        const data = snapshot.data() as BranchHead;
+      try {
+        const binary = toBytes(data.automergeState);
+        const AM = this.automerge!;
+        const load = (A: typeof AM, d: Uint8Array) =>
+          (A as { load<T>(x: Uint8Array): T }).load<AutomergeProject>(d);
+        const remoteDoc = load(AM, binary);
 
-        // Only merge if this is newer than what we've seen
-        if (data.timestamp > this.lastRemoteTimestamp) {
-          try {
-            const binary = toBytes(data.automergeState);
-            const AM = this.automerge!;
-            const load = (A: typeof AM, d: Uint8Array) =>
-              (A as { load<T>(x: Uint8Array): T }).load<AutomergeProject>(d);
-            const remoteDoc = load(AM, binary);
-
-            if (this.automergeDoc) {
-              this.automergeDoc = AM.merge(this.automergeDoc, remoteDoc);
-            } else {
-              this.automergeDoc = remoteDoc;
-            }
-
-            this.lastRemoteTimestamp = data.timestamp;
-            this.onUpdate(this.automergeDoc);
-            saveToCacheIDB(this.projectId, this.branchId, this.automergeDoc);
-          } catch (error) {
-            console.error('Failed to merge remote changes:', error);
-          }
+        if (this.automergeDoc) {
+          this.automergeDoc = AM.merge(this.automergeDoc, remoteDoc);
+        } else {
+          this.automergeDoc = remoteDoc;
         }
+
+        this.lastRemoteTimestamp = ts;
+        this.onUpdate(this.automergeDoc);
+        saveToCacheIDB(this.projectId, this.branchId, this.automergeDoc);
+      } catch (error) {
+        console.error('Failed to merge remote changes:', error);
       }
     });
   }
@@ -231,8 +238,7 @@ export class ProjectSyncManager {
       // Notify subscribers
       this.onUpdate(this.automergeDoc);
 
-      // Debounced sync to Firestore
-      this.debouncedSyncToFirestore();
+      this.debouncedSyncToRTDB();
     } catch (error) {
       console.error('Failed to apply change:', error);
       throw error;
@@ -240,39 +246,44 @@ export class ProjectSyncManager {
   }
 
   /**
-   * Debounced Firestore sync (defined in constructor)
+   * Debounced RTDB sync (defined in constructor)
    */
-  private debouncedSyncToFirestore: () => void;
+  private debouncedSyncToRTDB: () => void;
 
   /**
-   * Save current state to Firestore
+   * Save current state to Realtime Database
    */
-  private async syncToFirestore(): Promise<void> {
+  private async syncToRTDB(): Promise<void> {
     if (!this.isOnline || !this.automergeDoc) {
       return;
     }
 
+    const now = Date.now();
+    const elapsed = now - this.lastSyncToRTDBTimestamp;
+    if (this.lastSyncToRTDBTimestamp > 0 && elapsed < MIN_WRITE_INTERVAL_MS) {
+      this.debouncedSyncToRTDB();
+      return;
+    }
+
     try {
-      const branchRef = doc(
-        db,
-        `users/${this.userId}/projects/${this.projectId}/branches`,
-        this.branchId
-      );
+      const branchRef = ref(dbRealtime, branchPath(this.userId, this.projectId, this.branchId));
 
       const Automerge = await this.ensureAutomerge();
       const binary = Automerge.save(this.automergeDoc) as Uint8Array;
       const base64 = uint8ArrayToBase64(binary);
-      await setDoc(branchRef, {
+      const timestamp = Date.now();
+      this.lastSyncToRTDBTimestamp = timestamp;
+      await set(branchRef, {
         commitId: crypto.randomUUID(),
         automergeState: base64,
-        timestamp: Date.now(),
+        timestamp,
         author: this.userId,
-      }, { merge: true });
+      });
 
-      console.log('[FIREBASE-SYNC] Successfully synced to Firestore');
+      console.log('[FIREBASE-SYNC] Successfully synced to RTDB');
       this.onFirebaseSync?.();
     } catch (error) {
-      console.error('[FIREBASE-SYNC] Failed to sync to Firestore:', error);
+      console.error('[FIREBASE-SYNC] Failed to sync to RTDB:', error);
     }
   }
 
@@ -282,9 +293,8 @@ export class ProjectSyncManager {
   private setupNetworkHandlers(): void {
     const handleOnline = async () => {
       this.isOnline = true;
-      // Sync any pending changes
-      await this.syncWithFirestore();
-      this.debouncedSyncToFirestore();
+      await this.syncWithRTDB();
+      this.debouncedSyncToRTDB();
     };
 
     const handleOffline = () => {
@@ -317,17 +327,17 @@ export class ProjectSyncManager {
   }
 
   /**
-   * Force an immediate Firestore sync (useful for critical saves)
+   * Force an immediate RTDB sync (useful for critical saves)
    */
   async forceSyncToFirestore(): Promise<void> {
-    await this.syncToFirestore();
+    await this.syncToRTDB();
   }
 
   /**
-   * Fetch latest project state from Firestore and update local state (source of truth refresh)
+   * Fetch latest project state from RTDB and update local state (source of truth refresh)
    */
   async refreshFromFirestore(): Promise<void> {
-    await this.syncWithFirestore();
+    await this.syncWithRTDB();
   }
 
   /**
@@ -357,7 +367,7 @@ export class ProjectSyncManager {
       this.onUpdate(this.automergeDoc);
 
       await saveToCacheIDB(this.projectId, this.branchId, this.automergeDoc);
-      this.debouncedSyncToFirestore();
+      this.debouncedSyncToRTDB();
 
       console.log('[UNDO] Undo completed. Stack size:', this.undoStack.length);
     } catch (error) {
@@ -392,7 +402,7 @@ export class ProjectSyncManager {
       this.onUpdate(this.automergeDoc);
 
       await saveToCacheIDB(this.projectId, this.branchId, this.automergeDoc);
-      this.debouncedSyncToFirestore();
+      this.debouncedSyncToRTDB();
 
       console.log('[REDO] Redo completed. Stack size:', this.redoStack.length);
     } catch (error) {

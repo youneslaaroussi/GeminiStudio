@@ -20,6 +20,47 @@ function preloadOne(
   item: TimelineMediaUrl,
   controller: AbortController
 ): Promise<void> {
+  if (item.type === "image") {
+    return new Promise((resolve) => {
+      const el = document.createElement("img");
+      el.style.position = "absolute";
+      el.style.width = "0";
+      el.style.height = "0";
+      el.style.opacity = "0";
+      el.style.pointerEvents = "none";
+      document.body.appendChild(el);
+
+      const onDone = () => {
+        el.removeEventListener("load", onLoad);
+        el.removeEventListener("error", onError);
+        el.remove();
+        resolve();
+      };
+
+      const onLoad = () => onDone();
+      const onError = () => onDone();
+
+      el.addEventListener("load", onLoad, { once: true });
+      el.addEventListener("error", onError, { once: true });
+
+      if (controller.signal.aborted) {
+        el.remove();
+        resolve();
+        return;
+      }
+      controller.signal.addEventListener(
+        "abort",
+        () => {
+          el.remove();
+          resolve();
+        },
+        { once: true }
+      );
+
+      el.src = item.src;
+    });
+  }
+
   return new Promise((resolve) => {
     const el =
       item.type === "video"

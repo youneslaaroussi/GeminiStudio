@@ -1,19 +1,19 @@
 /**
- * Collects unique video and audio URLs from timeline layers for preloading.
+ * Collects unique video, audio, and image URLs from timeline layers for preloading.
  * Used so the preview can warm the browser cache before playback.
  */
 
-import type { Layer, VideoClip, AudioClip } from "@/app/types/timeline";
+import type { Layer, VideoClip, AudioClip, ImageClip } from "@/app/types/timeline";
 
 export interface TimelineMediaUrl {
   src: string;
-  type: "video" | "audio";
+  type: "video" | "audio" | "image";
   /** Clip start time for optional priority ordering (earlier = preload first). */
   start?: number;
 }
 
 /**
- * Returns a deduplicated list of media URLs (video and audio) from the given layers.
+ * Returns a deduplicated list of media URLs (video, audio, image) from the given layers.
  * Includes main clip src and, for video clips, maskSrc when present.
  */
 export function getTimelineMediaUrls(layers: Layer[]): TimelineMediaUrl[] {
@@ -47,6 +47,17 @@ export function getTimelineMediaUrls(layers: Layer[]): TimelineMediaUrl[] {
           result.push({
             src: clip.src,
             type: "audio",
+            start: clip.start,
+          });
+        }
+      }
+    } else if (layer.type === "image") {
+      for (const clip of layer.clips as ImageClip[]) {
+        if (clip.src && !seen.has(clip.src)) {
+          seen.add(clip.src);
+          result.push({
+            src: clip.src,
+            type: "image",
             start: clip.start,
           });
         }

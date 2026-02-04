@@ -1,39 +1,69 @@
 'use client';
 
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import * as branchOps from '@/app/lib/automerge/branch-operations';
 import type { BranchMetadata } from '@/app/lib/automerge/types';
 import { useAuth } from './useAuth';
 
+/** Default main branch entry (always present even if RTDB hasn't loaded) */
+const makeMainBranch = (userId: string): BranchMetadata & { id: string } => ({
+  id: 'main',
+  name: 'main',
+  createdAt: 0,
+  createdBy: userId,
+  isProtected: true,
+});
+
 /**
  * Hook for managing branches
+ * 
+ * Offline-first: Always shows main branch immediately, fetches from RTDB in background.
  */
 export function useBranches(projectId: string | null) {
   const { user } = useAuth();
+  // Start with main branch so UI is never stuck on loading
   const [branches, setBranches] = useState<Array<BranchMetadata & { id: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const initializedRef = useRef(false);
 
-  // Load all branches
+  // Initialize with main branch immediately when we have user
+  useEffect(() => {
+    if (user?.uid && !initializedRef.current) {
+      setBranches([makeMainBranch(user.uid)]);
+      initializedRef.current = true;
+    }
+  }, [user?.uid]);
+
+  // Load branches from RTDB (non-blocking background fetch)
   const loadBranches = useCallback(async () => {
-    if (!projectId || !user?.uid) return;
+    if (!projectId || !user?.uid) {
+      return;
+    }
 
-    setLoading(true);
     setError(null);
     try {
       const result = await branchOps.listBranches(user.uid, projectId);
-      setBranches(result);
+      const hasMain = result.some((b) => b.id === 'main');
+      const list = hasMain
+        ? result
+        : [makeMainBranch(user.uid), ...result];
+      setBranches(list);
     } catch (err) {
+      console.error('[useBranches] Failed to load branches:', err);
       setError(err instanceof Error ? err.message : 'Failed to load branches');
-    } finally {
-      setLoading(false);
+      // Keep showing main branch on error
     }
   }, [projectId, user?.uid]);
 
-  // Load branches on mount
+  // Fetch branches in background when we have project and user
   useEffect(() => {
+    if (!projectId || !user?.uid) {
+      return;
+    }
+    // Fire and forget - don't block UI
     loadBranches();
-  }, [loadBranches]);
+  }, [projectId, user?.uid, loadBranches]);
 
   // Create a new branch
   const createBranch = useCallback(

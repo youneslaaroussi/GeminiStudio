@@ -10,7 +10,7 @@ from typing import Any
 from langchain_core.tools import tool
 
 from ..config import get_settings
-from ..firebase import get_firestore_client, ensure_main_branch_exists
+from ..firebase import get_branch_data, set_branch_data, ensure_main_branch_exists
 
 from .add_clip_tool import (
     _get_project_data,
@@ -69,40 +69,28 @@ def removeTransition(
         }
 
     settings = get_settings()
-    db = get_firestore_client(settings)
     use_branch_id = branch_id or "main"
 
     try:
-        branch_ref = (
-            db.collection("users")
-            .document(user_id)
-            .collection("projects")
-            .document(project_id)
-            .collection("branches")
-            .document(use_branch_id)
-        )
-        branch_doc = branch_ref.get()
+        branch_data = get_branch_data(user_id, project_id, use_branch_id, settings)
 
-        if not branch_doc.exists:
+        if not branch_data:
             if use_branch_id == "main":
                 ensure_main_branch_exists(user_id, project_id, settings)
-                branch_doc = branch_ref.get()  # re-fetch after create
+                branch_data = get_branch_data(user_id, project_id, use_branch_id, settings)
             else:
                 return {
                     "status": "error",
                     "message": f"Branch '{use_branch_id}' not found for project.",
                 }
 
-        branch_data = branch_doc.to_dict()
         automerge_state = branch_data.get("automergeState")
-
         if not automerge_state:
             if use_branch_id == "main":
                 ensure_main_branch_exists(user_id, project_id, settings)
-                branch_doc = branch_ref.get()
-                branch_data = branch_doc.to_dict()
-                automerge_state = branch_data.get("automergeState")
-            else:
+                branch_data = get_branch_data(user_id, project_id, use_branch_id, settings)
+                automerge_state = branch_data.get("automergeState") if branch_data else None
+            if not automerge_state:
                 return {
                     "status": "error",
                     "message": "Project has no timeline data yet.",
@@ -136,11 +124,18 @@ def removeTransition(
         _set_project_data(doc, project_data)
         new_state = _save_automerge_doc(doc)
 
-        branch_ref.update({
-            "automergeState": new_state,
-            "commitId": str(uuid.uuid4()),
-            "timestamp": int(time.time() * 1000),
-        })
+        set_branch_data(
+            user_id,
+            project_id,
+            use_branch_id,
+            {
+                **branch_data,
+                "automergeState": new_state,
+                "commitId": str(uuid.uuid4()),
+                "timestamp": int(time.time() * 1000),
+            },
+            settings,
+        )
 
         return {
             "status": "success",

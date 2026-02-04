@@ -38,7 +38,8 @@ class TestDeleteClipFromTimeline:
         assert "valid" in result["message"].lower()
 
     @patch("langgraph_server.tools.delete_clip_tool.get_settings")
-    @patch("langgraph_server.tools.delete_clip_tool.get_firestore_client")
+    @patch("langgraph_server.tools.delete_clip_tool.get_branch_data")
+    @patch("langgraph_server.tools.delete_clip_tool.set_branch_data")
     @patch("langgraph_server.tools.delete_clip_tool._load_automerge_doc")
     @patch("langgraph_server.tools.delete_clip_tool._get_project_data")
     @patch("langgraph_server.tools.delete_clip_tool._set_project_data")
@@ -49,21 +50,14 @@ class TestDeleteClipFromTimeline:
         mock_set_data,
         mock_get_data,
         mock_load_doc,
-        mock_get_firestore,
+        mock_set_branch_data,
+        mock_get_branch_data,
         mock_get_settings,
         mock_settings,
     ):
-        """Should delete clips and update Firestore."""
+        """Should delete clips and update Realtime Database branch."""
         mock_get_settings.return_value = mock_settings
-
-        mock_db = MagicMock()
-        mock_branch_ref = MagicMock()
-        mock_branch_doc = MagicMock()
-        mock_branch_doc.exists = True
-        mock_branch_doc.to_dict.return_value = {"automergeState": "base64_state"}
-        mock_branch_ref.get.return_value = mock_branch_doc
-        mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_branch_ref
-        mock_get_firestore.return_value = mock_db
+        mock_get_branch_data.return_value = {"automergeState": "base64_state"}
 
         mock_doc = MagicMock()
         mock_load_doc.return_value = mock_doc
@@ -96,29 +90,23 @@ class TestDeleteClipFromTimeline:
 
         mock_set_data.assert_called_once()
         mock_save_doc.assert_called_once()
-        mock_branch_ref.update.assert_called_once()
+        mock_set_branch_data.assert_called_once()
 
     @patch("langgraph_server.tools.delete_clip_tool.get_settings")
-    @patch("langgraph_server.tools.delete_clip_tool.get_firestore_client")
+    @patch("langgraph_server.tools.delete_clip_tool.get_branch_data")
     @patch("langgraph_server.tools.delete_clip_tool._load_automerge_doc")
     @patch("langgraph_server.tools.delete_clip_tool._get_project_data")
     def test_no_clips_found(
         self,
         mock_get_data,
         mock_load_doc,
-        mock_get_firestore,
+        mock_get_branch_data,
         mock_get_settings,
         mock_settings,
     ):
         """Should return error when none of the requested clip IDs exist."""
         mock_get_settings.return_value = mock_settings
-
-        mock_db = MagicMock()
-        mock_branch_doc = MagicMock()
-        mock_branch_doc.exists = True
-        mock_branch_doc.to_dict.return_value = {"automergeState": "state"}
-        mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = mock_branch_doc
-        mock_get_firestore.return_value = mock_db
+        mock_get_branch_data.return_value = {"automergeState": "state"}
 
         mock_load_doc.return_value = MagicMock()
         mock_get_data.return_value = {"layers": [{"id": "L1", "clips": [{"id": "clip-other"}]}]}
@@ -129,16 +117,11 @@ class TestDeleteClipFromTimeline:
         assert "no clips found" in result["message"].lower() or "not found" in result["message"].lower()
 
     @patch("langgraph_server.tools.delete_clip_tool.get_settings")
-    @patch("langgraph_server.tools.delete_clip_tool.get_firestore_client")
-    def test_handles_missing_branch(self, mock_get_firestore, mock_get_settings, mock_settings):
+    @patch("langgraph_server.tools.delete_clip_tool.get_branch_data")
+    def test_handles_missing_branch(self, mock_get_branch_data, mock_get_settings, mock_settings):
         """Should handle missing branch gracefully."""
         mock_get_settings.return_value = mock_settings
-
-        mock_db = MagicMock()
-        mock_branch_doc = MagicMock()
-        mock_branch_doc.exists = False
-        mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = mock_branch_doc
-        mock_get_firestore.return_value = mock_db
+        mock_get_branch_data.return_value = None
 
         result = invoke_with_context(deleteClipFromTimeline, branch_id="nonexistent", clip_ids=["clip-abc"])
 
@@ -146,17 +129,12 @@ class TestDeleteClipFromTimeline:
         assert "not found" in result["message"].lower()
 
     @patch("langgraph_server.tools.delete_clip_tool.get_settings")
-    @patch("langgraph_server.tools.delete_clip_tool.get_firestore_client")
-    def test_handles_missing_automerge_state(self, mock_get_firestore, mock_get_settings, mock_settings):
+    @patch("langgraph_server.tools.delete_clip_tool.get_branch_data")
+    def test_handles_missing_automerge_state(self, mock_get_branch_data, mock_get_settings, mock_settings):
         """Should handle missing Automerge state (use non-main branch so we do not call ensure_main_branch_exists)."""
         mock_get_settings.return_value = mock_settings
-
-        mock_db = MagicMock()
-        mock_branch_doc = MagicMock()
-        mock_branch_doc.exists = True
-        mock_branch_doc.to_dict.return_value = {}
-        mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value.collection.return_value.document.return_value.get.return_value = mock_branch_doc
-        mock_get_firestore.return_value = mock_db
+        # Branch exists but has no automergeState (truthy dict, no key)
+        mock_get_branch_data.return_value = {"name": "Other", "author": "user-123"}
 
         result = invoke_with_context(deleteClipFromTimeline, branch_id="other", clip_ids=["clip-abc"])
 

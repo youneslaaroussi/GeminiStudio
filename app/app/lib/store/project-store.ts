@@ -382,6 +382,8 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
         await syncManager.applyChange((automergeDoc) => {
           automergeDoc.projectJSON = JSON.stringify(currentProject);
         });
+        // Ensure main branch exists in RTDB immediately so branch selector and listBranches see it
+        await syncManager.forceSyncToFirestore();
         set({ project: currentProject, syncManager, currentBranch: branchId, projectId });
       } else {
         console.log('[SYNC] No project data in Firebase or Automerge doc is null');

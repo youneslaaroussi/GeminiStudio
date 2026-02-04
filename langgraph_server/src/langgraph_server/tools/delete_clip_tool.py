@@ -9,7 +9,7 @@ import uuid
 from langchain_core.tools import tool
 
 from ..config import get_settings
-from ..firebase import get_firestore_client, ensure_main_branch_exists
+from ..firebase import get_branch_data, set_branch_data, ensure_main_branch_exists
 
 from .add_clip_tool import (
     _get_project_data,
@@ -68,28 +68,17 @@ def deleteClipFromTimeline(
         }
 
     settings = get_settings()
-    db = get_firestore_client(settings)
-
     use_branch_id = branch_id or "main"
     logger.info("[DELETE_CLIP] Using branch: %s", use_branch_id)
 
     try:
-        branch_ref = (
-            db.collection("users")
-            .document(user_id)
-            .collection("projects")
-            .document(project_id)
-            .collection("branches")
-            .document(use_branch_id)
-        )
-        branch_doc = branch_ref.get()
+        branch_data = get_branch_data(user_id, project_id, use_branch_id, settings)
 
-        # If branch doesn't exist and it's "main", create it with empty timeline
-        if not branch_doc.exists:
+        if not branch_data:
             if use_branch_id == "main":
                 logger.info("[DELETE_CLIP] Main branch not found, creating with empty timeline")
-                automerge_state = ensure_main_branch_exists(user_id, project_id, settings)
-                branch_doc = branch_ref.get()
+                ensure_main_branch_exists(user_id, project_id, settings)
+                branch_data = get_branch_data(user_id, project_id, use_branch_id, settings)
             else:
                 logger.error("[DELETE_CLIP] Branch not found: %s", use_branch_id)
                 return {
@@ -97,7 +86,6 @@ def deleteClipFromTimeline(
                     "message": f"Branch '{use_branch_id}' not found for project.",
                 }
 
-        branch_data = branch_doc.to_dict()
         automerge_state = branch_data.get("automergeState")
 
         if not automerge_state:
@@ -154,11 +142,18 @@ def deleteClipFromTimeline(
         _set_project_data(doc, project_data)
         new_state = _save_automerge_doc(doc)
 
-        branch_ref.update({
-            "automergeState": new_state,
-            "commitId": str(uuid.uuid4()),
-            "timestamp": int(time.time() * 1000),
-        })
+        set_branch_data(
+            user_id,
+            project_id,
+            use_branch_id,
+            {
+                **branch_data,
+                "automergeState": new_state,
+                "commitId": str(uuid.uuid4()),
+                "timestamp": int(time.time() * 1000),
+            },
+            settings,
+        )
 
         msg_extra = ""
         if not_found:

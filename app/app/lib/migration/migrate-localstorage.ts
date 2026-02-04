@@ -1,7 +1,8 @@
 'use client';
 
 import { doc, setDoc } from 'firebase/firestore';
-import { db } from '@/app/lib/server/firebase';
+import { ref, set } from 'firebase/database';
+import { db, dbRealtime } from '@/app/lib/server/firebase';
 import { projectToAutomerge } from '@/app/lib/automerge/adapter';
 import type { Project } from '@/app/types/timeline';
 import type { ProjectMetadata } from '@/app/lib/automerge/types';
@@ -105,13 +106,9 @@ export async function migrateLocalStorageProjects(
           isPublic: false,
         });
 
-        // 2. Create main branch (metadata + state combined)
-        const branchRef = doc(
-          db,
-          `users/${userId}/projects/${project.id}/branches`,
-          'main'
-        );
-        await setDoc(branchRef, {
+        // 2. Create main branch in Realtime Database (metadata + state combined)
+        const branchRef = ref(dbRealtime, `users/${userId}/projects/${project.id}/branches/main`);
+        await set(branchRef, {
           name: 'main',
           createdAt: Date.now(),
           createdBy: userId,

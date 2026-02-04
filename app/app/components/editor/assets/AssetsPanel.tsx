@@ -13,6 +13,15 @@ import {
   Search,
   X,
   LayoutTemplate,
+  Filter,
+  ArrowUpDown,
+  LayoutList,
+  FileQuestion,
+  ArrowDown,
+  ArrowUp,
+  ArrowDownAZ,
+  ArrowUpAZ,
+  Type,
 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { createVideoClip, createAudioClip, createImageClip } from "@/app/types/timeline";
@@ -140,12 +149,19 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
   // Filter by asset type and sort
   const assetTypeFilterOptions = ["all", "video", "audio", "image", "other"] as const;
   type AssetTypeFilter = (typeof assetTypeFilterOptions)[number];
+  const assetTypeFilterLabels: Record<AssetTypeFilter, string> = {
+    all: "All types",
+    video: "Video",
+    audio: "Audio",
+    image: "Image",
+    other: "Other",
+  };
   const sortOptions = [
-    { value: "date-desc", label: "Newest first" },
-    { value: "date-asc", label: "Oldest first" },
-    { value: "name-asc", label: "Name A–Z" },
-    { value: "name-desc", label: "Name Z–A" },
-    { value: "type", label: "Type" },
+    { value: "date-desc", label: "Newest first", icon: ArrowDown },
+    { value: "date-asc", label: "Oldest first", icon: ArrowUp },
+    { value: "name-asc", label: "Name A–Z", icon: ArrowDownAZ },
+    { value: "name-desc", label: "Name Z–A", icon: ArrowUpAZ },
+    { value: "type", label: "Type", icon: Type },
   ] as const;
   const [assetTypeFilter, setAssetTypeFilter] = useState<AssetTypeFilter>("all");
   const [sortBy, setSortBy] = useState<(typeof sortOptions)[number]["value"]>("date-desc");
@@ -562,36 +578,63 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
                     ? `${filteredAndSortedAssets.length} result${filteredAndSortedAssets.length !== 1 ? "s" : ""}`
                     : `${filteredAndSortedAssets.length} asset${filteredAndSortedAssets.length !== 1 ? "s" : ""}`}
                 </span>
-                <Select
-                  value={assetTypeFilter}
-                  onValueChange={(v) => setAssetTypeFilter(v as AssetTypeFilter)}
-                >
-                  <SelectTrigger size="sm" className="h-7 w-[100px] text-xs">
-                    <SelectValue placeholder="Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All types</SelectItem>
-                    <SelectItem value="video">Video</SelectItem>
-                    <SelectItem value="audio">Audio</SelectItem>
-                    <SelectItem value="image">Image</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={sortBy}
-                  onValueChange={(v) => setSortBy(v as (typeof sortOptions)[number]["value"])}
-                >
-                  <SelectTrigger size="sm" className="h-7 w-[115px] text-xs">
-                    <SelectValue placeholder="Sort" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sortOptions.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex flex-1 min-w-0 gap-x-2">
+                  <div className="min-w-0 flex-1">
+                    <Select
+                      value={assetTypeFilter}
+                      onValueChange={(v) => setAssetTypeFilter(v as AssetTypeFilter)}
+                    >
+                      <SelectTrigger size="sm" className="h-7 w-full min-w-0 text-xs gap-1.5 [&_[data-slot=select-value]_svg]:hidden">
+                        <Filter className="size-3.5 shrink-0 text-muted-foreground" />
+                        <SelectValue placeholder="Type" className="truncate" />
+                      </SelectTrigger>
+                      <SelectContent>
+                    <SelectItem value="all">
+                      <LayoutList className="size-3.5 shrink-0" />
+                      All types
+                    </SelectItem>
+                    <SelectItem value="video">
+                      <Video className="size-3.5 shrink-0" />
+                      Video
+                    </SelectItem>
+                    <SelectItem value="audio">
+                      <Music className="size-3.5 shrink-0" />
+                      Audio
+                    </SelectItem>
+                    <SelectItem value="image">
+                      <ImageIcon className="size-3.5 shrink-0" />
+                      Image
+                    </SelectItem>
+                    <SelectItem value="other">
+                      <FileQuestion className="size-3.5 shrink-0" />
+                      Other
+                    </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <Select
+                      value={sortBy}
+                      onValueChange={(v) => setSortBy(v as (typeof sortOptions)[number]["value"])}
+                    >
+                      <SelectTrigger size="sm" className="h-7 w-full min-w-0 text-xs gap-1.5 [&_[data-slot=select-value]_svg]:hidden">
+                        <ArrowUpDown className="size-3.5 shrink-0 text-muted-foreground" />
+                        <SelectValue placeholder="Sort" className="truncate" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sortOptions.map((opt) => {
+                          const Icon = opt.icon;
+                          return (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              <Icon className="size-3.5 shrink-0" />
+                              {opt.label}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
                 <Button
                   variant="ghost"
                   size="icon"

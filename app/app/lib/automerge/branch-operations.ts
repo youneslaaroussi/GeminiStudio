@@ -12,21 +12,18 @@ const base64ToUint8Array = (base64: string): Uint8Array => {
 const uint8ArrayToBase64 = (binary: Uint8Array): string => {
   return btoa(String.fromCharCode(...new Uint8Array(binary)));
 };
-import {
-  doc,
-  setDoc,
-  getDoc,
-  deleteDoc,
-  collection,
-  getDocs,
-  query,
-  orderBy,
-  limit as firestoreLimit,
-  Query,
-  DocumentData,
-} from 'firebase/firestore';
-import { db } from '@/app/lib/server/firebase';
+
+import { ref, get, set, remove } from 'firebase/database';
+import { dbRealtime } from '@/app/lib/server/firebase';
 import type { AutomergeProject, BranchHead, BranchMetadata } from './types';
+
+function branchPath(userId: string, projectId: string, branchId: string): string {
+  return `users/${userId}/projects/${projectId}/branches/${branchId}`;
+}
+
+function branchesPath(userId: string, projectId: string): string {
+  return `users/${userId}/projects/${projectId}/branches`;
+}
 
 /**
  * Create a new branch from an existing branch
@@ -40,39 +37,27 @@ export async function createBranch(
   try {
     const Automerge = await loadAutomerge();
 
-    // 1. Load source branch
-    const sourceHeadRef = doc(
-      db,
-      `users/${userId}/projects/${projectId}/branches`,
-      sourceBranch
-    );
-    const sourceSnapshot = await getDoc(sourceHeadRef);
+    const sourceRef = ref(dbRealtime, branchPath(userId, projectId, sourceBranch));
+    const sourceSnapshot = await get(sourceRef);
+    const sourceData = sourceSnapshot.val() as BranchHead | null;
 
-    if (!sourceSnapshot.exists()) {
+    if (!sourceData?.automergeState) {
       throw new Error(`Source branch "${sourceBranch}" not found`);
     }
 
-    const sourceData = sourceSnapshot.data() as BranchHead;
     const raw =
       typeof sourceData.automergeState === 'string'
         ? base64ToUint8Array(sourceData.automergeState)
         : sourceData.automergeState;
     const sourceDoc = (Automerge as { load<T>(d: Uint8Array): T }).load<AutomergeProject>(raw);
 
-    // 2. Clone Automerge doc (creates independent copy)
     const newDoc = Automerge.clone(sourceDoc);
 
-    // 3. Create branch ID (Firestore doc IDs must not contain "/" — use single segment)
     const safeName = newBranchName.replace(/\//g, '_').replace(/\s+/g, '_').trim() || 'unnamed';
     const branchId = `feature_${safeName}`;
 
-    // 4. Save new branch (metadata + state combined)
-    const newBranchRef = doc(
-      db,
-      `users/${userId}/projects/${projectId}/branches`,
-      branchId
-    );
-    await setDoc(newBranchRef, {
+    const newBranchRef = ref(dbRealtime, branchPath(userId, projectId, branchId));
+    await set(newBranchRef, {
       name: newBranchName,
       createdAt: Date.now(),
       createdBy: userId,
@@ -100,19 +85,22 @@ export async function listBranches(
   projectId: string
 ): Promise<Array<BranchMetadata & { id: string }>> {
   try {
-    const branchesRef = collection(
-      db,
-      `users/${userId}/projects/${projectId}/branches`
-    );
-    const snapshot = await getDocs(branchesRef);
+    console.log('[listBranches] userId:', userId);
+    console.log('[listBranches] projectId:', projectId);
+    const branchesRef = ref(dbRealtime, branchesPath(userId, projectId));
+    const snapshot = await get(branchesRef);
+    const val = snapshot.val() as Record<string, Omit<BranchMetadata, 'id'>> | null;
 
-    return snapshot.docs.map((d) => {
-      const data = d.data() as Omit<BranchMetadata, 'id'>;
-      return {
-        id: d.id,
-        ...data,
-      };
-    });
+    console.log('[listBranches] val:', val);
+
+    if (!val || typeof val !== 'object') {
+      return [];
+    }
+
+    return Object.entries(val).map(([id, data]) => ({
+      id,
+      ...data,
+    }));
   } catch (error) {
     console.error('Failed to list branches:', error);
     throw error;
@@ -132,13 +120,8 @@ export async function deleteBranch(
       throw new Error('Cannot delete main branch');
     }
 
-    const branchRef = doc(
-      db,
-      `users/${userId}/projects/${projectId}/branches`,
-      branchId
-    );
-
-    await deleteDoc(branchRef);
+    const branchRef = ref(dbRealtime, branchPath(userId, projectId, branchId));
+    await remove(branchRef);
   } catch (error) {
     console.error(`Failed to delete branch ${branchId}:`, error);
     throw error;
@@ -155,18 +138,14 @@ export async function switchBranch(
 ): Promise<any> {
   try {
     const Automerge = await loadAutomerge();
-    const branchRef = doc(
-      db,
-      `users/${userId}/projects/${projectId}/branches`,
-      targetBranch
-    );
-    const snapshot = await getDoc(branchRef);
+    const branchRef = ref(dbRealtime, branchPath(userId, projectId, targetBranch));
+    const snapshot = await get(branchRef);
+    const data = snapshot.val() as BranchHead | null;
 
-    if (!snapshot.exists()) {
+    if (!data?.automergeState) {
       throw new Error(`Branch "${targetBranch}" not found`);
     }
 
-    const data = snapshot.data() as BranchHead;
     const raw =
       typeof data.automergeState === 'string'
         ? base64ToUint8Array(data.automergeState)
@@ -180,7 +159,6 @@ export async function switchBranch(
 
 /**
  * Merge a source branch into a target branch
- * Uses Automerge CRDT for automatic conflict resolution
  */
 export async function mergeBranch(
   userId: string,
@@ -191,29 +169,16 @@ export async function mergeBranch(
   try {
     const Automerge = await loadAutomerge();
 
-    // 1. Load both branches
-    const sourceRef = doc(
-      db,
-      `users/${userId}/projects/${projectId}/branches`,
-      sourceBranch
-    );
-    const targetRef = doc(
-      db,
-      `users/${userId}/projects/${projectId}/branches`,
-      targetBranch
-    );
+    const sourceRef = ref(dbRealtime, branchPath(userId, projectId, sourceBranch));
+    const targetRef = ref(dbRealtime, branchPath(userId, projectId, targetBranch));
 
-    const [sourceSnapshot, targetSnapshot] = await Promise.all([
-      getDoc(sourceRef),
-      getDoc(targetRef),
-    ]);
+    const [sourceSnapshot, targetSnapshot] = await Promise.all([get(sourceRef), get(targetRef)]);
+    const sourceData = sourceSnapshot.val() as BranchHead | null;
+    const targetData = targetSnapshot.val() as BranchHead | null;
 
-    if (!sourceSnapshot.exists() || !targetSnapshot.exists()) {
+    if (!sourceData?.automergeState || !targetData?.automergeState) {
       throw new Error('One or both branches not found');
     }
-
-    const sourceData = sourceSnapshot.data() as BranchHead;
-    const targetData = targetSnapshot.data() as BranchHead;
 
     const toBytes = (v: string | Uint8Array) =>
       typeof v === 'string' ? base64ToUint8Array(v) : v;
@@ -223,17 +188,15 @@ export async function mergeBranch(
     const sourceDoc = load(Automerge, sourceData.automergeState);
     const targetDoc = load(Automerge, targetData.automergeState);
 
-    // 2. Merge using Automerge CRDT
-    // Automerge handles most conflicts automatically
     const mergedDoc = Automerge.merge(targetDoc, sourceDoc);
 
-    // 3. Save merged state back to target branch
-    await setDoc(targetRef, {
+    await set(targetRef, {
+      ...targetData,
       commitId: crypto.randomUUID(),
       automergeState: uint8ArrayToBase64(Automerge.save(mergedDoc)),
       timestamp: Date.now(),
       author: userId,
-    }, { merge: true });
+    });
 
     return { status: 'success' };
   } catch (error) {
@@ -253,28 +216,25 @@ export async function getBranchDiff(
 ): Promise<any> {
   try {
     const Automerge = await loadAutomerge();
-    const refA = doc(db, `users/${userId}/projects/${projectId}/branches`, branchA);
-    const refB = doc(db, `users/${userId}/projects/${projectId}/branches`, branchB);
+    const refA = ref(dbRealtime, branchPath(userId, projectId, branchA));
+    const refB = ref(dbRealtime, branchPath(userId, projectId, branchB));
 
-    const [snapshotA, snapshotB] = await Promise.all([getDoc(refA), getDoc(refB)]);
+    const [snapshotA, snapshotB] = await Promise.all([get(refA), get(refB)]);
+    const dataA = snapshotA.val() as BranchHead | null;
+    const dataB = snapshotB.val() as BranchHead | null;
 
-    if (!snapshotA.exists() || !snapshotB.exists()) {
+    if (!dataA?.automergeState || !dataB?.automergeState) {
       throw new Error('One or both branches not found');
     }
-
-    const dataA = snapshotA.data() as BranchHead;
-    const dataB = snapshotB.data() as BranchHead;
 
     const toBytes = (v: string | Uint8Array) =>
       typeof v === 'string' ? base64ToUint8Array(v) : v;
     const load = (A: typeof Automerge, d: string | Uint8Array) =>
       (A as { load<T>(x: Uint8Array): T }).load<AutomergeProject>(toBytes(d));
 
-    const docA = load(Automerge, dataA.automergeState);
-    const docB = load(Automerge, dataB.automergeState);
+    load(Automerge, dataA.automergeState);
+    load(Automerge, dataB.automergeState);
 
-    // Diff between two branches represented as their Automerge documents
-    // Returns empty array as baseline - can be enhanced with Automerge history API
     return [];
   } catch (error) {
     console.error(`Failed to get diff between ${branchA} and ${branchB}:`, error);
@@ -283,7 +243,7 @@ export async function getBranchDiff(
 }
 
 /**
- * Get the commit history for a branch
+ * Get the commit history for a branch (RTDB: commits under branch node, sort in memory)
  */
 export async function getBranchHistory(
   userId: string,
@@ -292,20 +252,17 @@ export async function getBranchHistory(
   limit: number = 50
 ): Promise<any[]> {
   try {
-    const commitsRef = collection(
-      db,
-      `users/${userId}/projects/${projectId}/branches/${branchId}/commits`
-    );
+    const commitsRef = ref(dbRealtime, `${branchPath(userId, projectId, branchId)}/commits`);
+    const snapshot = await get(commitsRef);
+    const val = snapshot.val() as Record<string, { timestamp?: number; [k: string]: unknown }> | null;
 
-    // Query with ordering and limits for efficient history retrieval
-    const q = query(
-      commitsRef,
-      orderBy('timestamp', 'desc'),
-      firestoreLimit(limit)
-    );
+    if (!val || typeof val !== 'object') {
+      return [];
+    }
 
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const entries = Object.entries(val).map(([id, data]) => ({ id, ...data }));
+    entries.sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+    return entries.slice(0, limit);
   } catch (error) {
     console.error(`Failed to get branch history for ${branchId}:`, error);
     throw error;

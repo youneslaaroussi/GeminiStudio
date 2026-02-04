@@ -5,9 +5,13 @@ from pathlib import Path
 from typing import Any, Optional
 
 import firebase_admin
-from firebase_admin import auth, credentials, firestore
+from firebase_admin import auth, credentials, firestore, db as rtdb
 
 from .config import Settings
+
+
+def _branch_path(user_id: str, project_id: str, branch_id: str) -> str:
+    return f"users/{user_id}/projects/{project_id}/branches/{branch_id}"
 
 
 def decode_automerge_state(base64_state: str) -> Optional[dict[str, Any]]:
@@ -106,15 +110,19 @@ def initialize_firebase(settings: Settings) -> firebase_admin.App:
     if firebase_admin._apps:
         return firebase_admin.get_app()
 
+    database_url = (
+        settings.firebase_database_url
+        or f"https://{settings.google_project_id}-default-rtdb.firebaseio.com"
+    )
+    options = {"databaseURL": database_url}
+
     svc_path = _service_account_path(settings)
     if svc_path:
         cred = credentials.Certificate(str(svc_path))
-        # Project ID is read from the service account JSON
-        return firebase_admin.initialize_app(cred)
+        return firebase_admin.initialize_app(cred, options)
 
-    # Fallback to application default credentials
     cred = credentials.ApplicationDefault()
-    return firebase_admin.initialize_app(cred)
+    return firebase_admin.initialize_app(cred, options)
 
 
 def lookup_email_by_phone(phone_number: str, settings: Settings) -> Optional[str]:
@@ -130,6 +138,35 @@ def get_firestore_client(settings: Settings):
     """Get Firestore client, initializing Firebase if needed."""
     initialize_firebase(settings)
     return firestore.client()
+
+
+def get_branch_ref(user_id: str, project_id: str, branch_id: str, settings: Settings):
+    """Return Realtime Database reference for a branch (users/{userId}/projects/{projectId}/branches/{branchId})."""
+    initialize_firebase(settings)
+    return rtdb.reference(_branch_path(user_id, project_id, branch_id))
+
+
+def get_branch_data(
+    user_id: str, project_id: str, branch_id: str, settings: Settings
+) -> Optional[dict[str, Any]]:
+    """Read branch document from Realtime Database. Returns dict or None if missing."""
+    ref = get_branch_ref(user_id, project_id, branch_id, settings)
+    data = ref.get()
+    if data is None:
+        return None
+    return dict(data) if isinstance(data, dict) else None
+
+
+def set_branch_data(
+    user_id: str,
+    project_id: str,
+    branch_id: str,
+    data: dict[str, Any],
+    settings: Settings,
+) -> None:
+    """Write branch document to Realtime Database."""
+    ref = get_branch_ref(user_id, project_id, branch_id, settings)
+    ref.set(data)
 
 
 def fetch_chat_session(chat_id: str, settings: Settings) -> Optional[dict[str, Any]]:
@@ -304,35 +341,25 @@ def ensure_main_branch_exists(
     """
     Ensure the main branch exists for a project, creating it if needed.
     Returns the automerge state.
+    Branch data is stored in Realtime Database.
     """
-    import uuid
     import logging
-    from google.cloud.firestore_v1 import SERVER_TIMESTAMP
+    import time
+    import uuid
     logger = logging.getLogger(__name__)
-    
-    db = get_firestore_client(settings)
-    
-    main_ref = (
-        db.collection("users")
-        .document(user_id)
-        .collection("projects")
-        .document(project_id)
-        .collection("branches")
-        .document("main")
-    )
-    main_doc = main_ref.get()
-    
-    if main_doc.exists:
-        main_data = main_doc.to_dict()
+
+    main_data = get_branch_data(user_id, project_id, "main", settings)
+
+    if main_data:
         automerge_state = main_data.get("automergeState")
         if automerge_state:
             return automerge_state
-        # Main exists but has no automerge state - update it
         logger.info(f"Main branch exists but has no automerge state, initializing for project {project_id}")
     else:
         logger.info(f"Main branch not found, creating for project {project_id}")
-    
-    # Fetch project metadata to get the correct name
+
+    # Fetch project metadata from Firestore to get the correct name
+    db = get_firestore_client(settings)
     project_ref = (
         db.collection("users")
         .document(user_id)
@@ -344,21 +371,24 @@ def ensure_main_branch_exists(
     if project_doc.exists:
         project_data = project_doc.to_dict()
         project_name = project_data.get("name", "Untitled Project") if project_data else "Untitled Project"
-    
-    # Create initial state with the correct project name
+
     automerge_state = create_initial_automerge_state(name=project_name)
-    
-    # Create or update main branch
-    main_ref.set({
-        "name": "Main",
-        "createdAt": SERVER_TIMESTAMP,
-        "createdBy": user_id,
-        "commitId": str(uuid.uuid4()),
-        "automergeState": automerge_state,
-        "timestamp": SERVER_TIMESTAMP,
-        "author": user_id,
-    }, merge=True)
-    
+    now_ms = int(time.time() * 1000)
+    set_branch_data(
+        user_id,
+        project_id,
+        "main",
+        {
+            "name": "Main",
+            "createdAt": now_ms,
+            "createdBy": user_id,
+            "commitId": str(uuid.uuid4()),
+            "automergeState": automerge_state,
+            "timestamp": now_ms,
+            "author": user_id,
+        },
+        settings,
+    )
     logger.info(f"Initialized main branch for project {project_id} with name '{project_name}'")
     return automerge_state
 
@@ -373,6 +403,7 @@ def create_branch_for_chat(
     Create a new branch for this chat session (from main).
     Returns the new branch_id. Each call creates a unique branch with timestamp suffix.
     If main doesn't exist, creates it first with an empty timeline.
+    Branch data is stored in Realtime Database.
     """
     import re
     import logging
@@ -380,50 +411,31 @@ def create_branch_for_chat(
     import time
     logger = logging.getLogger(__name__)
 
-    db = get_firestore_client(settings)
-
-    # Firestore doc ID must not contain /
     safe_suffix = re.sub(r"[^a-zA-Z0-9]", "_", chat_id)[:60].strip("_") or "chat"
-    # Add timestamp to ensure unique branch per /newchat
     timestamp = int(time.time())
     branch_id = f"chat_{safe_suffix}_{timestamp}"
 
-    # Ensure main branch exists (create if needed)
     automerge_state = ensure_main_branch_exists(user_id, project_id, settings)
-    
-    # Get main branch data for metadata
-    main_ref = (
-        db.collection("users")
-        .document(user_id)
-        .collection("projects")
-        .document(project_id)
-        .collection("branches")
-        .document("main")
-    )
-    main_doc = main_ref.get()
-    main_data = main_doc.to_dict() or {}
+    main_data = get_branch_data(user_id, project_id, "main", settings) or {}
 
-    # Create new branch (copy of main)
-    new_ref = (
-        db.collection("users")
-        .document(user_id)
-        .collection("projects")
-        .document(project_id)
-        .collection("branches")
-        .document(branch_id)
+    now_ms = int(time.time() * 1000)
+    set_branch_data(
+        user_id,
+        project_id,
+        branch_id,
+        {
+            "name": f"Chat {chat_id[:20]}{'…' if len(chat_id) > 20 else ''}",
+            "createdAt": main_data.get("createdAt", now_ms),
+            "createdBy": user_id,
+            "parentBranch": "main",
+            "parentCommit": main_data.get("commitId"),
+            "commitId": str(uuid.uuid4()),
+            "automergeState": automerge_state,
+            "timestamp": main_data.get("timestamp", now_ms),
+            "author": user_id,
+        },
+        settings,
     )
-    new_ref.set({
-        "name": f"Chat {chat_id[:20]}{'…' if len(chat_id) > 20 else ''}",
-        "createdAt": main_data.get("createdAt"),
-        "createdBy": user_id,
-        "parentBranch": "main",
-        "parentCommit": main_data.get("commitId"),
-        "commitId": str(uuid.uuid4()),
-        "automergeState": automerge_state,
-        "timestamp": main_data.get("timestamp"),
-        "author": user_id,
-    })
-
     logger.info(f"Created branch {branch_id} for chat {chat_id} (project {project_id})")
     return branch_id
 
@@ -932,20 +944,11 @@ def fetch_user_projects(
         doc_id = doc.reference.id
         data["id"] = doc_id
 
-        # Use session branch when provided (chat_id -> branch mapping)
+        # Use session branch when provided (chat_id -> branch mapping). Branch data from RTDB.
         use_branch_id = branch_id if branch_id else data.get("currentBranch", "main")
-        branch_ref = (
-            db.collection("users")
-            .document(user_id)
-            .collection("projects")
-            .document(doc_id)
-            .collection("branches")
-            .document(use_branch_id)
-        )
-        branch_doc = branch_ref.get()
+        branch_data = get_branch_data(user_id, doc_id, use_branch_id, settings)
 
-        if branch_doc.exists:
-            branch_data = branch_doc.to_dict()
+        if branch_data:
             data["_branch"] = {
                 "branchId": use_branch_id,
                 "commitId": branch_data.get("commitId"),

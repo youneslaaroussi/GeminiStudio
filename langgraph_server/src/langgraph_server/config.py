@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     )
     default_phone_region: str | None = Field(default="US", alias="DEFAULT_PHONE_REGION")
 
+    # Realtime Database URL for branch sync (defaults to https://<GOOGLE_PROJECT_ID>-default-rtdb.firebaseio.com)
+    firebase_database_url: str | None = Field(default=None, alias="FIREBASE_DATABASE_URL")
+
     telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
     telegram_webhook_secret: str | None = Field(
         default=None, alias="TELEGRAM_WEBHOOK_SECRET"

@@ -12,7 +12,7 @@ from typing import Any
 from langchain_core.tools import tool
 
 from ..config import get_settings
-from ..firebase import get_firestore_client, decode_automerge_state, ensure_main_branch_exists
+from ..firebase import get_branch_data, set_branch_data, decode_automerge_state, ensure_main_branch_exists, get_firestore_client
 
 logger = logging.getLogger(__name__)
 
@@ -352,39 +352,18 @@ def addClipToTimeline(
             "message": f"Segment (offset={source_offset}s, duration={resolved_duration}s) extends past source duration ({asset_duration}s).",
         }
 
-    # Get settings and db client (may already be initialized above)
-    try:
-        settings
-    except NameError:
-        settings = get_settings()
-    try:
-        db
-    except NameError:
-        db = get_firestore_client(settings)
-
-    # Determine which branch to use
+    settings = get_settings()
     use_branch_id = branch_id or "main"
     logger.info("[ADD_CLIP] Using branch: %s", use_branch_id)
 
     try:
-        # Load the branch document
-        branch_ref = (
-            db.collection("users")
-            .document(user_id)
-            .collection("projects")
-            .document(project_id)
-            .collection("branches")
-            .document(use_branch_id)
-        )
-        branch_doc = branch_ref.get()
+        branch_data = get_branch_data(user_id, project_id, use_branch_id, settings)
 
-        # If branch doesn't exist and it's "main", create it with empty timeline
-        if not branch_doc.exists:
+        if not branch_data:
             if use_branch_id == "main":
                 logger.info("[ADD_CLIP] Main branch not found, creating with empty timeline")
                 automerge_state = ensure_main_branch_exists(user_id, project_id, settings)
-                # Re-fetch the branch document
-                branch_doc = branch_ref.get()
+                branch_data = get_branch_data(user_id, project_id, use_branch_id, settings)
             else:
                 logger.error("[ADD_CLIP] Branch not found: %s", use_branch_id)
                 return {
@@ -393,7 +372,6 @@ def addClipToTimeline(
                 }
 
         logger.info("[ADD_CLIP] Branch document loaded")
-        branch_data = branch_doc.to_dict()
         automerge_state = branch_data.get("automergeState")
 
         if not automerge_state:
@@ -493,13 +471,20 @@ def addClipToTimeline(
         new_state = _save_automerge_doc(doc)
         logger.info("[ADD_CLIP] Automerge document saved, new state size: %d bytes", len(new_state))
 
-        # Update Firestore
-        logger.info("[ADD_CLIP] Updating Firestore...")
-        branch_ref.update({
-            "automergeState": new_state,
-            "commitId": str(uuid.uuid4()),
-            "timestamp": int(time.time() * 1000),
-        })
+        # Update Realtime Database branch
+        logger.info("[ADD_CLIP] Updating branch in Realtime Database...")
+        set_branch_data(
+            user_id,
+            project_id,
+            use_branch_id,
+            {
+                **branch_data,
+                "automergeState": new_state,
+                "commitId": str(uuid.uuid4()),
+                "timestamp": int(time.time() * 1000),
+            },
+            settings,
+        )
 
         logger.info(
             "[ADD_CLIP] SUCCESS: Added clip %s to layer %s in project %s (branch %s)",
