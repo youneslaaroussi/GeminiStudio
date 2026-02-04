@@ -192,8 +192,8 @@ export function RenderDialog({
               <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
                 <Film className="size-5" />
               </div>
-              <div>
-                <span className="block">Export video</span>
+              <div className="-space-y-1.5">
+                <span className="block text-left">Export video</span>
                 <span className="text-sm font-normal text-muted-foreground">
                   Choose format and quality, then render
                 </span>
