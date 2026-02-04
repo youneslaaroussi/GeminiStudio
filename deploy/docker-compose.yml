@@ -153,6 +153,7 @@ services:
     environment:
       - REPLICATE_API_TOKEN=${REPLICATE_API_TOKEN}
       - ASSET_SERVICE_URL=http://asset-service:8081
+      - ASSET_SERVICE_SHARED_SECRET=${ASSET_SERVICE_SHARED_SECRET:-}
       - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/google-service-account.json
       - FIREBASE_SERVICE_ACCOUNT_KEY=/app/secrets/firebase-service-account.json
