@@ -283,7 +283,7 @@ export class CreditsBillingService {
       return;
     }
 
-    // Read from webhook payload (same as Vidova); Stripe may send fields at top level
+    // Read from webhook payload; Stripe may send fields at top level
     const raw = subscription as unknown as { current_period_end?: number; cancel_at_period_end?: boolean };
     const periodEnd =
       raw.current_period_end ?? subscription.items?.data?.[0]?.current_period_end ?? 0;

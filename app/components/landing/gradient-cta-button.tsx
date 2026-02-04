@@ -3,7 +3,7 @@
 import { motion } from 'motion/react';
 import { ShaderGradient } from './shader-gradient';
 
-// Mini viewfinder / screen capture animation (from Vidova)
+// Mini viewfinder / screen capture animation
 function ViewfinderIcon() {
   return (
     <div className="relative w-7 h-7 flex items-center justify-center shrink-0">
