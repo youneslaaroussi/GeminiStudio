@@ -24,6 +24,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from .config import Settings
 from .firebase import get_firestore_client
+from .hmac_auth import get_asset_service_upload_headers
 
 logger = logging.getLogger(__name__)
 
@@ -147,11 +148,12 @@ def _upload_to_asset_service(
     
     try:
         import httpx
-        
+
         files = {"file": (filename, video_bytes, "video/mp4")}
         data = {"source": "veo", "run_pipeline": "true"}
-        
-        response = httpx.post(endpoint, files=files, data=data, timeout=120.0)
+        headers = get_asset_service_upload_headers(video_bytes)
+
+        response = httpx.post(endpoint, files=files, data=data, headers=headers, timeout=120.0)
         
         if response.status_code not in (200, 201):
             logger.error("[VEO_EVENTS] Asset service upload failed: %s - %s", response.status_code, response.text[:200])
