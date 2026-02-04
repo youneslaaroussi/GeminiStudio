@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { createVideoClip, createAudioClip, createImageClip } from "@/app/types/timeline";
-import type { RemoteAsset } from "@/app/types/assets";
+import type { RemoteAsset, AssetType } from "@/app/types/assets";
 import type { VeoJob } from "@/app/types/veo";
 import type { VideoEffectJob } from "@/app/types/video-effects";
 import { toast } from "sonner";
@@ -30,6 +30,13 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "@/components/ui/tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 import { useVideoEffectsStore } from "@/app/lib/store/video-effects-store";
@@ -129,6 +136,47 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
   const displayedAssets = searchResults
     ? assets.filter((asset) => searchResults.some((r) => r.id === asset.id))
     : assets;
+
+  // Filter by asset type and sort
+  const assetTypeFilterOptions = ["all", "video", "audio", "image", "other"] as const;
+  type AssetTypeFilter = (typeof assetTypeFilterOptions)[number];
+  const sortOptions = [
+    { value: "date-desc", label: "Newest first" },
+    { value: "date-asc", label: "Oldest first" },
+    { value: "name-asc", label: "Name A–Z" },
+    { value: "name-desc", label: "Name Z–A" },
+    { value: "type", label: "Type" },
+  ] as const;
+  const [assetTypeFilter, setAssetTypeFilter] = useState<AssetTypeFilter>("all");
+  const [sortBy, setSortBy] = useState<(typeof sortOptions)[number]["value"]>("date-desc");
+
+  const filteredAndSortedAssets = useMemo(() => {
+    let list = displayedAssets;
+    if (assetTypeFilter !== "all") {
+      list = list.filter((a) => a.type === assetTypeFilter);
+    }
+    const sorted = [...list].sort((a, b) => {
+      // Helper to get display name (description if available, otherwise name)
+      const getDisplayName = (asset: RemoteAsset) => asset.description || asset.name || "";
+      
+      switch (sortBy) {
+        case "date-desc":
+          return new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime();
+        case "date-asc":
+          return new Date(a.uploadedAt).getTime() - new Date(b.uploadedAt).getTime();
+        case "name-asc":
+          return getDisplayName(a).localeCompare(getDisplayName(b), undefined, { sensitivity: "base" });
+        case "name-desc":
+          return getDisplayName(b).localeCompare(getDisplayName(a), undefined, { sensitivity: "base" });
+        case "type":
+          return (a.type ?? "").localeCompare(b.type ?? "", undefined, { sensitivity: "base" }) ||
+            getDisplayName(a).localeCompare(getDisplayName(b), undefined, { sensitivity: "base" });
+        default:
+          return 0;
+      }
+    });
+    return sorted;
+  }, [displayedAssets, assetTypeFilter, sortBy]);
 
   // Pipeline states for all assets (for Jobs tab)
   const { states: pipelineStates, refresh: refreshPipelineStates } = usePipelineStates(projectId);
@@ -405,6 +453,20 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
     ? transcriptions[detailsDialogAssetId]
     : undefined;
 
+  const handleReorder = useCallback(
+    (orderedIds: string[]) => {
+      if (assetTypeFilter === "all") {
+        void reorderAssets(orderedIds);
+      } else {
+        const restIds = assets
+          .map((a) => a.id)
+          .filter((id) => !orderedIds.includes(id));
+        void reorderAssets([...orderedIds, ...restIds]);
+      }
+    },
+    [assetTypeFilter, assets, reorderAssets]
+  );
+
   return (
     <>
       <div className="flex h-full">
@@ -494,16 +556,46 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between px-3 py-2">
-                <span className="text-xs font-medium text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2 border-b border-border">
+                <span className="text-xs font-medium text-muted-foreground shrink-0">
                   {searchResults
-                    ? `${displayedAssets.length} result${displayedAssets.length !== 1 ? "s" : ""}`
-                    : `${assets.length} asset${assets.length !== 1 ? "s" : ""}`}
+                    ? `${filteredAndSortedAssets.length} result${filteredAndSortedAssets.length !== 1 ? "s" : ""}`
+                    : `${filteredAndSortedAssets.length} asset${filteredAndSortedAssets.length !== 1 ? "s" : ""}`}
                 </span>
+                <Select
+                  value={assetTypeFilter}
+                  onValueChange={(v) => setAssetTypeFilter(v as AssetTypeFilter)}
+                >
+                  <SelectTrigger size="sm" className="h-7 w-[100px] text-xs">
+                    <SelectValue placeholder="Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All types</SelectItem>
+                    <SelectItem value="video">Video</SelectItem>
+                    <SelectItem value="audio">Audio</SelectItem>
+                    <SelectItem value="image">Image</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={sortBy}
+                  onValueChange={(v) => setSortBy(v as (typeof sortOptions)[number]["value"])}
+                >
+                  <SelectTrigger size="sm" className="h-7 w-[115px] text-xs">
+                    <SelectValue placeholder="Sort" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sortOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-7"
+                  className="size-7 ml-auto shrink-0"
                   onClick={() => void fetchAssets()}
                 >
                   <RefreshCw className={cn("size-3.5", isLoading && "animate-spin")} />
@@ -511,7 +603,7 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
               </div>
               <ScrollArea className="flex-1 min-h-0 overflow-hidden">
                 <AssetList
-                  assets={displayedAssets}
+                  assets={filteredAndSortedAssets}
                   isLoading={isLoading}
                   error={error}
                   metadata={metadata}
@@ -522,7 +614,7 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
                   onViewTranscription={setTranscriptDialogAssetId}
                   onViewDetails={setDetailsDialogAssetId}
                   onRename={renameAsset}
-                  onReorder={reorderAssets}
+                  onReorder={handleReorder}
                   onDelete={deleteAsset}
                   onDeleteMany={deleteAssets}
                   onRefresh={fetchAssets}

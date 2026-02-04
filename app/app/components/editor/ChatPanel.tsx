@@ -205,16 +205,49 @@ export function ChatPanel() {
   const updateProjectInList = useProjectsListStore((state) => state.updateProject);
 
   const messagesRef = useRef<TimelineChatMessage[]>([]);
+  const addToolOutputRef = useRef<
+    (params: { state: "output-error"; tool: string; toolCallId: string; errorText: string }) => Promise<void>
+  | null>(null);
+  const setMessagesRef = useRef<typeof setMessages | null>(null);
 
-  const { messages, sendMessage, setMessages, status, error, clearError, stop } =
+  const { messages, sendMessage, setMessages, status, error, clearError, stop, addToolOutput } =
     useChat<TimelineChatMessage>({
       transport: chatTransport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
       id: sessionId,
       messages: initialMessages,
       onFinish: useCallback(
-        async () => {
-          const msgs = messagesRef.current;
+        async (options?: { isAbort?: boolean; messages?: TimelineChatMessage[] }) => {
+          const msgs = options?.messages ?? messagesRef.current;
+
+          // When user stopped the stream, remove the incomplete assistant message to prevent auto-resubmission
+          if (options?.isAbort && setMessagesRef.current) {
+            setMessagesRef.current((currentMessages) => {
+              // Find and remove the last assistant message if it has incomplete tool calls
+              const lastAssistantIndex = currentMessages.length - 1;
+              if (lastAssistantIndex >= 0 && currentMessages[lastAssistantIndex]?.role === "assistant") {
+                const lastMessage = currentMessages[lastAssistantIndex];
+                const parts = Array.isArray(lastMessage.parts) ? lastMessage.parts : [];
+                const hasIncompleteToolCalls = parts.some(
+                  (p) =>
+                    typeof p === "object" &&
+                    p !== null &&
+                    "state" in p &&
+                    p.state === "input-available" &&
+                    typeof p.type === "string" &&
+                    p.type.startsWith("tool-")
+                );
+                if (hasIncompleteToolCalls) {
+                  // Remove the incomplete assistant message
+                  return currentMessages.slice(0, lastAssistantIndex);
+                }
+              }
+              return currentMessages;
+            });
+            // Early return to skip project title generation when aborted
+            return;
+          }
+
           const conversationContext = msgs
             .filter((m) => m.role === "user" || m.role === "assistant")
             .map((m) => {
@@ -274,11 +307,58 @@ export function ChatPanel() {
     });
 
   useEffect(() => {
+    addToolOutputRef.current = addToolOutput as (params: {
+      state: "output-error";
+      tool: string;
+      toolCallId: string;
+      errorText: string;
+    }) => Promise<void>;
+    setMessagesRef.current = setMessages;
+  }, [addToolOutput, setMessages]);
+
+  useEffect(() => {
     messagesRef.current = messages ?? [];
   }, [messages]);
 
   const isBusy = status === "submitted" || status === "streaming" || isCloudProcessing;
   const hasMessages = messages && messages.length > 0;
+
+  const isMissingToolResultsError =
+    error?.message?.includes("Tool results are missing") ||
+    error?.message?.includes("missing for tool calls");
+
+  const handleDismissError = useCallback(async () => {
+    if (isMissingToolResultsError && messages && addToolOutput) {
+      for (const message of messages) {
+        const parts = Array.isArray(message.parts) ? message.parts : [];
+        for (const rawPart of parts) {
+          const part = rawPart as ToolPart | null;
+          if (
+            !part ||
+            typeof part !== "object" ||
+            part.state !== "input-available" ||
+            typeof part.type !== "string" ||
+            !part.type.startsWith("tool-") ||
+            typeof part.toolCallId !== "string"
+          ) {
+            continue;
+          }
+          const toolName = part.type.replace("tool-", "");
+          try {
+            await addToolOutput({
+              state: "output-error",
+              tool: toolName as Parameters<typeof addToolOutput>[0]["tool"],
+              toolCallId: part.toolCallId,
+              errorText: "Cancelled or timed out.",
+            });
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+    clearError?.();
+  }, [isMissingToolResultsError, messages, addToolOutput, clearError]);
 
   // Handle file selection and upload
   const handleFileSelect = useCallback(
@@ -717,9 +797,34 @@ export function ChatPanel() {
       setIsCloudProcessing(false);
       setCloudAgentStatus(null);
     } else {
+      // Immediately clean up any pending tool calls before stopping
+      if (setMessagesRef.current && messages) {
+        setMessagesRef.current((currentMessages) => {
+          // Find and remove the last assistant message if it has incomplete tool calls
+          const lastAssistantIndex = currentMessages.length - 1;
+          if (lastAssistantIndex >= 0 && currentMessages[lastAssistantIndex]?.role === "assistant") {
+            const lastMessage = currentMessages[lastAssistantIndex];
+            const parts = Array.isArray(lastMessage.parts) ? lastMessage.parts : [];
+            const hasIncompleteToolCalls = parts.some(
+              (p) =>
+                typeof p === "object" &&
+                p !== null &&
+                "state" in p &&
+                p.state === "input-available" &&
+                typeof p.type === "string" &&
+                p.type.startsWith("tool-")
+            );
+            if (hasIncompleteToolCalls) {
+              // Remove the incomplete assistant message
+              return currentMessages.slice(0, lastAssistantIndex);
+            }
+          }
+          return currentMessages;
+        });
+      }
       stop?.();
     }
-  }, [isCloudProcessing, stop]);
+  }, [isCloudProcessing, stop, messages]);
 
   // Start a new chat session
   const handleNewChat = useCallback(() => {
@@ -1083,9 +1188,9 @@ export function ChatPanel() {
             <button
               type="button"
               className="shrink-0 font-medium hover:underline"
-              onClick={() => clearError?.()}
+              onClick={() => void handleDismissError()}
             >
-              Dismiss
+              {isMissingToolResultsError ? "Dismiss and remove pending tools" : "Dismiss"}
             </button>
           </div>
         </div>

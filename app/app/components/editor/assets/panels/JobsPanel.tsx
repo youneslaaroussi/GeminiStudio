@@ -75,16 +75,16 @@ function JobItem({ assetName, step }: JobItemProps) {
   const StatusIcon = config.icon;
 
   return (
-    <div className={cn("rounded-md border border-border p-2.5 space-y-1.5", config.bg)}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+    <div className={cn("rounded-md border border-border p-2.5 space-y-1.5 min-w-0 max-w-full overflow-hidden", config.bg)}>
+      <div className="flex items-start justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <StepIcon className="size-3.5 text-muted-foreground shrink-0" />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1 overflow-hidden">
             <p className="text-xs font-medium truncate">{step.label}</p>
             <p className="text-[11px] text-muted-foreground truncate">{assetName}</p>
           </div>
         </div>
-        <div className={cn("flex items-center gap-1", config.color)}>
+        <div className={cn("flex items-center gap-1 shrink-0", config.color)}>
           <StatusIcon className={cn("size-3.5", config.animate && "animate-spin")} />
           <span className="text-[11px] capitalize">{step.status}</span>
         </div>
@@ -98,7 +98,7 @@ function JobItem({ assetName, step }: JobItemProps) {
         </div>
       )}
       {step.error && (
-        <p className="text-[11px] text-red-500 truncate">{step.error}</p>
+        <p className="text-[11px] text-red-500 line-clamp-2 break-words">{step.error}</p>
       )}
     </div>
   );
@@ -125,27 +125,27 @@ function VeoJobItem({ job }: VeoJobItemProps) {
     : job.params.prompt;
 
   return (
-    <div className={cn("rounded-md border border-border p-2.5 space-y-1.5", config.bg)}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+    <div className={cn("rounded-md border border-border p-2.5 space-y-1.5 min-w-0 max-w-full overflow-hidden", config.bg)}>
+      <div className="flex items-start justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
           <Video className="size-3.5 text-muted-foreground shrink-0" />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1 overflow-hidden">
             <p className="text-xs font-medium truncate">Veo Video Generation</p>
             <p className="text-[11px] text-muted-foreground truncate">{promptPreview}</p>
           </div>
         </div>
-        <div className={cn("flex items-center gap-1", config.color)}>
+        <div className={cn("flex items-center gap-1 shrink-0", config.color)}>
           <StatusIcon className={cn("size-3.5", config.animate && "animate-spin")} />
           <span className="text-[11px] capitalize">{job.status}</span>
         </div>
       </div>
-      <div className="flex gap-2 text-[10px] text-muted-foreground">
+      <div className="flex flex-wrap gap-x-2 gap-y-0 text-[10px] text-muted-foreground">
         <span>{job.params.resolution}</span>
         <span>{job.params.durationSeconds}s</span>
         <span>{job.params.aspectRatio}</span>
       </div>
       {job.error && (
-        <p className="text-[11px] text-red-500 truncate">{job.error}</p>
+        <p className="text-[11px] text-red-500 line-clamp-2 break-words">{job.error}</p>
       )}
     </div>
   );
@@ -169,22 +169,22 @@ function VideoEffectJobItem({ job }: VideoEffectJobItemProps) {
   const label = job.effectLabel ?? job.effectId;
 
   return (
-    <div className={cn("rounded-md border border-border p-2.5 space-y-1.5", config.bg)}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+    <div className={cn("rounded-md border border-border p-2.5 space-y-1.5 min-w-0 max-w-full overflow-hidden", config.bg)}>
+      <div className="flex items-start justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
           <Wand2 className="size-3.5 text-muted-foreground shrink-0" />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1 overflow-hidden">
             <p className="text-xs font-medium truncate">{label}</p>
             <p className="text-[11px] text-muted-foreground truncate">{job.assetName}</p>
           </div>
         </div>
-        <div className={cn("flex items-center gap-1", config.color)}>
+        <div className={cn("flex items-center gap-1 shrink-0", config.color)}>
           <StatusIcon className={cn("size-3.5", config.animate && "animate-spin")} />
           <span className="text-[11px] capitalize">{job.status}</span>
         </div>
       </div>
       {job.error && (
-        <p className="text-[11px] text-red-500 truncate">{job.error}</p>
+        <p className="text-[11px] text-red-500 line-clamp-2 break-words">{job.error}</p>
       )}
     </div>
   );
@@ -266,7 +266,7 @@ export function JobsPanel({ assets, pipelineStates, veoJobs, videoEffectJobs = [
 
   return (
     <ScrollArea className="h-full">
-      <div className="p-4 space-y-4">
+      <div className="p-4 space-y-4 min-w-0 overflow-hidden">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
             <ListTodo className="size-4" />
@@ -304,7 +304,7 @@ export function JobsPanel({ assets, pipelineStates, veoJobs, videoEffectJobs = [
                     Active ({activeCount})
                   </span>
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 min-w-0">
                   {runningVeoJobs.map((job) => (
                     <VeoJobItem key={job.id} job={job} />
                   ))}
@@ -333,7 +333,7 @@ export function JobsPanel({ assets, pipelineStates, veoJobs, videoEffectJobs = [
                     Recent
                   </span>
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 min-w-0">
                   {recentVeoJobs.map((job) => (
                     <VeoJobItem key={job.id} job={job} />
                   ))}
