@@ -105,6 +105,14 @@ data "google_secret_manager_secret_version" "firebase_app_id" {
   depends_on = [google_project_service.secretmanager]
 }
 
+data "google_secret_manager_secret_version" "firebase_database_url" {
+  count   = var.use_secret_manager ? 1 : 0
+  secret  = "firebase-database-url"
+  project = var.project_id
+
+  depends_on = [google_project_service.secretmanager]
+}
+
 # Local values for secrets (uses Secret Manager or falls back to variables)
 locals {
   gemini_api_key = var.use_secret_manager ? (
@@ -142,4 +150,10 @@ locals {
     ? data.google_secret_manager_secret_version.renderer_shared_secret[0].secret_data
     : ""
   ) : var.renderer_shared_secret
+
+  firebase_database_url = var.use_secret_manager ? (
+    length(data.google_secret_manager_secret_version.firebase_database_url) > 0
+    ? data.google_secret_manager_secret_version.firebase_database_url[0].secret_data
+    : ""
+  ) : var.firebase_database_url
 }

@@ -84,6 +84,19 @@ CORS_ORIGIN=${var.frontend_url}
 
 # Debug
 DEBUG=false
+
+# Firebase Configuration
+NEXT_PUBLIC_FIREBASE_API_KEY=${var.use_secret_manager ? try(data.google_secret_manager_secret_version.firebase_api_key[0].secret_data, "") : ""}
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${var.use_secret_manager ? try(data.google_secret_manager_secret_version.firebase_auth_domain[0].secret_data, "") : ""}
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=${var.use_secret_manager ? try(data.google_secret_manager_secret_version.firebase_project_id[0].secret_data, "") : ""}
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${var.use_secret_manager ? try(data.google_secret_manager_secret_version.firebase_storage_bucket[0].secret_data, "") : ""}
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${var.use_secret_manager ? try(data.google_secret_manager_secret_version.firebase_messaging_sender_id[0].secret_data, "") : ""}
+NEXT_PUBLIC_FIREBASE_APP_ID=${var.use_secret_manager ? try(data.google_secret_manager_secret_version.firebase_app_id[0].secret_data, "") : ""}
+FIREBASE_DATABASE_URL=${local.firebase_database_url}
+
+# HMAC Shared Secrets
+ASSET_SERVICE_SHARED_SECRET=${local.asset_service_shared_secret}
+RENDERER_SHARED_SECRET=${local.renderer_shared_secret}
 ENVFILE
 
   # Startup script to install Docker, clone repo, and configure environment

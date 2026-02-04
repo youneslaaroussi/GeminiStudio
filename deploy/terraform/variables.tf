@@ -107,6 +107,12 @@ variable "renderer_shared_secret" {
   sensitive   = true
 }
 
+variable "firebase_database_url" {
+  description = "Firebase Realtime Database URL (only used if use_secret_manager=false)"
+  type        = string
+  default     = ""
+}
+
 # =============================================================================
 # Feature Flags
 # =============================================================================
