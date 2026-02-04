@@ -12536,6 +12536,78 @@ function getChromaKeyShaderConfig(settings2) {
     }
   };
 }
+const HOVER_CYCLE = 1.8;
+const PULSE_CYCLE = 2.2;
+const FLOAT_CYCLE = 2.5;
+const GLOW_CYCLE = 1.6;
+function normalizeIntensity(intensity) {
+  if (intensity == null || !Number.isFinite(intensity)) return 1;
+  return Math.max(0, Math.min(5, intensity));
+}
+function* hoverCycle(node, cycleDuration, intensity) {
+  const base = node.scale();
+  const up = base.mul(1 + 0.03 * intensity);
+  const half = cycleDuration / 2;
+  yield* node.scale(up, half, easeInOutCubic);
+  yield* node.scale(base, half, easeInOutCubic);
+}
+function* pulseCycle(node, cycleDuration, intensity) {
+  const base = node.scale();
+  const up = base.mul(1 + 0.06 * intensity);
+  const half = cycleDuration / 2;
+  yield* node.scale(up, half, easeInOutCubic);
+  yield* node.scale(base, half, easeInOutCubic);
+}
+function* floatCycle(node, cycleDuration, intensity) {
+  const base = node.position();
+  const amount = 12 * intensity;
+  const half = cycleDuration / 2;
+  yield* node.position(base.add(new Vector2(0, -amount)), half, easeInOutCubic);
+  yield* node.position(base, half, easeInOutCubic);
+}
+function* glowCycle(node, cycleDuration, baseOpacity, intensity) {
+  const low = baseOpacity * (1 - 0.12 * intensity);
+  const half = cycleDuration / 2;
+  yield* node.opacity(low, half, easeInOutCubic);
+  yield* node.opacity(baseOpacity, half, easeInOutCubic);
+}
+function* applyClipAnimation(node, animation, duration, intensity) {
+  if (!node || !animation || animation === "none" || duration <= 0) return;
+  const i = normalizeIntensity(intensity);
+  if (i <= 0) {
+    yield* waitFor(duration);
+    return;
+  }
+  let elapsed = 0;
+  const baseOpacity = node.opacity();
+  while (elapsed < duration) {
+    const cycleDuration = animation === "hover" ? HOVER_CYCLE : animation === "pulse" ? PULSE_CYCLE : animation === "float" ? FLOAT_CYCLE : GLOW_CYCLE;
+    const remaining = duration - elapsed;
+    const cycle = Math.min(cycleDuration, remaining);
+    switch (animation) {
+      case "hover":
+        yield* hoverCycle(node, cycle, i);
+        break;
+      case "pulse":
+        yield* pulseCycle(node, cycle, i);
+        break;
+      case "float":
+        yield* floatCycle(node, cycle, i);
+        break;
+      case "glow":
+        yield* glowCycle(node, cycle, baseOpacity, i);
+        break;
+      default:
+        yield* waitFor(cycle);
+    }
+    elapsed += cycle;
+  }
+  const baseScale = node.scale();
+  const basePos = node.position();
+  node.scale(baseScale);
+  node.position(basePos);
+  node.opacity(baseOpacity);
+}
 const luminanceToAlpha = `#version 300 es
 precision highp float;
 
@@ -13069,7 +13141,14 @@ function* playVideo({
     }
     const mainDuration = timelineDuration - (enter ? enter.duration : 0) - (exit ? exit.duration : 0);
     if (mainDuration > 0) {
-      yield* waitFor(mainDuration);
+      if (clip.animation && clip.animation !== "none") {
+        yield* all(
+          waitFor(mainDuration),
+          applyClipAnimation(scaleTarget, clip.animation, mainDuration, clip.animationIntensity)
+        );
+      } else {
+        yield* waitFor(mainDuration);
+      }
     }
     if (exit) {
       switch (exit.type) {
@@ -13462,7 +13541,14 @@ function* playText({ entry, sceneWidth, sceneHeight }) {
   if (!target) return;
   yield* applyEnterTransition(target, clip.enterTransition, targetOpacity, sceneWidth, sceneHeight);
   if (timing.mainDuration > 0) {
-    yield* waitFor(timing.mainDuration);
+    if (clip.animation && clip.animation !== "none") {
+      yield* all(
+        waitFor(timing.mainDuration),
+        applyClipAnimation(target, clip.animation, timing.mainDuration, clip.animationIntensity)
+      );
+    } else {
+      yield* waitFor(timing.mainDuration);
+    }
   }
   yield* applyExitTransition(target, clip.exitTransition, sceneWidth, sceneHeight);
 }
@@ -13527,7 +13613,14 @@ function* playImage({ entry, sceneWidth, sceneHeight }) {
   if (!image) return;
   yield* applyEnterTransition(image, clip.enterTransition, 1, sceneWidth, sceneHeight);
   if (timing.mainDuration > 0) {
-    yield* waitFor(timing.mainDuration);
+    if (clip.animation && clip.animation !== "none") {
+      yield* all(
+        waitFor(timing.mainDuration),
+        applyClipAnimation(image, clip.animation, timing.mainDuration, clip.animationIntensity)
+      );
+    } else {
+      yield* waitFor(timing.mainDuration);
+    }
   }
   yield* applyExitTransition(image, clip.exitTransition, sceneWidth, sceneHeight);
 }

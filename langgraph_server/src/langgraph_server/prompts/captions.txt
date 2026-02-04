@@ -1,0 +1,7 @@
+# Caption settings for audio and video clips
+
+Audio and video clips show built-in captions from transcription. The project has caption settings (style, font, position) that apply to all such captions.
+
+- Use setCaptionSettings(style='...', ...) when the user wants to change how captions look. Examples: "use pill captions", "karaoke style", "minimal captions", "make captions bigger".
+- Styles: pill (default), karaoke-lime, karaoke-magenta, karaoke-cyan, outlined, bold-outline, minimal, word-highlight, pink-pill, dark-pill-lime, cloud-blob.
+- Optional: font_family (Inter Variable, Roboto, Montserrat, Poppins), font_size (10–48), font_weight (400, 500, 700), distance_from_bottom (0–500).

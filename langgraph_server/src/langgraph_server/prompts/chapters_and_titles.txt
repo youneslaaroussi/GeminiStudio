@@ -2,8 +2,8 @@
 
 Use text clips for structure and readability:
 
-- Title cards: addClipToTimeline(clip_type='text', text='Your Title Here', start=<timeline_seconds>, duration=3, template='title-card', subtitle='Optional subtitle', backgroundColor='#1a1a2e', ...). Place at the start of the video or at section boundaries. Use clear, short text (e.g. "Intro", "Day 1", "Outro").
-- Chapter cards: when building a longer narrative, add a text clip at the start of each major section (e.g. "The Beach", "Dinner", "Sunset") with duration 2-4 seconds so viewers can scan the structure.
+- Title cards: addClipToTimeline(clip_type='text', text='Your Title Here', start=<timeline_seconds>, duration=3, template='title-card', subtitle='Your subtext here', backgroundColor='#1a1a2e', ...). Always include subtitle (subtext) for title cards—it looks much nicer (e.g. text='Intro', subtitle='A quick overview'). Place at the start of the video or at section boundaries. Use clear, short text.
+- Chapter cards: when building a longer narrative, add a text clip at the start of each major section (e.g. "The Beach", "Dinner", "Sunset") with duration 2-4 seconds. Always use subtitle for these too (e.g. text='The Beach', subtitle='Morning at the coast').
 - Lower thirds: for name/title overlays, use template='lower-third' with subtitle (e.g. text='Jane Doe', subtitle='Host'). Use template='caption-style' for floating pill overlays.
 - Editing templates: use updateClipInTimeline(clip_id=..., template='lower-third', subtitle='...', backgroundColor='...') to change a text clip's style. Templates: text (plain), title-card (full-screen), lower-third (name bar), caption-style (pill).
 - Transitions: use updateClipInTimeline(clip_id=..., enter_transition='{"type":"fade","duration":0.5}', exit_transition='{"type":"fade","duration":0.5}') to add fade/slide/zoom in/out. Types: fade, slide-left, slide-right, slide-up, slide-down, zoom, dip-to-black. Duration 0.1-5s. Use type "none" to clear.

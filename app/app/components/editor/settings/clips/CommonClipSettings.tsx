@@ -1,7 +1,7 @@
 "use client";
 
 import { EditableInput } from "@/app/components/ui/EditableInput";
-import type { TimelineClip, VideoClip, AudioClip } from "@/app/types/timeline";
+import type { TimelineClip, VideoClip, AudioClip, ClipAnimationType } from "@/app/types/timeline";
 import {
   toNumber,
   inputClassName,
@@ -10,6 +10,14 @@ import {
   type ClipUpdateHandler,
 } from "../utils";
 import { ClipTransitionSettings } from "./ClipTransitionSettings";
+
+const CLIP_ANIMATION_OPTIONS: { value: ClipAnimationType; label: string }[] = [
+  { value: "none", label: "None" },
+  { value: "hover", label: "Hover" },
+  { value: "pulse", label: "Pulse" },
+  { value: "float", label: "Float" },
+  { value: "glow", label: "Glow" },
+];
 
 interface CommonClipSettingsProps {
   clip: TimelineClip;
@@ -187,6 +195,51 @@ export function CommonClipSettings({ clip, onUpdate }: CommonClipSettingsProps) 
 
       {/* Transitions */}
       <ClipTransitionSettings clip={clip} onUpdate={onUpdate} />
+
+      {/* Animation (video, text, image only) */}
+      {clip.type !== "audio" && (
+        <div className="space-y-2">
+          <div>
+            <label className={labelClassName}>Animation</label>
+            <select
+              value={(clip as VideoClip).animation ?? "none"}
+              onChange={(e) => {
+                const v = e.target.value as ClipAnimationType;
+                onUpdate({ animation: v === "none" ? undefined : v });
+              }}
+              className={inputClassName}
+            >
+              {CLIP_ANIMATION_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {(clip as VideoClip).animation && (clip as VideoClip).animation !== "none" && (
+            <div>
+              <div className="flex items-center justify-between">
+                <label className={labelClassName}>Intensity</label>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {Number(((clip as VideoClip).animationIntensity ?? 1).toFixed(2))}x
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={5}
+                step={0.25}
+                value={(clip as VideoClip).animationIntensity ?? 1}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  onUpdate({ animationIntensity: val });
+                }}
+                className="w-full h-2 rounded-md appearance-none bg-muted accent-primary"
+              />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-# Replicate version for SAM-2 Video
+# Replicate versions
 REPLICATE_VERSION_SAM2 = "meta/sam-2-video:33432afdfc06a10da6b4018932893d39b0159f838b6d11dd1236dff85cc5ec1d"
+REPLICATE_VERSION_BACKGROUND_REMOVER = "851-labs/background-remover:a029dff38972b5fda4ec5d75d7d1cd25aeff621d2cf4946a41055d7db66b80bc"
 
 
 @dataclass
@@ -170,9 +171,53 @@ SAM2_VIDEO_DEFINITION = VideoEffectDefinition(
 )
 
 
+def _build_background_remover_input(asset_url: str, asset_name: str, params: dict[str, Any]) -> dict[str, Any]:
+    """Build provider input for background-remover effect."""
+    return {"image": asset_url}
+
+
+def _extract_background_remover_result(provider_output: Any, provider_status: str) -> dict[str, Any]:
+    """Extract result from background-remover output (PNG URL)."""
+    if provider_status == "succeeded":
+        url: str | None = None
+        if isinstance(provider_output, str):
+            url = provider_output
+        elif isinstance(provider_output, dict) and "url" in provider_output:
+            url = provider_output.get("url")
+        elif isinstance(provider_output, list) and len(provider_output) > 0:
+            first = provider_output[0]
+            url = first if isinstance(first, str) else first.get("url") if isinstance(first, dict) else None
+        if url:
+            return {"result_url": url}
+
+    if provider_status == "failed":
+        if isinstance(provider_output, str):
+            return {"error": provider_output}
+        if isinstance(provider_output, list):
+            return {"error": "\n".join(str(item) for item in provider_output)}
+        return {"error": "Replicate job failed"}
+
+    return {}
+
+
+# Background Remover (image effect)
+BACKGROUND_REMOVER_DEFINITION = VideoEffectDefinition(
+    id="replicate.851-labs.background-remover",
+    label="Remove Background",
+    description="Remove the background from an image using AI. Output is a PNG with transparent background.",
+    provider="replicate",
+    version=REPLICATE_VERSION_BACKGROUND_REMOVER,
+    fields=[],
+    default_values={},
+    build_provider_input=_build_background_remover_input,
+    extract_result=_extract_background_remover_result,
+)
+
+
 # Registry of all effect definitions
 EFFECT_DEFINITIONS: list[VideoEffectDefinition] = [
     SAM2_VIDEO_DEFINITION,
+    BACKGROUND_REMOVER_DEFINITION,
 ]
 
 EFFECT_DEFINITIONS_MAP: dict[str, VideoEffectDefinition] = {

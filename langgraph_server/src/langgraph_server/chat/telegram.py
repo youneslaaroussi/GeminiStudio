@@ -1281,7 +1281,7 @@ Assets: {len(assets_info)}"""
         try:
             return await task
         except asyncio.CancelledError:
-            return "Run cancelled (new message sent)."
+            return "Interruped..."
         finally:
             async with self._agent_lock:
                 if self._agent_tasks.get(chat_id) is task:

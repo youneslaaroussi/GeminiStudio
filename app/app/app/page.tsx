@@ -281,17 +281,17 @@ function ProjectsContent() {
     <div className="min-h-[calc(100vh-3.5rem)]">
       {/* Hero Section */}
       <div className="border-b border-slate-800 bg-gradient-to-b from-slate-900/50 to-transparent">
-        <div className="max-w-7xl mx-auto px-6 py-10">
-          <div className="flex items-start justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-white mb-2">Your Projects</h1>
-              <p className="text-slate-400">
+              <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Your Projects</h1>
+              <p className="text-slate-400 text-sm sm:text-base">
                 Create and manage AI-assisted video timelines
               </p>
             </div>
             <Button
               onClick={handleNewProject}
-              className="bg-white text-black hover:bg-slate-100 shadow-lg shadow-white/5"
+              className="bg-white text-black hover:bg-slate-100 shadow-lg shadow-white/5 w-full sm:w-auto shrink-0"
             >
               <Plus className="size-4 mr-2" />
               New Project
@@ -301,12 +301,12 @@ function ProjectsContent() {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
         {/* Toolbar */}
-        <div className="flex items-center gap-4 mb-6">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-6">
           {/* Select All Checkbox */}
           {filteredAndSortedProjects.length > 0 && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={handleSelectAll}
                 className={cn(
@@ -322,21 +322,21 @@ function ProjectsContent() {
                 {someSelected && <div className="w-2 h-2 bg-slate-900 rounded-sm" />}
               </button>
               {selectedCount > 0 && (
-                <span className="text-sm text-slate-400">
+                <span className="text-sm text-slate-400 whitespace-nowrap">
                   {selectedCount} {selectedCount === 1 ? "selected" : "selected"}
                 </span>
               )}
             </div>
           )}
 
-          {/* Search */}
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-500" />
+          {/* Search - full width on mobile when wrapped */}
+          <div className="relative flex-1 min-w-0 basis-full sm:basis-auto sm:max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-500 pointer-events-none" />
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search projects..."
-              className="pl-10 bg-slate-900 border-slate-800 text-white placeholder:text-slate-500 focus:border-slate-700"
+              className="pl-10 bg-slate-900 border-slate-800 text-white placeholder:text-slate-500 focus:border-slate-700 w-full"
             />
           </div>
 
@@ -347,7 +347,7 @@ function ProjectsContent() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white"
+                  className="border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white shrink-0"
                 >
                   Sort by
                   <ChevronDown className="size-4 ml-2" />
@@ -401,21 +401,21 @@ function ProjectsContent() {
               variant="destructive"
               size="sm"
               onClick={handleDeleteAllClick}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-red-600 hover:bg-red-700 shrink-0"
             >
-              <Trash2 className="size-4 mr-2" />
+              <Trash2 className="size-4 mr-2 shrink-0" />
               Delete ({selectedCount})
             </Button>
           )}
 
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-2 sm:ml-auto shrink-0">
             {/* Refresh */}
             <Button
               variant="ghost"
               size="icon"
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="text-slate-400 hover:text-white hover:bg-slate-800"
+              className="text-slate-400 hover:text-white hover:bg-slate-800 size-8 sm:size-9"
             >
               <RefreshCw className={cn("size-4", isRefreshing && "animate-spin")} />
             </Button>
@@ -447,16 +447,16 @@ function ProjectsContent() {
             </div>
 
             {/* Import */}
-            <label>
+            <label className="cursor-pointer">
               <Button
                 variant="outline"
                 size="sm"
                 asChild
                 className="border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer"
               >
-                <span>
-                  <Upload className="size-4 mr-2" />
-                  Import
+                <span className="flex items-center">
+                  <Upload className="size-4 mr-0 sm:mr-2 shrink-0" />
+                  <span className="hidden sm:inline">Import</span>
                 </span>
               </Button>
               <input type="file" accept=".json" className="hidden" onChange={handleImport} />

@@ -76,10 +76,15 @@ class VideoEffectsWorker:
 
             status = job.get("status", "")
 
-            if status in ("completed", "error"):
+            if status == "completed" or status == "error":
                 # Job is done, no need to re-poll
                 await self.queue.update_task_status(job_id, "completed")
                 logger.info(f"Job {job_id} finished with status: {status}")
+            elif status == "completing":
+                # Job is being completed by another worker, re-check shortly
+                await asyncio.sleep(2)
+                await self.queue.enqueue_poll(job_id)
+                logger.debug(f"Job {job_id} is completing, will re-check")
             else:
                 # Job still running, re-enqueue for polling
                 await asyncio.sleep(3)  # Wait before re-polling

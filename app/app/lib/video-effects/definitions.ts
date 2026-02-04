@@ -171,14 +171,61 @@ const sam2VideoDefinition: VideoEffectDefinition<typeof sam2FormSchema, Sam2Form
     },
   };
 
+const backgroundRemoverDefinition: VideoEffectDefinition<z.ZodRecord<z.ZodString, z.ZodAny>, Record<string, never>> = {
+  id: "replicate.851-labs.background-remover",
+  label: "Remove Background",
+  description:
+    "Remove the background from an image using AI. Output is a PNG with transparent background.",
+  provider: "replicate" satisfies VideoEffectProvider,
+  version: "851-labs/background-remover:a029dff38972b5fda4ec5d75d7d1cd25aeff621d2cf4946a41055d7db66b80bc",
+  formSchema: z.record(z.any()),
+  defaultValues: {},
+  fields: [],
+  buildProviderInput: ({ assetUrl }) => ({ image: assetUrl }),
+  extractResult: ({ providerOutput, providerStatus }) => {
+    if (providerStatus === "succeeded") {
+      let url: string | undefined;
+      if (typeof providerOutput === "string") url = providerOutput;
+      else if (Array.isArray(providerOutput) && providerOutput[0])
+        url = typeof providerOutput[0] === "string" ? providerOutput[0] : (providerOutput[0] as { url?: string })?.url;
+      else if (providerOutput && typeof providerOutput === "object" && "url" in providerOutput)
+        url = (providerOutput as { url: string }).url;
+      if (url) return { resultUrl: url };
+    }
+    if (providerStatus === "failed") {
+      const msg =
+        typeof providerOutput === "string"
+          ? providerOutput
+          : Array.isArray(providerOutput)
+            ? providerOutput.join("\n")
+            : "Replicate job failed";
+      return { error: msg };
+    }
+    return {};
+  },
+};
+
 export const videoEffectDefinitions: AnyVideoEffectDefinition[] = [
   sam2VideoDefinition,
+];
+
+export const imageEffectDefinitions: AnyVideoEffectDefinition[] = [
+  backgroundRemoverDefinition,
 ];
 
 export const videoEffectDefinitionMap = new Map(
   videoEffectDefinitions.map((definition) => [definition.id, definition])
 );
 
+export const imageEffectDefinitionMap = new Map(
+  imageEffectDefinitions.map((definition) => [definition.id, definition])
+);
+
+export const allEffectDefinitionMap = new Map([
+  ...videoEffectDefinitionMap,
+  ...imageEffectDefinitionMap,
+]);
+
 export function getVideoEffectDefinition(effectId: string) {
-  return videoEffectDefinitionMap.get(effectId);
+  return allEffectDefinitionMap.get(effectId);
 }

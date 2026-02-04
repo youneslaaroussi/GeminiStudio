@@ -21,6 +21,7 @@ PROMPT_SECTION_ORDER = (
     "video_effects",
     "narrative",
     "chapters_and_titles",
+    "captions",
     "music_mood",
     "examples",
 )

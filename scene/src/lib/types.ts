@@ -24,6 +24,14 @@ export type VisualEffectType =
   | 'pixelate'
   | 'chromatic';
 
+/** Idle animation applied while a clip is visible (hover-style scale, pulse, float, glow) */
+export type ClipAnimationType =
+  | 'none'
+  | 'hover'   // Subtle scale up and back
+  | 'pulse'   // Scale in/out
+  | 'float'   // Gentle vertical drift
+  | 'glow';   // Opacity breathe
+
 /** Text template styles */
 export type TextTemplateType =
   | 'text'           // Basic text (default)
@@ -83,6 +91,10 @@ export interface VideoClip {
   enterTransition?: ClipTransition;
   /** Transition when clip exits (stops playing) */
   exitTransition?: ClipTransition;
+  /** Idle animation while clip is visible (hover, pulse, float, glow) */
+  animation?: ClipAnimationType;
+  /** Animation intensity 0–5x (1 = normal, 5 = 5x). Default 1. */
+  animationIntensity?: number;
 }
 
 export interface AudioClip {
@@ -130,6 +142,10 @@ export interface TextClip {
   enterTransition?: ClipTransition;
   /** Transition when clip exits (stops playing) */
   exitTransition?: ClipTransition;
+  /** Idle animation while clip is visible (hover, pulse, float, glow) */
+  animation?: ClipAnimationType;
+  /** Animation intensity 0–5x (1 = normal, 5 = 5x). Default 1. */
+  animationIntensity?: number;
 }
 
 export interface ImageClip {
@@ -155,6 +171,10 @@ export interface ImageClip {
   enterTransition?: ClipTransition;
   /** Transition when clip exits (stops playing) */
   exitTransition?: ClipTransition;
+  /** Idle animation while clip is visible (hover, pulse, float, glow) */
+  animation?: ClipAnimationType;
+  /** Animation intensity 0–5x (1 = normal, 5 = 5x). Default 1. */
+  animationIntensity?: number;
 }
 
 export interface ClipTransition {

@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { GradientCtaButtonAsButton } from '@/components/landing/gradient-cta-button';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -132,13 +133,13 @@ export default function LoginPage() {
                 </label>
               </div>
             )}
-            <button
+            <GradientCtaButtonAsButton
               type="submit"
               disabled={loading || (isSignup && !agreedToTerms)}
-              className="w-full py-2.5 bg-white text-slate-900 text-sm font-medium rounded-md hover:bg-slate-100 disabled:opacity-50 transition-colors"
+              className="w-full h-11 justify-center disabled:opacity-50"
             >
-              {loading ? '...' : (isSignup ? 'Sign up' : 'Sign in')}
-            </button>
+              {loading ? '…' : (isSignup ? 'Sign up' : 'Sign in')}
+            </GradientCtaButtonAsButton>
           </form>
 
           <p className="text-sm text-slate-500 text-center">
@@ -167,12 +168,12 @@ export default function LoginPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
-            <button
+            <GradientCtaButtonAsButton
               onClick={handleWelcomeModalClose}
-              className="px-4 py-2 bg-white text-slate-900 text-sm font-medium rounded-md hover:bg-slate-100 transition-colors"
+              className="h-10 px-5"
             >
               Get started
-            </button>
+            </GradientCtaButtonAsButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

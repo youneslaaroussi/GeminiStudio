@@ -26,10 +26,12 @@ router = APIRouter()
 class StartJobRequest(BaseModel):
     """Request body for starting a video effect job."""
 
-    asset_id: str = Field(..., alias="assetId", min_length=1)
+    asset_id: str | None = Field(default=None, alias="assetId")
+    image_url: str | None = Field(default=None, alias="imageUrl")
     effect_id: str = Field(..., alias="effectId", min_length=1)
     user_id: str = Field(..., alias="userId", min_length=1)
     project_id: str = Field(..., alias="projectId", min_length=1)
+    asset_name: str | None = Field(default=None, alias="assetName")
     params: dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"populate_by_name": True}
@@ -89,23 +91,47 @@ async def start_job(request: StartJobRequest):
     import uuid
     from datetime import datetime
 
+    # Require either asset_id or image_url
+    if not request.asset_id and not request.image_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Either assetId or imageUrl is required",
+        )
+    if request.asset_id and request.image_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide only one of assetId or imageUrl",
+        )
+
     # Get effect definition
     definition = get_effect_definition(request.effect_id)
     if not definition:
         raise HTTPException(status_code=400, detail=f"Unknown video effect: {request.effect_id}")
 
-    # Get asset from asset service
-    try:
-        asset = await get_asset_from_service(
-            request.user_id, request.project_id, request.asset_id
-        )
-    except Exception as e:
-        logger.exception(f"Failed to get asset: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to get asset: {e}")
+    asset_url: str
+    asset_name: str
+    asset_id: str
 
-    asset_url = asset.get("signedUrl") or asset.get("gcsUri")
-    if not asset_url:
-        raise HTTPException(status_code=400, detail="Asset does not have a valid URL")
+    if request.image_url:
+        # Use image URL directly (for image effects like background-remover)
+        asset_url = request.image_url
+        asset_name = request.asset_name or "image"
+        asset_id = f"url:{request.image_url[:80]}"
+    else:
+        # Get asset from asset service
+        try:
+            asset = await get_asset_from_service(
+                request.user_id, request.project_id, request.asset_id
+            )
+        except Exception as e:
+            logger.exception(f"Failed to get asset: {e}")
+            raise HTTPException(status_code=400, detail=f"Failed to get asset: {e}")
+
+        asset_url = asset.get("signedUrl") or asset.get("gcsUri")
+        if not asset_url:
+            raise HTTPException(status_code=400, detail="Asset does not have a valid URL")
+        asset_name = asset.get("name", request.asset_id)
+        asset_id = request.asset_id
 
     # Merge default values with provided params
     merged_params = {**definition.default_values, **request.params}
@@ -113,7 +139,7 @@ async def start_job(request: StartJobRequest):
     # Build provider input
     provider_input = definition.build_provider_input(
         asset_url=asset_url,
-        asset_name=asset.get("name", ""),
+        asset_name=asset_name,
         params=merged_params,
     )
 
@@ -135,8 +161,8 @@ async def start_job(request: StartJobRequest):
         "id": job_id,
         "effectId": definition.id,
         "provider": definition.provider,
-        "assetId": request.asset_id,
-        "assetName": asset.get("name", ""),
+        "assetId": asset_id,
+        "assetName": asset_name,
         "assetUrl": asset_url,
         "userId": request.user_id,
         "projectId": request.project_id,
@@ -181,7 +207,22 @@ async def get_job_status(job_id: str):
 
 
 @router.get("")
-async def list_jobs(asset_id: str = Query(..., alias="assetId")):
-    """List all jobs for an asset."""
-    jobs = list_jobs_by_asset(asset_id)
+async def list_jobs(
+    asset_id: str | None = Query(default=None, alias="assetId"),
+    image_url: str | None = Query(default=None, alias="imageUrl"),
+):
+    """List all jobs for an asset or image URL."""
+    if asset_id and image_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide only one of assetId or imageUrl",
+        )
+    if not asset_id and not image_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Either assetId or imageUrl query parameter is required",
+        )
+
+    lookup_id = asset_id if asset_id else f"url:{image_url[:80]}"
+    jobs = list_jobs_by_asset(lookup_id)
     return {"jobs": [job_to_response(job) for job in jobs]}

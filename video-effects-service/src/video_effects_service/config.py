@@ -18,6 +18,9 @@ class Settings(BaseSettings):
 
     # Asset Service
     asset_service_url: str = Field(default="http://localhost:8081", alias="ASSET_SERVICE_URL")
+    asset_service_shared_secret: str | None = Field(
+        default=None, alias="ASSET_SERVICE_SHARED_SECRET"
+    )
 
     # Google Cloud / Firebase
     google_project_id: str = Field(..., alias="GOOGLE_PROJECT_ID")

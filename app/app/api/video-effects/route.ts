@@ -11,11 +11,16 @@ import {
 export const runtime = "nodejs";
 
 const startJobSchema = z.object({
-  assetId: z.string().min(1, "Asset ID is required"),
+  assetId: z.string().optional(),
+  imageUrl: z.string().url().optional(),
   effectId: z.string().min(1, "Effect ID is required"),
   projectId: z.string().min(1, "Project ID is required"),
+  assetName: z.string().optional(),
   params: z.record(z.any()).optional(),
-});
+}).refine(
+  (data) => (data.assetId ? !data.imageUrl : !!data.imageUrl),
+  { message: "Either assetId or imageUrl is required" }
+);
 
 async function verifyToken(request: NextRequest): Promise<string | null> {
   const authHeader = request.headers.get("authorization");
@@ -43,15 +48,22 @@ export async function GET(request: NextRequest) {
   }
 
   const assetId = request.nextUrl.searchParams.get("assetId");
-  if (!assetId) {
+  const imageUrl = request.nextUrl.searchParams.get("imageUrl");
+  if (!assetId && !imageUrl) {
     return NextResponse.json(
-      { error: "assetId query parameter is required" },
+      { error: "assetId or imageUrl query parameter is required" },
+      { status: 400 }
+    );
+  }
+  if (assetId && imageUrl) {
+    return NextResponse.json(
+      { error: "Provide only one of assetId or imageUrl" },
       { status: 400 }
     );
   }
 
   try {
-    const jobs = await listVideoEffectJobs(assetId);
+    const jobs = await listVideoEffectJobs(assetId ?? undefined, imageUrl ?? undefined);
     return NextResponse.json({ jobs });
   } catch (error) {
     console.error("Failed to list video effect jobs", error);
@@ -77,6 +89,8 @@ export async function POST(request: NextRequest) {
       userId,
       projectId: payload.projectId,
       assetId: payload.assetId,
+      imageUrl: payload.imageUrl,
+      assetName: payload.assetName,
       effectId: payload.effectId,
       params: payload.params ?? {},
     });

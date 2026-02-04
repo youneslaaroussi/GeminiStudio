@@ -55,20 +55,28 @@ export function isVideoEffectsServiceEnabled(): boolean {
 export async function startVideoEffectJob(options: {
   userId: string;
   projectId: string;
-  assetId: string;
+  assetId?: string;
+  imageUrl?: string;
+  assetName?: string;
   effectId: string;
   params?: Record<string, unknown>;
 }): Promise<VideoEffectJob> {
+  const body: Record<string, unknown> = {
+    userId: options.userId,
+    projectId: options.projectId,
+    effectId: options.effectId,
+    params: options.params || {},
+  };
+  if (options.assetId) body.assetId = options.assetId;
+  if (options.imageUrl) {
+    body.imageUrl = options.imageUrl;
+    if (options.assetName) body.assetName = options.assetName;
+  }
+
   const response = await fetch(`${VIDEO_EFFECTS_SERVICE_URL}/api/jobs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      userId: options.userId,
-      projectId: options.projectId,
-      assetId: options.assetId,
-      effectId: options.effectId,
-      params: options.params || {},
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -101,11 +109,17 @@ export async function getVideoEffectJob(jobId: string): Promise<VideoEffectJob |
 }
 
 /**
- * List video effect jobs for an asset.
+ * List video effect jobs for an asset or image URL.
  */
-export async function listVideoEffectJobs(assetId: string): Promise<VideoEffectJob[]> {
+export async function listVideoEffectJobs(
+  assetId?: string,
+  imageUrl?: string
+): Promise<VideoEffectJob[]> {
+  const param = assetId
+    ? `assetId=${encodeURIComponent(assetId)}`
+    : `imageUrl=${encodeURIComponent(imageUrl!)}`;
   const response = await fetch(
-    `${VIDEO_EFFECTS_SERVICE_URL}/api/jobs?assetId=${encodeURIComponent(assetId)}`,
+    `${VIDEO_EFFECTS_SERVICE_URL}/api/jobs?${param}`,
     { method: "GET" }
   );
 

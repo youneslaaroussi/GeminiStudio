@@ -221,7 +221,7 @@ def addClipToTimeline(
         text: Text content for text clips
         name: Optional name for the clip
         template: For text clips: text, title-card, lower-third, or caption-style
-        subtitle: For text clips with title-card or lower-third template
+        subtitle: For text clips with title-card or lower-third template. Always use subtitle for title cards and chapter cards—it looks much nicer.
         backgroundColor: For text clips with background (e.g. rgba(0,0,0,0.8))
         enter_transition: Optional JSON {"type":"fade","duration":0.5} for in transition
         exit_transition: Optional JSON {"type":"fade","duration":0.5} for out transition

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-03T23:35:19.118Z",
+  "generatedAt": "2026-02-04T03:47:52.178Z",
   "tools": {
     "captureAsset": {
       "name": "captureAsset",
@@ -2632,6 +2632,19 @@
         "app": false,
         "langgraph": true,
         "langgraphName": "getVideoEffectJobStatus"
+      },
+      "fields": [],
+      "inputSchema": null
+    },
+    "removeBackgroundOnImage": {
+      "name": "removeBackgroundOnImage",
+      "label": "Remove Background from Image",
+      "description": "Remove the background from an image. Polls until done, then returns the result. Use asset_id for project assets or image_url for external URLs.",
+      "runLocation": "server",
+      "implementations": {
+        "app": false,
+        "langgraph": true,
+        "langgraphName": "removeBackgroundOnImage"
       },
       "fields": [],
       "inputSchema": null

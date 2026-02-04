@@ -3,6 +3,7 @@ import { Vector2, createRef, createSignal, waitFor, all, easeOutCubic, easeInCub
 import type { VideoClip, VideoEntry, ClipTransition } from '../types';
 import { toVector } from '../helpers';
 import { getEffectShaderConfig, getColorGradingShaderConfig, getChromaKeyShaderConfig } from '../effectShaders';
+import { applyClipAnimation } from './animations';
 import luminanceToAlpha from '../../shaders/luminanceToAlpha.glsl';
 import blurTransition from '../../shaders/blurTransition.glsl';
 import zoomTransition from '../../shaders/zoomTransition.glsl';
@@ -463,10 +464,17 @@ export function* playVideo({
       }
     }
 
-    // Main phase
+    // Main phase (with optional idle animation: hover, pulse, float, glow)
     const mainDuration = timelineDuration - (enter ? enter.duration : 0) - (exit ? exit.duration : 0);
     if (mainDuration > 0) {
-      yield* waitFor(mainDuration);
+      if (clip.animation && clip.animation !== 'none') {
+        yield* all(
+          waitFor(mainDuration),
+          applyClipAnimation(scaleTarget, clip.animation, mainDuration, clip.animationIntensity)
+        );
+      } else {
+        yield* waitFor(mainDuration);
+      }
     }
 
     // Exit phase

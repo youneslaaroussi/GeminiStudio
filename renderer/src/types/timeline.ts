@@ -84,6 +84,14 @@ export type VisualEffectType =
   | 'pixelate'
   | 'chromatic';
 
+/** Idle animation while a clip is visible (hover-style scale, pulse, float, glow) */
+export type ClipAnimationType =
+  | 'none'
+  | 'hover'
+  | 'pulse'
+  | 'float'
+  | 'glow';
+
 /** Text template styles */
 export type TextTemplateType =
   | 'text'           // Basic text (default)
@@ -126,6 +134,10 @@ export interface VideoClip extends BaseClip {
   colorGrading?: ColorGradingSettings;
   /** Chroma key (green screen) */
   chromaKey?: ChromaKeySettings;
+  /** Idle animation while clip is visible (hover, pulse, float, glow) */
+  animation?: ClipAnimationType;
+  /** Animation intensity 0–5x (1 = normal, 5 = 5x). Default 1. */
+  animationIntensity?: number;
 }
 
 export interface AudioClip extends BaseClip {
@@ -148,6 +160,10 @@ export interface TextClip extends BaseClip {
   subtitle?: string;
   /** Background color (for templates with backgrounds) */
   backgroundColor?: string;
+  /** Idle animation while clip is visible (hover, pulse, float, glow) */
+  animation?: ClipAnimationType;
+  /** Animation intensity 0–5x (1 = normal, 5 = 5x). Default 1. */
+  animationIntensity?: number;
 }
 
 export interface ImageClip extends BaseClip {
@@ -161,6 +177,10 @@ export interface ImageClip extends BaseClip {
   colorGrading?: ColorGradingSettings;
   /** Chroma key for image clips */
   chromaKey?: ChromaKeySettings;
+  /** Idle animation while clip is visible (hover, pulse, float, glow) */
+  animation?: ClipAnimationType;
+  /** Animation intensity 0–5x (1 = normal, 5 = 5x). Default 1. */
+  animationIntensity?: number;
 }
 
 export type TimelineClip = VideoClip | AudioClip | TextClip | ImageClip;

@@ -1,8 +1,9 @@
 import { Txt, Node, Rect } from '@motion-canvas/2d';
-import { createRef, waitFor, type ThreadGenerator } from '@motion-canvas/core';
+import { createRef, waitFor, all, type ThreadGenerator } from '@motion-canvas/core';
 import type { TextClip, TextEntry, TextClipSettings } from '../types';
 import { getEffectShaderConfig } from '../effectShaders';
 import { applyEnterTransition, applyExitTransition, getTransitionAdjustedTiming } from './transitions';
+import { applyClipAnimation } from './animations';
 
 interface CreateTextElementsOptions {
   clips: TextClip[];
@@ -270,9 +271,16 @@ export function* playText({ entry, sceneWidth, sceneHeight }: PlayTextOptions): 
   // Enter transition
   yield* applyEnterTransition(target, clip.enterTransition, targetOpacity, sceneWidth, sceneHeight);
 
-  // Main duration
+  // Main duration (with optional idle animation)
   if (timing.mainDuration > 0) {
-    yield* waitFor(timing.mainDuration);
+    if (clip.animation && clip.animation !== 'none') {
+      yield* all(
+        waitFor(timing.mainDuration),
+        applyClipAnimation(target, clip.animation, timing.mainDuration, clip.animationIntensity)
+      );
+    } else {
+      yield* waitFor(timing.mainDuration);
+    }
   }
 
   // Exit transition

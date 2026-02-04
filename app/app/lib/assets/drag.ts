@@ -40,12 +40,17 @@ export function assetMatchesLayer(assetType: AssetType, layerType: ClipType) {
   return assetType === layerType;
 }
 
+const IMAGE_CLIP_DEFAULT_DURATION = 5;
+
 export function createClipFromAsset(payload: AssetDragPayload, start: number): TimelineClip {
   const sourceDuration =
     typeof payload.duration === "number" && payload.duration > 0
       ? payload.duration
       : undefined;
-  const duration = sourceDuration ?? DEFAULT_ASSET_DURATIONS[payload.type] ?? 5;
+  const duration =
+    payload.type === "image"
+      ? IMAGE_CLIP_DEFAULT_DURATION
+      : sourceDuration ?? DEFAULT_ASSET_DURATIONS[payload.type] ?? 5;
   const name = payload.name || "Uploaded Asset";
   const options = {
     assetId: payload.id,
@@ -57,7 +62,7 @@ export function createClipFromAsset(payload: AssetDragPayload, start: number): T
     case "audio":
       return createAudioClip(payload.url, name, start, duration, { assetId: payload.id, sourceDuration });
     case "image":
-      return createImageClip(payload.url, name, start, duration, options);
+      return createImageClip(payload.url, name, start, IMAGE_CLIP_DEFAULT_DURATION, options);
     case "video":
     case "other":
     default:

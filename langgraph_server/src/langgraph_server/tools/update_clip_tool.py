@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 TEXT_TEMPLATES = ("text", "title-card", "lower-third", "caption-style")
 
+ANIMATION_TYPES = ("none", "hover", "pulse", "float", "glow")
+
 TRANSITION_TYPES = (
     "none", "fade", "slide-left", "slide-right", "slide-up", "slide-down",
     "cross-dissolve", "zoom", "blur", "dip-to-black",
@@ -75,6 +77,9 @@ def updateClipInTimeline(
     chroma_key: str | None = None,
     # Video focus area (crop/ken-burns region; video clips only)
     focus: str | None = None,
+    # Idle animation (video, text, image clips only): hover, pulse, float, glow
+    animation: str | None = None,
+    animation_intensity: float | None = None,
     _agent_context: dict | None = None,
 ) -> dict:
     """Update an existing clip on the project timeline.
@@ -90,6 +95,7 @@ def updateClipInTimeline(
     Use chroma_key (JSON) to make a key color transparent: {"color": "#00ff00", "threshold": 0.4, "smoothness": 0.1}.
     color and threshold are required; smoothness is optional (0-1). Omit or set to null to remove chroma key.
     For video clips, use focus (JSON) to set focus/zoom: {"x": 0.5, "y": 0.5, "zoom": 1}. x,y = center (0–1), zoom = 1 for full frame, 2 for 2×. Pass null to clear.
+    Use animation (hover|pulse|float|glow) for idle animations on video, text, image clips. Use animation_intensity 0-5 (1=normal, 5=5x). Pass "none" or omit to clear.
 
     Args:
         clip_id: The clip ID to update (e.g. "clip-abc12345")
@@ -113,6 +119,8 @@ def updateClipInTimeline(
         color_grading: Optional JSON for video/image clips: {"exposure":0,"contrast":0,"saturation":0,"temperature":0,"tint":0,"highlights":0,"shadows":0}. Values -100 to 100 (exposure often -2 to 2).
         chroma_key: Optional JSON for video/image clips: {"color":"#00ff00","threshold":0.4,"smoothness":0.1}. Key color (hex), threshold 0-1, smoothness 0-1. Pass null to remove.
         focus: Optional JSON for video clips: {"x":0.5,"y":0.5,"zoom":1}. Center (0–1) and zoom ratio. Pass null to clear.
+        animation: Optional idle animation for video/text/image: hover, pulse, float, glow. "none" to clear.
+        animation_intensity: Optional 0-5 (1=normal, 5=5x). Only used when animation is set.
 
     Returns:
         Status dict with updated clip info or error message.
@@ -267,6 +275,18 @@ def updateClipInTimeline(
             except (json.JSONDecodeError, TypeError):
                 pass
 
+    # Animation (video, text, image clips only). Clear if "none" or "".
+    if animation is not None:
+        anim = (animation or "").strip().lower()
+        if anim in ANIMATION_TYPES and anim != "none":
+            updates["animation"] = anim
+        elif anim in ("none", ""):
+            updates["_clear_animation"] = True  # Flag to remove
+    if animation_intensity is not None and isinstance(animation_intensity, (int, float)):
+        val = float(animation_intensity)
+        if 0 <= val <= 5:
+            updates["animationIntensity"] = val
+
     # Focus/zoom (video clips only). Clear if "null" or "". Format: {"x": 0.5, "y": 0.5, "zoom": 1}.
     focus_clear = False
     if focus is not None:
@@ -289,7 +309,9 @@ def updateClipInTimeline(
     # Merge colorGrading with existing clip values when we apply (see below)
     color_grading_merge = updates.pop("colorGrading", None)
 
-    if not updates and not transition_clears and not color_grading_merge and not chroma_key_clear and not focus_clear:
+    animation_clear = updates.pop("_clear_animation", False)
+
+    if not updates and not transition_clears and not color_grading_merge and not chroma_key_clear and not focus_clear and not animation_clear:
         return {
             "status": "error",
             "message": "No valid updates provided.",
@@ -362,6 +384,9 @@ def updateClipInTimeline(
                     updates["offset"] = max(0, source_duration - 0.1)
 
         _apply_updates(clip, updates)
+        if animation_clear and clip.get("type") in ("video", "text", "image"):
+            clip.pop("animation", None)
+            clip.pop("animationIntensity", None)
         if color_grading_merge is not None and clip.get("type") in ("video", "image"):
             existing = clip.get("colorGrading") or {}
             merged = {**existing, **color_grading_merge}

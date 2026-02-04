@@ -157,3 +157,46 @@ def list_jobs_by_asset(
         jobs.append(data)
 
     return jobs
+
+
+def claim_job_for_completion(
+    job_id: str,
+    settings: Settings | None = None,
+) -> bool:
+    """
+    Atomically claim a job for completion processing.
+
+    Uses a Firestore transaction to ensure only one worker processes the completion.
+    Sets status to 'completing' if current status is 'running'.
+
+    Returns:
+        True if successfully claimed, False if already claimed or completed.
+    """
+    settings = settings or get_settings()
+    db = get_firestore_client(settings)
+    doc_ref = db.collection(COLLECTION_NAME).document(job_id)
+
+    @firestore.transactional
+    def claim_in_transaction(transaction):
+        doc = doc_ref.get(transaction=transaction)
+        if not doc.exists:
+            return False
+
+        data = doc.to_dict()
+        current_status = data.get("status", "")
+
+        # Only claim if status is 'running' (not already completing/completed/error)
+        if current_status != "running":
+            logger.debug(f"Job {job_id} not claimable, status={current_status}")
+            return False
+
+        # Claim the job by setting status to 'completing'
+        transaction.update(doc_ref, {
+            "status": "completing",
+            "updatedAt": datetime.utcnow().isoformat() + "Z",
+        })
+        logger.info(f"Claimed job {job_id} for completion")
+        return True
+
+    transaction = db.transaction()
+    return claim_in_transaction(transaction)

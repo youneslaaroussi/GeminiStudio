@@ -28,28 +28,28 @@ function SettingsLayoutContent({ children }: { children: React.ReactNode }) {
   const activeSection = getActiveSection();
 
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)]">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-slate-800 bg-slate-950/50 p-4 shrink-0">
-        <div className="mb-6">
-          <h1 className="text-lg font-semibold text-white px-3">Settings</h1>
+    <div className="flex flex-col md:flex-row min-h-[calc(100vh-3.5rem)]">
+      {/* Sidebar: horizontal nav on mobile, vertical on desktop */}
+      <aside className="w-full md:w-64 border-b md:border-b-0 md:border-r border-slate-800 bg-slate-950/50 p-4 shrink-0">
+        <div className="mb-4 md:mb-6">
+          <h1 className="text-lg font-semibold text-white px-0 md:px-3">Settings</h1>
         </div>
-        <nav className="space-y-1">
+        <nav className="flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-1 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0">
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}
               onClick={() => router.push(item.href)}
               className={cn(
-                "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex-shrink-0 md:w-full",
                 activeSection === item.id
                   ? "bg-slate-800 text-white"
                   : "text-slate-400 hover:text-white hover:bg-slate-800/50"
               )}
             >
-              <item.icon className="size-4" />
+              <item.icon className="size-4 shrink-0" />
               {item.label}
               {activeSection === item.id && (
-                <ChevronRight className="size-4 ml-auto text-slate-500" />
+                <ChevronRight className="size-4 ml-auto text-slate-500 hidden md:block" />
               )}
             </button>
           ))}
@@ -57,8 +57,8 @@ function SettingsLayoutContent({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-8 overflow-auto">
-        <div className="max-w-2xl">
+      <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-auto min-w-0">
+        <div className="max-w-2xl w-full">
           {children}
         </div>
       </main>

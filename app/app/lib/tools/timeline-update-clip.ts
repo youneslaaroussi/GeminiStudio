@@ -121,6 +121,8 @@ const clipUpdateSchema = z.object({
     .optional(),
   enterTransition: clipTransitionSchema.optional().nullable(),
   exitTransition: clipTransitionSchema.optional().nullable(),
+  animation: z.enum(["none", "hover", "pulse", "float", "glow"]).optional().nullable(),
+  animationIntensity: z.number().min(0).max(5).optional(),
 });
 
 type ClipUpdateInput = z.infer<typeof clipUpdateSchema>;
@@ -153,6 +155,20 @@ function buildUpdates(
       updates.exitTransition = undefined;
     } else {
       updates.exitTransition = input.exitTransition as ClipTransition;
+    }
+  }
+
+  // Animation (video, text, image only—not audio)
+  if (clip.type !== "audio") {
+    if (input.animation !== undefined) {
+      if (input.animation === null || input.animation === "none" || !input.animation) {
+        updates.animation = undefined;
+      } else {
+        updates.animation = input.animation as "hover" | "pulse" | "float" | "glow";
+      }
+    }
+    if (input.animationIntensity !== undefined) {
+      updates.animationIntensity = Math.max(0, Math.min(5, input.animationIntensity));
     }
   }
 
@@ -220,7 +236,7 @@ export const timelineUpdateClipTool: ToolDefinition<
   name: "timelineUpdateClip",
   label: "Update Timeline Clip",
   description:
-    "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s).",
+    "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s). Use animation (none|hover|pulse|float|glow) and animationIntensity (0-5x) for idle animations on video, text, and image clips.",
   runLocation: "client",
   inputSchema: clipUpdateSchema,
   fields: [
@@ -311,6 +327,20 @@ export const timelineUpdateClipTool: ToolDefinition<
       type: "json",
       placeholder: '{"type":"fade","duration":0.5}',
       description: "Out transition when clip ends. Same types as enter. Omit or type:none to clear.",
+    },
+    {
+      name: "animation",
+      label: "Animation",
+      type: "text",
+      placeholder: "none | hover | pulse | float | glow",
+      description: "Idle animation while clip is visible (video, text, image only). none to clear.",
+    },
+    {
+      name: "animationIntensity",
+      label: "Animation Intensity",
+      type: "number",
+      placeholder: "1",
+      description: "Animation strength 0–5x (1 = normal). Only applies when animation is set.",
     },
   ],
   async run(input) {

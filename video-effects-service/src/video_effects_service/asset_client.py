@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 
 from .config import get_settings
+from .hmac_auth import get_asset_service_headers, get_asset_service_upload_headers
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +39,10 @@ async def get_asset_from_service(
     """
     settings = get_settings()
     url = f"{settings.asset_service_url}/api/assets/{user_id}/{project_id}/{asset_id}"
+    headers = get_asset_service_headers("")
 
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, timeout=30.0)
+        response = await client.get(url, headers=headers, timeout=30.0)
 
         if not response.is_success:
             raise AssetServiceError(
@@ -77,6 +79,7 @@ async def upload_to_asset_service(
     """
     settings = get_settings()
     url = f"{settings.asset_service_url}/api/assets/{user_id}/{project_id}/upload"
+    headers = get_asset_service_upload_headers(file_content)
 
     async with httpx.AsyncClient() as client:
         files = {"file": (filename, file_content, mime_type)}
@@ -89,7 +92,8 @@ async def upload_to_asset_service(
             url,
             files=files,
             data=data,
-            timeout=120.0,  # Longer timeout for uploads
+            headers=headers,
+            timeout=300.0,  # 5 min timeout for uploads (asset service can be slow)
         )
 
         if not response.is_success:

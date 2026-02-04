@@ -365,27 +365,23 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
   // Add asset to timeline
   const handleAddToTimeline = useCallback(
     (asset: RemoteAsset) => {
-      const duration = resolveAssetDuration(asset);
       const name = asset.name || "Asset";
       const start = getDuration();
       const assetMetadata = metadata[asset.id];
-      // For video/audio, use the resolved duration as the source duration
-      const sourceDuration = (asset.type === "video" || asset.type === "audio" || asset.type === "other") 
-        ? duration 
-        : undefined;
       const clipOptions = {
         assetId: asset.id,
         width: asset.width ?? assetMetadata?.width,
         height: asset.height ?? assetMetadata?.height,
-        sourceDuration,
       };
 
       if (asset.type === "video" || asset.type === "other") {
-        addClip(createVideoClip(asset.url, name, start, duration, clipOptions));
+        const duration = resolveAssetDuration(asset);
+        addClip(createVideoClip(asset.url, name, start, duration, { ...clipOptions, sourceDuration: duration }));
       } else if (asset.type === "audio") {
-        addClip(createAudioClip(asset.url, name, start, duration, { assetId: asset.id, sourceDuration }));
+        const duration = resolveAssetDuration(asset);
+        addClip(createAudioClip(asset.url, name, start, duration, { assetId: asset.id, sourceDuration: duration }));
       } else {
-        addClip(createImageClip(asset.url, name, start, duration, clipOptions));
+        addClip(createImageClip(asset.url, name, start, 5, clipOptions));
       }
     },
     [addClip, getDuration, resolveAssetDuration, metadata]

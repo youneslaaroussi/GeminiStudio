@@ -7,7 +7,7 @@ from typing import Any
 
 from .effects.definitions import get_effect_definition
 from .providers.replicate import get_prediction, map_replicate_status
-from .storage.firestore import get_job, update_job
+from .storage.firestore import get_job, update_job, claim_job_for_completion
 from .asset_client import download_remote_file, upload_to_asset_service
 
 logger = logging.getLogger(__name__)
@@ -27,9 +27,9 @@ async def poll_job(job_id: str) -> dict[str, Any] | None:
     if not job:
         return None
 
-    # If already completed or errored, no need to poll
+    # If already completed, completing, or errored, no need to poll
     status = job.get("status", "")
-    if status in ("completed", "error"):
+    if status in ("completed", "completing", "error"):
         return job
 
     # Get effect definition
@@ -58,6 +58,12 @@ async def poll_job(job_id: str) -> dict[str, Any] | None:
     new_status = map_replicate_status(prediction.get("status", ""))
 
     if new_status == "completed":
+        # Try to claim the job for completion (prevents race conditions)
+        if not claim_job_for_completion(job_id):
+            # Another worker is already handling completion
+            logger.debug(f"Job {job_id} completion already being handled")
+            return get_job(job_id)
+
         # Handle completion
         try:
             updated_job = await _handle_completion(job, definition, prediction)
@@ -132,7 +138,7 @@ async def _handle_completion(
     logger.info(f"Downloading processed video from {result_url}")
     file_content, mime_type = await download_remote_file(result_url)
 
-    # Use extension that matches actual format (webm, gif, mp4) so download filename is correct
+    # Use extension that matches actual format (webm, gif, mp4, png) so download filename is correct
     ext = ".mp4"
     if mime_type:
         mt = mime_type.split(";")[0].strip().lower()
@@ -140,6 +146,10 @@ async def _handle_completion(
             ext = ".webm"
         elif mt == "image/gif":
             ext = ".gif"
+        elif mt == "image/png":
+            ext = ".png"
+        elif mt.startswith("image/"):
+            ext = ".png"
         elif mt.startswith("video/"):
             ext = ".mp4"
     filename = f"{definition.label or definition.id}-{job_id[:8]}{ext}"

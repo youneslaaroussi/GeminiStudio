@@ -68,6 +68,13 @@ const LANGGRAPH_ONLY_TOOLS: Array<{
     langgraphName: "getVideoEffectJobStatus",
   },
   {
+    name: "removeBackgroundOnImage",
+    label: "Remove Background from Image",
+    description:
+      "Remove the background from an image. Polls until done, then returns the result. Use asset_id for project assets or image_url for external URLs.",
+    langgraphName: "removeBackgroundOnImage",
+  },
+  {
     name: "reorderLayers",
     label: "Reorder Timeline Layers",
     description:

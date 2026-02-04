@@ -618,7 +618,7 @@ Media Assets in Project ({len(assets_info)}):
         return TeleportResponse(
             success=False,
             chat_id=payload.chat_id,
-            message="Run cancelled (new message or stop)."
+            message="Interruped..."
         )
     finally:
         async with _teleport_lock:

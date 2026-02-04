@@ -231,26 +231,26 @@ function ProfileSection() {
           </p>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-6 pb-16">
           {/* Display Name */}
-          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
+          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4 sm:p-6">
             <label className="block text-sm font-medium text-white mb-1">
               Display name
             </label>
             <p className="text-sm text-slate-400 mb-4">
               This is the name that will be displayed across the app.
             </p>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <Input
                 value={profileName}
                 onChange={(e) => setProfileName(e.target.value)}
                 placeholder="Your name"
-                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 max-w-sm"
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 w-full sm:max-w-sm"
               />
               <Button
                 onClick={handleSaveName}
                 disabled={isSavingName}
-                className="bg-white text-black hover:bg-slate-100"
+                className="bg-white text-black hover:bg-slate-100 w-full sm:w-auto shrink-0"
               >
                 {isSavingName ? <Loader2 className="size-4 animate-spin" /> : "Save"}
               </Button>
@@ -258,25 +258,25 @@ function ProfileSection() {
           </div>
 
           {/* Email */}
-          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
+          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4 sm:p-6">
             <label className="block text-sm font-medium text-white mb-1">
               Email address
             </label>
             <p className="text-sm text-slate-400 mb-4">
               Your email address is used for login and notifications.
             </p>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
               <Input
                 value={user.email || ""}
                 disabled
-                className="bg-slate-800/50 border-slate-700 text-slate-400 max-w-sm"
+                className="bg-slate-800/50 border-slate-700 text-slate-400 w-full sm:max-w-sm"
               />
-              <span className="text-xs text-slate-500">Cannot be changed</span>
+              <span className="text-xs text-slate-500 shrink-0">Cannot be changed</span>
             </div>
           </div>
 
           {/* Change Password */}
-          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
+          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4 sm:p-6">
             <label className="block text-sm font-medium text-white mb-1">
               Change password
             </label>
@@ -356,7 +356,7 @@ function ProfileSection() {
           </div>
 
           {/* Delete Account */}
-          <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-6">
+          <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 sm:p-6">
             <label className="block text-sm font-medium text-red-400 mb-1">
               Delete account
             </label>
@@ -442,7 +442,7 @@ function ProfileSection() {
                   />
                 </div>
 
-                <div className="flex gap-3 pt-2">
+                <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
                   <Button
                     variant="outline"
                     onClick={() => {
@@ -573,8 +573,8 @@ function BillingSection() {
         </div>
 
         {/* Current Balance */}
-        <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
-          <div className="flex items-start justify-between">
+        <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-sm font-medium text-slate-400 mb-2">Current balance</p>
               <div className="flex items-baseline gap-2">
@@ -583,7 +583,7 @@ function BillingSection() {
               </div>
             </div>
             {billing.tier && (
-              <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 text-sm font-medium">
+              <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 text-sm font-medium shrink-0">
                 {SUBSCRIPTION_TIERS[billing.tier].name}
               </span>
             )}
@@ -616,7 +616,7 @@ function BillingSection() {
         </div>
 
         {/* Subscription Actions */}
-        <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
+        <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4 sm:p-6">
           <h3 className="text-sm font-medium text-white mb-1">Subscription</h3>
           <p className="text-sm text-slate-400 mb-4">
             Use R-Credits for renders and other premium features. Unused credits roll over
@@ -688,13 +688,13 @@ function BillingSection() {
                   <div
                     key={pack.id}
                     className={cn(
-                      "flex items-center justify-between rounded-lg border p-4 transition-colors",
+                      "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg border p-4 transition-colors",
                       isCurrentPlan
                         ? "border-amber-500/50 bg-amber-500/5"
                         : "border-slate-700 bg-slate-800/50 hover:border-slate-600"
                     )}
                   >
-                    <div>
+                    <div className="min-w-0">
                       <p className="font-medium text-white">{pack.name}</p>
                       <p className="text-sm text-slate-400">
                         {pack.credits} credits · ${pack.amountUsd.toFixed(2)}/mo
@@ -705,7 +705,7 @@ function BillingSection() {
                       disabled={!!checkoutLoading || isCurrentPlan}
                       variant={isCurrentPlan ? "outline" : "default"}
                       className={cn(
-                        "shrink-0",
+                        "w-full sm:w-auto shrink-0",
                         isCurrentPlan
                           ? "border-slate-600 text-slate-400"
                           : "bg-amber-600 hover:bg-amber-700 text-white"
@@ -835,9 +835,9 @@ function IntegrationsSection() {
 
       {/* Telegram */}
       <div className="rounded-lg border border-slate-800 bg-slate-900/50 overflow-hidden">
-        <div className="p-6">
-          <div className="flex items-start gap-4">
-            <div className="p-3 bg-blue-500/10 rounded-lg shrink-0">
+        <div className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+            <div className="p-3 bg-blue-500/10 rounded-lg shrink-0 w-fit">
               <MessageCircle className="size-5 text-blue-400" />
             </div>
             <div className="flex-1 min-w-0">
@@ -865,15 +865,15 @@ function IntegrationsSection() {
           </div>
         </div>
 
-        <div className="px-6 py-4 bg-slate-950/50 border-t border-slate-800">
+        <div className="px-4 sm:px-6 py-4 bg-slate-950/50 border-t border-slate-800">
           {loadingIntegrations ? (
             <div className="flex items-center gap-2 text-slate-400">
               <Loader2 className="size-4 animate-spin" />
               <span className="text-sm">Loading...</span>
             </div>
           ) : integrations.telegram ? (
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="min-w-0">
                 {integrations.telegram.telegramUsername && (
                   <p className="text-sm text-slate-300">
                     @{integrations.telegram.telegramUsername}
@@ -888,7 +888,7 @@ function IntegrationsSection() {
                 size="sm"
                 onClick={handleUnlink}
                 disabled={isUnlinking}
-                className="text-red-400 border-red-400/30 hover:bg-red-400/10 hover:text-red-300"
+                className="text-red-400 border-red-400/30 hover:bg-red-400/10 hover:text-red-300 w-full sm:w-auto shrink-0"
               >
                 {isUnlinking ? (
                   <Loader2 className="size-4 animate-spin mr-2" />
@@ -912,15 +912,15 @@ function IntegrationsSection() {
                 </a>
                 :
               </p>
-              <div className="flex items-center gap-2">
-                <code className="px-4 py-2 bg-slate-800 rounded-lg text-lg font-mono tracking-widest text-white">
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="px-3 sm:px-4 py-2 bg-slate-800 rounded-lg text-base sm:text-lg font-mono tracking-widest text-white break-all min-w-0">
                   {linkCode}
                 </code>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={handleCopyCode}
-                  className="text-slate-400 hover:text-white size-9"
+                  className="text-slate-400 hover:text-white size-9 shrink-0"
                 >
                   {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
                 </Button>

@@ -11,6 +11,7 @@ from .add_clip_tool import addClipToTimeline
 from .update_clip_tool import updateClipInTimeline
 from .add_transition_tool import addTransition
 from .apply_video_effect_tool import applyVideoEffectToClip, getVideoEffectJobStatus
+from .remove_background_tool import removeBackgroundOnImage
 from .delete_clip_tool import deleteClipFromTimeline
 from .remove_transition_tool import removeTransition
 from .docs_tool import search_product_docs
@@ -31,6 +32,7 @@ from .reorder_layers_tool import reorderLayers
 from .search_assets_tool import searchAssets
 from .set_asset_notes_tool import setAssetNotes
 from .set_scene_config_tool import setSceneConfig
+from .set_caption_settings_tool import setCaptionSettings
 from .apply_chroma_key_tool import applyChromaKeyToClip
 from .subscribe_pipeline_tool import subscribeToAssetPipeline
 from .subscribe_transcode_tool import subscribeToAssetTranscode
@@ -47,6 +49,7 @@ def get_registered_tools() -> Sequence[BaseTool]:
         addTransition,
         applyVideoEffectToClip,
         getVideoEffectJobStatus,
+        removeBackgroundOnImage,
         deleteClipFromTimeline,
         removeTransition,
         generateImage,
@@ -65,6 +68,7 @@ def get_registered_tools() -> Sequence[BaseTool]:
         searchAssets,
         setAssetNotes,
         setSceneConfig,
+        setCaptionSettings,
         applyChromaKeyToClip,
         search_product_docs,
         renderVideo,

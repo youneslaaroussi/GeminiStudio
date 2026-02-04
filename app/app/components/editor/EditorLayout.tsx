@@ -26,6 +26,7 @@ import { type EditorLayoutPreset, LAYOUT_PRESETS } from "./LayoutSelector";
 import { ChatPanel } from "./ChatPanel";
 import { ToolboxPanel } from "./ToolboxPanel";
 import { VideoEffectsPanel } from "./VideoEffectsPanel";
+import { ImageEffectsPanel } from "./ImageEffectsPanel";
 import { motion, AnimatePresence } from "motion/react";
 import { VoiceChat } from "@/app/components/VoiceChat";
 import { useProjectStore } from "@/app/lib/store/project-store";
@@ -36,34 +37,34 @@ import { useShortcuts } from "@/app/hooks/use-shortcuts";
 import { usePageReloadBlocker } from "@/app/hooks/use-page-reload-blocker";
 import { CommandMenu } from "./CommandMenu";
 import type { ProjectTranscription } from "@/app/types/transcription";
-import type { VideoClip } from "@/app/types/timeline";
+import type { VideoClip, ImageClip } from "@/app/types/timeline";
 import { getProxiedMediaUrl } from "@/app/components/ui/CoordinatePicker";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-// Wrapper component that gets selected video clip for the Effects tab
-function VideoEffectsPanelWrapper() {
+// Wrapper component that gets selected video or image clip for the Effects tab
+function EffectsPanelWrapper() {
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
   const layers = useProjectStore((s) => s.project.layers);
 
-  const selectedVideoClip = useMemo(() => {
+  const selectedClip = useMemo(() => {
     if (!selectedClipId) return null;
     for (const layer of layers) {
       const clip = layer.clips.find((c) => c.id === selectedClipId);
-      if (clip && clip.type === "video") {
-        return clip as VideoClip;
+      if (clip && (clip.type === "video" || clip.type === "image")) {
+        return clip;
       }
     }
     return null;
   }, [selectedClipId, layers]);
 
-  if (!selectedVideoClip) {
+  if (!selectedClip) {
     return (
       <div className="h-full flex items-center justify-center p-4">
         <div className="text-center text-muted-foreground">
           <Video className="size-10 mx-auto mb-3 opacity-40" />
-          <p className="text-sm font-medium">No video clip selected</p>
-          <p className="text-xs mt-1">Select a video clip to use AI effects</p>
+          <p className="text-sm font-medium">No video or image clip selected</p>
+          <p className="text-xs mt-1">Select a video or image clip to use AI effects</p>
         </div>
       </div>
     );
@@ -72,7 +73,12 @@ function VideoEffectsPanelWrapper() {
   return (
     <ScrollArea className="h-full">
       <div className="p-3">
-        <VideoEffectsPanel clip={selectedVideoClip} />
+        {selectedClip.type === "video" && (
+          <VideoEffectsPanel clip={selectedClip as VideoClip} />
+        )}
+        {selectedClip.type === "image" && (
+          <ImageEffectsPanel clip={selectedClip as ImageClip} />
+        )}
       </div>
     </ScrollArea>
   );
@@ -786,7 +792,7 @@ export function EditorLayout() {
                         }`}
                       >
                         <Sparkles className="size-4" />
-                        Video Effects
+                        Effects
                       </button>
                       <button
                         onClick={() => setRightPanelTab("chat")}
@@ -806,7 +812,7 @@ export function EditorLayout() {
                         <ToolboxPanel />
                       </div>
                       <div className={`absolute inset-0 ${rightPanelTab === "effects" ? "visible" : "invisible"}`}>
-                        <VideoEffectsPanelWrapper />
+                        <EffectsPanelWrapper />
                       </div>
                       <div className={`absolute inset-0 ${rightPanelTab === "chat" ? "visible" : "invisible"}`}>
                         <ChatPanel />

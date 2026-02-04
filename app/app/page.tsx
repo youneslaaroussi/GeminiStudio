@@ -25,6 +25,8 @@ import {
 } from 'react-icons/si';
 import { TypeAnimation } from 'react-type-animation';
 import { useAuth } from '@/app/lib/hooks/useAuth';
+import { RainbowGlow } from '@/components/landing/rainbow-glow';
+import { GradientCtaButtonAsButton } from '@/components/landing/gradient-cta-button';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -53,18 +55,20 @@ export default function LandingPage() {
             />
             <span className="font-semibold text-base">Gemini Studio</span>
           </div>
-          <button
+          <GradientCtaButtonAsButton
             onClick={handleGetStarted}
-            className="text-sm text-slate-400 hover:text-white transition-colors"
+            disabled={authLoading}
+            className="shrink-0"
           >
-            {authLoading ? '' : user ? 'Open app' : 'Sign in'}
-          </button>
+            {authLoading ? '…' : user ? 'Open app' : 'Sign in'}
+          </GradientCtaButtonAsButton>
         </div>
       </nav>
 
       {/* Hero */}
-      <section className="pt-32 pb-20 px-6">
-        <div className="max-w-3xl mx-auto">
+      <section className="pt-32 pb-20 px-6 relative overflow-hidden">
+        <RainbowGlow position="top" />
+        <div className="max-w-3xl mx-auto relative z-10">
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight leading-[1.15] mb-6">
             <TypeAnimation
               sequence={[
@@ -84,17 +88,28 @@ export default function LandingPage() {
                 2000,
                 'Post-production telepathy.',
                 2000,
+                'Video Editing at the Speed of Thought.',
+                2000,
               ]}
               wrapper="span"
               speed={50}
               repeat={Infinity}
             />
             <br />
-            Gemini builds it.
+            <span className="inline-flex items-center gap-2 align-baseline" style={{ transform: 'translateY(0.05em)' }}>
+              <img src="/gemini-logo.png" alt="" className="h-[0.85em] w-auto object-contain" aria-hidden />
+              <span>Gemini</span>
+            </span>
+            {' '}builds it.
           </h1>
 
-          <p className="text-lg text-slate-400 max-w-xl mb-10 leading-relaxed">
-            Stop clicking through menus. Tell Gemini what you want—cuts, captions,
+          <p className="text-lg text-slate-200 max-w-xl mb-10 leading-relaxed">
+            Stop clicking through menus. Tell{' '}
+            <span className="inline-flex items-center gap-1.5 align-baseline pl-0.5" style={{ transform: 'translateY(3px)' }}>
+              <img src="/gemini-logo.png" alt="" className="h-[1em] w-auto object-contain" aria-hidden />
+              <span>Gemini</span>
+            </span>
+            {' '}what you want—cuts, captions,
             transitions, effects—and watch your timeline update instantly.
           </p>
 
@@ -278,13 +293,13 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="py-8 px-6 border-t border-slate-800">
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-slate-500">
+      <footer className="py-6 sm:py-8 px-4 sm:px-6 border-t border-slate-800 mb-12">
+        <div className="max-w-3xl mx-auto flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-2 gap-y-1 text-sm text-slate-500 text-center sm:text-left">
             <img
               src="/gemini-logo.png"
               alt="Gemini Studio"
-              className="size-5"
+              className="size-5 shrink-0"
             />
             <span>Gemini Studio</span>
             <span>by</span>
@@ -297,7 +312,7 @@ export default function LandingPage() {
               Younes Laaroussi
             </a>
           </div>
-          <div className="flex items-center gap-6 text-sm text-slate-500">
+          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-x-4 gap-y-2 sm:gap-x-6 text-sm text-slate-500 text-center sm:text-left">
             <a
               href="https://github.com/youneslaaroussi/GeminiStudio"
               target="_blank"
@@ -305,7 +320,7 @@ export default function LandingPage() {
               className="inline-flex items-center gap-1.5 hover:text-slate-300 transition-colors"
               aria-label="GitHub repository"
             >
-              <SiGithub className="size-4" aria-hidden />
+              <SiGithub className="size-4 shrink-0" aria-hidden />
               GitHub
             </a>
             <span>

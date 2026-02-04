@@ -1,8 +1,9 @@
 import { Img, Node } from '@motion-canvas/2d';
-import { createRef, waitFor, type ThreadGenerator } from '@motion-canvas/core';
+import { createRef, waitFor, all, type ThreadGenerator } from '@motion-canvas/core';
 import type { ImageClip, ImageEntry } from '../types';
 import { getEffectShaderConfig, getColorGradingShaderConfig, getChromaKeyShaderConfig } from '../effectShaders';
 import { applyEnterTransition, applyExitTransition, getTransitionAdjustedTiming } from './transitions';
+import { applyClipAnimation } from './animations';
 
 interface CreateImageElementsOptions {
   clips: ImageClip[];
@@ -85,9 +86,16 @@ export function* playImage({ entry, sceneWidth, sceneHeight }: PlayImageOptions)
   // Enter transition
   yield* applyEnterTransition(image, clip.enterTransition, 1, sceneWidth, sceneHeight);
 
-  // Main duration
+  // Main duration (with optional idle animation)
   if (timing.mainDuration > 0) {
-    yield* waitFor(timing.mainDuration);
+    if (clip.animation && clip.animation !== 'none') {
+      yield* all(
+        waitFor(timing.mainDuration),
+        applyClipAnimation(image, clip.animation, timing.mainDuration, clip.animationIntensity)
+      );
+    } else {
+      yield* waitFor(timing.mainDuration);
+    }
   }
 
   // Exit transition
