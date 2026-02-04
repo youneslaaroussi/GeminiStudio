@@ -105,6 +105,7 @@ jobs:
                 SECRET_FIREBASE_STORAGE_BUCKET=$(gcloud secrets versions access latest --secret=firebase-storage-bucket 2>/dev/null || true)
                 SECRET_FIREBASE_MESSAGING_SENDER_ID=$(gcloud secrets versions access latest --secret=firebase-messaging-sender-id 2>/dev/null || true)
                 SECRET_FIREBASE_APP_ID=$(gcloud secrets versions access latest --secret=firebase-app-id 2>/dev/null || true)
+                SECRET_FIREBASE_DATABASE_URL=$(gcloud secrets versions access latest --secret=firebase-database-url 2>/dev/null || true)
                 SECRET_MAGIC_LINK=$(gcloud secrets versions access latest --secret=magic-link-secret 2>/dev/null || true)
                 SECRET_DEMO_USER_ID=$(gcloud secrets versions access latest --secret=demo-user-id 2>/dev/null || true)
                 SECRET_DEMO_PROJECT_ID=$(gcloud secrets versions access latest --secret=demo-project-id 2>/dev/null || true)
@@ -146,6 +147,7 @@ jobs:
                   printf "%s\n" "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${SECRET_FIREBASE_STORAGE_BUCKET}"
                   printf "%s\n" "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${SECRET_FIREBASE_MESSAGING_SENDER_ID}"
                   printf "%s\n" "NEXT_PUBLIC_FIREBASE_APP_ID=${SECRET_FIREBASE_APP_ID}"
+                  printf "%s\n" "FIREBASE_DATABASE_URL=${SECRET_FIREBASE_DATABASE_URL}"
                   printf "%s\n" "RENDERER_SHARED_SECRET=${SECRET_RENDERER}"
                   printf "%s\n" "ASSET_SERVICE_SHARED_SECRET=${SECRET_ASSET_SERVICE}"
                   printf "%s\n" "CLOUDCONVERT_API_KEY=${SECRET_CLOUDCONVERT}"

@@ -198,6 +198,15 @@ export async function pollVeoJob(jobId: string): Promise<VeoJob | null> {
     return serializeVeoJob(job);
   }
 
+  // Skip polling for jobs created by the Python/LangGraph agent (e.g. via Telegram)
+  // Those use the GenAI SDK with operation names like "models/veo-3.1.../operations/..."
+  // which are incompatible with the Vertex AI fetchPredictOperation endpoint.
+  // The Python VeoEventPoller handles those jobs instead.
+  if (job.operationName.startsWith("models/")) {
+    // Return as-is without polling - let Python handle it
+    return serializeVeoJob(job);
+  }
+
   const token = await getAccessToken();
 
   const response = await fetch(FETCH_URL, {
