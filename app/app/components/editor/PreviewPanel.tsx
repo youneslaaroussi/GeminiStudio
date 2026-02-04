@@ -9,7 +9,7 @@ import type { ProjectTranscription } from "@/app/types/transcription";
 import { Button } from "@/components/ui/button";
 import { Crosshair, Maximize2, Minimize2, Play, Pause } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
-import { usePreloadTimelineMedia } from "@/app/hooks/use-preload-timeline-media";
+import { SharedMediaLoader } from "@/app/lib/media/shared-media-loader";
 
 export interface PreviewPanelHandle {
   recenter: () => void;
@@ -76,7 +76,10 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   const fullscreenRef = useRef<HTMLDivElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
 
-  const preloadProgress = usePreloadTimelineMedia(layers);
+  // Notify SharedMediaLoader of playback state to pause extractions during playback
+  useEffect(() => {
+    SharedMediaLoader.setPlaybackActive(isPlaying);
+  }, [isPlaying]);
 
   const handleRecenter = useCallback(() => {
     scenePlayerRef.current?.recenter();
@@ -239,56 +242,6 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
                 <p>{isFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen preview (F)"}</p>
               </TooltipContent>
             </Tooltip>
-            {/* Preload progress: pie circle (0–100% of timeline media) */}
-            {preloadProgress.total > 0 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex items-center justify-center">
-                    <svg
-                      width={14}
-                      height={14}
-                      viewBox="0 0 16 16"
-                      className="rotate-[-90deg]"
-                      aria-hidden
-                    >
-                      <circle
-                        cx="8"
-                        cy="8"
-                        r="6"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                        className="text-muted-foreground/30"
-                      />
-                      <circle
-                        cx="8"
-                        cy="8"
-                        r="6"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                        strokeLinecap="round"
-                        className="text-amber-500 transition-[stroke-dasharray] duration-300"
-                        style={{
-                          strokeDasharray: 2 * Math.PI * 6,
-                          strokeDashoffset:
-                            2 * Math.PI * 6 *
-                            (1 -
-                              (preloadProgress.total === 0
-                                ? 1
-                                : preloadProgress.loaded / preloadProgress.total)),
-                        }}
-                      />
-                    </svg>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p>
-                    Preload {preloadProgress.loaded}/{preloadProgress.total} assets
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            )}
           </TooltipProvider>
           {/* Motion Canvas update dot */}
           <div
