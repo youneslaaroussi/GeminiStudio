@@ -60,11 +60,29 @@ interface GradientCtaButtonProps {
   className?: string;
 }
 
+// Props that conflict between React's HTML events and Framer Motion's handlers
+const MOTION_CONFLICT_PROPS = [
+  'onDrag',
+  'onDragStart',
+  'onDragEnd',
+  'onAnimationStart',
+  'onAnimationEnd',
+  'onAnimationIteration',
+] as const;
+type MotionButtonProps = Omit<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  (typeof MOTION_CONFLICT_PROPS)[number]
+>;
+type MotionAnchorProps = Omit<
+  React.AnchorHTMLAttributes<HTMLAnchorElement>,
+  (typeof MOTION_CONFLICT_PROPS)[number]
+>;
+
 export function GradientCtaButtonAsButton({
   children,
   className = '',
   ...props
-}: GradientCtaButtonProps & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+}: GradientCtaButtonProps & MotionButtonProps) {
   return (
     <motion.button
       type="button"
@@ -87,7 +105,7 @@ export function GradientCtaButtonAsLink({
   href,
   className = '',
   ...props
-}: GradientCtaButtonProps & React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) {
+}: GradientCtaButtonProps & MotionAnchorProps & { href: string }) {
   return (
     <motion.a
       href={href}

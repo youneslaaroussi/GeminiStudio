@@ -158,17 +158,19 @@ function buildUpdates(
     }
   }
 
-  // Animation (video, text, image only—not audio)
+  // Animation (video, text, image only—not audio). Use assertion because
+  // Partial<TimelineClip> doesn't allow animation (AudioClip has no animation).
   if (clip.type !== "audio") {
+    const visualUpdates = updates as Partial<VideoClip | TextClip | ImageClip>;
     if (input.animation !== undefined) {
       if (input.animation === null || input.animation === "none" || !input.animation) {
-        updates.animation = undefined;
+        visualUpdates.animation = undefined;
       } else {
-        updates.animation = input.animation as "hover" | "pulse" | "float" | "glow";
+        visualUpdates.animation = input.animation as "hover" | "pulse" | "float" | "glow";
       }
     }
     if (input.animationIntensity !== undefined) {
-      updates.animationIntensity = Math.max(0, Math.min(5, input.animationIntensity));
+      visualUpdates.animationIntensity = Math.max(0, Math.min(5, input.animationIntensity));
     }
   }
 
