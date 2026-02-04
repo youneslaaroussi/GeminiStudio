@@ -454,14 +454,14 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
     : undefined;
 
   const handleReorder = useCallback(
-    (orderedIds: string[]) => {
+    async (orderedIds: string[]): Promise<boolean> => {
       if (assetTypeFilter === "all") {
-        void reorderAssets(orderedIds);
+        return await reorderAssets(orderedIds);
       } else {
         const restIds = assets
           .map((a) => a.id)
           .filter((id) => !orderedIds.includes(id));
-        void reorderAssets([...orderedIds, ...restIds]);
+        return await reorderAssets([...orderedIds, ...restIds]);
       }
     },
     [assetTypeFilter, assets, reorderAssets]
