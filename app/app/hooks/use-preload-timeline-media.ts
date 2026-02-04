@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Layer } from "@/app/types/timeline";
 import {
   getTimelineMediaUrls,
@@ -9,11 +9,18 @@ import {
 
 const PRELOAD_CONCURRENCY = 3;
 
+export interface PreloadProgress {
+  /** Total number of assets to preload this run (video + audio URLs). */
+  total: number;
+  /** Number that have finished loading (canplay/loadeddata/error). */
+  loaded: number;
+}
+
 function preloadOne(
   item: TimelineMediaUrl,
   controller: AbortController
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const el =
       item.type === "video"
         ? document.createElement("video")
@@ -63,7 +70,8 @@ function preloadOne(
 async function preloadQueue(
   items: TimelineMediaUrl[],
   concurrency: number,
-  controller: AbortController
+  controller: AbortController,
+  onItemDone: () => void
 ): Promise<void> {
   const queue = [...items];
   let active = 0;
@@ -83,6 +91,7 @@ async function preloadQueue(
     if (!item) return Promise.resolve();
     active++;
     return preloadOne(item, controller).then(() => {
+      onItemDone();
       active--;
       return runNext();
     });
@@ -99,32 +108,46 @@ async function preloadQueue(
  * Preloads all video and audio URLs used in the timeline so that when Motion Canvas
  * reaches each clip during preview, the media is already in the browser cache.
  * Runs in the background with limited concurrency; does not block the UI.
+ * Returns progress { total, loaded } for showing a preload indicator.
  */
 export function usePreloadTimelineMedia(
   layers: Layer[],
   options?: { enabled?: boolean }
-): void {
+): PreloadProgress {
   const enabled = options?.enabled !== false;
   const preloadedUrlsRef = useRef<Set<string>>(new Set());
   const controllerRef = useRef<AbortController | null>(null);
+  const [progress, setProgress] = useState<PreloadProgress>({ total: 0, loaded: 0 });
 
   useEffect(() => {
     if (!enabled || typeof document === "undefined") return;
 
     const urls = getTimelineMediaUrls(layers);
-    if (urls.length === 0) return;
+    if (urls.length === 0) {
+      setProgress({ total: 0, loaded: 0 });
+      return;
+    }
 
     // Sort by clip start so earlier clips are preloaded first
     const sorted = [...urls].sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
 
     // Skip URLs we already preloaded (same set from previous run)
     const toPreload = sorted.filter((u) => !preloadedUrlsRef.current.has(u.src));
-    if (toPreload.length === 0) return;
+    if (toPreload.length === 0) {
+      setProgress({ total: 0, loaded: 0 });
+      return;
+    }
 
+    setProgress({ total: toPreload.length, loaded: 0 });
     const controller = new AbortController();
     controllerRef.current = controller;
 
-    preloadQueue(toPreload, PRELOAD_CONCURRENCY, controller).then(() => {
+    preloadQueue(toPreload, PRELOAD_CONCURRENCY, controller, () => {
+      setProgress((prev) => ({
+        ...prev,
+        loaded: Math.min(prev.loaded + 1, prev.total),
+      }));
+    }).then(() => {
       if (!controller.signal.aborted) {
         toPreload.forEach((u) => preloadedUrlsRef.current.add(u.src));
       }
@@ -135,4 +158,6 @@ export function usePreloadTimelineMedia(
       controllerRef.current = null;
     };
   }, [layers, enabled]);
+
+  return progress;
 }
