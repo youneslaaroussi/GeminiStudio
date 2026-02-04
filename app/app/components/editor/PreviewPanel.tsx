@@ -9,6 +9,7 @@ import type { ProjectTranscription } from "@/app/types/transcription";
 import { Button } from "@/components/ui/button";
 import { Crosshair, Maximize2, Minimize2, Play, Pause } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { usePreloadTimelineMedia } from "@/app/hooks/use-preload-timeline-media";
 
 export interface PreviewPanelHandle {
   recenter: () => void;
@@ -74,6 +75,8 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   const scenePlayerRef = useRef<ScenePlayerHandle>(null);
   const fullscreenRef = useRef<HTMLDivElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
+
+  usePreloadTimelineMedia(layers);
 
   const handleRecenter = useCallback(() => {
     scenePlayerRef.current?.recenter();

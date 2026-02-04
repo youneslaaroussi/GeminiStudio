@@ -148,23 +148,34 @@ export function Clip({ clip, layerId }: ClipProps) {
 
   const isVideo = clip.type === "video";
   const videoSrc = isVideo ? (clip as VideoClip).src : undefined;
-  // Use bucketed dimensions for cache key to avoid re-generating on small size changes
-  // Round width to nearest 50px, use fixed height of 40 (standard track height)
+  // Cache per asset only (not offset/duration) so cutting clips doesn't regenerate
   const filmstripWidth = Math.max(50, Math.ceil(waveformWidth / 50) * 50);
-  const filmstripHeight = 40; // Fixed height for consistent caching
+  const filmstripHeight = 40;
   const filmstripCacheKey = isVideo
-    ? `${clip.assetId ?? clip.src}-filmstrip-${clip.offset.toFixed(2)}-${clip.duration.toFixed(2)}-${filmstripWidth}`
+    ? `${clip.assetId ?? clip.src}-filmstrip-${filmstripWidth}-${filmstripHeight}`
     : undefined;
-  // Only request filmstrip when we have a meaningful height
   const shouldLoadFilmstrip = isVideo && clipHeight >= 10;
-  const { filmstripDataUrl, isLoading: filmstripLoading } = useFilmstrip({
+  const {
+    filmstripDataUrl,
+    sourceDurationSeconds: filmstripSourceDuration,
+    isLoading: filmstripLoading,
+  } = useFilmstrip({
     src: shouldLoadFilmstrip ? videoSrc : undefined,
     cacheKey: filmstripCacheKey,
     width: filmstripWidth,
     height: filmstripHeight,
-    offsetSeconds: clip.offset,
-    durationSeconds: clip.duration,
   });
+  // Crop full-asset filmstrip to this clip's segment via CSS
+  const filmstripCrop =
+    filmstripDataUrl &&
+    filmstripSourceDuration != null &&
+    filmstripSourceDuration > 0 &&
+    clip.duration > 0
+      ? {
+          imgWidth: (filmstripSourceDuration / clip.duration) * waveformWidth,
+          marginLeft: -(clip.offset / clip.duration) * waveformWidth,
+        }
+      : null;
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent, action: "drag" | "resize-left" | "resize-right") => {
@@ -330,15 +341,28 @@ export function Clip({ clip, layerId }: ClipProps) {
         >
           <Trash2 className="size-3.5" />
         </button>
-        {/* Video filmstrip (Mediabunny) */}
+        {/* Video filmstrip: full-asset strip cropped to this clip's segment */}
         {isVideo && (
           <div className="pointer-events-none absolute inset-[2px] rounded-sm overflow-hidden bg-black/30">
             {filmstripDataUrl ? (
-              <img
-                src={filmstripDataUrl}
-                alt=""
-                className="h-full w-full object-cover object-center"
-              />
+              filmstripCrop ? (
+                <img
+                  src={filmstripDataUrl}
+                  alt=""
+                  className="h-full object-cover object-center"
+                  style={{
+                    width: filmstripCrop.imgWidth,
+                    minWidth: filmstripCrop.imgWidth,
+                    marginLeft: filmstripCrop.marginLeft,
+                  }}
+                />
+              ) : (
+                <img
+                  src={filmstripDataUrl}
+                  alt=""
+                  className="h-full w-full object-cover object-center"
+                />
+              )
             ) : (
               filmstripLoading && (
                 <div className="h-full w-full animate-pulse bg-white/10" />

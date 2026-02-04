@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { initAdmin } from "@/app/lib/server/firebase-admin";
 import { getAuth } from "firebase-admin/auth";
 import {
@@ -94,6 +95,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
   try {
     await deleteAssetFromService(userId, projectId, assetId);
+    revalidateTag("assets", "max");
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Failed to delete asset:", error);
@@ -143,6 +145,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   try {
     const asset = await updateAssetFromService(userId, projectId, assetId, updates);
+    revalidateTag("assets", "max");
     return NextResponse.json({ asset });
   } catch (error) {
     if (error instanceof Error && error.message === "Asset not found") {

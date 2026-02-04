@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import type { RemoteAsset } from "@/app/types/assets";
 import {
   isAssetServiceEnabled,
@@ -63,6 +64,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const assets = await reorderAssetsFromService(userId, projectId, assetIds);
+    revalidateTag("assets", "max");
     return NextResponse.json({
       assets: assets.map((a) => toRemoteAsset(a, projectId)),
     });

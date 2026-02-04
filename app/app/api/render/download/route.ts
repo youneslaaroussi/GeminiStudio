@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
   }
 
   const url = request.nextUrl.searchParams.get("url");
+  const preferredFilename = request.nextUrl.searchParams.get("filename");
 
   if (!url) {
     return NextResponse.json(
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
       response.headers.get("content-type") || "application/octet-stream";
     const contentLength = response.headers.get("content-length");
 
-    // Extract filename from URL path so extension matches actual format (webm, gif, mp4)
+    // Prefer client-provided filename (e.g. project name), otherwise from URL path
     const pathParts = parsedUrl.pathname.split("/");
     const pathBasename = pathParts[pathParts.length - 1]?.split("?")[0] || "";
     const ext =
@@ -69,12 +70,22 @@ export async function GET(request: NextRequest) {
         : contentType.startsWith("image/gif")
           ? ".gif"
           : ".mp4";
+    const sanitize = (s: string) =>
+      s.replace(/[<>:"/\\|?*]+/g, "_").replace(/\s+/g, " ").trim() || null;
+    const baseFromPreferred =
+      preferredFilename && sanitize(preferredFilename);
+    const hasExt = baseFromPreferred && /\.(mp4|webm|gif)$/i.test(baseFromPreferred);
+    const safePreferred =
+      baseFromPreferred
+        ? hasExt ? baseFromPreferred : `${baseFromPreferred}${ext}`
+        : null;
     const filename =
-      pathBasename && /\.(mp4|webm|gif)$/i.test(pathBasename)
+      safePreferred ||
+      (pathBasename && /\.(mp4|webm|gif)$/i.test(pathBasename)
         ? pathBasename
         : pathBasename
           ? pathBasename.replace(/\.[^.]*$/, ext) || `video${ext}`
-          : `video${ext}`;
+          : `video${ext}`);
 
     // Stream the response
     const headers = new Headers({

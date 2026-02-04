@@ -86,6 +86,10 @@ function getTimelineDuration(project: Project): number {
   return maxEnd;
 }
 
+function sanitizeDownloadFilename(name: string): string {
+  return name.replace(/[<>:"/\\|?*]+/g, "_").replace(/\s+/g, " ").trim() || "render";
+}
+
 export function RenderDialog({
   open,
   onOpenChange,
@@ -413,7 +417,13 @@ export function RenderDialog({
               </div>
               {jobStatus?.downloadUrl ? (
                 <Button asChild className="w-full h-11 text-base" size="lg">
-                  <a href={jobStatus.downloadUrl} download>
+                  <a
+                    href={`/api/render/download?${new URLSearchParams({
+                      url: jobStatus.downloadUrl,
+                      filename: `${sanitizeDownloadFilename(project.name)}.${format}`,
+                    }).toString()}`}
+                    download={`${sanitizeDownloadFilename(project.name)}.${format}`}
+                  >
                     <Download className="size-5 mr-2" />
                     Download video
                   </a>

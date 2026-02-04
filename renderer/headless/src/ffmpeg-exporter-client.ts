@@ -37,6 +37,7 @@ export class FFmpegExporterClient implements Exporter {
 
   private readonly pending = new Map<string, PendingRequest[]>();
   private readonly socket = getSocket();
+  private frameIndex = 0;
 
   public constructor(
     private readonly project: Project,
@@ -73,6 +74,7 @@ export class FFmpegExporterClient implements Exporter {
   }
 
   public async start(): Promise<void> {
+    this.frameIndex = 0;
     const options = this.settings.exporter.options as Record<string, unknown>;
     const audioOffset =
       (this.project.meta?.shared?.audioOffset?.get?.() as number | undefined) ?? 0;
@@ -85,15 +87,26 @@ export class FFmpegExporterClient implements Exporter {
   }
 
   public async handleFrame(canvas: HTMLCanvasElement): Promise<void> {
+    const totalFrames = Math.round(
+      Math.max(0, this.settings.range[1] - this.settings.range[0]) * this.settings.fps,
+    );
+    // Drop last frame (Motion Canvas often renders a black frame at the end).
+    if (this.frameIndex >= totalFrames - 1) {
+      this.frameIndex++;
+      return;
+    }
+
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob((result) => resolve(result), 'image/png'),
     );
     if (!blob) {
+      this.frameIndex++;
       return;
     }
 
     const buffer = await blob.arrayBuffer();
     await this.invoke('handleFrame', { data: buffer });
+    this.frameIndex++;
   }
 
   public async stop(result: RendererResult): Promise<void> {

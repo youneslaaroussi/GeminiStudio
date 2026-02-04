@@ -34,6 +34,8 @@ interface StoredRenderJob {
   outputPath: string;
   startedAt: number;
   status: RenderJobStatus;
+  projectName?: string;
+  format?: RenderFormat;
 }
 
 const STORAGE_KEY = "gemini-render-jobs";
@@ -177,12 +179,18 @@ function filenameFromContentDisposition(header: string | null): string | null {
   return match ? decodeURIComponent(match[1].trim()) : null;
 }
 
+function sanitizeDownloadFilename(name: string): string {
+  return name.replace(/[<>:"/\\|?*]+/g, "_").replace(/\s+/g, " ").trim() || "render";
+}
+
 async function downloadInBackground(url: string, fallbackFilename?: string): Promise<void> {
   const toastId = toast.loading("Downloading video...");
 
   try {
     // Use proxy to avoid CORS issues with GCS
-    const proxyUrl = `/api/render/download?url=${encodeURIComponent(url)}`;
+    const params = new URLSearchParams({ url });
+    if (fallbackFilename) params.set("filename", fallbackFilename);
+    const proxyUrl = `/api/render/download?${params.toString()}`;
     const authHeaders = await getAuthHeaders();
     const response = await fetch(proxyUrl, { headers: authHeaders });
 
@@ -220,12 +228,20 @@ async function downloadInBackground(url: string, fallbackFilename?: string): Pro
 }
 
 function showCompletionToast(downloadUrl: string) {
+  const jobs = loadStoredJobs();
+  const jobId = useRenderStore.getState().currentJobId;
+  const job = jobId ? jobs.find((j) => j.jobId === jobId) : null;
+  const ext = job?.format || "mp4";
+  const fallbackFilename = job?.projectName
+    ? `${sanitizeDownloadFilename(job.projectName)}.${ext}`
+    : undefined;
+
   toast.success("Render complete!", {
     duration: 10000,
     action: {
       label: "Download",
       onClick: () => {
-        downloadInBackground(downloadUrl);
+        downloadInBackground(downloadUrl, fallbackFilename);
       },
     },
   });
@@ -420,6 +436,8 @@ export function useRender(): UseRenderReturn {
         outputPath: data.outputPath || "",
         startedAt: Date.now(),
         status: initialStatus,
+        projectName: project.name,
+        format: options.format,
       });
       store.setActiveJobs(loadStoredJobs());
 

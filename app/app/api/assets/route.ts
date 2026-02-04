@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag, unstable_cache } from "next/cache";
 import type { RemoteAsset } from "@/app/types/assets";
 import {
   isAssetServiceEnabled,
@@ -8,6 +9,9 @@ import {
   type TranscodeOptions,
 } from "@/app/lib/server/asset-service-client";
 import { verifyBearerToken } from "@/app/lib/server/auth";
+
+/** Revalidate list cache after this many seconds (we revalidate on upload/PATCH/DELETE/reorder). */
+const LIST_CACHE_REVALIDATE_SEC = 300; // 5 min
 import { deductCredits, getBilling } from "@/app/lib/server/credits";
 import {
   getUploadActionFromMimeType,
@@ -74,8 +78,20 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const assets = await listAssetsFromService(userId, projectId);
-    return NextResponse.json({ assets: assets.map((a) => toRemoteAsset(a, projectId)) });
+    const getCachedList = unstable_cache(
+      (uid: string, pid: string) => listAssetsFromService(uid, pid),
+      ["assets-list"],
+      { revalidate: LIST_CACHE_REVALIDATE_SEC, tags: ["assets"] }
+    );
+    const assets = await getCachedList(userId, projectId);
+    const res = NextResponse.json({ assets: assets.map((a) => toRemoteAsset(a, projectId)) });
+    // Allow short client-side cache so back/forward or refocus is instant
+    // Long-lived client cache; server still revalidates on mutations. Refetch (e.g. after upload) gets fresh data.
+    res.headers.set(
+      "Cache-Control",
+      `private, max-age=31536000, stale-while-revalidate=${LIST_CACHE_REVALIDATE_SEC}`
+    );
+    return res;
   } catch (error) {
     console.error("Failed to list assets:", error);
     return NextResponse.json(
@@ -211,6 +227,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    revalidateTag("assets", "max"); // so list + file meta caches see new assets
     return NextResponse.json(
       { assets: uploaded, creditsUsed: totalCreditsNeeded, transcodeStarted, convertStarted },
       { status: 201 }

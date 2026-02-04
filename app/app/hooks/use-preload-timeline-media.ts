@@ -1,0 +1,138 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import type { Layer } from "@/app/types/timeline";
+import {
+  getTimelineMediaUrls,
+  type TimelineMediaUrl,
+} from "@/app/lib/media/timeline-media-urls";
+
+const PRELOAD_CONCURRENCY = 3;
+
+function preloadOne(
+  item: TimelineMediaUrl,
+  controller: AbortController
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const el =
+      item.type === "video"
+        ? document.createElement("video")
+        : document.createElement("audio");
+    el.preload = "auto";
+    el.style.position = "absolute";
+    el.style.width = "0";
+    el.style.height = "0";
+    el.style.opacity = "0";
+    el.style.pointerEvents = "none";
+    document.body.appendChild(el);
+
+    const onDone = () => {
+      el.removeEventListener("canplay", onCanplay);
+      el.removeEventListener("error", onError);
+      el.removeEventListener("loadeddata", onLoadedData);
+      el.remove();
+      resolve();
+    };
+
+    const onCanplay = () => onDone();
+    const onLoadedData = () => onDone();
+    const onError = () => onDone();
+
+    el.addEventListener("canplay", onCanplay, { once: true });
+    el.addEventListener("loadeddata", onLoadedData, { once: true });
+    el.addEventListener("error", onError, { once: true });
+
+    if (controller.signal.aborted) {
+      el.remove();
+      resolve();
+      return;
+    }
+    controller.signal.addEventListener(
+      "abort",
+      () => {
+        el.remove();
+        resolve();
+      },
+      { once: true }
+    );
+
+    el.src = item.src;
+  });
+}
+
+async function preloadQueue(
+  items: TimelineMediaUrl[],
+  concurrency: number,
+  controller: AbortController
+): Promise<void> {
+  const queue = [...items];
+  let active = 0;
+
+  const runNext = (): Promise<void> => {
+    if (controller.signal.aborted || queue.length === 0) {
+      if (active === 0) return Promise.resolve();
+      return new Promise((r) => {
+        const check = () => {
+          if (active === 0) r();
+          else setTimeout(check, 50);
+        };
+        check();
+      });
+    }
+    const item = queue.shift();
+    if (!item) return Promise.resolve();
+    active++;
+    return preloadOne(item, controller).then(() => {
+      active--;
+      return runNext();
+    });
+  };
+
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    () => runNext()
+  );
+  await Promise.all(workers);
+}
+
+/**
+ * Preloads all video and audio URLs used in the timeline so that when Motion Canvas
+ * reaches each clip during preview, the media is already in the browser cache.
+ * Runs in the background with limited concurrency; does not block the UI.
+ */
+export function usePreloadTimelineMedia(
+  layers: Layer[],
+  options?: { enabled?: boolean }
+): void {
+  const enabled = options?.enabled !== false;
+  const preloadedUrlsRef = useRef<Set<string>>(new Set());
+  const controllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!enabled || typeof document === "undefined") return;
+
+    const urls = getTimelineMediaUrls(layers);
+    if (urls.length === 0) return;
+
+    // Sort by clip start so earlier clips are preloaded first
+    const sorted = [...urls].sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
+
+    // Skip URLs we already preloaded (same set from previous run)
+    const toPreload = sorted.filter((u) => !preloadedUrlsRef.current.has(u.src));
+    if (toPreload.length === 0) return;
+
+    const controller = new AbortController();
+    controllerRef.current = controller;
+
+    preloadQueue(toPreload, PRELOAD_CONCURRENCY, controller).then(() => {
+      if (!controller.signal.aborted) {
+        toPreload.forEach((u) => preloadedUrlsRef.current.add(u.src));
+      }
+    });
+
+    return () => {
+      controller.abort();
+      controllerRef.current = null;
+    };
+  }, [layers, enabled]);
+}

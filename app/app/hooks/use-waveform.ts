@@ -39,6 +39,16 @@ const DB_NAME = "gemini-studio-waveforms";
 const STORE_NAME = "waveforms";
 const memoryCache = new Map<string, WaveformData>();
 
+/** Defer extraction so main preview can load first (avoids competing for same asset). */
+const DEFER_MS = 2000;
+function whenIdleOrDeferred(cb: () => void): void {
+  if (typeof requestIdleCallback !== "undefined") {
+    requestIdleCallback(cb, { timeout: DEFER_MS });
+  } else {
+    setTimeout(cb, DEFER_MS);
+  }
+}
+
 function openWaveformDb(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === "undefined") return Promise.resolve(null);
   return new Promise((resolve, reject) => {
@@ -264,19 +274,27 @@ export function useWaveform({
     let hasSetProgressiveData = false; // Track if THIS extraction set any data
     const requestId = ++latestRequest.current;
     const controller = new AbortController();
+
+    // Resolve from memory cache immediately (no defer)
+    const memCached = resolvedCacheKey ? memoryCache.get(resolvedCacheKey) : null;
+    if (memCached) {
+      updatePath(memCached);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
+    const runExtraction = () => {
+      (async () => {
+        const cached = resolvedCacheKey ? memoryCache.get(resolvedCacheKey) : null;
+        if (cached) {
+          updatePath(cached);
+          setIsLoading(false);
+          return;
+        }
 
-    (async () => {
-      // Check cache first
-      const cached = resolvedCacheKey ? memoryCache.get(resolvedCacheKey) : null;
-      if (cached) {
-        updatePath(cached);
-        setIsLoading(false);
-        return;
-      }
-
-      // For video, use progressive extraction
-      if (mediaType === "video" && src) {
+        // For video, use progressive extraction
+        if (mediaType === "video" && src) {
         try {
           const result = await extractWaveformProgressive(
             src,
@@ -336,6 +354,13 @@ export function useWaveform({
         setIsLoading(false);
       }
     })();
+    };
+
+    // Defer extraction so main preview can load first
+    whenIdleOrDeferred(() => {
+      if (cancelled || requestId !== latestRequest.current) return;
+      runExtraction();
+    });
 
     return () => {
       cancelled = true;

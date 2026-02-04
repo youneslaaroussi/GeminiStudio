@@ -10,6 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 import {
   isAssetServiceEnabled,
   getAssetFromService,
@@ -18,6 +19,9 @@ import { verifyAuth } from "@/app/lib/server/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/** Cache asset metadata (incl. signed URL) so repeat file requests are instant. */
+const ASSET_META_CACHE_SEC = 3600; // 1 hour; signed URLs typically valid 1h+
 
 /**
  * HEAD request for browsers to check file size before Range requests.
@@ -45,7 +49,12 @@ export async function HEAD(
   }
 
   try {
-    const asset = await getAssetFromService(userId, projectId, assetId);
+    const getCachedAsset = unstable_cache(
+      (uid: string, pid: string, aid: string) => getAssetFromService(uid, pid, aid),
+      ["asset-meta"],
+      { revalidate: ASSET_META_CACHE_SEC, tags: ["assets"] }
+    );
+    const asset = await getCachedAsset(userId, projectId, assetId);
     if (!asset.signedUrl) {
       return new NextResponse(null, { status: 404 });
     }
@@ -108,8 +117,13 @@ export async function GET(
   }
 
   try {
-    // Get asset info including signed URL - userId comes from auth, not query params
-    const asset = await getAssetFromService(userId, projectId, assetId);
+    // Get asset info including signed URL (cached so repeat requests are instant)
+    const getCachedAsset = unstable_cache(
+      (uid: string, pid: string, aid: string) => getAssetFromService(uid, pid, aid),
+      ["asset-meta"],
+      { revalidate: ASSET_META_CACHE_SEC, tags: ["assets"] }
+    );
+    const asset = await getCachedAsset(userId, projectId, assetId);
 
     if (!asset.signedUrl) {
       return NextResponse.json(
