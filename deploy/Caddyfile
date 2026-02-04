@@ -4,7 +4,24 @@
 {$DOMAIN:localhost}, www.{$DOMAIN:localhost} {
     # Billing service API (for Stripe webhooks and client calls)
     handle /credits/* {
-        reverse_proxy billing-service:3100
+        # Handle CORS preflight requests
+        @options method OPTIONS
+        handle @options {
+            header Access-Control-Allow-Origin "{http.request.header.Origin}"
+            header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+            header Access-Control-Allow-Headers "Content-Type, Authorization"
+            header Access-Control-Allow-Credentials "true"
+            header Access-Control-Max-Age "3600"
+            respond 204
+        }
+        
+        # Forward all requests to billing service
+        reverse_proxy billing-service:3100 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
     }
 
     # LangGraph API (AI agent endpoints)
