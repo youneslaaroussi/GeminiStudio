@@ -1,0 +1,6 @@
+#!/bin/sh
+# Run build before pushing. Aborts push if build fails.
+
+echo "Running build before push..."
+pnpm build
+exit $?

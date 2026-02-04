@@ -2,6 +2,7 @@ packages:
   - app
   - scene
   - renderer
+  - billing-service
   - packages/*
 
 onlyBuiltDependencies:

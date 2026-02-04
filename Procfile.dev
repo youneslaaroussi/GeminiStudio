@@ -1,0 +1,21 @@
+# Gemini Studio Local Development Services
+# Start all services with: overmind start -f Procfile.dev
+# Or use: pnpm dev:all
+
+# Frontend (Next.js)
+app: cd app && pnpm dev
+
+# Renderer Service (Node.js)
+renderer: cd renderer && pnpm dev
+
+# Billing Service (NestJS)
+billing: cd billing-service && pnpm start:dev
+
+# Asset Service (Python/FastAPI)
+assets: cd asset-service && uv run python -m asset_service
+
+# Video Effects Service (Python/FastAPI)
+effects: cd video-effects-service && uv run python -m video_effects_service
+
+# LangGraph Server (Python/FastAPI)
+langgraph: cd langgraph_server && uv run uvicorn langgraph_server.main:app --reload --port 8000

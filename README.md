@@ -258,6 +258,34 @@ Copy the example env file for each service you run; set API keys and URLs. Detai
 
 ### Run locally
 
+**Option A: All services at once (recommended)**
+
+Requires [Overmind](https://github.com/DarthSim/overmind) (`brew install overmind`). Starts all 6 services in a unified TUI with per-service panes, logs, and controls.
+
+```bash
+pnpm dev
+```
+
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Start all services (Overmind TUI) |
+| `pnpm dev:connect` | Connect to the Overmind session |
+| `pnpm dev:restart` | Restart all or specific services |
+| `pnpm dev:stop` | Stop all services |
+| `pnpm dev:status` | Show service status |
+
+In the Overmind TUI: press a service's key (e.g. `1` for app, `2` for renderer) to focus its pane; `q` to quit.
+
+**Option B: Without Overmind**
+
+If Overmind isn't installed, use the simple concurrent runner:
+
+```bash
+pnpm dev:simple
+```
+
+**Option C: Separate terminals**
+
 1. Start **Redis**.
 2. In separate terminals, start each service:
 
@@ -280,6 +308,8 @@ Copy the example env file for each service you run; set API keys and URLs. Detai
    ```bash
    pnpm --filter app dev
    ```
+
+   Optionally add **billing-service** (`cd billing-service && pnpm start:dev`) and **video-effects-service** (`cd video-effects-service && uv run python -m video_effects_service`).
 
 3. Open **http://localhost:3000**. If the LangGraph server is elsewhere, set `NEXT_PUBLIC_LANGGRAPH_URL` in the app env.
 
