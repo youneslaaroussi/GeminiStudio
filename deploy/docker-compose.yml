@@ -281,7 +281,7 @@ services:
       - KICKBOX_API_KEY=${KICKBOX_API_KEY:-}
       - PORT=3100
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
-      - CORS_ORIGIN=${CORS_ORIGIN:-*}
+      - CORS_ORIGIN=${CORS_ORIGIN:-https://www.geminivideo.studio,https://geminivideo.studio}
     volumes:
       - ./secrets:/app/secrets:ro
     healthcheck:
