@@ -5,8 +5,8 @@
 # Frontend (Next.js)
 app: cd app && pnpm dev
 
-# Renderer Service (Node.js)
-renderer: cd renderer && pnpm dev
+# Renderer Service (Node.js) - build headless bundle first so renders work
+renderer: cd renderer && pnpm run build:headless && pnpm dev
 
 # Billing Service (NestJS)
 billing: cd billing-service && pnpm start:dev

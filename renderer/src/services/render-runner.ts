@@ -1,13 +1,13 @@
 import { createServer as createHttpServer } from 'http';
 import { randomUUID } from 'crypto';
 import { dirname, join, resolve } from 'path';
+import { existsSync } from 'fs';
 import { access, mkdir, rename, copyFile, rm, readFile } from 'fs/promises';
 import getPort from 'get-port';
 import express from 'express';
 import { Server as IOServer } from 'socket.io';
 import { Cluster } from 'puppeteer-cluster';
 import type { Job } from 'bullmq';
-import { fileURLToPath } from 'url';
 import ffmpeg from 'fluent-ffmpeg';
 import { logger } from '../logger.js';
 import type { RenderJobData } from '../jobs/render-job.js';
@@ -19,8 +19,13 @@ import { loadConfig } from '../config.js';
 
 const config = loadConfig();
 
-const MODULE_DIR = dirname(fileURLToPath(new URL('.', import.meta.url)));
-const HEADLESS_DIST = resolve(MODULE_DIR, 'headless');
+// Resolve headless bundle from package root: headless/dist (dev) or dist/headless (prod)
+const packageRoot = process.cwd();
+const headlessDistDev = join(packageRoot, 'headless', 'dist');
+const headlessDistProd = join(packageRoot, 'dist', 'headless');
+const HEADLESS_DIST = existsSync(join(headlessDistDev, 'main.js'))
+  ? headlessDistDev
+  : headlessDistProd;
 const HEADLESS_HTML = join(HEADLESS_DIST, 'index.html');
 const HEADLESS_BUNDLE = join(HEADLESS_DIST, 'main.js');
 
