@@ -370,11 +370,18 @@ class TelegramProvider(ChatProvider):
 
     async def dispatch_responses(self, messages: Iterable[OutgoingMessage]) -> None:
         """Send responses via the centralized send_telegram_message (handles MarkdownV2 conversion)."""
+        from ..attachment_queue import pop_attachments
+
         for message in messages:
+            # Pop any queued attachments for this thread
+            thread_id = f"telegram-{message.recipient_id}"
+            attachments = await pop_attachments(thread_id)
+
             result = await send_telegram_message(
                 message.recipient_id,
                 message.text,
                 self.settings,
+                attachments=attachments if attachments else None,
             )
             if not result:
                 logger.warning(f"Failed to send message to {message.recipient_id}")

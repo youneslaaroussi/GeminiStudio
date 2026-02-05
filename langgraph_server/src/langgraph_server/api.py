@@ -469,9 +469,9 @@ Media Assets in Project ({len(assets_info)}):
     if not is_telegram_session:
         telegram_chat_id = get_telegram_chat_id_for_user(session.get("userId"), settings)
 
-    async def send_to_telegram_async(text: str):
+    async def send_to_telegram_async(text: str, attachments: list[dict] | None = None):
         if telegram_chat_id:
-            await send_telegram_message(telegram_chat_id, text, settings)
+            await send_telegram_message(telegram_chat_id, text, settings, attachments=attachments)
 
     async def set_agent_status(status_plain: str | None, status_telegram: str | None = None):
         """Write intermediary status to Firebase (plain) and Telegram (italic+emoji)."""
@@ -511,12 +511,34 @@ Media Assets in Project ({len(assets_info)}):
         if not text or not session.get("userId"):
             return
         nonlocal current_messages
+
+        # Pop any queued attachments for this thread
+        from .attachment_queue import pop_attachments
+        attachments = await pop_attachments(thread_id)
+
         new_message = {
             "id": f"msg-{int(time.time() * 1000)}-agent",
             "role": "assistant",
             "parts": [{"type": "text", "text": text}],
             "createdAt": datetime.utcnow().isoformat() + "Z",
         }
+
+        # Add attachments to message metadata if present
+        if attachments:
+            new_message["metadata"] = {
+                "attachments": [
+                    {
+                        "id": f"attachment-{int(time.time() * 1000)}-{i}",
+                        "name": att.get("name") or f"Attachment {i + 1}",
+                        "mimeType": f"{att.get('type', 'video')}/mp4" if att.get("type") == "video" else f"{att.get('type', 'image')}/jpeg",
+                        "signedUrl": att.get("url"),
+                        "category": att.get("type", "video"),
+                        "uploadedAt": att.get("queuedAt", datetime.utcnow().isoformat() + "Z"),
+                    }
+                    for i, att in enumerate(attachments)
+                ]
+            }
+
         current_messages = current_messages + [new_message]
         update_chat_session_messages(
             user_id=session["userId"],
@@ -527,7 +549,7 @@ Media Assets in Project ({len(assets_info)}):
         console.print(f"[dim]Wrote to Firebase: {text[:50]}...[/dim]")
         if telegram_chat_id:
             try:
-                await send_to_telegram_async(text)
+                await send_to_telegram_async(text, attachments=attachments if attachments else None)
                 console.print(f"[dim]Sent to Telegram: {telegram_chat_id}[/dim]")
             except Exception as e:
                 console.print(f"[yellow]Failed to send to Telegram: {e}[/yellow]")

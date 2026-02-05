@@ -229,18 +229,32 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   const touchStateRef = useRef<{
     touches: number;
     initialDistance: number;
-    initialCenter: { x: number; y: number };
+    initialCenter: { x: number; y: number }; // Screen coordinates (clientX/Y)
     initialZoom: number;
-    initialPosition: { x: number; y: number };
-    lastSinglePos: { x: number; y: number } | null;
+    initialPosition: { x: number; y: number }; // Transform position
+    lastTouchPos: { x: number; y: number } | null; // Screen coordinates
+    lastTouchTime: number;
+    velocity: { x: number; y: number };
+    isPanning: boolean;
+    startTime: number;
   } | null>(null);
 
-  function getTouchCenter(touches: TouchList, container: HTMLElement): { x: number; y: number } {
+  const momentumAnimationRef = useRef<number | null>(null);
+
+  // Convert screen coordinates to transform coordinates (relative to container center)
+  function screenToTransform(screenX: number, screenY: number, container: HTMLElement): { x: number; y: number } {
     const rect = container.getBoundingClientRect();
+    return {
+      x: screenX - rect.left - rect.width / 2,
+      y: screenY - rect.top - rect.height / 2,
+    };
+  }
+
+  function getTouchCenter(touches: TouchList): { x: number; y: number } {
     let x = 0, y = 0;
     for (let i = 0; i < touches.length; i++) {
-      x += touches[i].clientX - rect.left - rect.width / 2;
-      y += touches[i].clientY - rect.top - rect.height / 2;
+      x += touches[i].clientX;
+      y += touches[i].clientY;
     }
     return { x: x / touches.length, y: y / touches.length };
   }
@@ -252,33 +266,89 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
     return Math.hypot(dx, dy);
   }
 
-  // Handle Touch gestures (pinch-to-zoom, two-finger pan, single-finger pan)
+  // Handle Touch gestures (pinch-to-zoom, pan with momentum)
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
+    // Cancel any ongoing momentum animation
+    const cancelMomentum = () => {
+      if (momentumAnimationRef.current !== null) {
+        cancelAnimationFrame(momentumAnimationRef.current);
+        momentumAnimationRef.current = null;
+      }
+    };
+
+    // Apply momentum scrolling
+    const applyMomentum = (velocity: { x: number; y: number }) => {
+      cancelMomentum();
+      
+      const friction = 0.95;
+      const minVelocity = 0.5;
+      
+      let vx = velocity.x;
+      let vy = velocity.y;
+      
+      const animate = () => {
+        if (Math.abs(vx) < minVelocity && Math.abs(vy) < minVelocity) {
+          momentumAnimationRef.current = null;
+          return;
+        }
+        
+        setPosition((prev) => ({
+          x: prev.x + vx,
+          y: prev.y + vy,
+        }));
+        
+        vx *= friction;
+        vy *= friction;
+        
+        momentumAnimationRef.current = requestAnimationFrame(animate);
+      };
+      
+      momentumAnimationRef.current = requestAnimationFrame(animate);
+    };
+
     const onTouchStart = (e: TouchEvent) => {
+      cancelMomentum();
+      
       if (e.touches.length === 1 || e.touches.length === 2) {
-        e.preventDefault();
         const { zoom: z, x, y } = transformRef.current;
+        const now = Date.now();
+        
         if (e.touches.length === 2) {
+          // Two-finger gesture: pinch-to-zoom
+          e.preventDefault();
+          const center = getTouchCenter(e.touches);
+          const distance = getTouchDistance(e.touches);
+          
           touchStateRef.current = {
             touches: 2,
-            initialDistance: getTouchDistance(e.touches),
-            initialCenter: getTouchCenter(e.touches, container),
+            initialDistance: distance,
+            initialCenter: center,
             initialZoom: z,
             initialPosition: { x, y },
-            lastSinglePos: null,
+            lastTouchPos: null,
+            lastTouchTime: now,
+            velocity: { x: 0, y: 0 },
+            isPanning: false,
+            startTime: now,
           };
         } else {
-          const center = getTouchCenter(e.touches, container);
+          // Single-finger gesture: pan (or tap for selection)
+          const center = getTouchCenter(e.touches);
+          
           touchStateRef.current = {
             touches: 1,
             initialDistance: 0,
             initialCenter: center,
             initialZoom: z,
             initialPosition: { x, y },
-            lastSinglePos: center,
+            lastTouchPos: center,
+            lastTouchTime: now,
+            velocity: { x: 0, y: 0 },
+            isPanning: false,
+            startTime: now,
           };
         }
       }
@@ -288,45 +358,119 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
       const state = touchStateRef.current;
       if (!state || !container) return;
 
+      const now = Date.now();
+      const deltaTime = Math.max(1, now - state.lastTouchTime);
+
       if (e.touches.length === 2 && state.touches === 2) {
+        // Pinch-to-zoom: keep the point under the current pinch center fixed
         e.preventDefault();
         const distance = getTouchDistance(e.touches);
-        const center = getTouchCenter(e.touches, container);
-        if (state.initialDistance > 0) {
+        const center = getTouchCenter(e.touches);
+        
+        if (state.initialDistance > 0 && distance > 0) {
           const scale = distance / state.initialDistance;
           const newZoom = Math.max(0.1, Math.min(10, state.initialZoom * scale));
-          // Zoom around pinch center: keep point under fingers fixed
-          const newX = center.x - (center.x - state.initialPosition.x) * (newZoom / state.initialZoom);
-          const newY = center.y - (center.y - state.initialPosition.y) * (newZoom / state.initialZoom);
+          
+          // Convert current pinch center to transform coordinates (relative to container center)
+          const currentCenterTransform = screenToTransform(center.x, center.y, container);
+          const initialCenterTransform = screenToTransform(state.initialCenter.x, state.initialCenter.y, container);
+          
+          // Calculate zoom ratio
+          const zoomRatio = newZoom / state.initialZoom;
+          
+          // To keep the point under the current pinch center fixed:
+          // The transform position of that point should scale around the current center
+          // newPosition = currentCenter + (initialPosition - initialCenter) * zoomRatio
+          const newX = currentCenterTransform.x + (state.initialPosition.x - initialCenterTransform.x) * zoomRatio;
+          const newY = currentCenterTransform.y + (state.initialPosition.y - initialCenterTransform.y) * zoomRatio;
+          
           setZoomToFit(false);
           setZoom(newZoom);
           setPosition({ x: newX, y: newY });
         }
-      } else if (e.touches.length === 1 && state.touches === 1 && state.lastSinglePos) {
-        e.preventDefault();
-        const center = getTouchCenter(e.touches, container);
-        const dx = center.x - state.lastSinglePos.x;
-        const dy = center.y - state.lastSinglePos.y;
-        touchStateRef.current = { ...state, lastSinglePos: center };
-        setZoomToFit(false);
-        if (zoomToFitRef.current) setZoom(transformRef.current.zoom);
-        setPosition((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
+      } else if (e.touches.length === 1 && state.touches === 1) {
+        // Single-finger pan
+        const center = getTouchCenter(e.touches);
+        const dx = center.x - (state.lastTouchPos?.x ?? center.x);
+        const dy = center.y - (state.lastTouchPos?.y ?? center.y);
+        
+        // Calculate velocity for momentum
+        const vx = (dx / deltaTime) * 16; // Normalize to ~60fps
+        const vy = (dy / deltaTime) * 16;
+        
+        // Check if this is a pan gesture (moved more than threshold)
+        const moveDistance = Math.hypot(dx, dy);
+        if (moveDistance > 5 || state.isPanning) {
+          e.preventDefault();
+          
+          // Screen delta directly translates to transform delta (both relative to container)
+          setZoomToFit(false);
+          if (zoomToFitRef.current) {
+            setZoom(transformRef.current.zoom);
+          }
+          
+          setPosition((prev) => ({
+            x: prev.x + dx,
+            y: prev.y + dy,
+          }));
+          
+          touchStateRef.current = {
+            ...state,
+            lastTouchPos: center,
+            lastTouchTime: now,
+            velocity: { x: vx, y: vy },
+            isPanning: true,
+          };
+        } else {
+          // Small movement, might be a tap - update position but don't prevent default yet
+          touchStateRef.current = {
+            ...state,
+            lastTouchPos: center,
+            lastTouchTime: now,
+            velocity: { x: vx, y: vy },
+          };
+        }
       }
     };
 
     const onTouchEnd = (e: TouchEvent) => {
-      if (e.touches.length < 2) {
-        const state = touchStateRef.current;
-        if (state?.touches === 2 && e.touches.length === 1) {
-          // Second finger lifted, switch to single-finger mode
-          touchStateRef.current = {
-            ...state,
-            touches: 1,
-            lastSinglePos: getTouchCenter(e.touches, container!),
-          };
-        } else if (e.touches.length === 0) {
-          touchStateRef.current = null;
+      const state = touchStateRef.current;
+      if (!state) return;
+
+      if (e.touches.length === 0) {
+        // All touches ended
+        if (state.touches === 1) {
+          if (state.isPanning && state.velocity) {
+            // Apply momentum scrolling for single-finger pan
+            const momentumVelocity = {
+              x: state.velocity.x * 0.5, // Reduce velocity for smoother feel
+              y: state.velocity.y * 0.5,
+            };
+            applyMomentum(momentumVelocity);
+          } else if (!state.isPanning && state.lastTouchPos) {
+            // This was a tap - trigger selection
+            // Use changedTouches to get the touch that ended
+            if (e.changedTouches.length > 0) {
+              const touch = e.changedTouches[0];
+              handleSelectionAtPointRef.current(touch.clientX, touch.clientY);
+            }
+          }
         }
+        
+        touchStateRef.current = null;
+      } else if (e.touches.length === 1 && state.touches === 2) {
+        // Transition from two-finger to one-finger
+        const center = getTouchCenter(e.touches);
+        const now = Date.now();
+        
+        touchStateRef.current = {
+          ...state,
+          touches: 1,
+          lastTouchPos: center,
+          lastTouchTime: now,
+          velocity: { x: 0, y: 0 },
+          isPanning: false,
+        };
       }
     };
 
@@ -334,7 +478,9 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
     container.addEventListener('touchmove', onTouchMove, { passive: false });
     container.addEventListener('touchend', onTouchEnd, { passive: true });
     container.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    
     return () => {
+      cancelMomentum();
       container.removeEventListener('touchstart', onTouchStart);
       container.removeEventListener('touchmove', onTouchMove);
       container.removeEventListener('touchend', onTouchEnd);
@@ -366,21 +512,22 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
     null
   );
 
-  // Handle click to select clips
-  const handleSceneClick = useCallback(
-    (e: React.MouseEvent) => {
+  // Ref to store latest selection handler for touch events
+  const handleSelectionAtPointRef = useRef<(clientX: number, clientY: number) => void>(() => {});
+
+  // Handle selection at screen coordinates
+  const handleSelectionAtPoint = useCallback(
+    (clientX: number, clientY: number) => {
       if (!player || !containerRef.current) return;
       // Don't run hitbox logic when we just released from dragging the selection overlay
       if (skipNextSceneClickRef.current) {
         skipNextSceneClickRef.current = false;
         return;
       }
-      // Don't handle if shift is held (that's for panning)
-      if (e.shiftKey) return;
 
       const rect = containerRef.current.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const clickY = e.clientY - rect.top;
+      const clickX = clientX - rect.left;
+      const clickY = clientY - rect.top;
 
       // Convert screen click to CSS canvas coordinates
       // Reverse the transform: screenX = (cssX - w/2) * zoom + w/2 + tx
@@ -475,7 +622,6 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
       }
 
       if (foundClipId) {
-        e.stopPropagation();
         setSelectedClip(foundClipId);
       } else {
         // Click on empty space - deselect
@@ -483,6 +629,22 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
       }
     },
     [player, containerSize, transform, currentTime, layers, setSelectedClip]
+  );
+
+  // Update ref when handler changes
+  useEffect(() => {
+    handleSelectionAtPointRef.current = handleSelectionAtPoint;
+  }, [handleSelectionAtPoint]);
+
+  // Handle click to select clips
+  const handleSceneClick = useCallback(
+    (e: React.MouseEvent) => {
+      // Don't handle if shift is held (that's for panning)
+      if (e.shiftKey) return;
+      e.stopPropagation();
+      handleSelectionAtPoint(e.clientX, e.clientY);
+    },
+    [handleSelectionAtPoint]
   );
 
   // Handle Wheel

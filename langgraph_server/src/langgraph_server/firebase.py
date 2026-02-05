@@ -778,14 +778,111 @@ def _convert_to_telegram_markdown(text: str) -> str:
         return text
 
 
+async def _send_telegram_with_attachments(
+    chat_id: str,
+    text: str,
+    attachments: list[dict],
+    telegram_base_url: str,
+    italic: bool,
+    logger,
+) -> bool | dict:
+    """Send message with explicit attachments to Telegram.
+
+    Sends the first attachment with the text as caption, then any additional
+    attachments separately.
+    """
+    import httpx
+
+    if not attachments:
+        return False
+
+    # Convert text to caption
+    caption = _convert_to_telegram_markdown(text) if text else None
+    if caption and italic:
+        caption = "_" + caption + "_"
+
+    last_message_id = None
+
+    async with httpx.AsyncClient() as client:
+        for i, attachment in enumerate(attachments):
+            att_url = attachment.get("url")
+            att_type = attachment.get("type", "video")
+            att_caption = attachment.get("caption")
+
+            if not att_url:
+                logger.warning("[TELEGRAM] Attachment missing URL, skipping")
+                continue
+
+            # Use text caption for first attachment, individual caption for others
+            use_caption = caption if i == 0 else att_caption
+            if use_caption:
+                use_caption = use_caption[:1024]
+
+            # Map attachment type to Telegram endpoint and payload key
+            if att_type == "video":
+                endpoint = f"{telegram_base_url}/sendVideo"
+                media_key = "video"
+            elif att_type == "image":
+                endpoint = f"{telegram_base_url}/sendPhoto"
+                media_key = "photo"
+            elif att_type == "audio":
+                endpoint = f"{telegram_base_url}/sendAudio"
+                media_key = "audio"
+            else:
+                logger.warning(f"[TELEGRAM] Unknown attachment type '{att_type}', treating as video")
+                endpoint = f"{telegram_base_url}/sendVideo"
+                media_key = "video"
+
+            payload = {
+                "chat_id": chat_id,
+                media_key: att_url,
+                "caption": use_caption,
+                "parse_mode": "MarkdownV2",
+            }
+            payload = {k: v for k, v in payload.items() if v is not None}
+
+            logger.info(f"[TELEGRAM] Sending {att_type} attachment {i + 1}/{len(attachments)} to {chat_id}")
+
+            try:
+                response = await client.post(endpoint, json=payload, timeout=60.0)
+                if response.status_code == 200:
+                    result = response.json().get("result", {})
+                    last_message_id = result.get("message_id")
+                    logger.info(f"[TELEGRAM] Sent {att_type} to {chat_id}, message_id={last_message_id}")
+                else:
+                    logger.warning(f"[TELEGRAM] Failed to send {att_type} (status={response.status_code}): {response.text[:300]}")
+                    # Retry without MarkdownV2
+                    payload.pop("parse_mode", None)
+                    if use_caption:
+                        # Use plain caption without markdown
+                        payload["caption"] = (text if i == 0 else att_caption or "")[:1024] or None
+                        payload = {k: v for k, v in payload.items() if v is not None}
+                    response = await client.post(endpoint, json=payload, timeout=60.0)
+                    if response.status_code == 200:
+                        result = response.json().get("result", {})
+                        last_message_id = result.get("message_id")
+                        logger.info(f"[TELEGRAM] Sent {att_type} (plain) to {chat_id}, message_id={last_message_id}")
+                    else:
+                        logger.error(f"[TELEGRAM] Attachment send failed: {response.text[:300]}")
+            except Exception as e:
+                logger.exception(f"[TELEGRAM] Error sending attachment: {e}")
+
+    if last_message_id:
+        return {"success": True, "message_id": last_message_id}
+    return False
+
+
 async def send_telegram_message(
-    chat_id: str, text: str, settings: Settings, *, italic: bool = False
+    chat_id: str, text: str, settings: Settings, *, italic: bool = False, attachments: list[dict] | None = None
 ) -> bool | dict:
     """Send a message to a Telegram chat. Auto-detects and embeds media URLs.
-    
+
     Converts standard Markdown to Telegram MarkdownV2 format before sending.
     If italic=True, wraps the message in MarkdownV2 italics (_..._).
-    
+
+    If attachments is provided, uses those instead of extracting URLs from text.
+    Each attachment dict should have: url, type (video/image/audio), optional caption/name.
+
     Returns:
         bool: True if sent successfully, False otherwise (for backwards compatibility)
         dict: If successful, returns {"success": True, "message_id": <id>} for new code
@@ -799,7 +896,13 @@ async def send_telegram_message(
         return False
 
     telegram_base_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}"
-    
+
+    # If explicit attachments provided, use those instead of URL extraction
+    if attachments:
+        return await _send_telegram_with_attachments(
+            chat_id, text, attachments, telegram_base_url, italic, logger
+        )
+
     # Check if message contains a media URL (pass public_app_url to convert relative proxy URLs)
     media_url, media_type = _extract_media_url(text, base_url=settings.public_app_url)
     logger.info(f"[TELEGRAM] Media detection: url_found={media_url is not None}, type={media_type}, text_preview={text[:150]}...")
