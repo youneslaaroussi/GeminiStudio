@@ -13,6 +13,7 @@ import { useProjectStore } from "@/app/lib/store/project-store";
 import { useProjectsListStore } from "@/app/lib/store/projects-list-store";
 import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { usePipelineStates } from "@/app/lib/hooks/usePipelineStates";
+import { useAutoSave } from "@/app/lib/hooks/useAutoSave";
 import { getProxiedMediaUrl } from "@/app/components/ui/CoordinatePicker";
 import type { ProjectTranscription } from "@/app/types/transcription";
 import { Button } from "@/components/ui/button";
@@ -101,6 +102,8 @@ export function MobileEditorLayout() {
   const currentTime = useProjectStore((s) => s.currentTime);
   const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
   const getDuration = useProjectStore((s) => s.getDuration);
+
+  useAutoSave({ intervalMs: 30_000, enabled: !!projectId });
 
   // Get assets and pipeline states to build transcriptions at runtime
   const assets = useAssetsStore((s) => s.assets);
@@ -224,19 +227,18 @@ export function MobileEditorLayout() {
       useProjectStore.getState().saveProject();
 
       // Update projects list with thumbnail and name
-      if (projectId) {
-        const userId = useProjectsListStore.getState().userId;
+      if (projectId && user?.uid) {
         await updateListProject(projectId, {
           name: project.name,
           ...(thumbnail && { thumbnail }),
-        }, userId ?? undefined);
+        }, user.uid);
       }
 
       console.log("Project saved locally");
     } catch (error) {
       console.error("Failed to save project:", error);
     }
-  }, [saveStatus, previewCanvas, projectId, project.name, updateListProject]);
+  }, [saveStatus, previewCanvas, projectId, project.name, updateListProject, user?.uid]);
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background">

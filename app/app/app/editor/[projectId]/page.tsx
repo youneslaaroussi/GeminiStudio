@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { EditorLayout } from "../../../components/editor/EditorLayout";
 import { EditorSkeleton } from "../../../components/editor/EditorSkeleton";
 import { useProjectStore } from "@/app/lib/store/project-store";
+import { useProjectsListStore } from "@/app/lib/store/projects-list-store";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import { useAnalytics } from "@/app/lib/hooks/useAnalytics";
 import { getStoredBranchForProject } from "@/app/lib/store/branch-storage";
@@ -23,6 +24,7 @@ export default function EditorPage({ params }: EditorPageProps) {
   const { events: analytics } = useAnalytics();
   const loadProject = useProjectStore((s) => s.loadProject);
   const initializeSync = useProjectStore((s) => s.initializeSync);
+  const setUserId = useProjectsListStore((s) => s.setUserId);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -31,6 +33,7 @@ export default function EditorPage({ params }: EditorPageProps) {
     }
 
     if (user) {
+      setUserId(user.uid); // Ensure projects list store has userId for Firestore updates (save, etc.)
       loadProject(projectId);
       const branchId = getStoredBranchForProject(projectId);
       console.log('[EDITOR] Initializing sync with userId:', user.uid, 'branch:', branchId);

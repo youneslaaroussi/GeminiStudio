@@ -270,13 +270,21 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
     const corrected = correctTimeline(state.project);
     const changed = corrected !== state.project;
     console.log('[CORRECTION] Project changed:', changed);
-    if (!changed) return; // Skip set if no changes
-    set({ project: corrected });
+
+    // Update store if correction made changes
+    if (changed) {
+      set({ project: corrected });
+    }
+
+    // Always sync to Firebase if there are pending changes, regardless of correction
+    // The project to sync is the corrected one if changed, otherwise current state
+    const projectToSync = changed ? corrected : state.project;
     if (pendingSyncAfterCorrect && state.syncManager) {
       pendingSyncAfterCorrect = false;
+      console.log('[SYNC] Syncing project to Firebase with', projectToSync.layers.length, 'layers');
       state.syncManager
         .applyChange((automergeDoc: any) => {
-          automergeDoc.projectJSON = JSON.stringify(corrected);
+          automergeDoc.projectJSON = JSON.stringify(projectToSync);
         })
         .catch((e: unknown) => console.error('[SYNC] Failed to sync after correction:', e));
     }

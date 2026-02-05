@@ -35,6 +35,7 @@ import { useAssetHighlightStore } from "@/app/lib/store/asset-highlight-store";
 import { usePipelineStates } from "@/app/lib/hooks/usePipelineStates";
 import { useShortcuts } from "@/app/hooks/use-shortcuts";
 import { usePageReloadBlocker } from "@/app/hooks/use-page-reload-blocker";
+import { useAutoSave } from "@/app/lib/hooks/useAutoSave";
 import { CommandMenu } from "./CommandMenu";
 import type { ProjectTranscription } from "@/app/types/transcription";
 import type { VideoClip, ImageClip } from "@/app/types/timeline";
@@ -226,6 +227,8 @@ export function EditorLayout() {
     enabled: hasUnsavedChanges,
     onBlock: handleReloadBlocked,
   });
+
+  useAutoSave({ intervalMs: 30_000, enabled: !!projectId });
 
   useEffect(() => {
     if (!hasUnsavedChanges) {

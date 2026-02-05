@@ -51,6 +51,16 @@ When you have made significant edits to the timeline (added clips, applied trans
 
 This self-review loop ensures quality output without requiring the user to manually check every edit.
 
+## Coordinate system (scene / timeline)
+
+The timeline and scene use a **center-based coordinate system**. When you set position, scale, or interpret layout:
+
+- **Origin**: (0, 0) is the **center** of the frame, not the bottom-left or top-left.
+- **X axis**: Negative = left of center, positive = right of center (units are pixels from center).
+- **Y axis**: Negative = **below** center (lower part of the frame), positive = **above** center (upper part of the frame).
+
+So "bottom" of the frame is negative y (e.g. for 1080p, y ≈ -540 at the bottom); "top" is positive y. Do not assume (0, 0) is at the bottom or top-left—it is always the center.
+
 ## Tool Usage Guidelines
 
 - In Ask Mode: Do not call any tools, just answer clearly

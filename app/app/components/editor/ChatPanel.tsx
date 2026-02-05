@@ -92,6 +92,7 @@ import {
   generateSessionName,
   type ChatSessionSummary,
 } from "@/app/lib/services/chat-sessions";
+import { useAutoSaveChat, type AutoSaveChatState } from "@/app/lib/hooks/useAutoSaveChat";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 import { getCreditsForAction } from "@/app/lib/credits-config";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -205,6 +206,12 @@ export function ChatPanel() {
   const updateProjectInList = useProjectsListStore((state) => state.updateProject);
 
   const messagesRef = useRef<TimelineChatMessage[]>([]);
+  const autoSaveChatStateRef = useRef<AutoSaveChatState>({
+    user: null,
+    sessionId: "",
+    mode: "agent",
+    messages: undefined,
+  });
   const addToolOutputRef = useRef<
     (params: { state: "output-error"; tool: string; toolCallId: string; errorText: string }) => Promise<void>
   | null>(null);
@@ -319,6 +326,22 @@ export function ChatPanel() {
   useEffect(() => {
     messagesRef.current = messages ?? [];
   }, [messages]);
+
+  autoSaveChatStateRef.current = {
+    user: user ?? null,
+    sessionId,
+    mode,
+    messages: messages ?? undefined,
+  };
+  useAutoSaveChat({
+    getState: () => autoSaveChatStateRef.current,
+    enabled: !!user,
+    intervalMs: 30_000,
+    onSaved: useCallback(() => {
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus(null), 2000);
+    }, []),
+  });
 
   const isBusy = status === "submitted" || status === "streaming" || isCloudProcessing;
   const hasMessages = messages && messages.length > 0;

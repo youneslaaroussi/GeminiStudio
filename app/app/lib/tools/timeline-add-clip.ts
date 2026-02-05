@@ -180,7 +180,8 @@ export const timelineAddClipTool: ToolDefinition<
       label: "Position",
       type: "json",
       placeholder: '{"x":0,"y":0}',
-      description: "Scene position as { x, y } in pixels.",
+      description:
+        "Scene position as { x, y } in pixels. Uses center origin: (0,0) is center of frame; x positive = right, negative = left; y positive = above center (top), negative = below center (bottom).",
     },
     {
       name: "scale",

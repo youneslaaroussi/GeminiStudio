@@ -279,6 +279,8 @@ export const timelineUpdateClipTool: ToolDefinition<
       label: "Position",
       type: "json",
       placeholder: '{"x":0,"y":0}',
+      description:
+        "Scene position in pixels. Center origin: (0,0) = center; x positive = right, negative = left; y positive = up (top), negative = down (bottom).",
     },
     {
       name: "scale",

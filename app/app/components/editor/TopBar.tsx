@@ -193,19 +193,18 @@ export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, 
       useProjectStore.getState().saveProject();
 
       // Update projects list with thumbnail and name
-      if (projectId) {
-        const userId = useProjectsListStore.getState().userId;
+      if (projectId && user?.uid) {
         await updateListProject(projectId, {
           name: project.name,
           ...(thumbnail && { thumbnail }),
-        }, userId ?? undefined);
+        }, user.uid);
       }
 
       console.log("Project saved locally");
     } catch (error) {
       console.error("Failed to save project:", error);
     }
-  }, [saveStatus, previewCanvas, projectId, project.name, updateListProject]);
+  }, [saveStatus, previewCanvas, projectId, project.name, updateListProject, user?.uid]);
 
 
   const parseAndLoadProject = useCallback(
@@ -350,9 +349,8 @@ export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, 
               onValueCommit={(val) => {
                 const newName = val || "Untitled Project";
                 updateProjectSettings({ name: newName });
-                if (projectId) {
-                  const userId = useProjectsListStore.getState().userId;
-                  updateListProject(projectId, { name: newName }, userId ?? undefined);
+                if (projectId && user?.uid) {
+                  updateListProject(projectId, { name: newName }, user.uid);
                 }
               }}
               className="text-sm font-medium text-foreground bg-transparent border-0 outline-none focus:font-bold rounded px-0 py-0 min-w-[120px] placeholder:text-muted-foreground"
