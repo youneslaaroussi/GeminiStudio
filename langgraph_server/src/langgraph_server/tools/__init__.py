@@ -38,7 +38,7 @@ from .subscribe_pipeline_tool import subscribeToAssetPipeline
 from .subscribe_transcode_tool import subscribeToAssetTranscode
 from .time_tool import get_current_time_utc
 from .weather_tool import lookup_weather_snapshot
-from .queue_attachment_tool import queueAttachment
+from .send_attachment_tool import sendAttachment
 
 
 def get_registered_tools() -> Sequence[BaseTool]:
@@ -77,7 +77,7 @@ def get_registered_tools() -> Sequence[BaseTool]:
         subscribeToAssetPipeline,
         subscribeToAssetTranscode,
         lookup_weather_snapshot,
-        queueAttachment,
+        sendAttachment,
     )
 
 

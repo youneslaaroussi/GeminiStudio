@@ -242,13 +242,7 @@ class RenderEventSubscriber:
                     if thread_id.startswith("telegram-"):
                         telegram_chat_id = thread_id.replace("telegram-", "")
                         try:
-                            # Pop any queued attachments
-                            from .attachment_queue import pop_attachments
-                            attachments = await pop_attachments(thread_id)
-                            await send_telegram_message(
-                                telegram_chat_id, ai_response, self._settings,
-                                attachments=attachments if attachments else None
-                            )
+                            await send_telegram_message(telegram_chat_id, ai_response, self._settings)
                             logger.info("Sent render notification to Telegram chat %s", telegram_chat_id)
                         except Exception as e:
                             logger.warning("Failed to send to Telegram: %s", e)
@@ -259,13 +253,7 @@ class RenderEventSubscriber:
                         )
                         if telegram_chat_id:
                             try:
-                                # Pop any queued attachments
-                                from .attachment_queue import pop_attachments
-                                attachments = await pop_attachments(thread_id)
-                                await send_telegram_message(
-                                    telegram_chat_id, ai_response, self._settings,
-                                    attachments=attachments if attachments else None
-                                )
+                                await send_telegram_message(telegram_chat_id, ai_response, self._settings)
                                 logger.info("Sent render notification to linked Telegram chat %s", telegram_chat_id)
                             except Exception as e:
                                 logger.warning("Failed to send to Telegram: %s", e)
