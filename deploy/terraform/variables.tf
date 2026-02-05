@@ -178,7 +178,7 @@ variable "speech_language_codes" {
 variable "renderer_concurrency" {
   description = "Number of concurrent render jobs"
   type        = number
-  default     = 2
+  default     = 5
 }
 
 variable "frontend_url" {
