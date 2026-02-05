@@ -5,13 +5,14 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Any, Dict, Literal, Optional
 
+import httpx
 from langchain_core.tools import tool, InjectedToolArg
 
 logger = logging.getLogger(__name__)
 
 
 @tool
-async def sendAttachment(
+def sendAttachment(
     url: str,
     type: Literal["video", "image", "audio"],
     caption: Optional[str] = None,
@@ -31,7 +32,6 @@ async def sendAttachment(
         Status dict indicating success or failure.
     """
     from ..config import get_settings
-    from ..firebase import send_telegram_message
 
     context = _agent_context or {}
     thread_id = context.get("thread_id")
@@ -68,44 +68,69 @@ async def sendAttachment(
     telegram_chat_id = thread_id.replace("telegram-", "")
     settings = get_settings()
 
-    # Build attachment in the format send_telegram_message expects
-    attachment = {
-        "url": url.strip(),
-        "type": type,
-        "caption": caption,
+    if not settings.telegram_bot_token:
+        return {
+            "status": "error",
+            "message": "Telegram bot token not configured.",
+            "reason": "no_token",
+        }
+
+    telegram_base_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}"
+
+    # Map type to Telegram endpoint and payload key
+    if type == "video":
+        endpoint = f"{telegram_base_url}/sendVideo"
+        media_key = "video"
+    elif type == "image":
+        endpoint = f"{telegram_base_url}/sendPhoto"
+        media_key = "photo"
+    elif type == "audio":
+        endpoint = f"{telegram_base_url}/sendAudio"
+        media_key = "audio"
+    else:
+        endpoint = f"{telegram_base_url}/sendVideo"
+        media_key = "video"
+
+    payload = {
+        "chat_id": telegram_chat_id,
+        media_key: url.strip(),
     }
+    if caption:
+        payload["caption"] = caption[:1024]
 
     try:
-        result = await send_telegram_message(
-            telegram_chat_id,
-            caption or "",  # Text/caption
-            settings,
-            attachments=[attachment],
-        )
+        with httpx.Client(timeout=60.0) as client:
+            response = client.post(endpoint, json=payload)
 
-        if result:
-            logger.info(
-                "[SEND_ATTACHMENT] Sent %s to %s: %s",
-                type,
-                telegram_chat_id,
-                url[:60],
-            )
-            return {
-                "status": "success",
-                "type": type,
-                "message": f"Sent {type} to user.",
-            }
-        else:
-            logger.warning(
-                "[SEND_ATTACHMENT] Failed to send %s to %s",
-                type,
-                telegram_chat_id,
-            )
-            return {
-                "status": "error",
-                "message": f"Failed to send {type}. Telegram may have rejected the URL.",
-                "reason": "send_failed",
-            }
+            if response.status_code == 200:
+                result = response.json().get("result", {})
+                message_id = result.get("message_id")
+                logger.info(
+                    "[SEND_ATTACHMENT] Sent %s to %s, message_id=%s",
+                    type,
+                    telegram_chat_id,
+                    message_id,
+                )
+                return {
+                    "status": "success",
+                    "type": type,
+                    "message_id": message_id,
+                    "message": f"Sent {type} to user.",
+                }
+            else:
+                error_text = response.text[:200]
+                logger.warning(
+                    "[SEND_ATTACHMENT] Failed to send %s (status=%d): %s",
+                    type,
+                    response.status_code,
+                    error_text,
+                )
+                return {
+                    "status": "error",
+                    "message": f"Telegram rejected the {type}. Status: {response.status_code}",
+                    "reason": "telegram_error",
+                    "details": error_text,
+                }
 
     except Exception as e:
         logger.exception("[SEND_ATTACHMENT] Error sending attachment")
