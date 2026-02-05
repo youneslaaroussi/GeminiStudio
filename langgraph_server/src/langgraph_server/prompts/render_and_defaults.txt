@@ -10,12 +10,12 @@ WRONG - User: "render this video" -> You: "What format do you want?" <- THIS IS 
 
 When the user wants to see/hear an asset, use sendAttachment to send it directly:
 
-- Call sendAttachment(asset_id="...", type="video|image|audio", caption="optional")
+- Call sendAttachment(asset_id="...", type="video|image|audio")
 - The media is sent immediately to the chat
 - The tool fetches the asset URL internally - just pass the asset_id
 
 EXAMPLE - User asks to see a video:
-Call sendAttachment(asset_id="abc-123", type="video", caption="Here's your video!")
+Call sendAttachment(asset_id="abc-123", type="video")
 
 EXAMPLE - User asks to hear an audio track:
-Call sendAttachment(asset_id="xyz-456", type="audio", caption="Here's the music track!")
+Call sendAttachment(asset_id="xyz-456", type="audio")

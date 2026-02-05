@@ -28,7 +28,7 @@ def sendAttachment(
     Args:
         asset_id: The ID of the asset to send.
         type: The type of media - "video", "image", or "audio".
-        caption: Optional caption to display with the media.
+        caption: Deprecated. Captions are ignored to avoid duplicate chat messages.
 
     Returns:
         Status dict indicating success or failure.
@@ -130,7 +130,7 @@ def sendAttachment(
             files = {file_key: (asset_name, file_bytes, mime_type)}
             data = {"chat_id": telegram_chat_id}
             if caption:
-                data["caption"] = caption[:1024]
+                logger.debug("[SEND_ATTACHMENT] Caption provided but ignored to avoid duplicate text messages.")
 
             resp = client.post(endpoint, files=files, data=data)
 
