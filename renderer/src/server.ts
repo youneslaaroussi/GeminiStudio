@@ -2,11 +2,126 @@ import express from 'express';
 import type { Request, Response, NextFunction, Express } from 'express';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { enqueueRenderJob, renderQueue } from './queue.js';
-import { renderJobSchema } from './jobs/render-job.js';
+import { renderJobSchema, type RenderJobData } from './jobs/render-job.js';
 import { logger } from './logger.js';
+import { loadConfig } from './config.js';
 
 const SHARED_SECRET = process.env.RENDERER_SHARED_SECRET;
 const MAX_TIMESTAMP_DRIFT_MS = 5 * 60 * 1000; // 5 minutes
+
+const config = loadConfig();
+
+/**
+ * Quality levels ordered from lowest to highest
+ */
+const QUALITY_LEVELS: Record<string, number> = {
+  low: 1,
+  web: 2,
+  social: 3,
+  studio: 4,
+};
+
+/**
+ * Apply hard limits to render job settings.
+ * Clamps FPS, resolution (preserving aspect ratio), duration, and quality.
+ */
+function applyRenderLimits(job: RenderJobData): RenderJobData {
+  const limits = {
+    maxFps: config.maxFps,
+    maxResolution: config.maxResolution,
+    maxDuration: config.maxDuration,
+    maxQuality: config.maxQuality,
+  };
+
+  // Clamp FPS
+  const clampedFps = Math.min(job.output.fps, limits.maxFps);
+
+  // Clamp resolution preserving aspect ratio
+  const { width, height } = job.output.size;
+  const longestDimension = Math.max(width, height);
+  let clampedWidth = width;
+  let clampedHeight = height;
+
+  if (longestDimension > limits.maxResolution) {
+    const scale = limits.maxResolution / longestDimension;
+    clampedWidth = Math.round(width * scale);
+    clampedHeight = Math.round(height * scale);
+  }
+
+  // Clamp duration
+  // First, clamp timelineDuration if provided
+  let clampedTimelineDuration = job.timelineDuration;
+  if (clampedTimelineDuration && clampedTimelineDuration > limits.maxDuration) {
+    clampedTimelineDuration = limits.maxDuration;
+  }
+  
+  // Clamp range if provided
+  let clampedRange: [number, number] | undefined = job.output.range;
+  if (clampedRange) {
+    const duration = clampedRange[1] - clampedRange[0];
+    if (duration > limits.maxDuration) {
+      clampedRange = [clampedRange[0], clampedRange[0] + limits.maxDuration];
+    }
+  }
+  
+  // If no range but we have a duration that exceeds limit, set a range
+  const computedDuration = clampedTimelineDuration ?? 
+    (clampedRange ? clampedRange[1] - clampedRange[0] : undefined) ??
+    job.variables?.duration;
+  
+  if (!clampedRange && computedDuration && computedDuration > limits.maxDuration) {
+    clampedRange = [0, limits.maxDuration];
+  }
+
+  // Clamp quality
+  const currentQuality = job.output.quality?.toLowerCase() ?? 'web';
+  const currentQualityLevel = QUALITY_LEVELS[currentQuality] ?? QUALITY_LEVELS.web;
+  const maxQualityLevel = QUALITY_LEVELS[limits.maxQuality.toLowerCase()] ?? QUALITY_LEVELS.web;
+  const clampedQuality = currentQualityLevel <= maxQualityLevel ? currentQuality : limits.maxQuality;
+
+  // Log if any limits were applied
+  const rangeChanged = clampedRange !== job.output.range && 
+    (clampedRange === undefined || job.output.range === undefined ||
+     clampedRange[0] !== job.output.range[0] ||
+     clampedRange[1] !== job.output.range[1]);
+  
+  if (clampedFps !== job.output.fps ||
+      clampedWidth !== width ||
+      clampedHeight !== height ||
+      rangeChanged ||
+      clampedTimelineDuration !== job.timelineDuration ||
+      clampedQuality !== currentQuality) {
+    logger.warn({
+      original: {
+        fps: job.output.fps,
+        resolution: `${width}x${height}`,
+        duration: job.output.range ? job.output.range[1] - job.output.range[0] : job.timelineDuration,
+        quality: currentQuality,
+      },
+      clamped: {
+        fps: clampedFps,
+        resolution: `${clampedWidth}x${clampedHeight}`,
+        duration: clampedRange ? clampedRange[1] - clampedRange[0] : clampedTimelineDuration,
+        quality: clampedQuality,
+      },
+    }, 'Applied render limits to job');
+  }
+
+  return {
+    ...job,
+    timelineDuration: clampedTimelineDuration,
+    output: {
+      ...job.output,
+      fps: clampedFps,
+      size: {
+        width: clampedWidth,
+        height: clampedHeight,
+      },
+      range: clampedRange,
+      quality: clampedQuality,
+    },
+  };
+}
 
 // Extend Request to include raw body
 interface RequestWithRawBody extends Request {
@@ -129,7 +244,9 @@ export const createServer = (): Express => {
     }
 
     try {
-      const job = await enqueueRenderJob(parse.data);
+      // Apply hard limits to the render job
+      const limitedJob = applyRenderLimits(parse.data);
+      const job = await enqueueRenderJob(limitedJob);
       res.status(202).json({ jobId: job.id });
     } catch (err) {
       logger.error({ err }, 'Failed to enqueue render job');

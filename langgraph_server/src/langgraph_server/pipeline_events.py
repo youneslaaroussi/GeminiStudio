@@ -16,7 +16,7 @@ from typing import Any, Dict, Optional, Set
 from google.api_core.exceptions import NotFound
 from google.cloud import pubsub_v1
 from google.cloud.pubsub_v1.subscriber.message import Message
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from .config import Settings
 
@@ -426,11 +426,6 @@ class PipelineEventSubscriber:
                 details.append(f"Asset ID: {asset_id}")
 
             body = "Asset pipeline completed:\n" + "\n".join(f"- {item}" for item in details)
-            system_prompt = (
-                "Asset pipeline status update received. Craft a concise message for the user "
-                "summarizing the outcome. If successful, mention that the asset is now ready "
-                "to use and any metadata that was extracted. If failed, briefly explain what went wrong."
-            )
 
         elif event_type == "pipeline.failed":
             details = [
@@ -445,10 +440,6 @@ class PipelineEventSubscriber:
                 details.append(f"  - {label}: {error[:100]}")
 
             body = "Asset pipeline failed:\n" + "\n".join(f"- {item}" for item in details)
-            system_prompt = (
-                "Asset pipeline status update received. Craft a concise message for the user "
-                "summarizing the outcome. If failed, briefly explain what went wrong."
-            )
 
         elif event_type == "transcode.completed":
             details = [
@@ -463,18 +454,11 @@ class PipelineEventSubscriber:
                     details.append(f"Format: {transcode_result.get('outputFormat')}")
 
             body = "Asset transcode completed:\n" + "\n".join(f"- {item}" for item in details)
-            system_prompt = (
-                "Asset transcode completed. The video file has been transcoded and is now ready to use. "
-                "Inform the user their video is ready. The full analysis (metadata, transcription, etc.) "
-                "is still processing in the background and will be available soon. "
-                "If the user asked about the video content, let them know you can help once analysis completes."
-            )
 
         else:
             logger.debug("[PIPELINE_EVENTS] Ignoring unsupported event type: %s", event_type)
             return []
 
-        return [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=body),
-        ]
+        # Just inject the event as information - let the agent decide what to do
+        # based on its system prompt and conversation context
+        return [HumanMessage(content=body)]

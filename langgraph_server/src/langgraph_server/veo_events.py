@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 
 from google.oauth2 import service_account
 from google.cloud import storage
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from .config import Settings
 from .firebase import get_firestore_client
@@ -713,14 +713,6 @@ class VeoEventPoller:
             logger.debug("[VEO_EVENTS] Ignoring unsupported event type: %s", event_type)
             return []
 
-        system_prompt = (
-            "Veo video generation status update received. Craft a concise message for the user "
-            "summarizing the outcome. If successful, include the video URL using markdown link format "
-            "like [Watch your video](URL) so it can be embedded. Suggest they can add it to their "
-            "project timeline. If failed, explain the issue briefly."
-        )
-
-        return [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=body),
-        ]
+        # Just inject the event as information - let the agent decide what to do
+        # based on its system prompt and conversation context
+        return [HumanMessage(content=body)]

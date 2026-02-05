@@ -12,7 +12,7 @@ from google.api_core.exceptions import NotFound
 from google.cloud import pubsub_v1, storage
 from google.cloud.pubsub_v1.subscriber.message import Message
 from google.oauth2 import service_account
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from .agent import graph
 from .config import Settings
@@ -318,12 +318,6 @@ class RenderEventSubscriber:
             logger.debug("Ignoring unsupported render event type: %s", event_type)
             return []
 
-        system_prompt = (
-            "Renderer status update received. Craft a concise message for the user summarizing the render outcome "
-            "and include any download locations or next steps."
-        )
-
-        return [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=body),
-        ]
+        # Just inject the event as information - let the agent decide what to do
+        # based on its system prompt and conversation context
+        return [HumanMessage(content=body)]
