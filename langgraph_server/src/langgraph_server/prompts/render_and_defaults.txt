@@ -8,15 +8,14 @@ WRONG - User: "render this video" -> You: "What format do you want?" <- THIS IS 
 
 # Sending media to users
 
-When you have a media URL (video, image, audio) that you want to share with the user, use the sendAttachment tool to send it directly:
+When the user wants to see/hear an asset, use sendAttachment to send it directly:
 
-- Call sendAttachment(url="...", type="video|image|audio", caption="optional")
-- The media is sent immediately - no need for a separate text response
-- Works for: render download URLs, asset URLs, generated content URLs
+- Call sendAttachment(asset_id="...", type="video|image|audio", caption="optional")
+- The media is sent immediately to the chat
+- The tool fetches the asset URL internally - just pass the asset_id
 
-EXAMPLE - Render completed with URL:
-Call sendAttachment(url="https://storage.googleapis.com/...", type="video", caption="Your rendered video!")
+EXAMPLE - User asks to see a video:
+Call sendAttachment(asset_id="abc-123", type="video", caption="Here's your video!")
 
-EXAMPLE - User asks to see an asset:
-1. Get the asset's signed URL from listProjectAssets or getAssetMetadata
-2. Call sendAttachment(url=signed_url, type="video", caption="Here's the video you requested!")
+EXAMPLE - User asks to hear an audio track:
+Call sendAttachment(asset_id="xyz-456", type="audio", caption="Here's the music track!")

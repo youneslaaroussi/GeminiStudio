@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 @tool
 def sendAttachment(
-    url: str,
+    asset_id: str,
     type: Literal["video", "image", "audio"],
     caption: Optional[str] = None,
     _agent_context: Annotated[Optional[Dict[str, Any]], InjectedToolArg] = None,
@@ -24,7 +24,7 @@ def sendAttachment(
     The media will be sent as a separate message in the chat.
 
     Args:
-        url: The URL of the media file. Can be a signed GCS URL or absolute URL.
+        asset_id: The ID of the asset to send.
         type: The type of media - "video", "image", or "audio".
         caption: Optional caption to display with the media.
 
@@ -35,65 +35,63 @@ def sendAttachment(
 
     context = _agent_context or {}
     thread_id = context.get("thread_id")
+    user_id = context.get("user_id")
+    project_id = context.get("project_id")
 
     if not thread_id:
-        return {
-            "status": "error",
-            "message": "No conversation thread available.",
-            "reason": "missing_thread",
-        }
+        return {"status": "error", "message": "No conversation thread.", "reason": "missing_thread"}
 
-    if not url or not url.strip():
-        return {
-            "status": "error",
-            "message": "Please provide a valid URL for the attachment.",
-            "reason": "invalid_url",
-        }
+    if not user_id or not project_id:
+        return {"status": "error", "message": "No user/project context.", "reason": "missing_context"}
+
+    if not asset_id or not asset_id.strip():
+        return {"status": "error", "message": "Please provide an asset_id.", "reason": "invalid_asset_id"}
 
     if type not in ("video", "image", "audio"):
-        return {
-            "status": "error",
-            "message": f"Invalid attachment type '{type}'. Must be 'video', 'image', or 'audio'.",
-            "reason": "invalid_type",
-        }
+        return {"status": "error", "message": f"Invalid type '{type}'.", "reason": "invalid_type"}
 
-    # Only works for Telegram sessions
     if not thread_id.startswith("telegram-"):
-        return {
-            "status": "error",
-            "message": "Direct attachment sending only works for Telegram chats.",
-            "reason": "not_telegram",
-        }
+        return {"status": "error", "message": "Only works for Telegram chats.", "reason": "not_telegram"}
 
     telegram_chat_id = thread_id.replace("telegram-", "")
     settings = get_settings()
 
     if not settings.telegram_bot_token:
-        return {
-            "status": "error",
-            "message": "Telegram bot token not configured.",
-            "reason": "no_token",
-        }
+        return {"status": "error", "message": "Telegram bot token not configured.", "reason": "no_token"}
 
+    # Fetch asset to get signed URL
+    try:
+        asset_service_url = getattr(settings, 'asset_service_url', None) or "http://asset-service:8081"
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.get(f"{asset_service_url}/api/assets/{user_id}/{project_id}/{asset_id.strip()}")
+            if resp.status_code != 200:
+                return {"status": "error", "message": f"Asset not found: {asset_id}", "reason": "asset_not_found"}
+            asset = resp.json()
+    except Exception as e:
+        logger.exception("[SEND_ATTACHMENT] Failed to fetch asset")
+        return {"status": "error", "message": f"Failed to fetch asset: {e}", "reason": "fetch_failed"}
+
+    signed_url = asset.get("signedUrl")
+    if not signed_url:
+        return {"status": "error", "message": "Asset has no signed URL.", "reason": "no_url"}
+
+    asset_name = asset.get("name", asset_id)
+
+    # Map type to Telegram endpoint
     telegram_base_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}"
-
-    # Map type to Telegram endpoint and payload key
     if type == "video":
         endpoint = f"{telegram_base_url}/sendVideo"
         media_key = "video"
     elif type == "image":
         endpoint = f"{telegram_base_url}/sendPhoto"
         media_key = "photo"
-    elif type == "audio":
-        endpoint = f"{telegram_base_url}/sendAudio"
-        media_key = "audio"
-    else:
-        endpoint = f"{telegram_base_url}/sendVideo"
-        media_key = "video"
+    else:  # audio - use document for any format
+        endpoint = f"{telegram_base_url}/sendDocument"
+        media_key = "document"
 
     payload = {
         "chat_id": telegram_chat_id,
-        media_key: url.strip(),
+        media_key: signed_url,
     }
     if caption:
         payload["caption"] = caption[:1024]
@@ -105,37 +103,13 @@ def sendAttachment(
             if response.status_code == 200:
                 result = response.json().get("result", {})
                 message_id = result.get("message_id")
-                logger.info(
-                    "[SEND_ATTACHMENT] Sent %s to %s, message_id=%s",
-                    type,
-                    telegram_chat_id,
-                    message_id,
-                )
-                return {
-                    "status": "success",
-                    "type": type,
-                    "message_id": message_id,
-                    "message": f"Sent {type} to user.",
-                }
+                logger.info("[SEND_ATTACHMENT] Sent %s '%s' to %s", type, asset_name, telegram_chat_id)
+                return {"status": "success", "type": type, "asset_name": asset_name, "message": f"Sent {asset_name}."}
             else:
-                error_text = response.text[:200]
-                logger.warning(
-                    "[SEND_ATTACHMENT] Failed to send %s (status=%d): %s",
-                    type,
-                    response.status_code,
-                    error_text,
-                )
-                return {
-                    "status": "error",
-                    "message": f"Telegram rejected the {type}. Status: {response.status_code}",
-                    "reason": "telegram_error",
-                    "details": error_text,
-                }
+                error_text = response.text[:300]
+                logger.warning("[SEND_ATTACHMENT] Failed (status=%d): %s", response.status_code, error_text)
+                return {"status": "error", "message": f"Telegram rejected: {error_text[:100]}", "reason": "telegram_error"}
 
     except Exception as e:
-        logger.exception("[SEND_ATTACHMENT] Error sending attachment")
-        return {
-            "status": "error",
-            "message": f"Error sending attachment: {str(e)}",
-            "reason": "exception",
-        }
+        logger.exception("[SEND_ATTACHMENT] Error sending")
+        return {"status": "error", "message": f"Error: {str(e)}", "reason": "exception"}
