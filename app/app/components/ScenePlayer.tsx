@@ -225,6 +225,123 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   const zoomToFitRef = useRef(zoomToFit);
   useEffect(() => { zoomToFitRef.current = zoomToFit; }, [zoomToFit]);
 
+  // Touch gesture state
+  const touchStateRef = useRef<{
+    touches: number;
+    initialDistance: number;
+    initialCenter: { x: number; y: number };
+    initialZoom: number;
+    initialPosition: { x: number; y: number };
+    lastSinglePos: { x: number; y: number } | null;
+  } | null>(null);
+
+  function getTouchCenter(touches: TouchList, container: HTMLElement): { x: number; y: number } {
+    const rect = container.getBoundingClientRect();
+    let x = 0, y = 0;
+    for (let i = 0; i < touches.length; i++) {
+      x += touches[i].clientX - rect.left - rect.width / 2;
+      y += touches[i].clientY - rect.top - rect.height / 2;
+    }
+    return { x: x / touches.length, y: y / touches.length };
+  }
+
+  function getTouchDistance(touches: TouchList): number {
+    if (touches.length < 2) return 0;
+    const dx = touches[1].clientX - touches[0].clientX;
+    const dy = touches[1].clientY - touches[0].clientY;
+    return Math.hypot(dx, dy);
+  }
+
+  // Handle Touch gestures (pinch-to-zoom, two-finger pan, single-finger pan)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1 || e.touches.length === 2) {
+        e.preventDefault();
+        const { zoom: z, x, y } = transformRef.current;
+        if (e.touches.length === 2) {
+          touchStateRef.current = {
+            touches: 2,
+            initialDistance: getTouchDistance(e.touches),
+            initialCenter: getTouchCenter(e.touches, container),
+            initialZoom: z,
+            initialPosition: { x, y },
+            lastSinglePos: null,
+          };
+        } else {
+          const center = getTouchCenter(e.touches, container);
+          touchStateRef.current = {
+            touches: 1,
+            initialDistance: 0,
+            initialCenter: center,
+            initialZoom: z,
+            initialPosition: { x, y },
+            lastSinglePos: center,
+          };
+        }
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      const state = touchStateRef.current;
+      if (!state || !container) return;
+
+      if (e.touches.length === 2 && state.touches === 2) {
+        e.preventDefault();
+        const distance = getTouchDistance(e.touches);
+        const center = getTouchCenter(e.touches, container);
+        if (state.initialDistance > 0) {
+          const scale = distance / state.initialDistance;
+          const newZoom = Math.max(0.1, Math.min(10, state.initialZoom * scale));
+          // Zoom around pinch center: keep point under fingers fixed
+          const newX = center.x - (center.x - state.initialPosition.x) * (newZoom / state.initialZoom);
+          const newY = center.y - (center.y - state.initialPosition.y) * (newZoom / state.initialZoom);
+          setZoomToFit(false);
+          setZoom(newZoom);
+          setPosition({ x: newX, y: newY });
+        }
+      } else if (e.touches.length === 1 && state.touches === 1 && state.lastSinglePos) {
+        e.preventDefault();
+        const center = getTouchCenter(e.touches, container);
+        const dx = center.x - state.lastSinglePos.x;
+        const dy = center.y - state.lastSinglePos.y;
+        touchStateRef.current = { ...state, lastSinglePos: center };
+        setZoomToFit(false);
+        if (zoomToFitRef.current) setZoom(transformRef.current.zoom);
+        setPosition((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        const state = touchStateRef.current;
+        if (state?.touches === 2 && e.touches.length === 1) {
+          // Second finger lifted, switch to single-finger mode
+          touchStateRef.current = {
+            ...state,
+            touches: 1,
+            lastSinglePos: getTouchCenter(e.touches, container!),
+          };
+        } else if (e.touches.length === 0) {
+          touchStateRef.current = null;
+        }
+      }
+    };
+
+    container.addEventListener('touchstart', onTouchStart, { passive: false });
+    container.addEventListener('touchmove', onTouchMove, { passive: false });
+    container.addEventListener('touchend', onTouchEnd, { passive: true });
+    container.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    return () => {
+      container.removeEventListener('touchstart', onTouchStart);
+      container.removeEventListener('touchmove', onTouchMove);
+      container.removeEventListener('touchend', onTouchEnd);
+      container.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, []);
+
   // Handle Drag
   const [handleDrag, isDragging] = useDrag(
     useCallback(
@@ -663,7 +780,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
         >
           <div
             ref={containerRef}
-            className="relative w-full h-full"
+            className="relative w-full h-full touch-none select-none"
             onMouseDown={(e) => {
               if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
                 handleDrag(e);

@@ -58,7 +58,7 @@ function createBasicText(clip: TextClip, view: Node, settings: TextClipSettings)
       y={clip.position.y}
       scale={clip.scale}
       opacity={0}
-      shaders={effectShaders}
+      {...(effectShaders ? { shaders: effectShaders } : {})}
       shadowBlur={8}
       shadowColor="rgba(0,0,0,0.5)"
     />
@@ -99,7 +99,7 @@ function createTitleCard(
         fontSize={fontSize}
         fill={fill}
         y={clip.subtitle ? -30 : 0}
-        shaders={effectShaders}
+        {...(effectShaders ? { shaders: effectShaders } : {})}
         shadowBlur={20}
         shadowColor="rgba(255,255,255,0.15)"
       />
@@ -183,7 +183,7 @@ function createLowerThird(
           fontWeight={600}
           fontSize={fontSize}
           fill={fill}
-          shaders={effectShaders}
+          {...(effectShaders ? { shaders: effectShaders } : {})}
         />
         {/* Subtitle */}
         {clip.subtitle && (
@@ -233,7 +233,7 @@ function createCaptionStyle(clip: TextClip, view: Node, settings: TextClipSettin
         fontWeight={settings.fontWeight}
         fontSize={fontSize}
         fill={fill}
-        shaders={effectShaders}
+        {...(effectShaders ? { shaders: effectShaders } : {})}
       />
     </Rect>
   );

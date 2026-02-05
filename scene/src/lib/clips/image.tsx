@@ -33,7 +33,7 @@ export function createImageElements({ clips, view }: CreateImageElementsOptions)
         y={clip.position.y}
         scale={clip.scale}
         opacity={0}
-        shaders={effectShaders}
+        {...(effectShaders ? { shaders: effectShaders } : {})}
       />
     );
 

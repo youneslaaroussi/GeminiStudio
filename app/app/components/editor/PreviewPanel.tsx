@@ -10,6 +10,71 @@ import { Button } from "@/components/ui/button";
 import { Crosshair, Maximize2, Minimize2, Play, Pause } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { SharedMediaLoader } from "@/app/lib/media/shared-media-loader";
+import { usePreloadTimelineMedia } from "@/app/hooks/use-preload-timeline-media";
+
+/**
+ * Small pie chart indicator for asset preloading progress.
+ */
+function PreloadPieIndicator({ loaded, total }: { loaded: number; total: number }) {
+  if (total === 0) return null;
+  
+  const progress = total > 0 ? loaded / total : 0;
+  const isComplete = loaded >= total;
+  
+  // Don't show when complete (all assets loaded)
+  if (isComplete) return null;
+  
+  // SVG pie chart using stroke-dasharray technique
+  const size = 12;
+  const strokeWidth = 2;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDasharray = `${progress * circumference} ${circumference}`;
+  
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div 
+          className="relative flex items-center justify-center"
+          style={{ width: size, height: size }}
+        >
+          <svg
+            width={size}
+            height={size}
+            viewBox={`0 0 ${size} ${size}`}
+            className="transform -rotate-90"
+          >
+            {/* Background circle */}
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={strokeWidth}
+              className="text-muted-foreground/30"
+            />
+            {/* Progress arc */}
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={strokeWidth}
+              strokeDasharray={strokeDasharray}
+              strokeLinecap="round"
+              className="text-amber-500 transition-all duration-150"
+            />
+          </svg>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        <p>Preloading assets: {loaded}/{total}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 export interface PreviewPanelHandle {
   recenter: () => void;
@@ -191,6 +256,9 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     [layers]
   );
 
+  // Preload timeline media assets
+  const preloadProgress = usePreloadTimelineMedia(layers);
+
   return (
     <div ref={fullscreenRef} className="h-full flex flex-col min-w-0 bg-background">
       <div className="flex items-center justify-between border-b border-border px-3 py-2 shrink-0">
@@ -242,6 +310,8 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
                 <p>{isFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen preview (F)"}</p>
               </TooltipContent>
             </Tooltip>
+            {/* Asset preload pie indicator */}
+            <PreloadPieIndicator loaded={preloadProgress.loaded} total={preloadProgress.total} />
           </TooltipProvider>
           {/* Motion Canvas update dot */}
           <div

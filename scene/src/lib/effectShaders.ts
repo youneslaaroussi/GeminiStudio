@@ -34,15 +34,24 @@ export function getColorGradingShaderConfig(
 ): ColorGradingShaderConfig | undefined {
   if (!settings) return undefined;
 
+  // Default missing values to 0
+  const exposure = settings.exposure ?? 0;
+  const contrast = settings.contrast ?? 0;
+  const saturation = settings.saturation ?? 0;
+  const temperature = settings.temperature ?? 0;
+  const tint = settings.tint ?? 0;
+  const highlights = settings.highlights ?? 0;
+  const shadows = settings.shadows ?? 0;
+
   // Check if all values are at default (0)
   const isDefault =
-    settings.exposure === 0 &&
-    settings.contrast === 0 &&
-    settings.saturation === 0 &&
-    settings.temperature === 0 &&
-    settings.tint === 0 &&
-    settings.highlights === 0 &&
-    settings.shadows === 0;
+    exposure === 0 &&
+    contrast === 0 &&
+    saturation === 0 &&
+    temperature === 0 &&
+    tint === 0 &&
+    highlights === 0 &&
+    shadows === 0;
 
   if (isDefault) return undefined;
 
@@ -50,16 +59,16 @@ export function getColorGradingShaderConfig(
     fragment: colorGradingShader,
     uniforms: {
       // Exposure stays as-is (-2 to 2)
-      exposure: createSignal(settings.exposure),
+      exposure: createSignal(exposure),
       // Convert -100 to 100 -> -1 to 1
-      contrast: createSignal(settings.contrast / 100),
+      contrast: createSignal(contrast / 100),
       // Convert -100 to 100 -> 0 to 2 (with 0 = 1)
-      saturation: createSignal(1 + settings.saturation / 100),
+      saturation: createSignal(1 + saturation / 100),
       // Convert -100 to 100 -> -1 to 1
-      temperature: createSignal(settings.temperature / 100),
-      tint: createSignal(settings.tint / 100),
-      highlights: createSignal(settings.highlights / 100),
-      shadows: createSignal(settings.shadows / 100),
+      temperature: createSignal(temperature / 100),
+      tint: createSignal(tint / 100),
+      highlights: createSignal(highlights / 100),
+      shadows: createSignal(shadows / 100),
     },
   };
 }

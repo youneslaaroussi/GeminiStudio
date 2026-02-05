@@ -12443,22 +12443,29 @@ void main() {
 //# sourceURL=src/shaders/chromaKey.glsl`;
 function getColorGradingShaderConfig(settings2) {
   if (!settings2) return void 0;
-  const isDefault = settings2.exposure === 0 && settings2.contrast === 0 && settings2.saturation === 0 && settings2.temperature === 0 && settings2.tint === 0 && settings2.highlights === 0 && settings2.shadows === 0;
+  const exposure = settings2.exposure ?? 0;
+  const contrast = settings2.contrast ?? 0;
+  const saturation = settings2.saturation ?? 0;
+  const temperature = settings2.temperature ?? 0;
+  const tint = settings2.tint ?? 0;
+  const highlights = settings2.highlights ?? 0;
+  const shadows = settings2.shadows ?? 0;
+  const isDefault = exposure === 0 && contrast === 0 && saturation === 0 && temperature === 0 && tint === 0 && highlights === 0 && shadows === 0;
   if (isDefault) return void 0;
   return {
     fragment: colorGradingShader,
     uniforms: {
       // Exposure stays as-is (-2 to 2)
-      exposure: createSignal(settings2.exposure),
+      exposure: createSignal(exposure),
       // Convert -100 to 100 -> -1 to 1
-      contrast: createSignal(settings2.contrast / 100),
+      contrast: createSignal(contrast / 100),
       // Convert -100 to 100 -> 0 to 2 (with 0 = 1)
-      saturation: createSignal(1 + settings2.saturation / 100),
+      saturation: createSignal(1 + saturation / 100),
       // Convert -100 to 100 -> -1 to 1
-      temperature: createSignal(settings2.temperature / 100),
-      tint: createSignal(settings2.tint / 100),
-      highlights: createSignal(settings2.highlights / 100),
-      shadows: createSignal(settings2.shadows / 100)
+      temperature: createSignal(temperature / 100),
+      tint: createSignal(tint / 100),
+      highlights: createSignal(highlights / 100),
+      shadows: createSignal(shadows / 100)
     }
   };
 }
@@ -12858,7 +12865,7 @@ function createVideoElements({ clips, view, transitions }) {
                 width: 1920,
                 height: 1080,
                 compositeOperation: compositeOp,
-                shaders
+                ...shaders ? { shaders } : {}
               },
               `video-clip-${clip.id}`
             )
@@ -12899,7 +12906,7 @@ function createVideoElements({ clips, view, transitions }) {
           opacity: hasFocus ? 1 : 0,
           position: hasFocus ? void 0 : toVector(clip.position),
           scale: hasFocus ? void 0 : toVector(clip.scale),
-          shaders
+          ...shaders ? { shaders } : {}
         },
         hasFocus ? `video-inner-${clip.id}` : `video-clip-${clip.id}`
       );
@@ -13342,7 +13349,7 @@ function createBasicText(clip, view, settings2) {
         y: clip.position.y,
         scale: clip.scale,
         opacity: 0,
-        shaders: effectShaders,
+        ...effectShaders ? { shaders: effectShaders } : {},
         shadowBlur: 8,
         shadowColor: "rgba(0,0,0,0.5)"
       },
@@ -13378,7 +13385,7 @@ function createTitleCard(clip, view, settings2, sceneWidth, sceneHeight) {
               fontSize,
               fill,
               y: clip.subtitle ? -30 : 0,
-              shaders: effectShaders,
+              ...effectShaders ? { shaders: effectShaders } : {},
               shadowBlur: 20,
               shadowColor: "rgba(255,255,255,0.15)"
             }
@@ -13460,7 +13467,7 @@ function createLowerThird(clip, view, settings2, _sceneWidth, sceneHeight) {
                     fontWeight: 600,
                     fontSize,
                     fill,
-                    shaders: effectShaders
+                    ...effectShaders ? { shaders: effectShaders } : {}
                   }
                 ),
                 clip.subtitle && /* @__PURE__ */ jsx(
@@ -13515,7 +13522,7 @@ function createCaptionStyle(clip, view, settings2) {
             fontWeight: settings2.fontWeight,
             fontSize,
             fill,
-            shaders: effectShaders
+            ...effectShaders ? { shaders: effectShaders } : {}
           }
         )
       },
@@ -13572,7 +13579,7 @@ function createImageElements({ clips, view }) {
         y: clip.position.y,
         scale: clip.scale,
         opacity: 0,
-        shaders: effectShaders
+        ...effectShaders ? { shaders: effectShaders } : {}
       },
       `image-clip-${clip.id}`
     );

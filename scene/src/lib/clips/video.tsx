@@ -109,7 +109,7 @@ export function createVideoElements({ clips, view, transitions }: CreateVideoEle
             width={1920}
             height={1080}
             compositeOperation={compositeOp}
-            shaders={shaders}
+            {...(shaders ? { shaders } : {})}
           />
         </Node>
       );
@@ -153,7 +153,7 @@ export function createVideoElements({ clips, view, transitions }: CreateVideoEle
           opacity={hasFocus ? 1 : 0}
           position={hasFocus ? undefined : toVector(clip.position)}
           scale={hasFocus ? undefined : toVector(clip.scale)}
-          shaders={shaders}
+          {...(shaders ? { shaders } : {})}
         />
       );
 

@@ -59,7 +59,11 @@ export function BranchSelector({ projectId }: BranchSelectorProps) {
 
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (open) void reloadBranches();
+        }}
+      >
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
             <GitBranch className="mr-2 h-4 w-4" />
@@ -70,16 +74,14 @@ export function BranchSelector({ projectId }: BranchSelectorProps) {
           <DropdownMenuLabel>Branches</DropdownMenuLabel>
           <DropdownMenuSeparator />
 
-          {/* Main branch */}
-          {mainBranch && (
-            <DropdownMenuItem
-              onClick={() => handleSwitchBranch('main')}
-              className={currentBranch === 'main' ? 'bg-accent' : ''}
-            >
-              <span className="flex-1">main</span>
-              {currentBranch === 'main' && <span className="ml-2 text-xs">✓</span>}
-            </DropdownMenuItem>
-          )}
+          {/* Main branch - always show so list is never empty */}
+          <DropdownMenuItem
+            onClick={() => handleSwitchBranch('main')}
+            className={currentBranch === 'main' ? 'bg-accent' : ''}
+          >
+            <span className="flex-1">{mainBranch?.name ?? 'main'}</span>
+            {currentBranch === 'main' && <span className="ml-2 text-xs">✓</span>}
+          </DropdownMenuItem>
 
           {/* Feature branches */}
           {featureBranches.length > 0 && (
@@ -91,7 +93,7 @@ export function BranchSelector({ projectId }: BranchSelectorProps) {
                   onClick={() => handleSwitchBranch(branch.id)}
                   className={currentBranch === branch.id ? 'bg-accent' : ''}
                 >
-                  <span className="flex-1 truncate">{branch.name}</span>
+                  <span className="flex-1 truncate">{branch.name || branch.id}</span>
                   {currentBranch === branch.id && <span className="ml-2 text-xs">✓</span>}
                 </DropdownMenuItem>
               ))}
