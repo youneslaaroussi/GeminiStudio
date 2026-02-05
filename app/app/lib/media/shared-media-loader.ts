@@ -6,8 +6,15 @@ import {
   UrlSource,
   VideoSampleSink,
   AudioSampleSink,
-  type VideoSample,
 } from "mediabunny";
+
+// ============================================================================
+// Constants - Fixed filmstrip dimensions (cached once per source, CSS scales to fit)
+// ============================================================================
+
+const FILMSTRIP_WIDTH = 600;
+const FILMSTRIP_HEIGHT = 40;
+const FILMSTRIP_FRAME_COUNT = 20;
 
 // ============================================================================
 // Types
@@ -22,6 +29,10 @@ export interface MediaMetadata {
 export interface FilmstripResult {
   dataUrl: string;
   sourceDuration: number;
+  /** Fixed width the filmstrip was rendered at */
+  width: number;
+  /** Fixed height the filmstrip was rendered at */
+  height: number;
 }
 
 export interface WaveformResult {
@@ -38,8 +49,6 @@ export interface ExtractionResult {
 export interface ExtractionOptions {
   needsFilmstrip?: boolean;
   needsWaveform?: boolean;
-  filmstripWidth?: number;
-  filmstripHeight?: number;
   signal?: AbortSignal;
 }
 
@@ -172,17 +181,14 @@ class SharedMediaLoaderImpl {
 
   /**
    * Request extraction for a URL (queued, deduplicated).
+   * Filmstrips are always extracted at fixed dimensions for consistent caching.
    */
   async requestExtraction(src: string, options: ExtractionOptions = {}): Promise<ExtractionResult> {
     // Check cache first
     const cached = this.getCachedResult(src);
     
-    // Check filmstrip cache with dimensions (if requesting filmstrip)
-    let cachedFilmstrip: FilmstripResult | undefined;
-    if (options.needsFilmstrip && options.filmstripWidth && options.filmstripHeight) {
-      const filmstripCacheKey = `${src}-filmstrip-${options.filmstripWidth}-${options.filmstripHeight}`;
-      cachedFilmstrip = filmstripCache.get(filmstripCacheKey);
-    }
+    // Filmstrip is cached by src only (fixed dimensions)
+    const cachedFilmstrip = options.needsFilmstrip ? filmstripCache.get(src) : undefined;
     
     const needsFilmstrip = options.needsFilmstrip && !cachedFilmstrip;
     const needsWaveform = options.needsWaveform && !cached?.waveform;
@@ -203,8 +209,6 @@ class SharedMediaLoaderImpl {
       // Merge options
       if (options.needsFilmstrip) existing.options.needsFilmstrip = true;
       if (options.needsWaveform) existing.options.needsWaveform = true;
-      if (options.filmstripWidth) existing.options.filmstripWidth = options.filmstripWidth;
-      if (options.filmstripHeight) existing.options.filmstripHeight = options.filmstripHeight;
       
       // Return a promise that resolves when the existing extraction completes
       return new Promise((resolve, reject) => {
@@ -234,20 +238,18 @@ class SharedMediaLoaderImpl {
   }
 
   /**
-   * Get cached results for a URL (metadata and waveform only).
-   * Filmstrip requires dimensions, use loadFilmstripFromCache instead.
+   * Get cached results for a URL (metadata, waveform, and filmstrip).
    */
   getCachedResult(src: string): Partial<ExtractionResult> | null {
     const metadata = metadataCache.get(src);
     const waveform = waveformCache.get(src);
+    const filmstrip = filmstripCache.get(src);
 
-    if (!metadata && !waveform) {
+    if (!metadata && !waveform && !filmstrip) {
       return null;
     }
 
-    // Note: filmstrip is NOT included here because it requires dimensions
-    // Use loadFilmstripFromCache(src, width, height) for filmstrip
-    return { metadata, waveform };
+    return { metadata, waveform, filmstrip };
   }
 
   /**
@@ -335,24 +337,14 @@ class SharedMediaLoaderImpl {
 
       if (signal?.aborted) throw new Error("Aborted");
 
-      // 2. Extract filmstrip if needed
-      const filmstripWidth = options.filmstripWidth ?? 300;
-      const filmstripHeight = options.filmstripHeight ?? 40;
-      const filmstripCacheKey = `${src}-filmstrip-${filmstripWidth}-${filmstripHeight}`;
-      let filmstrip = filmstripCache.get(filmstripCacheKey);
+      // 2. Extract filmstrip if needed (always at fixed dimensions)
+      let filmstrip = filmstripCache.get(src);
       if (options.needsFilmstrip && !filmstrip && metadata.duration > 0) {
         console.log("[SharedMediaLoader] Extracting filmstrip for:", src.slice(0, 60) + "...");
-        filmstrip = await this.extractFilmstrip(
-          src,
-          input,
-          metadata,
-          filmstripWidth,
-          filmstripHeight,
-          signal
-        );
+        filmstrip = await this.extractFilmstrip(src, input, metadata, signal);
         if (filmstrip) {
-          filmstripCache.set(filmstripCacheKey, filmstrip);
-          await putToDb(FILMSTRIP_DB_NAME, FILMSTRIP_STORE_NAME, filmstripCacheKey, filmstrip);
+          filmstripCache.set(src, filmstrip);
+          await putToDb(FILMSTRIP_DB_NAME, FILMSTRIP_STORE_NAME, src, filmstrip);
           this.notifySubscribers(src, { filmstrip });
         }
       }
@@ -377,14 +369,13 @@ class SharedMediaLoaderImpl {
   }
 
   /**
-   * Extract filmstrip frames from video.
+   * Extract filmstrip frames from video at fixed dimensions.
+   * Uses FILMSTRIP_WIDTH, FILMSTRIP_HEIGHT, and FILMSTRIP_FRAME_COUNT constants.
    */
   private async extractFilmstrip(
     src: string,
     input: Input,
     metadata: MediaMetadata,
-    width: number,
-    height: number,
     signal?: AbortSignal
   ): Promise<FilmstripResult | undefined> {
     console.log("[SharedMediaLoader] Extracting filmstrip for:", src.slice(0, 60) + "...");
@@ -392,12 +383,8 @@ class SharedMediaLoaderImpl {
     const videoTrack = await input.getPrimaryVideoTrack();
     if (!videoTrack) return undefined;
 
-    const trackWidth = metadata.width || 16;
-    const trackHeight = metadata.height || 9;
-    const aspectRatio = trackWidth / trackHeight;
-    const idealFrameCount = Math.ceil(width / (height * aspectRatio));
-    const MAX_FRAMES = 30;
-    const frameCount = Math.max(1, Math.min(idealFrameCount, MAX_FRAMES));
+    // Use fixed frame count for consistent caching
+    const frameCount = FILMSTRIP_FRAME_COUNT;
 
     const timestamps: number[] = [];
     for (let i = 0; i < frameCount; i++) {
@@ -405,16 +392,14 @@ class SharedMediaLoaderImpl {
     }
 
     const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = FILMSTRIP_WIDTH;
+    canvas.height = FILMSTRIP_HEIGHT;
     const ctx = canvas.getContext("2d");
     if (!ctx) return undefined;
 
     const sink = new VideoSampleSink(videoTrack);
     let slotIndex = 0;
-    const slotWidth = width / timestamps.length;
-    let lastUpdateTime = 0;
-    const UPDATE_INTERVAL_MS = 150;
+    const slotWidth = FILMSTRIP_WIDTH / frameCount;
 
     const iterator = sink.samplesAtTimestamps(timestamps);
     try {
@@ -429,30 +414,20 @@ class SharedMediaLoaderImpl {
         try {
           const dx = slotIndex * slotWidth;
           const sampleAspect = sample.displayWidth / sample.displayHeight;
-          const slotAspect = slotWidth / height;
+          const slotAspect = slotWidth / FILMSTRIP_HEIGHT;
           let drawWidth: number;
           let drawHeight: number;
           if (sampleAspect > slotAspect) {
-            drawHeight = height;
-            drawWidth = height * sampleAspect;
+            drawHeight = FILMSTRIP_HEIGHT;
+            drawWidth = FILMSTRIP_HEIGHT * sampleAspect;
           } else {
             drawWidth = slotWidth;
             drawHeight = slotWidth / sampleAspect;
           }
           const drawX = dx + (slotWidth - drawWidth) / 2;
-          const drawY = (height - drawHeight) / 2;
+          const drawY = (FILMSTRIP_HEIGHT - drawHeight) / 2;
           sample.draw(ctx, drawX, drawY, drawWidth, drawHeight);
           slotIndex++;
-
-          // Progressive update: notify subscribers periodically
-          const now = performance.now();
-          if (now - lastUpdateTime > UPDATE_INTERVAL_MS) {
-            lastUpdateTime = now;
-            const progressDataUrl = canvas.toDataURL("image/jpeg", 0.7);
-            this.notifySubscribers(src, {
-              filmstrip: { dataUrl: progressDataUrl, sourceDuration: metadata.duration },
-            });
-          }
         } finally {
           sample.close();
         }
@@ -471,6 +446,8 @@ class SharedMediaLoaderImpl {
     return {
       dataUrl,
       sourceDuration: metadata.duration,
+      width: FILMSTRIP_WIDTH,
+      height: FILMSTRIP_HEIGHT,
     };
   }
 
@@ -571,6 +548,17 @@ class SharedMediaLoaderImpl {
       result.metadata = metadataCache.get(src);
     }
 
+    // Try to load filmstrip (keyed by src only, fixed dimensions)
+    if (!filmstripCache.has(src)) {
+      const cached = await getFromDb<FilmstripResult>(FILMSTRIP_DB_NAME, FILMSTRIP_STORE_NAME, src);
+      if (cached && cached.dataUrl) {
+        filmstripCache.set(src, cached);
+        result.filmstrip = cached;
+      }
+    } else {
+      result.filmstrip = filmstripCache.get(src);
+    }
+
     // Try to load waveform
     if (!waveformCache.has(src)) {
       const cached = await getFromDb<WaveformResult>(WAVEFORM_DB_NAME, WAVEFORM_STORE_NAME, src);
@@ -586,24 +574,18 @@ class SharedMediaLoaderImpl {
   }
 
   /**
-   * Load filmstrip from cache with specific dimensions.
+   * Load filmstrip from cache (fixed dimensions, keyed by src only).
    */
-  async loadFilmstripFromCache(
-    src: string,
-    width: number,
-    height: number
-  ): Promise<FilmstripResult | null> {
-    const cacheKey = `${src}-filmstrip-${width}-${height}`;
-    
+  async loadFilmstripFromCache(src: string): Promise<FilmstripResult | null> {
     // Check memory first
-    if (filmstripCache.has(cacheKey)) {
-      return filmstripCache.get(cacheKey)!;
+    if (filmstripCache.has(src)) {
+      return filmstripCache.get(src)!;
     }
 
     // Try IndexedDB
-    const cached = await getFromDb<FilmstripResult>(FILMSTRIP_DB_NAME, FILMSTRIP_STORE_NAME, cacheKey);
+    const cached = await getFromDb<FilmstripResult>(FILMSTRIP_DB_NAME, FILMSTRIP_STORE_NAME, src);
     if (cached && cached.dataUrl) {
-      filmstripCache.set(cacheKey, cached);
+      filmstripCache.set(src, cached);
       return cached;
     }
 

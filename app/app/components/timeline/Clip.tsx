@@ -148,34 +148,35 @@ export function Clip({ clip, layerId }: ClipProps) {
 
   const isVideo = clip.type === "video";
   const videoSrc = isVideo ? (clip as VideoClip).src : undefined;
-  // Cache per asset only (not offset/duration) so cutting clips doesn't regenerate
-  const filmstripWidth = Math.max(50, Math.ceil(waveformWidth / 50) * 50);
-  const filmstripHeight = 40;
-  const filmstripCacheKey = isVideo
-    ? `${clip.assetId ?? clip.src}-filmstrip-${filmstripWidth}-${filmstripHeight}`
-    : undefined;
+  // Filmstrip is generated at fixed dimensions and cached once per source
+  // CSS handles scaling/cropping to fit the clip width
   const shouldLoadFilmstrip = isVideo && clipHeight >= 10;
   const {
     filmstripDataUrl,
     sourceDurationSeconds: filmstripSourceDuration,
+    filmstripWidth: fixedFilmstripWidth,
     isLoading: filmstripLoading,
   } = useFilmstrip({
     src: shouldLoadFilmstrip ? videoSrc : undefined,
-    cacheKey: filmstripCacheKey,
-    width: filmstripWidth,
-    height: filmstripHeight,
   });
-  // Crop full-asset filmstrip to this clip's segment via CSS
-  const filmstripCrop =
-    filmstripDataUrl &&
-    filmstripSourceDuration != null &&
-    filmstripSourceDuration > 0 &&
-    clip.duration > 0
-      ? {
-          imgWidth: (filmstripSourceDuration / clip.duration) * waveformWidth,
-          marginLeft: -(clip.offset / clip.duration) * waveformWidth,
-        }
-      : null;
+  
+  // Scale the fixed-size filmstrip to fit the clip width, cropping for trimmed clips
+  const filmstripStyle = useMemo(() => {
+    if (!filmstripDataUrl || !filmstripSourceDuration || filmstripSourceDuration <= 0 || !fixedFilmstripWidth) {
+      return null;
+    }
+    // Calculate how much of the source this clip shows
+    const clipVisibleDuration = clip.duration;
+    // Scale factor: how much to stretch the filmstrip to match clip width
+    const scaleFactor = (filmstripSourceDuration / clipVisibleDuration) * (waveformWidth / fixedFilmstripWidth);
+    // Offset within the scaled filmstrip
+    const offsetX = (clip.offset / filmstripSourceDuration) * fixedFilmstripWidth * scaleFactor;
+    
+    return {
+      width: fixedFilmstripWidth * scaleFactor,
+      marginLeft: -offsetX,
+    };
+  }, [filmstripDataUrl, filmstripSourceDuration, fixedFilmstripWidth, clip.duration, clip.offset, waveformWidth]);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent, action: "drag" | "resize-left" | "resize-right") => {
@@ -341,28 +342,22 @@ export function Clip({ clip, layerId }: ClipProps) {
         >
           <Trash2 className="size-3.5" />
         </button>
-        {/* Video filmstrip: full-asset strip cropped to this clip's segment */}
+        {/* Video filmstrip: fixed-size strip scaled/cropped via CSS */}
         {isVideo && (
           <div className="pointer-events-none absolute inset-[2px] rounded-sm overflow-hidden bg-black/30">
             {filmstripDataUrl ? (
-              filmstripCrop ? (
-                <img
-                  src={filmstripDataUrl}
-                  alt=""
-                  className="h-full object-cover object-center"
-                  style={{
-                    width: filmstripCrop.imgWidth,
-                    minWidth: filmstripCrop.imgWidth,
-                    marginLeft: filmstripCrop.marginLeft,
-                  }}
-                />
-              ) : (
-                <img
-                  src={filmstripDataUrl}
-                  alt=""
-                  className="h-full w-full object-cover object-center"
-                />
-              )
+              <img
+                src={filmstripDataUrl}
+                alt=""
+                className="h-full object-cover object-left"
+                style={filmstripStyle ? {
+                  width: filmstripStyle.width,
+                  minWidth: filmstripStyle.width,
+                  marginLeft: filmstripStyle.marginLeft,
+                } : {
+                  width: '100%',
+                }}
+              />
             ) : (
               filmstripLoading && (
                 <div className="h-full w-full animate-pulse bg-white/10" />
