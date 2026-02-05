@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
-import { X, Plus, MousePointer2, Play, Pause } from 'lucide-react';
+import { useCallback, useRef, useState, useEffect } from 'react';
+import { X, Plus, MousePointer2, Loader2 } from 'lucide-react';
+import { extractVideoFrameAtTimestamp } from '@/app/lib/tools/asset-utils';
 
 export interface Point {
   x: number;
@@ -105,15 +106,15 @@ export function CoordinatePicker({
   const mediaSrc = useProxy ? getProxiedMediaUrl(src) : src;
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [hoverPosition, setHoverPosition] = useState<{ x: number; y: number } | null>(null);
   const [mediaDimensions, setMediaDimensions] = useState<{ width: number; height: number } | null>(null);
 
-  // Video-specific state
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
+  // Video-specific state - using frame extraction instead of playback
+  const [currentTimestamp, setCurrentTimestamp] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [frameDataUrl, setFrameDataUrl] = useState<string | null>(null);
+  const [isExtractingFrame, setIsExtractingFrame] = useState(false);
 
   // Track the natural dimensions of the loaded media
   const handleImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -121,34 +122,62 @@ export function CoordinatePicker({
     setMediaDimensions({ width: img.naturalWidth, height: img.naturalHeight });
   }, []);
 
-  const handleVideoLoad = useCallback((e: React.SyntheticEvent<HTMLVideoElement>) => {
-    const video = e.currentTarget;
-    setMediaDimensions({ width: video.videoWidth, height: video.videoHeight });
-    setDuration(video.duration || 0);
-  }, []);
-
-  const handleTimeUpdate = useCallback(() => {
-    if (!videoRef.current) return;
-    setCurrentTime(videoRef.current.currentTime);
-  }, []);
-
-  const togglePlayPause = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!videoRef.current) return;
-    if (isPlaying) {
-      videoRef.current.pause();
-    } else {
-      videoRef.current.play();
+  // Extract video frame when timestamp changes
+  useEffect(() => {
+    if (mediaType !== 'video' || !mediaSrc) {
+      setFrameDataUrl(null);
+      return;
     }
-    setIsPlaying(!isPlaying);
-  }, [isPlaying]);
+
+    setIsExtractingFrame(true);
+    extractVideoFrameAtTimestamp(mediaSrc, currentTimestamp)
+      .then((dataUrl) => {
+        if (dataUrl) {
+          setFrameDataUrl(dataUrl);
+          // Try to get dimensions from the extracted frame
+          const img = new Image();
+          img.onload = () => {
+            setMediaDimensions({ width: img.width, height: img.height });
+            if (!duration || duration === 0) {
+              // Estimate duration if not available (default to 10s)
+              setDuration(10);
+            }
+          };
+          img.src = dataUrl;
+        }
+      })
+      .catch((err) => {
+        console.error('[CoordinatePicker] Failed to extract frame:', err);
+        setFrameDataUrl(null);
+      })
+      .finally(() => {
+        setIsExtractingFrame(false);
+      });
+  }, [mediaType, mediaSrc, currentTimestamp]);
+
+  // Get video duration from metadata if available
+  useEffect(() => {
+    if (mediaType === 'video' && mediaSrc && !duration) {
+      // Try to get duration from SharedMediaLoader
+      import('@/app/lib/media/shared-media-loader').then(({ SharedMediaLoader }) => {
+        SharedMediaLoader.requestExtraction(mediaSrc, {})
+          .then((result) => {
+            if (result.metadata?.duration) {
+              setDuration(result.metadata.duration);
+            }
+          })
+          .catch(() => {
+            // Fallback to default duration
+            setDuration(10);
+          });
+      });
+    }
+  }, [mediaType, mediaSrc, duration]);
 
   const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     e.stopPropagation();
-    if (!videoRef.current) return;
     const time = parseFloat(e.target.value);
-    videoRef.current.currentTime = time;
-    setCurrentTime(time);
+    setCurrentTimestamp(time);
   }, []);
 
   const handleClick = useCallback(
@@ -251,20 +280,27 @@ export function CoordinatePicker({
         onMouseLeave={handleMouseLeave}
         onMouseMove={handleMouseMove}
       >
-        {/* Media element - Image or Video */}
+        {/* Media element - Image or Video Frame */}
         {mediaType === 'video' ? (
-          <video
-            ref={videoRef}
-            src={mediaSrc}
-            className="absolute inset-0 h-full w-full object-contain"
-            onLoadedMetadata={handleVideoLoad}
-            onTimeUpdate={handleTimeUpdate}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            muted
-            playsInline
-            crossOrigin="anonymous"
-          />
+          <>
+            {isExtractingFrame ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-black">
+                <Loader2 className="size-8 animate-spin text-white/60" />
+              </div>
+            ) : frameDataUrl ? (
+              <img
+                src={frameDataUrl}
+                alt={alt}
+                className="absolute inset-0 h-full w-full object-contain"
+                draggable={false}
+                crossOrigin="anonymous"
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center bg-black text-white/60 text-sm">
+                Loading frame...
+              </div>
+            )}
+          </>
         ) : (
           <img
             src={mediaSrc}
@@ -276,33 +312,22 @@ export function CoordinatePicker({
           />
         )}
 
-        {/* Video Controls */}
+        {/* Video Frame Slider */}
         {mediaType === 'video' && (
           <div className="video-controls absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 pt-6">
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={togglePlayPause}
-                className="flex size-6 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30"
-              >
-                {isPlaying ? (
-                  <Pause className="size-3" />
-                ) : (
-                  <Play className="size-3 ml-0.5" />
-                )}
-              </button>
               <input
                 type="range"
                 min={0}
                 max={duration || 100}
                 step={0.1}
-                value={currentTime}
+                value={currentTimestamp}
                 onChange={handleSeek}
                 onClick={(e) => e.stopPropagation()}
                 className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-white/30 [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
               />
               <span className="min-w-[60px] text-right text-[10px] text-white/80">
-                {formatTime(currentTime)} / {formatTime(duration)}
+                {formatTime(currentTimestamp)} / {formatTime(duration)}
               </span>
             </div>
           </div>

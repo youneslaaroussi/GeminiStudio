@@ -6,6 +6,7 @@ import {
   UrlSource,
   VideoSampleSink,
   AudioSampleSink,
+  CanvasSink,
 } from "mediabunny";
 
 // ============================================================================
@@ -40,10 +41,17 @@ export interface WaveformResult {
   duration: number;
 }
 
+export interface ThumbnailResult {
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
 export interface ExtractionResult {
   metadata: MediaMetadata;
   filmstrip?: FilmstripResult;
   waveform?: WaveformResult;
+  thumbnail?: ThumbnailResult;
 }
 
 export interface ExtractionOptions {
@@ -76,6 +84,8 @@ const WAVEFORM_DB_NAME = "gemini-studio-waveforms";
 const WAVEFORM_STORE_NAME = "waveforms";
 const MEDIA_INFO_DB_NAME = "gemini-studio-media-info";
 const MEDIA_INFO_STORE_NAME = "media-info";
+const THUMBNAIL_DB_NAME = "gemini-studio-thumbnails";
+const THUMBNAIL_STORE_NAME = "thumbnails";
 
 function openDb(dbName: string, storeName: string): Promise<IDBDatabase | null> {
   if (typeof indexedDB === "undefined") return Promise.resolve(null);
@@ -131,6 +141,7 @@ async function putToDb<T>(dbName: string, storeName: string, key: string, value:
 const metadataCache = new Map<string, MediaMetadata>();
 const filmstripCache = new Map<string, FilmstripResult>();
 const waveformCache = new Map<string, WaveformResult>();
+const thumbnailCache = new Map<string, ThumbnailResult>();
 
 // ============================================================================
 // Shared Media Loader
@@ -238,18 +249,127 @@ class SharedMediaLoaderImpl {
   }
 
   /**
-   * Get cached results for a URL (metadata, waveform, and filmstrip).
+   * Get cached results for a URL (metadata, waveform, filmstrip, and thumbnail).
    */
   getCachedResult(src: string): Partial<ExtractionResult> | null {
     const metadata = metadataCache.get(src);
     const waveform = waveformCache.get(src);
     const filmstrip = filmstripCache.get(src);
+    const thumbnail = thumbnailCache.get(src);
 
-    if (!metadata && !waveform && !filmstrip) {
+    if (!metadata && !waveform && !filmstrip && !thumbnail) {
       return null;
     }
 
-    return { metadata, waveform, filmstrip };
+    return { metadata, waveform, filmstrip, thumbnail };
+  }
+
+  /**
+   * Request thumbnail extraction for a video URL (first frame at timestamp 0).
+   * Returns cached thumbnail if available, otherwise extracts and caches it.
+   */
+  async requestThumbnail(src: string, signal?: AbortSignal): Promise<ThumbnailResult | null> {
+    // Check cache first
+    const cached = thumbnailCache.get(src);
+    if (cached) {
+      return cached;
+    }
+
+    // Check IndexedDB
+    const dbCached = await getFromDb<ThumbnailResult>(THUMBNAIL_DB_NAME, THUMBNAIL_STORE_NAME, src);
+    if (dbCached && dbCached.dataUrl) {
+      thumbnailCache.set(src, dbCached);
+      return dbCached;
+    }
+
+    // Extract thumbnail
+    try {
+      const thumbnail = await this.extractThumbnail(src, signal);
+      if (thumbnail) {
+        thumbnailCache.set(src, thumbnail);
+        await putToDb(THUMBNAIL_DB_NAME, THUMBNAIL_STORE_NAME, src, thumbnail);
+      }
+      return thumbnail;
+    } catch (err) {
+      console.error("[SharedMediaLoader] Failed to extract thumbnail:", err);
+      return null;
+    }
+  }
+
+  /**
+   * Extract a single thumbnail frame from video at timestamp 0.
+   */
+  private async extractThumbnail(
+    src: string,
+    signal?: AbortSignal
+  ): Promise<ThumbnailResult | null> {
+    console.log("[SharedMediaLoader] Extracting thumbnail for:", src.slice(0, 60) + "...");
+    
+    const input = this.getInput(src);
+    
+    try {
+      const videoTrack = await input.getPrimaryVideoTrack();
+      if (!videoTrack) return null;
+
+      if (signal?.aborted) return null;
+
+      // Use CanvasSink for efficient single-frame extraction
+      // Extract at timestamp 0 (first frame)
+      const canvasSink = new CanvasSink(videoTrack, {
+        width: 160, // Reasonable thumbnail size
+        height: 90,
+        fit: "contain", // Preserve aspect ratio
+      });
+
+      const firstTimestamp = await videoTrack.getFirstTimestamp();
+      const frame = await canvasSink.getCanvas(firstTimestamp);
+      
+      if (!frame || signal?.aborted) {
+        return null;
+      }
+
+      // Convert canvas to data URL (JPEG for smaller size)
+      // Handle both HTMLCanvasElement and OffscreenCanvas
+      let dataUrl: string;
+      const canvas = frame.canvas;
+      if ("toDataURL" in canvas) {
+        // HTMLCanvasElement
+        dataUrl = (canvas as HTMLCanvasElement).toDataURL("image/jpeg", 0.85);
+      } else if ("convertToBlob" in canvas) {
+        // OffscreenCanvas - convert to blob then to data URL
+        const blob = await (canvas as OffscreenCanvas).convertToBlob({
+          type: "image/jpeg",
+          quality: 0.85,
+        });
+        dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (typeof reader.result === "string") {
+              resolve(reader.result);
+            } else {
+              reject(new Error("Failed to read thumbnail data"));
+            }
+          };
+          reader.onerror = () => reject(new Error("Failed to read thumbnail data"));
+          reader.readAsDataURL(blob);
+        });
+      } else {
+        throw new Error("Unsupported canvas type for thumbnail extraction");
+      }
+      
+      console.log("[SharedMediaLoader] Thumbnail extracted");
+
+      return {
+        dataUrl,
+        width: canvas.width,
+        height: canvas.height,
+      };
+    } catch (err) {
+      console.error("[SharedMediaLoader] Thumbnail extraction error:", err);
+      return null;
+    } finally {
+      this.releaseInput(src);
+    }
   }
 
   /**
@@ -593,12 +713,32 @@ class SharedMediaLoaderImpl {
   }
 
   /**
+   * Load thumbnail from cache.
+   */
+  async loadThumbnailFromCache(src: string): Promise<ThumbnailResult | null> {
+    // Check memory first
+    if (thumbnailCache.has(src)) {
+      return thumbnailCache.get(src)!;
+    }
+
+    // Try IndexedDB
+    const cached = await getFromDb<ThumbnailResult>(THUMBNAIL_DB_NAME, THUMBNAIL_STORE_NAME, src);
+    if (cached && cached.dataUrl) {
+      thumbnailCache.set(src, cached);
+      return cached;
+    }
+
+    return null;
+  }
+
+  /**
    * Clear all caches (for debugging/testing).
    */
   clearCaches(): void {
     metadataCache.clear();
     filmstripCache.clear();
     waveformCache.clear();
+    thumbnailCache.clear();
   }
 }
 

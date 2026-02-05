@@ -5,6 +5,8 @@ import { Loader2, Image, Video, Music, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MentionListProps, MentionListRef, MentionSuggestionItem } from "./types";
 import type { AssetType } from "@/app/types/assets";
+import { SharedMediaLoader } from "@/app/lib/media/shared-media-loader";
+import { toAbsoluteAssetUrl } from "@/app/lib/tools/asset-utils";
 
 function getAssetIcon(type: AssetType) {
   switch (type) {
@@ -19,7 +21,7 @@ function getAssetIcon(type: AssetType) {
   }
 }
 
-/** Thumbnail matching console Assets tab AssetRow - images use url, videos use video element */
+/** Thumbnail matching console Assets tab AssetRow - uses SharedMediaLoader for video thumbnails */
 const MentionThumbnail = memo(function MentionThumbnail({
   type,
   url,
@@ -30,7 +32,32 @@ const MentionThumbnail = memo(function MentionThumbnail({
   thumbnailUrl?: string;
 }) {
   const [showFallback, setShowFallback] = useState(false);
+  const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null);
+  const [isLoadingThumbnail, setIsLoadingThumbnail] = useState(false);
   const Icon = getAssetIcon(type);
+
+  // For video assets, use SharedMediaLoader to extract first frame as thumbnail
+  useEffect(() => {
+    if (type === "video" && url && !thumbnailUrl && !videoThumbnail && !isLoadingThumbnail) {
+      setIsLoadingThumbnail(true);
+      const absoluteUrl = toAbsoluteAssetUrl(url);
+      SharedMediaLoader.requestThumbnail(absoluteUrl)
+        .then((result) => {
+          if (result?.dataUrl) {
+            setVideoThumbnail(result.dataUrl);
+          } else {
+            setShowFallback(true);
+          }
+        })
+        .catch((err) => {
+          console.error("[MentionThumbnail] Failed to load thumbnail:", err);
+          setShowFallback(true);
+        })
+        .finally(() => {
+          setIsLoadingThumbnail(false);
+        });
+    }
+  }, [type, url, thumbnailUrl, videoThumbnail, isLoadingThumbnail]);
 
   if (!url && !thumbnailUrl) {
     return (
@@ -59,19 +86,33 @@ const MentionThumbnail = memo(function MentionThumbnail({
   }
 
   if (type === "video") {
-    return (
-      <div className="size-8 shrink-0 rounded bg-muted overflow-hidden flex items-center justify-center">
-        {showFallback ? (
-          <Icon className="size-4 text-muted-foreground" />
-        ) : (
-          <video
-            src={url}
+    // Use extracted thumbnail from SharedMediaLoader, or fallback to icon
+    if (videoThumbnail && !showFallback) {
+      return (
+        <div className="size-8 shrink-0 rounded bg-muted overflow-hidden flex items-center justify-center">
+          <img
+            src={videoThumbnail}
+            alt=""
             className="size-full object-cover"
-            muted
-            preload="metadata"
+            loading="lazy"
             onError={() => setShowFallback(true)}
           />
-        )}
+        </div>
+      );
+    }
+
+    // Show loading state or fallback icon
+    if (isLoadingThumbnail) {
+      return (
+        <div className="size-8 shrink-0 rounded bg-muted overflow-hidden flex items-center justify-center">
+          <Loader2 className="size-3 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+
+    return (
+      <div className="size-8 shrink-0 rounded bg-muted overflow-hidden flex items-center justify-center">
+        <Icon className="size-4 text-muted-foreground" />
       </div>
     );
   }

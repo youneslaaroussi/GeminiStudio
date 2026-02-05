@@ -117,6 +117,58 @@ export async function captureVideoFrame(asset: RemoteAsset, timecode: number) {
   }
 }
 
+/**
+ * Extract a video frame at a specific timestamp from a URL.
+ * Returns a data URL of the frame as JPEG.
+ */
+export async function extractVideoFrameAtTimestamp(
+  url: string,
+  timestamp: number
+): Promise<string | null> {
+  const absoluteUrl = toAbsoluteAssetUrl(url);
+  const input = new Input({
+    formats: ALL_FORMATS,
+    source: new UrlSource(absoluteUrl),
+  });
+  try {
+    const videoTrack = await input.getPrimaryVideoTrack();
+    if (!videoTrack) {
+      return null;
+    }
+    if (!(await videoTrack.canDecode())) {
+      return null;
+    }
+    
+    // Get first timestamp to calculate relative time
+    const firstTimestamp = await videoTrack.getFirstTimestamp();
+    const relativeTime = timestamp + firstTimestamp;
+    
+    const canvasSink = new CanvasSink(videoTrack, { poolSize: 1 });
+    const frame = await canvasSink.getCanvas(relativeTime);
+    if (!frame) {
+      return null;
+    }
+    
+    // Convert canvas to data URL (handle both HTMLCanvasElement and OffscreenCanvas)
+    const canvas = frame.canvas;
+    if ("toDataURL" in canvas) {
+      return (canvas as HTMLCanvasElement).toDataURL("image/jpeg", 0.85);
+    } else if ("convertToBlob" in canvas) {
+      const blob = await (canvas as OffscreenCanvas).convertToBlob({
+        type: "image/jpeg",
+        quality: 0.85,
+      });
+      return await blobToDataUrl(blob);
+    }
+    return null;
+  } catch (err) {
+    console.error("[extractVideoFrameAtTimestamp] Error:", err);
+    return null;
+  } finally {
+    input.dispose();
+  }
+}
+
 export async function loadImageDimensions(url: string) {
   return new Promise<{ width: number; height: number }>((resolve, reject) => {
     const image = new Image();

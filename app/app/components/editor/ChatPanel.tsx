@@ -2465,6 +2465,29 @@ function AttachmentDisplay({
 }) {
   const Icon = getAttachmentIcon(attachment.category);
   const previewUrl = attachment.signedUrl || attachment.localUrl;
+  const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null);
+  const [isLoadingThumbnail, setIsLoadingThumbnail] = useState(false);
+
+  // For video, extract first frame as thumbnail
+  useEffect(() => {
+    if (attachment.category === "video" && previewUrl && !videoThumbnail && !isLoadingThumbnail) {
+      setIsLoadingThumbnail(true);
+      import("@/app/lib/tools/asset-utils").then(({ extractVideoFrameAtTimestamp }) => {
+        extractVideoFrameAtTimestamp(previewUrl, 0)
+          .then((dataUrl) => {
+            if (dataUrl) {
+              setVideoThumbnail(dataUrl);
+            }
+          })
+          .catch((err) => {
+            console.error("[AttachmentDisplay] Failed to extract thumbnail:", err);
+          })
+          .finally(() => {
+            setIsLoadingThumbnail(false);
+          });
+      });
+    }
+  }, [attachment.category, previewUrl, videoThumbnail, isLoadingThumbnail]);
 
   // For images, show thumbnail
   if (attachment.category === "image" && previewUrl) {
@@ -2485,16 +2508,25 @@ function AttachmentDisplay({
     );
   }
 
-  // For video, show with play icon
+  // For video, show first frame thumbnail
   if (attachment.category === "video" && previewUrl) {
     return (
       <div className="rounded-lg overflow-hidden border border-border/50 max-w-[200px]">
-        <video
-          src={previewUrl}
-          className="max-h-32 w-auto"
-          controls
-          preload="metadata"
-        />
+        {isLoadingThumbnail ? (
+          <div className="flex items-center justify-center max-h-32 bg-muted/50">
+            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          </div>
+        ) : videoThumbnail ? (
+          <img
+            src={videoThumbnail}
+            alt={attachment.name}
+            className="max-h-32 w-auto object-cover"
+          />
+        ) : (
+          <div className="flex items-center justify-center max-h-32 bg-muted/50">
+            <Icon className="size-8 text-muted-foreground" />
+          </div>
+        )}
         <div className={cn(
           "px-2 py-1 text-[10px] truncate",
           isUser ? "bg-primary-foreground/10" : "bg-muted/50"

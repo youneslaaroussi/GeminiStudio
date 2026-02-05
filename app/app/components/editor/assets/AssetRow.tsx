@@ -39,6 +39,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatBytes, formatDuration } from "./utils";
+import { SharedMediaLoader } from "@/app/lib/media/shared-media-loader";
+import { toAbsoluteAssetUrl } from "@/app/lib/tools/asset-utils";
 
 function AssetIcon({ type }: { type: RemoteAsset["type"] }) {
   if (type === "video")
@@ -61,6 +63,31 @@ const AssetThumbnail = memo(function AssetThumbnail({
   thumbnailUrl?: string;
 }) {
   const [showFallback, setShowFallback] = useState(false);
+  const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null);
+  const [isLoadingThumbnail, setIsLoadingThumbnail] = useState(false);
+
+  // For video assets, use SharedMediaLoader to extract first frame as thumbnail
+  useEffect(() => {
+    if (type === "video" && !thumbnailUrl && !videoThumbnail && !isLoadingThumbnail) {
+      setIsLoadingThumbnail(true);
+      const absoluteUrl = toAbsoluteAssetUrl(url);
+      SharedMediaLoader.requestThumbnail(absoluteUrl)
+        .then((result) => {
+          if (result?.dataUrl) {
+            setVideoThumbnail(result.dataUrl);
+          } else {
+            setShowFallback(true);
+          }
+        })
+        .catch((err) => {
+          console.error("[AssetThumbnail] Failed to load thumbnail:", err);
+          setShowFallback(true);
+        })
+        .finally(() => {
+          setIsLoadingThumbnail(false);
+        });
+    }
+  }, [type, url, thumbnailUrl, videoThumbnail, isLoadingThumbnail]);
 
   if (type === "image" && !showFallback) {
     return (
@@ -81,22 +108,40 @@ const AssetThumbnail = memo(function AssetThumbnail({
     );
   }
 
-  if (type === "video" && !showFallback) {
+  if (type === "video") {
+    // Use extracted thumbnail from SharedMediaLoader, or fallback to icon
+    if (videoThumbnail && !showFallback) {
+      return (
+        <>
+          <img
+            src={videoThumbnail}
+            alt=""
+            className="size-full object-cover"
+            loading="lazy"
+            onError={() => setShowFallback(true)}
+          />
+          {showFallback && (
+            <div className="flex items-center justify-center">
+              <AssetIcon type={type} />
+            </div>
+          )}
+        </>
+      );
+    }
+
+    // Show loading state or fallback icon
+    if (isLoadingThumbnail) {
+      return (
+        <div className="flex items-center justify-center size-full">
+          <Loader2 className="size-4 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+
     return (
-      <>
-        <video
-          src={url}
-          className="size-full object-cover"
-          muted
-          preload="metadata"
-          onError={() => setShowFallback(true)}
-        />
-        {showFallback && (
-          <div className="flex items-center justify-center">
-            <AssetIcon type={type} />
-          </div>
-        )}
-      </>
+      <div className="flex items-center justify-center size-full">
+        <AssetIcon type={type} />
+      </div>
     );
   }
 

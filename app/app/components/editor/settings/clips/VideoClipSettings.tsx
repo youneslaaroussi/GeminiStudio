@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { EditableInput } from "@/app/components/ui/EditableInput";
 import type { VideoClip, MaskMode, VisualEffectType, ColorGradingSettings, ChromaKeySettings } from "@/app/types/timeline";
 import { DEFAULT_COLOR_GRADING } from "@/app/types/timeline";
+import { extractVideoFrameAtTimestamp } from "@/app/lib/tools/asset-utils";
+import { Loader2 } from "lucide-react";
 
 const VISUAL_EFFECT_OPTIONS: { value: VisualEffectType; label: string }[] = [
   { value: "none", label: "None" },
@@ -171,6 +173,37 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
     if (!clip.maskAssetId) return null;
     return assets.find((a) => a.id === clip.maskAssetId) ?? null;
   }, [assets, clip.maskAssetId]);
+
+  // Frame extraction state for mask preview
+  const [maskFrameTimestamp, setMaskFrameTimestamp] = useState(0);
+  const [maskFrameDataUrl, setMaskFrameDataUrl] = useState<string | null>(null);
+  const [isExtractingMaskFrame, setIsExtractingMaskFrame] = useState(false);
+  const maskAssetMetadata = useAssetsStore((s) => s.metadata[clip.maskAssetId ?? ""]);
+  const maskDuration = maskAssetMetadata?.duration ?? selectedMaskAsset?.duration ?? 10;
+
+  // Extract frame when timestamp changes
+  useEffect(() => {
+    if (!selectedMaskAsset) {
+      setMaskFrameDataUrl(null);
+      return;
+    }
+
+    const url = selectedMaskAsset.signedUrl || selectedMaskAsset.url;
+    if (!url) return;
+
+    setIsExtractingMaskFrame(true);
+    extractVideoFrameAtTimestamp(url, maskFrameTimestamp)
+      .then((dataUrl) => {
+        setMaskFrameDataUrl(dataUrl);
+      })
+      .catch((err) => {
+        console.error("[VideoClipSettings] Failed to extract mask frame:", err);
+        setMaskFrameDataUrl(null);
+      })
+      .finally(() => {
+        setIsExtractingMaskFrame(false);
+      });
+  }, [selectedMaskAsset, maskFrameTimestamp]);
 
   return (
     <div className="space-y-3">
@@ -400,16 +433,42 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
                   <p className="text-[10px] text-muted-foreground">
                     Using: <span className="text-foreground">{selectedMaskAsset.name}</span>
                   </p>
-                  {/* Mask thumbnail preview */}
-                  <div className="relative rounded-md overflow-hidden bg-black aspect-video">
-                    <video
-                      src={selectedMaskAsset.signedUrl || selectedMaskAsset.url}
-                      className="w-full h-full object-contain"
-                      muted
-                      loop
-                      autoPlay
-                      playsInline
-                    />
+                  {/* Mask frame preview with slider */}
+                  <div className="space-y-2">
+                    <div className="relative rounded-md overflow-hidden bg-black aspect-video">
+                      {isExtractingMaskFrame ? (
+                        <div className="flex items-center justify-center w-full h-full">
+                          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                        </div>
+                      ) : maskFrameDataUrl ? (
+                        <img
+                          src={maskFrameDataUrl}
+                          alt="Mask preview"
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center w-full h-full text-muted-foreground text-xs">
+                          No frame available
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                        <span>Frame position</span>
+                        <span className="tabular-nums">
+                          {maskFrameTimestamp.toFixed(1)}s / {maskDuration.toFixed(1)}s
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={maskDuration}
+                        step={0.1}
+                        value={maskFrameTimestamp}
+                        onChange={(e) => setMaskFrameTimestamp(Number(e.target.value))}
+                        className="w-full h-2 rounded accent-primary cursor-pointer"
+                      />
+                    </div>
                   </div>
                 </div>
               )}
