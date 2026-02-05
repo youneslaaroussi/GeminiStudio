@@ -84,6 +84,17 @@ def sendAttachment(
 
     asset_name = asset.get("name") or asset.get("fileName") or f"{asset_id}.bin"
     mime_type = asset.get("mimeType", "application/octet-stream")
+    file_size = asset.get("size", 0)
+
+    # Telegram bot upload limit is 50MB
+    MAX_SIZE = 50 * 1024 * 1024  # 50MB
+    if file_size > MAX_SIZE:
+        size_mb = file_size / (1024 * 1024)
+        return {
+            "status": "error",
+            "message": f"File too large ({size_mb:.1f}MB). Telegram limit is 50MB.",
+            "reason": "file_too_large",
+        }
 
     # Step 2: Download the file from GCS
     try:
