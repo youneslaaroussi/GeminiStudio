@@ -150,9 +150,18 @@ class RenderEventSubscriber:
         metadata = event.get("metadata") or {}
         agent_meta = metadata.get("agent") or {}
 
+        tags = metadata.get("tags") or []
+        extra_meta = metadata.get("extra") or {}
+        is_preview_job = "preview" in tags or extra_meta.get("previewMode")
         thread_id = agent_meta.get("threadId")
         if not thread_id:
             logger.debug("Skipping render event without thread context: job_id=%s", job_id)
+            return
+        if is_preview_job:
+            logger.info(
+                "Skipping render event for preview job (watchVideo/internal). job_id=%s",
+                job_id,
+            )
             return
 
         configurable: Dict[str, str] = {"thread_id": thread_id}
