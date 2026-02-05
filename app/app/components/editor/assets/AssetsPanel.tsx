@@ -195,7 +195,9 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
   }, [displayedAssets, assetTypeFilter, sortBy]);
 
   // Pipeline states for all assets (for Jobs tab)
-  const { states: pipelineStates, refresh: refreshPipelineStates } = usePipelineStates(projectId);
+  const { states: pipelineStates, refresh: refreshPipelineStates } = usePipelineStates(projectId, {
+    enabled: !!projectId,
+  });
 
   const addClip = useProjectStore((s) => s.addClip);
   const getDuration = useProjectStore((s) => s.getDuration);
@@ -444,8 +446,11 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
       } else {
         addClip(createImageClip(asset.url, name, start, 5, clipOptions));
       }
+
+      // Refresh pipeline states so captions appear when transcription completes
+      void refreshPipelineStates();
     },
-    [addClip, getDuration, resolveAssetDuration, metadata]
+    [addClip, getDuration, resolveAssetDuration, metadata, refreshPipelineStates]
   );
 
 

@@ -57,9 +57,9 @@ The timeline and scene use a **center-based coordinate system**. When you set po
 
 - **Origin**: (0, 0) is the **center** of the frame, not the bottom-left or top-left.
 - **X axis**: Negative = left of center, positive = right of center (units are pixels from center).
-- **Y axis**: Negative = **below** center (lower part of the frame), positive = **above** center (upper part of the frame).
+- **Y axis**: **Positive** = **below** center (lower part of the frame), **negative** = **above** center (upper part of the frame). So y increases downward: top of frame is negative y (e.g. for 1080p, y ≈ -540 at top), bottom is positive y (y ≈ +540 at bottom).
 
-So "bottom" of the frame is negative y (e.g. for 1080p, y ≈ -540 at the bottom); "top" is positive y. Do not assume (0, 0) is at the bottom or top-left—it is always the center.
+Do not assume (0, 0) is at the bottom or top-left—it is always the center. Do not assume "up" is positive y—in this system, positive y is down.
 
 ## Tool Usage Guidelines
 

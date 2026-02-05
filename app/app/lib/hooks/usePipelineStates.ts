@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import equal from "fast-deep-equal";
-import { getAuthHeaders } from "./useAuthFetch";
+import { useEffect } from "react";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "@/app/lib/server/firebase";
+import { useAuth } from "@/app/lib/hooks/useAuth";
+import { useAssetsStore } from "@/app/lib/store/assets-store";
+import { usePipelineStatesStore } from "@/app/lib/store/pipeline-states-store";
 import type { PipelineStepState } from "@/app/types/pipeline";
 
 export interface PipelineState {
@@ -12,9 +15,7 @@ export interface PipelineState {
 }
 
 interface UsePipelineStatesOptions {
-  /** Polling interval in milliseconds. Default: 20000 */
-  interval?: number;
-  /** Whether polling is enabled. Default: true */
+  /** Whether listening is enabled. Default: true */
   enabled?: boolean;
 }
 
@@ -29,105 +30,83 @@ interface UsePipelineStatesResult {
 }
 
 /**
- * Hook for fetching and polling all pipeline states for a project.
+ * Hook for real-time pipeline states via Firestore listeners.
+ * No polling - asset service writes pipeline state to Firestore when steps complete,
+ * so caption updates appear instantly in timeline/preview.
  */
 export function usePipelineStates(
   projectId: string | null,
   options: UsePipelineStatesOptions = {}
 ): UsePipelineStatesResult {
-  const { interval = 20000, enabled = true } = options;
+  const { enabled = true } = options;
 
-  const [states, setStates] = useState<Record<string, PipelineStepState[]>>({});
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const userId = user?.uid ?? null;
+  const assets = useAssetsStore((s) => s.assets);
 
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const prevStatesRef = useRef<Record<string, PipelineStepState[]> | null>(null);
-
-  const fetchStates = useCallback(async () => {
-    if (!projectId) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const authHeaders = await getAuthHeaders();
-      const url = new URL("/api/pipeline", window.location.origin);
-      url.searchParams.set("projectId", projectId);
-
-      const response = await fetch(url.toString(), {
-        headers: authHeaders,
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error("Unauthorized");
-        }
-        throw new Error("Failed to fetch pipeline states");
-      }
-
-      const data = await response.json();
-      const statesMap: Record<string, PipelineStepState[]> = {};
-
-      for (const state of data.states || []) {
-        statesMap[state.assetId] = state.steps;
-      }
-
-      const prev = prevStatesRef.current;
-      const deepChanged = prev === null ? true : !equal(prev, statesMap);
-      if (prev !== null) {
-        console.log("[usePipelineStates] poll: config deep changed =", deepChanged);
-      }
-      prevStatesRef.current = statesMap;
-
-      if (deepChanged) {
-        setStates(statesMap);
-      }
-    } catch (err) {
-      console.error("Pipeline states fetch error:", err);
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [projectId]);
-
-  // Check if any assets have active jobs
+  const states = usePipelineStatesStore((s) => s.states);
+  const isLoading = usePipelineStatesStore((s) => s.isLoading);
+  const error = usePipelineStatesStore((s) => s.error);
+  const refresh = usePipelineStatesStore((s) => s.refresh);
   const hasActiveJobs = Object.values(states).some((steps) =>
     steps.some((step) => step.status === "running" || step.status === "waiting")
   );
 
-  // Set up polling
+  const assetIds = assets.map((a) => a.id).sort().join(",");
+
   useEffect(() => {
-    if (!enabled || !projectId) {
+    if (!enabled || !projectId || !userId) {
+      usePipelineStatesStore.getState().setProjectId(null);
       return;
     }
 
-    // Initial fetch
-    fetchStates();
+    usePipelineStatesStore.getState().setProjectId(projectId);
 
-    // Start polling
-    intervalRef.current = setInterval(fetchStates, interval);
+    const ids = assetIds ? assetIds.split(",") : [];
+    if (ids.length === 0) {
+      return;
+    }
+
+    const unsubscribes: (() => void)[] = [];
+
+    for (const assetId of ids) {
+      const stateRef = doc(
+        db,
+        "users",
+        userId,
+        "projects",
+        projectId,
+        "assets",
+        assetId,
+        "pipeline",
+        "state"
+      );
+
+      const unsub = onSnapshot(
+        stateRef,
+        (snap) => {
+          if (!snap.exists()) return;
+          const data = snap.data();
+          const steps = (data?.steps ?? []) as PipelineStepState[];
+          usePipelineStatesStore.getState().upsertAssetState(assetId, steps);
+        },
+        (err) => {
+          console.error(`Pipeline state listener error for asset ${assetId}:`, err);
+        }
+      );
+      unsubscribes.push(unsub);
+    }
 
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      unsubscribes.forEach((u) => u());
     };
-  }, [enabled, projectId, interval, fetchStates]);
-
-  // Reset state when project changes
-  useEffect(() => {
-    setStates({});
-    setError(null);
-    prevStatesRef.current = null;
-  }, [projectId]);
+  }, [enabled, projectId, userId, assetIds]);
 
   return {
     states,
     isLoading,
     error,
     hasActiveJobs,
-    refresh: fetchStates,
+    refresh,
   };
 }

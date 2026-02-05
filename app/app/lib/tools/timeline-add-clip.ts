@@ -181,7 +181,7 @@ export const timelineAddClipTool: ToolDefinition<
       type: "json",
       placeholder: '{"x":0,"y":0}',
       description:
-        "Scene position as { x, y } in pixels. Uses center origin: (0,0) is center of frame; x positive = right, negative = left; y positive = above center (top), negative = below center (bottom).",
+        "Scene position as { x, y } in pixels. Center origin: (0,0) = center; x positive = right, negative = left; y positive = down (below center, bottom of frame), negative = up (above center, top of frame).",
     },
     {
       name: "scale",
@@ -449,6 +449,12 @@ export const timelineAddClipTool: ToolDefinition<
     }
 
     store.addClip(clip, input.layerId);
+
+    // Refresh pipeline states so captions appear when transcription completes
+    if (resolvedType === "video" || resolvedType === "audio") {
+      const { usePipelineStatesStore } = await import("@/app/lib/store/pipeline-states-store");
+      void usePipelineStatesStore.getState().refresh();
+    }
 
     const outputs: ToolOutput[] = [
       {
