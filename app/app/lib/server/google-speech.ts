@@ -8,7 +8,6 @@ const MODEL = process.env.SPEECH_MODEL || DEFAULT_SPEECH_MODEL;
 const SERVICE_ACCOUNT_KEY =
   process.env.SPEECH_SERVICE_ACCOUNT_KEY ||
   process.env.GOOGLE_SERVICE_ACCOUNT_KEY ||
-  process.env.VEO_SERVICE_ACCOUNT_KEY ||
   process.env.ASSET_SERVICE_ACCOUNT_KEY;
 const LANGUAGE_CODES = (process.env.SPEECH_LANGUAGE_CODES || "en-US")
   .split(",")
@@ -30,7 +29,7 @@ function assertSpeechEnv(): void {
     throw new Error("SPEECH_PROJECT_ID (or VEO_PROJECT_ID / GOOGLE_CLOUD_PROJECT) is not configured");
   }
   if (!SERVICE_ACCOUNT_KEY) {
-    throw new Error("SPEECH_SERVICE_ACCOUNT_KEY (or GOOGLE_SERVICE_ACCOUNT_KEY / VEO_SERVICE_ACCOUNT_KEY) is not configured");
+    throw new Error("SPEECH_SERVICE_ACCOUNT_KEY (or GOOGLE_SERVICE_ACCOUNT_KEY) is not configured");
   }
   if (!BUCKET) {
     throw new Error("SPEECH_GCS_BUCKET is not configured");

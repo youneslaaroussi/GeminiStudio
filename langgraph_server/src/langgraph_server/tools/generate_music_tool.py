@@ -169,12 +169,12 @@ def _get_credentials_from_key(key_value: str | None) -> service_account.Credenti
 
 def _get_vertex_access_token(settings: Settings) -> str | None:
     """Get an access token for Vertex AI with cloud-platform scope (same as app Lyria).
-    Prefer LYRIA_SERVICE_ACCOUNT_KEY then VEO_SERVICE_ACCOUNT_KEY then FIREBASE_SERVICE_ACCOUNT_KEY.
+    Prefer LYRIA_SERVICE_ACCOUNT_KEY then GOOGLE_SERVICE_ACCOUNT_KEY then FIREBASE_SERVICE_ACCOUNT_KEY.
     """
     creds = None
     for key_value in (
         getattr(settings, "lyria_service_account_key", None),
-        getattr(settings, "veo_service_account_key", None),
+        getattr(settings, "google_service_account_key", None),
         settings.firebase_service_account_key,
     ):
         creds = _get_credentials_from_key(key_value)

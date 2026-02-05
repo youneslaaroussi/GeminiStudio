@@ -19,18 +19,16 @@ const BASE_URL = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PR
 const PREDICT_URL = `${BASE_URL}:predictLongRunning`;
 const FETCH_URL = `${BASE_URL}:fetchPredictOperation`;
 
-const VEO_SERVICE_ACCOUNT_ENV = ["VEO_SERVICE_ACCOUNT_KEY"] as const;
-
 function assertEnv() {
   if (!PROJECT_ID) {
     throw new Error("VEO_PROJECT_ID is not configured");
   }
-  assertGoogleCredentials({ preferredEnvVars: [...VEO_SERVICE_ACCOUNT_ENV] });
+  assertGoogleCredentials();
 }
 
 async function getAccessToken() {
   assertEnv();
-  const creds = parseGoogleServiceAccount({ preferredEnvVars: [...VEO_SERVICE_ACCOUNT_ENV] });
+  const creds = parseGoogleServiceAccount();
   const auth = new GoogleAuth({
     credentials: creds,
     scopes: ["https://www.googleapis.com/auth/cloud-platform"],

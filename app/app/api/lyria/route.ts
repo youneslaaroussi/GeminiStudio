@@ -17,7 +17,7 @@ const MODEL_ID = LYRIA_MODEL;
 const BASE_URL = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${MODEL_ID}`;
 const PREDICT_URL = `${BASE_URL}:predict`;
 
-const LYRIA_SERVICE_ACCOUNT_ENV = ["LYRIA_SERVICE_ACCOUNT_KEY", "VEO_SERVICE_ACCOUNT_KEY"] as const;
+const LYRIA_SERVICE_ACCOUNT_ENV = ["LYRIA_SERVICE_ACCOUNT_KEY", "GOOGLE_SERVICE_ACCOUNT_KEY"] as const;
 
 async function verifyToken(request: NextRequest): Promise<string | null> {
   const authHeader = request.headers.get("authorization");

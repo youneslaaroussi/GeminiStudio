@@ -57,7 +57,6 @@ services:
       # Service accounts
       - FIREBASE_SERVICE_ACCOUNT_KEY=/app/secrets/firebase-service-account.json
       - GOOGLE_SERVICE_ACCOUNT_KEY=/app/secrets/google-service-account.json
-      - VEO_SERVICE_ACCOUNT_KEY=/app/secrets/google-service-account.json
       - SPEECH_SERVICE_ACCOUNT_KEY=/app/secrets/google-service-account.json
       # Veo configuration
       - VEO_PROJECT_ID=${GOOGLE_PROJECT_ID}
@@ -215,7 +214,6 @@ services:
       - LYRIA_MODEL=${LYRIA_MODEL:-lyria-002}
       - LYRIA_LOCATION=${LYRIA_LOCATION:-us-central1}
       - LYRIA_SERVICE_ACCOUNT_KEY=${LYRIA_SERVICE_ACCOUNT_KEY:-/app/secrets/google-service-account.json}
-      - VEO_SERVICE_ACCOUNT_KEY=${VEO_SERVICE_ACCOUNT_KEY:-/app/secrets/google-service-account.json}
       # Telegram
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET:-}
