@@ -9,6 +9,7 @@ Use **watchVideo()** to render a fast preview (360p @ 10fps) and watch it direct
 - Check for: timing issues, awkward cuts, music sync, pacing problems
 - If issues found, make adjustments and call watchVideo() again to verify
 - Once satisfied, report to the user and offer a final production render
+- These previews are for YOUR internal review only. Do NOT call sendAttachment or otherwise share them unless the user explicitly asks for the file.
 
 This single tool handles render + watching in one step.
 

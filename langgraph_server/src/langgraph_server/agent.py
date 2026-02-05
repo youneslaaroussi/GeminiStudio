@@ -20,7 +20,7 @@ from .tools import get_registered_tools, get_tools_by_name
 logger = logging.getLogger(__name__)
 
 
-def _build_media_message(result: dict[str, Any]) -> HumanMessage | None:
+def _build_media_message(result: dict[str, Any], source_tool: str | None = None) -> HumanMessage | None:
     """Build a HumanMessage with media content for injection after tool result.
     
     When a tool returns _injectMedia: True, we need to inject the media as a
@@ -37,9 +37,16 @@ def _build_media_message(result: dict[str, Any]) -> HumanMessage | None:
     asset_name = result.get("assetName", "asset")
     start_offset = result.get("startOffset")
     end_offset = result.get("endOffset")
+    preview_only = source_tool == "watchVideo"
     
     # Build text description
-    if start_offset or end_offset:
+    if preview_only:
+        text = (
+            f"INTERNAL PREVIEW for '{asset_name}'. "
+            "This video is only for your self-review of the timeline. "
+            "Do NOT call sendAttachment or share the file with the user unless they explicitly request it."
+        )
+    elif start_offset or end_offset:
         text = f"Here is the video segment ({start_offset or '0s'} - {end_offset or 'end'}) for '{asset_name}':"
     else:
         text = f"Here is the media '{asset_name}':"
@@ -59,6 +66,8 @@ def _build_media_message(result: dict[str, Any]) -> HumanMessage | None:
     # Note: This may require langchain-google-genai support for videoMetadata
     if start_offset or end_offset:
         logger.info("[AGENT] Media injection with time range: %s - %s", start_offset, end_offset)
+    if preview_only:
+        logger.info("[AGENT] watchVideo preview marked as internal-only media injection")
     
     return HumanMessage(content=content)
 
@@ -143,7 +152,7 @@ def create_graph(settings: Settings | None = None):
                     # We inject media as HumanMessage after ToolMessage because Gemini
                     # doesn't support multimodal content in function responses
                     if isinstance(result, dict) and result.get("_injectMedia"):
-                        media_msg = _build_media_message(result)
+                        media_msg = _build_media_message(result, source_tool=tool_name)
                         if media_msg:
                             media_to_inject.append(media_msg)
                             logger.info("[AGENT] Media injection queued for: %s", result.get("assetName"))
