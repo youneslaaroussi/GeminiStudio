@@ -8,6 +8,8 @@ from typing import Annotated, Any, Dict, Literal, Optional
 import httpx
 from langchain_core.tools import tool, InjectedToolArg
 
+from ..hmac_auth import get_asset_service_headers
+
 logger = logging.getLogger(__name__)
 
 
@@ -60,11 +62,16 @@ def sendAttachment(
         return {"status": "error", "message": "Telegram bot token not configured.", "reason": "no_token"}
 
     # Fetch asset to get signed URL
+    if not settings.asset_service_url:
+        return {"status": "error", "message": "Asset service not configured.", "reason": "no_asset_service"}
+
     try:
-        asset_service_url = getattr(settings, 'asset_service_url', None) or "http://asset-service:8081"
+        endpoint = f"{settings.asset_service_url.rstrip('/')}/api/assets/{user_id}/{project_id}/{asset_id.strip()}"
+        headers = get_asset_service_headers("")
         with httpx.Client(timeout=30.0) as client:
-            resp = client.get(f"{asset_service_url}/api/assets/{user_id}/{project_id}/{asset_id.strip()}")
+            resp = client.get(endpoint, headers=headers)
             if resp.status_code != 200:
+                logger.warning("[SEND_ATTACHMENT] Asset fetch failed: %d %s", resp.status_code, resp.text[:200])
                 return {"status": "error", "message": f"Asset not found: {asset_id}", "reason": "asset_not_found"}
             asset = resp.json()
     except Exception as e:
