@@ -61,62 +61,78 @@ def sendAttachment(
     if not settings.telegram_bot_token:
         return {"status": "error", "message": "Telegram bot token not configured.", "reason": "no_token"}
 
-    # Fetch asset to get signed URL
     if not settings.asset_service_url:
         return {"status": "error", "message": "Asset service not configured.", "reason": "no_asset_service"}
 
+    # Step 1: Fetch asset metadata
     try:
         endpoint = f"{settings.asset_service_url.rstrip('/')}/api/assets/{user_id}/{project_id}/{asset_id.strip()}"
         headers = get_asset_service_headers("")
         with httpx.Client(timeout=30.0) as client:
             resp = client.get(endpoint, headers=headers)
             if resp.status_code != 200:
-                logger.warning("[SEND_ATTACHMENT] Asset fetch failed: %d %s", resp.status_code, resp.text[:200])
+                logger.warning("[SEND_ATTACHMENT] Asset fetch failed: %d", resp.status_code)
                 return {"status": "error", "message": f"Asset not found: {asset_id}", "reason": "asset_not_found"}
             asset = resp.json()
     except Exception as e:
-        logger.exception("[SEND_ATTACHMENT] Failed to fetch asset")
+        logger.exception("[SEND_ATTACHMENT] Failed to fetch asset metadata")
         return {"status": "error", "message": f"Failed to fetch asset: {e}", "reason": "fetch_failed"}
 
     signed_url = asset.get("signedUrl")
     if not signed_url:
         return {"status": "error", "message": "Asset has no signed URL.", "reason": "no_url"}
 
-    asset_name = asset.get("name", asset_id)
+    asset_name = asset.get("name") or asset.get("fileName") or f"{asset_id}.bin"
+    mime_type = asset.get("mimeType", "application/octet-stream")
 
-    # Map type to Telegram endpoint
+    # Step 2: Download the file from GCS
+    try:
+        logger.info("[SEND_ATTACHMENT] Downloading %s (%s)", asset_name, mime_type)
+        with httpx.Client(timeout=120.0) as client:
+            resp = client.get(signed_url, follow_redirects=True)
+            if resp.status_code != 200:
+                logger.warning("[SEND_ATTACHMENT] GCS download failed: %d", resp.status_code)
+                return {"status": "error", "message": "Failed to download file from storage.", "reason": "download_failed"}
+            file_bytes = resp.content
+            logger.info("[SEND_ATTACHMENT] Downloaded %d bytes", len(file_bytes))
+    except Exception as e:
+        logger.exception("[SEND_ATTACHMENT] Failed to download file")
+        return {"status": "error", "message": f"Download failed: {e}", "reason": "download_failed"}
+
+    # Step 3: Upload to Telegram
     telegram_base_url = f"https://api.telegram.org/bot{settings.telegram_bot_token}"
+
+    # Choose endpoint based on type
     if type == "video":
         endpoint = f"{telegram_base_url}/sendVideo"
-        media_key = "video"
+        file_key = "video"
     elif type == "image":
         endpoint = f"{telegram_base_url}/sendPhoto"
-        media_key = "photo"
-    else:  # audio - use document for any format
+        file_key = "photo"
+    else:  # audio
         endpoint = f"{telegram_base_url}/sendDocument"
-        media_key = "document"
-
-    payload = {
-        "chat_id": telegram_chat_id,
-        media_key: signed_url,
-    }
-    if caption:
-        payload["caption"] = caption[:1024]
+        file_key = "document"
 
     try:
-        with httpx.Client(timeout=60.0) as client:
-            response = client.post(endpoint, json=payload)
+        logger.info("[SEND_ATTACHMENT] Uploading to Telegram as %s", file_key)
+        with httpx.Client(timeout=120.0) as client:
+            files = {file_key: (asset_name, file_bytes, mime_type)}
+            data = {"chat_id": telegram_chat_id}
+            if caption:
+                data["caption"] = caption[:1024]
 
-            if response.status_code == 200:
-                result = response.json().get("result", {})
+            resp = client.post(endpoint, files=files, data=data)
+
+            if resp.status_code == 200:
+                result = resp.json().get("result", {})
                 message_id = result.get("message_id")
-                logger.info("[SEND_ATTACHMENT] Sent %s '%s' to %s", type, asset_name, telegram_chat_id)
+                logger.info("[SEND_ATTACHMENT] Sent %s to %s, message_id=%s", asset_name, telegram_chat_id, message_id)
                 return {"status": "success", "type": type, "asset_name": asset_name, "message": f"Sent {asset_name}."}
             else:
-                error_text = response.text[:300]
-                logger.warning("[SEND_ATTACHMENT] Failed (status=%d): %s", response.status_code, error_text)
-                return {"status": "error", "message": f"Telegram rejected: {error_text[:100]}", "reason": "telegram_error"}
+                error_text = resp.text[:200]
+                logger.warning("[SEND_ATTACHMENT] Telegram upload failed: %d %s", resp.status_code, error_text)
+                return {"status": "error", "message": f"Telegram rejected: {error_text[:80]}", "reason": "telegram_error"}
 
     except Exception as e:
-        logger.exception("[SEND_ATTACHMENT] Error sending")
-        return {"status": "error", "message": f"Error: {str(e)}", "reason": "exception"}
+        logger.exception("[SEND_ATTACHMENT] Failed to upload to Telegram")
+        return {"status": "error", "message": f"Upload failed: {e}", "reason": "upload_failed"}
