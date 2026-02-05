@@ -43,21 +43,14 @@ output "gcs_bucket" {
   value       = var.gcs_bucket_name
 }
 
-output "generated_env_file" {
-  description = "Path to the generated .env file"
-  value       = "${path.module}/../generated.env"
-}
-
 output "next_steps" {
   description = "Next steps after terraform apply"
   value       = <<-EOT
     
     Infrastructure created! Next steps:
     
-    1. Ensure secrets are in Secret Manager:
-       gcloud secrets versions access latest --secret=gemini-api-key
-       gcloud secrets versions access latest --secret=stripe-secret-key
-       gcloud secrets versions access latest --secret=replicate-api-token
+    1. Copy deploy/.env to VM (create from deploy/.env.example, all vars come from docker-compose + .env):
+       gcloud compute scp deploy/.env ${google_compute_instance.gemini_studio.name}:/opt/gemini-studio/deploy/.env --zone=${var.zone} --project=${var.project_id}
     
     2. Copy service account JSON to VM:
        gcloud compute scp /path/to/service-account.json ${google_compute_instance.gemini_studio.name}:/opt/gemini-studio/deploy/secrets/service-account.json --zone=${var.zone} --project=${var.project_id}

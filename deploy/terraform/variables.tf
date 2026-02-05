@@ -1,4 +1,5 @@
 # GeminiStudio Terraform Variables
+# Secrets and env vars are managed via deploy/.env and docker-compose - Terraform only manages infrastructure.
 
 # =============================================================================
 # Required Variables
@@ -37,9 +38,9 @@ variable "instance_name" {
 }
 
 variable "machine_type" {
-  description = "GCE machine type (e2-standard-2 = 2 vCPU, 8GB RAM)"
+  description = "GCE machine type"
   type        = string
-  default     = "e2-standard-2"
+  default     = "e2-standard-8"
 }
 
 variable "disk_size_gb" {
@@ -52,155 +53,6 @@ variable "service_account_email" {
   description = "Service account email (leave empty for default compute SA)"
   type        = string
   default     = ""
-}
-
-# =============================================================================
-# Secret Manager Configuration
-# =============================================================================
-
-variable "use_secret_manager" {
-  description = "Use Google Secret Manager for API keys (recommended)"
-  type        = bool
-  default     = true
-}
-
-# Fallback variables if not using Secret Manager
-variable "gemini_api_key" {
-  description = "Gemini API key (only used if use_secret_manager=false)"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "stripe_secret_key" {
-  description = "Stripe secret key (only used if use_secret_manager=false)"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "replicate_api_token" {
-  description = "Replicate API token (only used if use_secret_manager=false)"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "algolia_admin_key" {
-  description = "Algolia Admin API key (only used if use_secret_manager=false)"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "asset_service_shared_secret" {
-  description = "HMAC shared secret for asset service auth (only used if use_secret_manager=false)"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "renderer_shared_secret" {
-  description = "HMAC shared secret for renderer auth (only used if use_secret_manager=false)"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "firebase_database_url" {
-  description = "Firebase Realtime Database URL (only used if use_secret_manager=false)"
-  type        = string
-  default     = ""
-}
-
-# =============================================================================
-# Feature Flags
-# =============================================================================
-
-variable "enable_billing" {
-  description = "Enable billing service (requires Stripe)"
-  type        = bool
-  default     = false
-}
-
-variable "enable_video_effects" {
-  description = "Enable video effects service (requires Replicate)"
-  type        = bool
-  default     = false
-}
-
-variable "enable_algolia" {
-  description = "Enable Algolia search"
-  type        = bool
-  default     = false
-}
-
-# =============================================================================
-# Service Configuration
-# =============================================================================
-
-variable "gemini_model_id" {
-  description = "Gemini model ID for asset analysis"
-  type        = string
-  default     = "gemini-2.0-flash"
-}
-
-variable "veo_location" {
-  description = "Vertex AI location for Veo"
-  type        = string
-  default     = "us-central1"
-}
-
-variable "veo_model_id" {
-  description = "Veo model ID"
-  type        = string
-  default     = "veo-3.0-generate-001"
-}
-
-variable "speech_location" {
-  description = "Speech-to-Text location"
-  type        = string
-  default     = "global"
-}
-
-variable "speech_model" {
-  description = "Speech-to-Text model"
-  type        = string
-  default     = "chirp_3"
-}
-
-variable "speech_language_codes" {
-  description = "Speech-to-Text language codes"
-  type        = string
-  default     = "en-US"
-}
-
-variable "renderer_concurrency" {
-  description = "Number of concurrent render jobs"
-  type        = number
-  default     = 5
-}
-
-variable "frontend_url" {
-  description = "Frontend URL for CORS (e.g., https://your-app.vercel.app)"
-  type        = string
-  default     = "http://localhost:3000"
-}
-
-# =============================================================================
-# Algolia Configuration
-# =============================================================================
-
-variable "algolia_app_id" {
-  description = "Algolia Application ID"
-  type        = string
-  default     = ""
-}
-
-variable "algolia_index_prefix" {
-  description = "Algolia index prefix"
-  type        = string
-  default     = "gemini_assets"
 }
 
 # =============================================================================
