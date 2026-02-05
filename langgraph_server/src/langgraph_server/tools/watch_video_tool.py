@@ -223,18 +223,21 @@ def _poll_job_status(job_id: str, settings: Settings) -> dict[str, Any]:
 
 @tool
 def watchVideo(
+    start_time: Optional[float] = None,
+    end_time: Optional[float] = None,
     _agent_context: Optional[Dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Render a preview of the current timeline and watch it.
 
-    This triggers a fast low-resolution render (360p, 10fps) of the timeline,
-    waits for it to complete, then returns the video so you can see it directly.
+    Optionally pass start_time and end_time (in seconds) to render only a segment.
+    This triggers a fast low-resolution render (360p, 10fps), waits for it to complete,
+    then returns the video so you can see it directly.
 
     Use this to review your edits before finalizing. The video will be returned
     as multimodal content that you can perceive and analyze with full context
     of what you were trying to achieve.
 
-    Takes 10-60 seconds depending on timeline length.
+    Takes 10-60 seconds depending on timeline length (or segment length if range used).
     """
     context = _agent_context or {}
     settings = get_settings()
@@ -318,6 +321,12 @@ def watchVideo(
         "includeAudio": True,
         "uploadUrl": upload_url,
     }
+    if (
+        start_time is not None
+        and end_time is not None
+        and end_time > start_time
+    ):
+        output_payload["range"] = [start_time, end_time]
 
     thread_id = context.get("thread_id")
     metadata: Dict[str, Any] = {
@@ -448,10 +457,14 @@ def watchVideo(
     file_uri = uploaded.uri
     logger.info("[watchVideo] Preview ready: %s", file_uri)
 
+    range_note = ""
+    if start_time is not None and end_time is not None and end_time > start_time:
+        range_note = f" (segment {start_time}s–{end_time}s)"
+
     # Return text with _injectMedia flag - agent.py will inject media as HumanMessage
     return {
         "status": "success",
-        "message": f"Preview render of '{project_name}' ready ({preview_width}x{preview_height} @ {PREVIEW_FPS}fps). The video is now visible.",
+        "message": f"Preview render of '{project_name}'{range_note} ready ({preview_width}x{preview_height} @ {PREVIEW_FPS}fps). The video is now visible.",
         "_injectMedia": True,
         "fileUri": file_uri,
         "mimeType": "video/mp4",

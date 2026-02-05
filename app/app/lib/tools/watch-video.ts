@@ -19,7 +19,18 @@ import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_TIME_MS = 5 * 60 * 1000; // 5 minutes max
 
-const watchVideoSchema = z.object({});
+const watchVideoSchema = z.object({
+  startTime: z
+    .number()
+    .min(0)
+    .optional()
+    .describe("Start time in seconds to render only a segment (use with endTime)"),
+  endTime: z
+    .number()
+    .min(0)
+    .optional()
+    .describe("End time in seconds to render only a segment (use with startTime)"),
+});
 
 interface RenderResponse {
   jobId: string;
@@ -47,13 +58,30 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
   label: "Watch Video",
   description:
     "Render a preview of the current timeline and watch it. " +
-    "This triggers a fast low-resolution render (360p @ 10fps), waits for completion, " +
-    "then returns the video so you can see it directly with full conversation context. " +
-    "Use this to review your edits and critique your own work. Takes 10-60 seconds.",
+    "Optionally use startTime and endTime (seconds) to render only a segment. " +
+    "Triggers a fast low-resolution render (360p @ 10fps), waits for completion, " +
+    "then returns the video so you can see it directly. Use to review your edits. Takes 10-60 seconds.",
   runLocation: "client",
   inputSchema: watchVideoSchema,
-  fields: [],
-  async run(_input, context) {
+  fields: [
+    {
+      name: "startTime",
+      label: "Start Time (s)",
+      type: "number",
+      placeholder: "e.g. 5",
+      description: "Optional start time in seconds to watch only part of the timeline.",
+      required: false,
+    },
+    {
+      name: "endTime",
+      label: "End Time (s)",
+      type: "number",
+      placeholder: "e.g. 15",
+      description: "Optional end time in seconds (use with startTime).",
+      required: false,
+    },
+  ],
+  async run(input, context) {
     try {
       if (typeof window === "undefined") {
         return {
@@ -79,6 +107,12 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
       const authHeaders = await getAuthHeaders();
       const projectName = context.project.name || "Timeline Preview";
 
+      // Optional range: render only [startTime, endTime] when both provided
+      const range: [number, number] | undefined =
+        input.startTime != null && input.endTime != null && input.endTime > input.startTime
+          ? [input.startTime, input.endTime]
+          : undefined;
+
       // Step 1: Trigger preview render
       const renderResponse = await fetch("/api/render", {
         method: "POST",
@@ -93,6 +127,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
             format: "mp4",
             quality: "low",
             fps: 10,
+            ...(range && { range }),
           },
           preview: true,
         }),
@@ -184,13 +219,15 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
       // Gemini doesn't support multimodal tool results, so prepareStep injects as user message
       // For Live API (which can't use fileUri with tokens), we also include downloadUrl
       const renderTime = Math.round((Date.now() - startTime) / 1000);
+      const rangeNote =
+        range != null ? ` (segment ${range[0]}s–${range[1]}s)` : "";
 
       return {
         status: "success" as const,
         outputs: [
           {
             type: "text" as const,
-            text: `Preview of "${projectName}" ready (360p @ 10fps, rendered in ${renderTime}s). The video is now visible.`,
+            text: `Preview of "${projectName}"${rangeNote} ready (360p @ 10fps, rendered in ${renderTime}s). The video is now visible.`,
           },
         ],
         meta: {

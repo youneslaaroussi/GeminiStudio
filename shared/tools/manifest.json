@@ -2099,19 +2099,47 @@
     "watchVideo": {
       "name": "watchVideo",
       "label": "Watch Video",
-      "description": "Render a preview of the current timeline and watch it. This triggers a fast low-resolution render (360p @ 10fps), waits for completion, then returns the video so you can see it directly with full conversation context. Use this to review your edits and critique your own work. Takes 10-60 seconds.",
+      "description": "Render a preview of the current timeline and watch it. Optionally use startTime and endTime (seconds) to render only a segment. Triggers a fast low-resolution render (360p @ 10fps), waits for completion, then returns the video so you can see it directly. Use to review your edits. Takes 10-60 seconds.",
       "runLocation": "client",
       "implementations": {
         "app": true,
         "langgraph": false
       },
-      "fields": [],
+      "fields": [
+        {
+          "name": "startTime",
+          "label": "Start Time (s)",
+          "type": "number",
+          "placeholder": "e.g. 5",
+          "description": "Optional start time in seconds to watch only part of the timeline.",
+          "required": false
+        },
+        {
+          "name": "endTime",
+          "label": "End Time (s)",
+          "type": "number",
+          "placeholder": "e.g. 15",
+          "description": "Optional end time in seconds (use with startTime).",
+          "required": false
+        }
+      ],
       "inputSchema": {
         "$ref": "#/definitions/watchVideoInput",
         "definitions": {
           "watchVideoInput": {
             "type": "object",
-            "properties": {},
+            "properties": {
+              "startTime": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Start time in seconds to render only a segment (use with endTime)."
+              },
+              "endTime": {
+                "type": "number",
+                "minimum": 0,
+                "description": "End time in seconds to render only a segment (use with startTime)."
+              }
+            },
             "additionalProperties": false
           }
         },
