@@ -7,7 +7,7 @@ import { useProjectStore, setOnFirebaseSync } from "@/app/lib/store/project-stor
 import type { Layer, CaptionSettings, TextClipSettings } from "@/app/types/timeline";
 import type { ProjectTranscription } from "@/app/types/transcription";
 import { Button } from "@/components/ui/button";
-import { Crosshair, Maximize2, Minimize2, Play, Pause } from "lucide-react";
+import { Crosshair, Maximize2, Minimize2, Play, Pause, RotateCw } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { SharedMediaLoader } from "@/app/lib/media/shared-media-loader";
 import { usePreloadTimelineMedia } from "@/app/hooks/use-preload-timeline-media";
@@ -133,6 +133,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   const [showUpdateIndicator, setShowUpdateIndicator] = useState(false);
   const [showFirebaseIndicator, setShowFirebaseIndicator] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [playerKey, setPlayerKey] = useState(0);
   const [fullscreenControlsVisible, setFullscreenControlsVisible] = useState(true);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const firebaseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -148,6 +149,10 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
 
   const handleRecenter = useCallback(() => {
     scenePlayerRef.current?.recenter();
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    setPlayerKey((k) => k + 1);
   }, []);
 
   const enterFullscreen = useCallback(() => {
@@ -274,6 +279,22 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
         {/* Controls and indicator dots */}
         <div className="flex items-center gap-2">
           <TooltipProvider delayDuration={300}>
+            {/* Refresh button */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  onClick={handleRefresh}
+                >
+                  <RotateCw className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>Refresh preview (restart player)</p>
+              </TooltipContent>
+            </Tooltip>
             {/* Recenter button */}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -337,6 +358,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
       </div>
       <div className="flex-1 overflow-hidden relative">
         <ScenePlayer
+          key={playerKey}
           ref={scenePlayerRef}
           onPlayerChange={onPlayerChange}
           onCanvasReady={onCanvasReady}

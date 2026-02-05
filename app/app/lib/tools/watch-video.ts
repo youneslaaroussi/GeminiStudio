@@ -182,6 +182,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
 
       // Step 4: Return with _injectMedia flag for media injection
       // Gemini doesn't support multimodal tool results, so prepareStep injects as user message
+      // For Live API (which can't use fileUri with tokens), we also include downloadUrl
       const renderTime = Math.round((Date.now() - startTime) / 1000);
 
       return {
@@ -195,6 +196,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
         meta: {
           _injectMedia: true,
           fileUri: geminiData.fileUri,
+          downloadUrl: jobStatus.downloadUrl, // For Live API which needs inline data
           mimeType: geminiData.mimeType || "video/mp4",
           assetName: `Preview - ${projectName}`,
           jobId,

@@ -19,6 +19,7 @@ import type {
   TimelineChatMessage,
 } from '@/app/types/chat';
 import { ProjectSyncManager } from '@/app/lib/automerge/sync-manager';
+import { correctTimeline } from '@/app/lib/timeline/auto-correct';
 import { automergeToProject, projectToAutomerge } from '@/app/lib/automerge/adapter';
 import type { AutomergeProject } from '@/app/lib/automerge/types';
 import { setStoredBranchForProject } from '@/app/lib/store/branch-storage';
@@ -247,33 +248,59 @@ export const setOnFirebaseSync = (callback: (() => void) | null) => {
   }
 };
 
+const CORRECTION_DEBOUNCE_MS = 300;
+
+function debounce<T extends (...args: any[]) => any>(fn: T, wait: number): T {
+  let timeout: ReturnType<typeof setTimeout>;
+  return ((...args: Parameters<T>) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => fn(...args), wait);
+  }) as T;
+}
+
 export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore => {
   let syncManager: ProjectSyncManager | null = null;
+  let pendingSyncAfterCorrect = false;
 
   const updateProjectState = createProjectUpdateHelper(set);
+
+  const runCorrection = () => {
+    console.log('[CORRECTION] Debounced correction running');
+    const state = get();
+    const corrected = correctTimeline(state.project);
+    const changed = corrected !== state.project;
+    console.log('[CORRECTION] Project changed:', changed);
+    if (!changed) return; // Skip set if no changes
+    set({ project: corrected });
+    if (pendingSyncAfterCorrect && state.syncManager) {
+      pendingSyncAfterCorrect = false;
+      state.syncManager
+        .applyChange((automergeDoc: any) => {
+          automergeDoc.projectJSON = JSON.stringify(corrected);
+        })
+        .catch((e: unknown) => console.error('[SYNC] Failed to sync after correction:', e));
+    }
+  };
+
+  const debouncedRunCorrection = debounce(runCorrection, CORRECTION_DEBOUNCE_MS);
+
+  const scheduleCorrection = (options?: { syncAfter: boolean }) => {
+    if (options?.syncAfter) pendingSyncAfterCorrect = true;
+    debouncedRunCorrection();
+  };
 
   // Helper to apply changes through sync manager
   const applySyncedChange = async (
     changeFn: (state: ProjectStore) => { project: Project; [key: string]: unknown } | null | undefined
   ) => {
-    // 1. Apply change to store immediately
+    // 1. Apply change to store immediately (no correction yet)
     const result = changeFn(get());
     if (result) {
       const { project, ...rest } = result;
       set({ project, ...rest });
 
-      // 2. Sync to Automerge async
-      const currentSyncManager = get().syncManager;
-      if (currentSyncManager) {
-        try {
-          console.log('[SYNC] Syncing to Automerge');
-          await currentSyncManager.applyChange((automergeDoc) => {
-            automergeDoc.projectJSON = JSON.stringify(project);
-          });
-        } catch (error) {
-          console.error('[SYNC] Failed to sync to Automerge:', error);
-        }
-      }
+      // 2. Schedule debounced correction; when it runs we'll sync corrected project
+      scheduleCorrection({ syncAfter: true });
     }
   };
 
@@ -349,6 +376,7 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
           // Preserve the metadata name as source of truth (Automerge name can be stale)
           project = applyMetadataName(project);
           set({ project, currentBranch: branchId, isOnline: syncManager?.getIsOnline() ?? true });
+          scheduleCorrection();
         },
         () => {
           onFirebaseSync?.();
@@ -370,6 +398,7 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
           project = applyMetadataName(project);
           console.log('[SYNC] Loaded project from Firebase:', project.name, 'with', project.layers.length, 'layers');
           set({ project, syncManager, currentBranch: branchId, projectId });
+          scheduleCorrection();
         } catch (e) {
           console.error('Failed to parse project from Firebase:', e);
           set({ syncManager, currentBranch: branchId, projectId });
@@ -385,6 +414,7 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
         // Ensure main branch exists in RTDB immediately so branch selector and listBranches see it
         await syncManager.forceSyncToFirestore();
         set({ project: currentProject, syncManager, currentBranch: branchId, projectId });
+        scheduleCorrection();
       } else {
         console.log('[SYNC] No project data in Firebase or Automerge doc is null');
         set({ syncManager, currentBranch: branchId, projectId });
@@ -782,6 +812,7 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
             transitions: project.transitions ?? {},
           });
           const snapshot = JSON.stringify(normalized);
+          scheduleCorrection();
           return {
             project: normalized,
             currentTime: 0,

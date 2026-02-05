@@ -122,6 +122,7 @@ export const watchAssetTool: ToolDefinition<typeof watchAssetSchema, Project> = 
 
       // Return file info with _injectMedia flag
       // The chat route will inject this as a user message for Gemini to see
+      // For Live API (which can't use fileUri with tokens), we also include downloadUrl
       const timeRange = input.startTime || input.endTime
         ? ` (${input.startTime || '0'}s - ${input.endTime || 'end'})`
         : '';
@@ -140,6 +141,7 @@ export const watchAssetTool: ToolDefinition<typeof watchAssetSchema, Project> = 
           assetName: asset.name,
           assetType: asset.type,
           fileUri: data.fileUri,
+          downloadUrl: assetUrl, // For Live API which needs inline data
           mimeType: data.mimeType || asset.mimeType,
           startOffset: input.startTime ? `${input.startTime}s` : undefined,
           endOffset: input.endTime ? `${input.endTime}s` : undefined,

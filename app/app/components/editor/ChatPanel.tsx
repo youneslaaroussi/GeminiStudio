@@ -360,12 +360,10 @@ export function ChatPanel() {
     clearError?.();
   }, [isMissingToolResultsError, messages, addToolOutput, clearError]);
 
-  // Handle file selection and upload
-  const handleFileSelect = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const files = event.target.files;
-      if (!files || files.length === 0) return;
-
+  // Shared upload for both file input and drop zone
+  const uploadFiles = useCallback(
+    async (files: File[]) => {
+      if (!files.length) return;
       setIsUploadingAttachments(true);
       try {
         const formData = new FormData();
@@ -376,20 +374,17 @@ export function ChatPanel() {
         for (const file of files) {
           formData.append("files", file);
         }
-
         const authHeaders = await getAuthHeaders();
         const response = await fetch("/api/chat/attachments", {
           method: "POST",
           headers: authHeaders,
           body: formData,
         });
-
         if (!response.ok) {
           const error = await response.json();
           console.error("Failed to upload attachments:", error);
           return;
         }
-
         const { attachments } = (await response.json()) as {
           attachments: ChatAttachment[];
         };
@@ -398,13 +393,47 @@ export function ChatPanel() {
         console.error("Failed to upload attachments:", error);
       } finally {
         setIsUploadingAttachments(false);
-        // Reset file input
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
       }
     },
     [sessionId, projectId]
+  );
+
+  const handleFileSelect = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = event.target.files;
+      if (!files || files.length === 0) return;
+      void uploadFiles(Array.from(files));
+    },
+    [uploadFiles]
+  );
+
+  // Full-panel file drop zone (on top of chat so TipTap doesn't intercept)
+  const [isChatDropZoneActive, setIsChatDropZoneActive] = useState(false);
+  const chatDropZoneDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("Files")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      setIsChatDropZoneActive(true);
+    }
+  }, []);
+  const chatDropZoneDragLeave = useCallback((e: React.DragEvent) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsChatDropZoneActive(false);
+    }
+  }, []);
+  const chatDropZoneDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsChatDropZoneActive(false);
+      const files = e.dataTransfer.files;
+      if (files?.length) {
+        void uploadFiles(Array.from(files));
+      }
+    },
+    [uploadFiles]
   );
 
   const removeAttachment = useCallback((attachmentId: string) => {
@@ -1023,7 +1052,27 @@ export function ChatPanel() {
   }, [messages, clientToolMap, runClientToolForCall]);
 
   return (
-    <div className="flex h-full flex-col">
+    <div
+      className="relative flex h-full flex-col"
+      onDragOverCapture={chatDropZoneDragOver}
+      onDragLeaveCapture={chatDropZoneDragLeave}
+      onDropCapture={chatDropZoneDrop}
+    >
+      {/* File drop zone overlay — on top of entire chat so TipTap doesn't intercept */}
+      {isChatDropZoneActive && (
+        <div
+          className="absolute inset-0 z-[100] flex min-h-full min-w-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10"
+          onDragOver={chatDropZoneDragOver}
+          onDragLeave={chatDropZoneDragLeave}
+          onDrop={chatDropZoneDrop}
+        >
+          <div className="flex flex-col items-center gap-2 text-center">
+            <Paperclip className="size-10 text-primary" />
+            <p className="text-sm font-medium text-foreground">Drop files to attach</p>
+            <p className="text-xs text-muted-foreground">Images, video, audio, PDF, or text</p>
+          </div>
+        </div>
+      )}
       {/* Messages Area */}
       <div ref={messagesScrollContainerRef} className="flex-1 overflow-y-auto">
         {/* Task List (sticky at top when present) */}

@@ -6,6 +6,7 @@ import ReactMarkdown from "react-markdown";
 import { useLiveSession } from "@/app/hooks/useLiveSession";
 import { getAudioInputDevices, executeToolByName } from "@/app/lib/live";
 import { AudioWaveVisualizer } from "@/app/components/AudioWaveVisualizer";
+import { useProjectStore } from "@/app/lib/store/project-store";
 import type { ToolCallRequest, AudioDevice, LiveVoiceName } from "@/app/lib/live";
 
 /** Curated list of voices with descriptions */
@@ -36,6 +37,10 @@ export function VoiceChat({ onToolCall, className = "" }: VoiceChatProps) {
   const [isRefreshingDevices, setIsRefreshingDevices] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState<LiveVoiceName>("Puck");
   const [showVoiceSelector, setShowVoiceSelector] = useState(false);
+
+  // Get project context for tool execution
+  const project = useProjectStore((state) => state.project);
+  const projectId = useProjectStore((state) => state.projectId);
 
   const MIC_DEVICE_STORAGE_KEY = "voice-chat-mic-device-id";
   const VOICE_STORAGE_KEY = "voice-chat-voice";
@@ -122,9 +127,12 @@ export function VoiceChat({ onToolCall, className = "" }: VoiceChatProps) {
       if (onToolCall) {
         return onToolCall(toolCall);
       }
-      return executeToolByName(toolCall.name, toolCall.args);
+      return executeToolByName(toolCall.name, toolCall.args, {
+        project,
+        projectId: projectId ?? undefined,
+      });
     },
-    [onToolCall]
+    [onToolCall, project, projectId]
   );
 
   const {

@@ -277,6 +277,14 @@ The agent has:
 
 This is the difference between a tool that produces output and an agent that produces *quality* output.
 
+### Live Voice Chat: Real-Time Collaboration
+
+Gemini Studio includes **Live API integration** for real-time voice conversations with the AI agent. The agent can execute tools, manipulate your timeline, and even "see" previews of your work—all through natural voice commands.
+
+**Current:** When you ask the agent to watch your video, it extracts key frames using [Mediabunny](https://mediabunny.dev/) and analyzes them to understand the composition.
+
+**Future Vision:** The Live API will continuously stream what you see—the same preview panel, at 5x playback speed—directly to the agent. This creates a true "pair editing" experience where the AI watches alongside you in real-time, ready to act on voice commands like *"that cut was too early"* or *"add a transition here"*. The agent becomes a co-director who sees exactly what you see.
+
 ### Render Quality Controls
 
 The agent intelligently chooses render settings based on intent:

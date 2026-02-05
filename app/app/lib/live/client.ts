@@ -29,10 +29,18 @@ export class LiveSession {
     isSpeaking: false,
   };
   private pendingToolCalls: Map<string, { resolve: (value: Record<string, unknown>) => void }> = new Map();
+  private authToken: string | null = null;
 
   constructor(config: LiveSessionConfig, callbacks: LiveSessionCallbacks = {}) {
     this.config = config;
     this.callbacks = callbacks;
+  }
+
+  /**
+   * Set auth token for authenticated proxy requests (e.g., media fetching)
+   */
+  setAuthToken(token: string): void {
+    this.authToken = token;
   }
 
   private setState(updates: Partial<LiveSessionState>) {
@@ -208,6 +216,7 @@ export class LiveSession {
     functionCalls: Array<{ id: string; name: string; args: Record<string, unknown> }>
   ) {
     const responses: ToolCallResponse[] = [];
+    const mediaToInject: Array<{ downloadUrl: string; mimeType: string; assetType?: string }> = [];
 
     for (const call of functionCalls) {
       try {
@@ -216,6 +225,15 @@ export class LiveSession {
           name: call.name,
           args: call.args,
         });
+
+        // Check for media injection request - prefer downloadUrl for Live API
+        if (result?._injectMedia && result._downloadUrl && result._mimeType) {
+          mediaToInject.push({
+            downloadUrl: result._downloadUrl as string,
+            mimeType: result._mimeType as string,
+            assetType: result._assetType as string | undefined,
+          });
+        }
 
         responses.push({
           id: call.id,
@@ -233,7 +251,27 @@ export class LiveSession {
       }
     }
 
+    // Send tool responses first
     this.sendToolResponses(responses);
+
+    // Then inject any media so the model can see it
+    for (const media of mediaToInject) {
+      const isVideo = media.assetType === "video" || media.mimeType.startsWith("video/");
+      const isImage = media.assetType === "image" || media.mimeType.startsWith("image/");
+      const isAudio = media.assetType === "audio" || media.mimeType.startsWith("audio/");
+
+      if (isVideo) {
+        // Video: extract frames using mediabunny
+        await this.sendVideoFrames(media.downloadUrl, this.authToken ?? undefined, 4);
+      } else if (isImage) {
+        // Image: send directly
+        await this.sendImage(media.downloadUrl, this.authToken ?? undefined);
+      } else if (isAudio) {
+        // Audio: Live API doesn't support injecting audio files mid-conversation
+        // The model already received the tool response text
+        console.log("[LiveSession] Audio assets cannot be injected into Live API");
+      }
+    }
   }
 
   private sendToolResponses(responses: ToolCallResponse[]) {
@@ -328,6 +366,153 @@ export class LiveSession {
     };
 
     this.ws.send(JSON.stringify(message));
+  }
+
+  /**
+   * Send an image to the model.
+   * Uses proxy to avoid CORS issues with GCS signed URLs.
+   */
+  async sendImage(url: string, authToken?: string): Promise<void> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      throw new Error("Not connected");
+    }
+
+    try {
+      // Use proxy to avoid CORS issues with GCS
+      const proxyUrl = `/api/proxy/media?url=${encodeURIComponent(url)}`;
+      const headers: HeadersInit = {};
+      if (authToken) {
+        headers["Authorization"] = `Bearer ${authToken}`;
+      }
+
+      const response = await fetch(proxyUrl, { headers });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status}`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const base64Data = arrayBufferToBase64(arrayBuffer);
+
+      // Determine mime type from response or default to jpeg
+      const contentType = response.headers.get("Content-Type") || "image/jpeg";
+
+      // Send image using realtimeInput (same pattern as audio)
+      const message = {
+        realtimeInput: {
+          video: {
+            data: base64Data,
+            mimeType: contentType,
+          },
+        },
+      };
+
+      this.ws.send(JSON.stringify(message));
+      console.log("[LiveSession] Sent image to model");
+    } catch (error) {
+      console.error("Failed to send image:", error);
+      this.sendText(`[Image failed to load: ${error instanceof Error ? error.message : "Unknown error"}]`);
+    }
+  }
+
+  /**
+   * Send video frames to the model by extracting frames using mediabunny.
+   * Live API requires individual image frames, not encoded video files.
+   * Uses proxy to avoid CORS issues with GCS signed URLs.
+   */
+  async sendVideoFrames(url: string, authToken?: string, frameCount: number = 4): Promise<void> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      throw new Error("Not connected");
+    }
+
+    try {
+      // Use proxy URL to avoid CORS
+      const proxyUrl = `/api/proxy/media?url=${encodeURIComponent(url)}`;
+      const headers: HeadersInit = {};
+      if (authToken) {
+        headers["Authorization"] = `Bearer ${authToken}`;
+      }
+
+      // Dynamically import mediabunny (it's a client-side library)
+      const { Input, UrlSource, CanvasSink, MP4 } = await import("mediabunny");
+
+      // Create input with custom fetch that includes auth
+      const source = new UrlSource(proxyUrl, {
+        requestInit: { headers },
+      });
+
+      const input = new Input({
+        formats: [MP4],
+        source,
+      });
+
+      const videoTrack = await input.getPrimaryVideoTrack();
+      if (!videoTrack) {
+        throw new Error("No video track found");
+      }
+
+      const duration = await videoTrack.computeDuration();
+      const startTime = await videoTrack.getFirstTimestamp();
+
+      // Create canvas sink for extracting frames as images
+      const sink = new CanvasSink(videoTrack, {
+        width: 640,  // Reasonable size for Live API
+        height: 360,
+        fit: "contain",  // Required when both width and height are provided
+      });
+
+      // Calculate evenly spaced timestamps
+      const timestamps: number[] = [];
+      for (let i = 0; i < frameCount; i++) {
+        const t = startTime + (i / (frameCount - 1 || 1)) * (duration - startTime);
+        timestamps.push(t);
+      }
+
+      // Extract and send each frame
+      let frameIndex = 0;
+      for await (const result of sink.canvasesAtTimestamps(timestamps)) {
+        if (!result) continue;
+        const canvas = result.canvas;
+        
+        // Convert canvas to JPEG base64 (handle both HTMLCanvasElement and OffscreenCanvas)
+        let blob: Blob;
+        if (canvas instanceof OffscreenCanvas) {
+          blob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.8 });
+        } else {
+          blob = await new Promise<Blob>((resolve) => {
+            (canvas as HTMLCanvasElement).toBlob((b) => resolve(b!), "image/jpeg", 0.8);
+          });
+        }
+        const arrayBuffer = await blob.arrayBuffer();
+        const base64Data = arrayBufferToBase64(arrayBuffer);
+
+        // Send frame using realtimeInput (same pattern as audio)
+        const message = {
+          realtimeInput: {
+            video: {
+              data: base64Data,
+              mimeType: "image/jpeg",
+            },
+          },
+        };
+
+        this.ws?.send(JSON.stringify(message));
+        frameIndex++;
+
+        // Small delay between frames
+        if (frameIndex < frameCount) {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      }
+
+      // Clean up
+      input.dispose();
+
+      console.log(`[LiveSession] Sent ${frameIndex} frames to model`);
+    } catch (error) {
+      console.error("Failed to send video frames:", error);
+      // Send error as text so the model knows something went wrong
+      this.sendText(`[Video frames failed to load: ${error instanceof Error ? error.message : "Unknown error"}]`);
+    }
   }
 
   disconnect(): void {

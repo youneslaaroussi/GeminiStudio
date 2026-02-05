@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { LiveSession, getToolsForLiveApi, executeToolByName } from "@/app/lib/live";
 import type { LiveSessionState, ToolCallRequest, LiveVoiceName } from "@/app/lib/live";
 import { useAuth } from "@/app/lib/hooks/useAuth";
+import { useProjectStore } from "@/app/lib/store/project-store";
 import { LIVE_MODEL } from "@/app/lib/model-ids";
 
 interface UseLiveSessionOptions {
@@ -30,12 +31,22 @@ interface UseLiveSessionReturn {
 
 export function useLiveSession(options: UseLiveSessionOptions = {}): UseLiveSessionReturn {
   const { user } = useAuth();
+  const project = useProjectStore((state) => state.project);
+  const projectId = useProjectStore((state) => state.projectId);
   const sessionRef = useRef<LiveSession | null>(null);
   const [state, setState] = useState<LiveSessionState>({
     status: "disconnected",
     isListening: false,
     isSpeaking: false,
   });
+
+  // Keep refs to always have latest project context in callbacks
+  const projectRef = useRef(project);
+  const projectIdRef = useRef(projectId);
+  useEffect(() => {
+    projectRef.current = project;
+    projectIdRef.current = projectId;
+  }, [project, projectId]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -96,8 +107,11 @@ When the user asks you to do something, use the appropriate tool to accomplish i
             if (options.onToolCall) {
               return options.onToolCall(toolCall);
             }
-            // Otherwise, execute tool from registry
-            return executeToolByName(toolCall.name, toolCall.args);
+            // Otherwise, execute tool from registry with project context
+            return executeToolByName(toolCall.name, toolCall.args, {
+              project: projectRef.current,
+              projectId: projectIdRef.current ?? undefined,
+            });
           },
           onOutputLevel: options.onOutputLevel,
           onError: (error) => {
@@ -108,6 +122,8 @@ When the user asks you to do something, use the appropriate tool to accomplish i
       );
 
       sessionRef.current = session;
+      // Set auth token for authenticated proxy requests (media fetching)
+      session.setAuthToken(idToken);
       await session.connect(token);
     } catch (error) {
       console.error("Failed to connect:", error);

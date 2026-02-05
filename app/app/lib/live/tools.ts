@@ -158,20 +158,31 @@ export function getToolsByName(names: string[]): LiveToolDeclaration[] {
   return [{ functionDeclarations }];
 }
 
+/** Context for tool execution */
+export interface LiveToolContext {
+  project?: import("@/app/types/timeline").Project;
+  projectId?: string;
+}
+
 /**
  * Execute a tool from the registry by name
  * Returns the result as a plain object for Live API response
+ * 
+ * If the tool result contains _injectMedia metadata, the response will include
+ * _injectMedia, _fileUri, and _mimeType fields that LiveSession uses to send
+ * the media to the model.
  */
 export async function executeToolByName(
   toolName: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  context: LiveToolContext = {}
 ): Promise<Record<string, unknown>> {
   const { executeTool } = await import("@/app/lib/tools/tool-registry");
 
   const result = await executeTool({
     toolName,
     input: args,
-    context: {},
+    context,
   });
 
   if (result.status === "error") {
@@ -194,9 +205,29 @@ export async function executeToolByName(
     }
   }
 
-  return {
+  const response: Record<string, unknown> = {
     success: true,
     message: outputTexts.join("\n") || "Action completed",
     data: outputData.length === 1 ? outputData[0] : outputData.length > 0 ? outputData : undefined,
   };
+
+  // Pass through media injection metadata for tools like watchVideo/watchAsset
+  const meta = result.meta as Record<string, unknown> | undefined;
+  if (meta?._injectMedia && meta?.mimeType) {
+    response._injectMedia = true;
+    response._mimeType = meta.mimeType;
+    // downloadUrl is preferred for Live API (which can't use fileUri with tokens)
+    if (meta.downloadUrl) {
+      response._downloadUrl = meta.downloadUrl;
+    }
+    if (meta.fileUri) {
+      response._fileUri = meta.fileUri;
+    }
+    // Pass asset type for proper handling (video needs frame extraction, image can be sent directly)
+    if (meta.assetType) {
+      response._assetType = meta.assetType;
+    }
+  }
+
+  return response;
 }
