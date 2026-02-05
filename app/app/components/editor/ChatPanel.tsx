@@ -1398,12 +1398,6 @@ export function ChatPanel() {
           </div>
         )}
 
-        <p className="text-[11px] text-muted-foreground text-center py-0.5">
-          Each message uses{" "}
-          <span className="font-medium tabular-nums text-foreground">{chatCredits}</span>{" "}
-          R‑Credits
-        </p>
-
         {/* Message Input */}
         <form onSubmit={handleFormSubmit} className="flex gap-2">
           {/* Hidden file input */}
@@ -1468,13 +1462,19 @@ export function ChatPanel() {
           )}
         </form>
 
-        {/* Powered by branding */}
-        <div className="flex items-center justify-center gap-1.5 pt-2 pb-1">
-          <span className="text-xs text-muted-foreground">Powered by</span>
+        {/* Powered by branding and credits */}
+        <div className="flex items-center justify-center gap-1.5 pt-2 pb-1 text-[11px] text-muted-foreground">
+          <span className="text-muted-foreground">Powered by</span>
           <div className="flex items-center gap-1">
             <img src="/gemini-logo.png" alt="Gemini" className="size-3.5" />
-            <span className="text-xs font-medium text-foreground">Gemini 3 Pro</span>
+            <span className="font-medium text-foreground">Gemini 3 Pro</span>
           </div>
+          <span aria-hidden className="text-muted-foreground/60">·</span>
+          <span>
+            Each message uses{" "}
+            <span className="font-medium tabular-nums text-foreground">{chatCredits}</span>{" "}
+            R‑Credits
+          </span>
         </div>
       </div>
     </div>

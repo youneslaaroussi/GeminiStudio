@@ -26,6 +26,9 @@ MIN_WIDTH = 320
 MIN_HEIGHT = 240
 MIN_FPS = 1
 MAX_FPS = 240
+# Maximum render dimension to prevent renderer timeouts
+# Cap at 720p (1280 on longest dimension)
+MAX_RENDER_DIMENSION = 1280
 
 
 @tool
@@ -126,9 +129,21 @@ def setSceneConfig(
 
         # Apply updates
         if width is not None and height is not None:
+            # Clamp resolution to prevent renderer timeouts
+            actual_width = max(MIN_WIDTH, width)
+            actual_height = max(MIN_HEIGHT, height)
+            max_side = max(actual_width, actual_height)
+            if max_side > MAX_RENDER_DIMENSION:
+                scale = MAX_RENDER_DIMENSION / max_side
+                actual_width = int(actual_width * scale)
+                actual_height = int(actual_height * scale)
+                # Ensure dimensions are even (required for video encoding)
+                actual_width = actual_width - (actual_width % 2)
+                actual_height = actual_height - (actual_height % 2)
+                logger.info("Clamping requested resolution from %dx%d to %dx%d", width, height, actual_width, actual_height)
             project_data["resolution"] = {
-                "width": max(MIN_WIDTH, width),
-                "height": max(MIN_HEIGHT, height),
+                "width": actual_width,
+                "height": actual_height,
             }
         if fps is not None:
             project_data["fps"] = max(MIN_FPS, min(MAX_FPS, fps))
@@ -157,7 +172,7 @@ def setSceneConfig(
 
         resolution = project_data.get("resolution", {})
         updated: dict[str, Any] = {
-            "resolution": {"width": resolution.get("width", 1920), "height": resolution.get("height", 1080)},
+            "resolution": {"width": resolution.get("width", 1280), "height": resolution.get("height", 720)},
             "fps": project_data.get("fps", 30),
             "background": project_data.get("background", "#000000"),
             "name": project_data.get("name", "Untitled Project"),

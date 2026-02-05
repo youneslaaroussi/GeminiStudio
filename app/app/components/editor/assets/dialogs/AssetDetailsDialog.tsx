@@ -4,12 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy, ExternalLink, Loader2, ChevronDown, ChevronRight, Camera, RotateCw, StickyNote } from "lucide-react";
 import { getAuthToken } from "@/app/lib/hooks/useAuthFetch";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+  SheetClose,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { RemoteAsset } from "@/app/types/assets";
@@ -67,29 +68,19 @@ export function AssetDetailsDialog({
     };
   }, [pipelineSteps]);
 
-  if (!asset) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Asset Details</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground py-8 text-center">
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-2xl flex flex-col" showCloseButton={false}>
+        <SheetHeader>
+          <SheetTitle>Asset Details</SheetTitle>
+        </SheetHeader>
+
+        {!asset ? (
+          <p className="text-sm text-muted-foreground py-8 text-center px-4">
             No asset selected.
           </p>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl w-[95vw] max-h-[85vh] overflow-y-auto overflow-x-hidden">
-        <DialogHeader>
-          <DialogTitle>Asset Details</DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-6">
+        ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 space-y-6 pb-4">
           {/* General Info */}
           <section className="space-y-3">
             <h4 className="text-sm font-semibold">General</h4>
@@ -278,14 +269,15 @@ export function AssetDetailsDialog({
             </section>
           )}
         </div>
+        )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <SheetFooter>
+          <SheetClose asChild>
+            <Button variant="outline">Close</Button>
+          </SheetClose>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 

@@ -149,6 +149,7 @@
     "react-type-animation": "^3.2.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
+    "vaul": "^1.1.2",
     "zod": "^3.24.0",
     "zundo": "^2.3.0",
     "zustand": "^5.0.10"

@@ -73,8 +73,8 @@ def getTimelineState(
     # Extract key info
     name = project_data.get("name") or target_project.get("name") or "Untitled"
     resolution = project_data.get("resolution", {})
-    width = resolution.get("width", 1920)
-    height = resolution.get("height", 1080)
+    width = resolution.get("width", 1280)
+    height = resolution.get("height", 720)
     fps = project_data.get("fps", 30)
     background = project_data.get("background", "#000000")
 

@@ -289,8 +289,8 @@ def watchVideo(
 
     # Get resolution and apply scale
     resolution = project_data.get("resolution") or {}
-    full_width = int(resolution.get("width") or 1920)
-    full_height = int(resolution.get("height") or 1080)
+    full_width = int(resolution.get("width") or 1280)
+    full_height = int(resolution.get("height") or 720)
     preview_width = int(full_width * PREVIEW_RESOLUTION_SCALE)
     preview_height = int(full_height * PREVIEW_RESOLUTION_SCALE)
 
