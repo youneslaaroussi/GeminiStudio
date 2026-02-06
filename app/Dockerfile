@@ -12,18 +12,20 @@ COPY app/package.json ./app/
 COPY scene/package.json ./scene/
 # app depends on local @ai-sdk/google (file:../ai-sdk/packages/google)
 COPY ai-sdk/packages/google ./ai-sdk/packages/google
+# @vercel/ai-tsconfig is internal to ai-sdk (not on npm); copy so google's tsconfig can extend it
+COPY ai-sdk/tools/tsconfig ./ai-sdk/tools/tsconfig
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile || pnpm install
 
 # Build @ai-sdk/google (dist/ is gitignored, so it's missing in CI).
-# Package tsconfig extends ./node_modules/@vercel/ai-tsconfig and needs deps in its node_modules.
-RUN pnpm add -D tsup typescript @vercel/ai-tsconfig -w \
-  && mkdir -p ai-sdk/packages/google/node_modules \
-  && ln -s ../../../../node_modules/@vercel ai-sdk/packages/google/node_modules/@vercel \
-  && ln -s ../../../../node_modules/@ai-sdk ai-sdk/packages/google/node_modules/@ai-sdk \
-  && ln -s ../../../../node_modules/zod ai-sdk/packages/google/node_modules/zod \
-  && cd ai-sdk/packages/google && pnpm exec tsup --tsconfig tsconfig.build.json
+# Point google's node_modules at root deps and at the copied ai-tsconfig.
+RUN pnpm add -D tsup typescript -w \
+  && mkdir -p ai-sdk/packages/google/node_modules/@vercel \
+  && ln -sf ../../../../tools/tsconfig ai-sdk/packages/google/node_modules/@vercel/ai-tsconfig \
+  && ln -sf ../../../../node_modules/@ai-sdk ai-sdk/packages/google/node_modules/@ai-sdk \
+  && ln -sf ../../../../node_modules/zod ai-sdk/packages/google/node_modules/zod \
+  && cd ai-sdk/packages/google && NODE_PATH=/app/node_modules npx -y tsup@8 --config tsup.config.ts --no-dts
 
 # Copy source
 COPY app ./app
