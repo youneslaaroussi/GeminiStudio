@@ -79,7 +79,9 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasRenderedFirstFrame, setHasRenderedFirstFrame] = useState(false);
+  const [showSlowLoadHint, setShowSlowLoadHint] = useState(false);
   const animationFrameRef = useRef<number | null>(null);
+  const slowLoadHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestLayersRef = useRef(layers);
   const latestTranscriptionsRef = useRef(transcriptions);
   const latestTransitionsRef = useRef(transitions);
@@ -116,6 +118,32 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   useEffect(() => {
     onVariablesUpdatedRef.current = onVariablesUpdated;
   }, [onVariablesUpdated]);
+
+  // After 10s in "loading preview" state, show hint to use the reload button
+  const isLoadingPreview = !!(
+    project &&
+    !error &&
+    !hasRenderedFirstFrame &&
+    layers.some((layer) => layer.clips.length > 0)
+  );
+  useEffect(() => {
+    if (!isLoadingPreview) {
+      setShowSlowLoadHint(false);
+      if (slowLoadHintTimeoutRef.current) {
+        clearTimeout(slowLoadHintTimeoutRef.current);
+        slowLoadHintTimeoutRef.current = null;
+      }
+      return;
+    }
+    setShowSlowLoadHint(false);
+    slowLoadHintTimeoutRef.current = setTimeout(() => setShowSlowLoadHint(true), 10_000);
+    return () => {
+      if (slowLoadHintTimeoutRef.current) {
+        clearTimeout(slowLoadHintTimeoutRef.current);
+        slowLoadHintTimeoutRef.current = null;
+      }
+    };
+  }, [isLoadingPreview]);
 
   useEffect(() => {
     latestCurrentTimeRef.current = currentTime;
@@ -987,6 +1015,16 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
             <div className="flex flex-col items-center gap-3">
               <div className="size-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
               <span className="text-xs text-white/60">Loading preview...</span>
+              {showSlowLoadHint && (
+                <motion.span
+                  className="text-xs text-white/50 text-center max-w-[220px]"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.4 }}
+                >
+                  If it takes too long, try the reload button at the top.
+                </motion.span>
+              )}
             </div>
           </motion.div>
         )}
