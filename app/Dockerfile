@@ -10,11 +10,16 @@ WORKDIR /app
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY app/package.json ./app/
 COPY scene/package.json ./scene/
-# app depends on local @ai-sdk/google (file:../ai-sdk/packages/google).
+# app depends on local @ai-sdk/google (file:../ai-sdk/packages/google)
 COPY ai-sdk/packages/google ./ai-sdk/packages/google
+# @vercel/ai-tsconfig is internal to ai-sdk (not on npm); copy so google's tsconfig can extend it
+COPY ai-sdk/tools/tsconfig ./ai-sdk/tools/tsconfig
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile || pnpm install
+
+# Note: @ai-sdk/google is built as a separate CI step before image builds.
+# We still copy the local package so workspace install resolves it.
 
 # Copy source
 COPY app ./app
