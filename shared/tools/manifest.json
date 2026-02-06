@@ -1131,7 +1131,7 @@
                   },
                   "colorGrading": {
                     "type": "object",
-                    "description": "Exposure: -2 to 2. All others (contrast, saturation, temperature, tint, highlights, shadows): -100 to 100. Use values like 20 or -30 for visible effect; values like 1.4 are too small.",
+                    "description": "Exposure: -2 to 2. All others (contrast, saturation, temperature, tint, highlights, shadows): -100 to 100. Use 20-50 for visible effect—NEVER use 0.1, 0.2, or 0.15 (0-1 scale is wrong). Example: {\"temperature\":25,\"saturation\":30,\"contrast\":15}.",
                     "properties": {
                       "exposure": {
                         "type": "number",

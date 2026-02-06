@@ -59,6 +59,15 @@ The timeline and scene use a **center-based coordinate system**. When you set po
 
 Do not assume (0, 0) is at the bottom or top-left—it is always the center. Do not assume "up" is positive y—in this system, positive y is down.
 
+## Color Grading (IMPORTANT)
+
+When adjusting video or image clip color (contrast, saturation, temperature, tint, highlights, shadows):
+
+- **Range is -100 to 100** — not 0–1. Values like 0.1, 0.2, 0.15 are far too small and produce no visible effect.
+- Use values like **20–50** for noticeable change. Examples: temperature 25 = slightly warmer, saturation 30 = visibly more saturated, contrast 15 = subtle contrast bump.
+- For "slightly warmer, slightly more saturated, touch of contrast": use e.g. `temperature: 25, saturation: 30, contrast: 15` — NOT 0.2, 0.15, 0.1.
+- **Exception**: exposure uses range -2 to 2 (not -100 to 100).
+
 ## Tool Usage Guidelines
 
 - In Ask Mode: Do not call any tools, just answer clearly

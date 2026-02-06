@@ -242,16 +242,27 @@ This creates:
 - Pub/Sub topics
 - `generated.env` file with all configuration
 
-### 4b. GCS CORS (for direct playback from GCS)
+### 4b. GCS CORS (for direct playback and LiveSession media)
 
-Preview uses signed URLs so the browser loads media directly from GCS. The bucket must allow your app origins:
+Preview and LiveSession use signed URLs so the browser fetches media directly from GCS. **The bucket must have CORS enabled** or you’ll see errors like “blocked by CORS policy: No 'Access-Control-Allow-Origin' header”.
+
+From repo root:
 
 ```bash
-# From repo root; bucket name from terraform.tfvars / gcs_bucket_name
+# Default bucket: geminivideostudio-storage
+./deploy/set-gcs-cors.sh
+
+# Or pass your bucket (e.g. from terraform.tfvars / gcs_bucket_name)
+./deploy/set-gcs-cors.sh your-bucket-name
+```
+
+Equivalent manual step:
+
+```bash
 gsutil cors set deploy/gcs-cors.json gs://geminivideostudio-storage
 ```
 
-If the bucket name differs, use your actual bucket. CORS allows `https://www.geminivideo.studio`, `https://geminivideo.studio`, and `http://localhost:3000`.
+Allowed origins: `https://www.geminivideo.studio`, `https://geminivideo.studio`, `http://localhost:3000`. To add more, edit `deploy/gcs-cors.json` and re-run the script.
 
 ### 5. Setup the VM
 

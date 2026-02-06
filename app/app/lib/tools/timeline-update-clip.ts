@@ -25,18 +25,19 @@ const focusSchema: z.ZodType<Focus> = z.object({
   zoom: z.number().min(1),
 });
 
-/** Color grading: exposure -2 to 2; contrast/saturation/temperature/tint/highlights/shadows -100 to 100 (use 10–50 for visible effect, not 0–2). */
+/** Color grading: exposure -2 to 2; contrast/saturation/temperature/tint/highlights/shadows -100 to 100 (use 15-50 for visible effect, never 0-1). */
 const colorGradingSchema = z
   .object({
-    exposure: z.number().min(-2).max(2).optional(),
-    contrast: z.number().min(-100).max(100).optional(),
-    saturation: z.number().min(-100).max(100).optional(),
-    temperature: z.number().min(-100).max(100).optional(),
-    tint: z.number().min(-100).max(100).optional(),
-    highlights: z.number().min(-100).max(100).optional(),
-    shadows: z.number().min(-100).max(100).optional(),
+    exposure: z.number().min(-2).max(2).optional().describe("Range -2 to 2 only"),
+    contrast: z.number().min(-100).max(100).optional().describe("Range -100 to 100. Use 15-50 for visible effect (not 0.1)."),
+    saturation: z.number().min(-100).max(100).optional().describe("Range -100 to 100. Use 15-50 for visible effect (not 0.15)."),
+    temperature: z.number().min(-100).max(100).optional().describe("Range -100 to 100 (cool to warm). Use 15-50 for visible effect (not 0.2)."),
+    tint: z.number().min(-100).max(100).optional().describe("Range -100 to 100 (green to magenta). Use 15-50 for visible effect."),
+    highlights: z.number().min(-100).max(100).optional().describe("Range -100 to 100. Use 15-50 for visible effect."),
+    shadows: z.number().min(-100).max(100).optional().describe("Range -100 to 100. Use 15-50 for visible effect."),
   })
-  .optional();
+  .optional()
+  .describe("Exposure: -2 to 2. All others: -100 to 100. Use 20-50 for visible change—never 0.1 or 0.2.");
 
 /** Chroma key: key color (hex), threshold and smoothness 0–1 */
 const chromaKeySchema = z
@@ -240,7 +241,7 @@ export const timelineUpdateClipTool: ToolDefinition<
   name: "timelineUpdateClip",
   label: "Update Timeline Clip",
   description:
-    "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s). Use animation (none|hover|pulse|float|glow) and animationIntensity (0-5x) for idle animations on video, text, and image clips.",
+    "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s). Use animation (none|hover|pulse|float|glow) and animationIntensity (0-5x) for idle animations on video, text, and image clips. COLOR GRADING: contrast, saturation, temperature, tint, highlights, shadows use range -100 to 100 (NOT 0–1). Use 20–50 for visible effect—values like 0.1 or 0.2 are too small. exposure is -2 to 2.",
   runLocation: "client",
   inputSchema: clipUpdateSchema,
   fields: [
@@ -295,9 +296,9 @@ export const timelineUpdateClipTool: ToolDefinition<
       label: "Video Settings",
       type: "json",
       placeholder:
-        '{"width":1920,"height":1080,"objectFit":"contain","focus":{"x":0.5,"y":0.5,"zoom":1},"colorGrading":{...},"chromaKey":{...},"audioVolume":1}',
+        '{"width":1920,"height":1080,"objectFit":"contain","focus":{"x":0.5,"y":0.5,"zoom":1},"colorGrading":{"temperature":25,"saturation":30,"contrast":15},"chromaKey":{...},"audioVolume":1}',
       description:
-        "Do not pass src—media URL is derived from clip's assetId. focus: center (x,y 0–1) and zoom (1 = full frame, 2 = 2×). colorGrading: exposure only is -2 to 2; contrast, saturation, temperature, tint, highlights, shadows are -100 to 100 (use e.g. 20 or -30 for visible change—values like 1.4 are too small). chromaKey: key color (hex), threshold and smoothness 0–1 for green screen. audioVolume: 0–1 for video clip audio track.",
+        "Do not pass src—media URL is derived from clip's assetId. focus: center (x,y 0–1) and zoom (1 = full frame, 2 = 2×). colorGrading: contrast, saturation, temperature, tint, highlights, shadows MUST use -100 to 100 (NOT 0–1). Example for slightly warmer/more saturated: {\"temperature\":25,\"saturation\":30,\"contrast\":15}. Never use 0.1, 0.2, etc—use 15–50. exposure: -2 to 2 only. chromaKey: key color (hex), threshold and smoothness 0–1. audioVolume: 0–1.",
     },
     {
       name: "audioSettings",
@@ -312,7 +313,7 @@ export const timelineUpdateClipTool: ToolDefinition<
       type: "json",
       placeholder: '{"width":1920,"height":1080}',
       description:
-        "Do not pass src—media URL is derived from clip's assetId. colorGrading: exposure -2 to 2; contrast, saturation, temperature, tint, highlights, shadows -100 to 100 (use e.g. 20 or -30, not 1.4).",
+        "Do not pass src—media URL is derived from clip's assetId. colorGrading: contrast, saturation, temperature, tint, highlights, shadows use -100 to 100 (NOT 0–1). Use 15–50 for visible effect. exposure: -2 to 2 only.",
     },
     {
       name: "textSettings",
