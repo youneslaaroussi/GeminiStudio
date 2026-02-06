@@ -12,7 +12,7 @@
     "dev:restart": "overmind restart",
     "dev:stop": "overmind stop",
     "dev:status": "overmind status",
-    "dev:simple": "concurrently -n app,renderer,billing,assets,effects,langgraph -c cyan,yellow,green,magenta,blue,red \"cd app && pnpm dev\" \"cd renderer && pnpm dev\" \"cd billing-service && pnpm start:dev\" \"cd asset-service && uv run python -m asset_service\" \"cd video-effects-service && uv run python -m video_effects_service\" \"cd langgraph_server && uv run uvicorn langgraph_server.main:app --reload --port 8000\""
+    "dev:simple": "concurrently -n app,renderer,billing,assets,effects,langgraph -c cyan,yellow,green,magenta,blue,red \"cd app && pnpm dev\" \"cd renderer && pnpm dev\" \"cd billing-service && pnpm start:dev\" \"cd asset-service && uv run python -m asset_service\" \"cd video-effects-service && uv run python -m video_effects_service\" \"cd langgraph_server && uv run env PYTHONPATH=src uvicorn langgraph_server.main:app --reload --port 8000\""
   },
   "dependencies": {
     "ws": "^8.19.0"

@@ -28,9 +28,12 @@ interface UploadRequestBody {
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = `gemini-files_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+  
   // Require authentication
   const userId = await verifyAuth(request);
   if (!userId) {
+    console.error(`[gemini-files:${requestId}] ERROR: Unauthorized`);
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -38,10 +41,12 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as UploadRequestBody;
 
     if (!body.url) {
+      console.error(`[gemini-files:${requestId}] ERROR: url is required`);
       return NextResponse.json({ error: "url is required" }, { status: 400 });
     }
 
     if (!body.mimeType) {
+      console.error(`[gemini-files:${requestId}] ERROR: mimeType is required`);
       return NextResponse.json({ error: "mimeType is required" }, { status: 400 });
     }
 
@@ -69,24 +74,19 @@ export async function POST(request: NextRequest) {
 
     // HTTP(S) URL - upload to Files API
     if (!body.url.startsWith("http://") && !body.url.startsWith("https://")) {
+      console.error(`[gemini-files:${requestId}] ERROR: Invalid URL format`, { url: body.url });
       return NextResponse.json(
         { error: "Invalid URL format. Expected http:// or https://" },
         { status: 400 }
       );
     }
 
-    console.log(`[gemini-files] Uploading to Gemini Files API from URL...`);
-
     try {
       const uploadedFile = await uploadFileFromUrl(body.url, {
         mimeType: normalizedMimeType,
         displayName: body.displayName,
       });
-
-      // Wait for the file to be processed
       const activeFile = await waitForFileActive(uploadedFile.name);
-
-      console.log(`[gemini-files] File uploaded successfully: ${activeFile.uri}`);
 
       return NextResponse.json({
         fileUri: activeFile.uri,
@@ -98,6 +98,11 @@ export async function POST(request: NextRequest) {
       });
     } catch (err) {
       if (err instanceof GeminiFilesApiError) {
+        console.error(`[gemini-files:${requestId}] Gemini Files API error`, {
+          message: err.message,
+          statusCode: err.statusCode,
+          details: err.details,
+        });
         return NextResponse.json(
           { error: `Failed to upload file: ${err.message}`, details: err.details },
           { status: err.statusCode }
@@ -106,7 +111,10 @@ export async function POST(request: NextRequest) {
       throw err;
     }
   } catch (error) {
-    console.error("[gemini-files] Failed to upload file:", error);
+    console.error(`[gemini-files:${requestId}] Unexpected error`, {
+      error: error instanceof Error ? error.message : "Unknown error",
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }

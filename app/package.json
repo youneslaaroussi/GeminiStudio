@@ -12,7 +12,7 @@
     "add-credits": "tsx scripts/add-credits.ts"
   },
   "dependencies": {
-    "@ai-sdk/google": "3.0.13",
+    "@ai-sdk/google": "file:../ai-sdk/packages/google",
     "@ai-sdk/provider-utils": "^4.0.9",
     "@ai-sdk/react": "3.0.52",
     "@automerge/automerge": "^3.2.3",

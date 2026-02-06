@@ -119,20 +119,15 @@ function createToolboxTools(): ToolMap {
             toolCallId: options.toolCallId,
             inputKeys: Object.keys(input ?? {}),
           };
-          logger.info(context, "Waiting for client tool result");
           const result = await waitForClientToolResult({
             toolCallId: options.toolCallId,
             toolName: definition.name,
-            timeoutMs: definition.name === "watchVideo" ? 300_000 : undefined,
+            timeoutMs: (definition.name === "watchVideo" || definition.name === "watchAsset") ? 300_000 : undefined,
           });
           if (result.status === "error") {
             logger.error({ ...context, error: result.error }, "Client tool execution failed");
             throw new Error(result.error ?? "Client tool execution failed.");
           }
-          logger.info(
-            { ...context, summary: summarizeExecutionResult(result), hasMeta: !!result.meta },
-            "Client tool execution completed"
-          );
           // Return raw result - prepareStep needs meta._injectMedia, toModelOutput transforms for model
           return result;
         }
@@ -142,8 +137,6 @@ function createToolboxTools(): ToolMap {
           runLocation: definition.runLocation ?? "server",
           inputKeys: Object.keys(input ?? {}),
         };
-        logger.info(context, "Executing toolbox tool");
-
         const result = await executeTool({
           toolName: definition.name,
           input,
@@ -153,10 +146,6 @@ function createToolboxTools(): ToolMap {
           logger.error({ ...context, error: result.error }, "Tool execution failed");
           throw new Error(result.error ?? "Tool execution failed.");
         }
-        logger.info(
-          { ...context, summary: summarizeExecutionResult(result), hasMeta: !!result.meta },
-          "Tool execution completed"
-        );
         // Return raw result - toModelOutput transforms for model
         return result;
       },
@@ -217,24 +206,6 @@ export async function POST(req: Request) {
     typeof body?.id === "string" && body.id.length > 0 ? body.id : "default";
   const fallbackMode = isChatMode(body?.mode) ? body.mode : "ask";
 
-  logger.info(
-    {
-      messageCount: messages.length,
-      bodyKeys: Object.keys(body ?? {}),
-      messages: messages.map((m) => ({
-        id: m.id,
-        role: m.role,
-        roleType: typeof m.role,
-        partsCount: Array.isArray(m.parts) ? m.parts.length : 0,
-        hasContent: !!(m as { content?: string }).content,
-        keys: Object.keys(m ?? {}),
-        metadataKeys: m.metadata ? Object.keys(m.metadata) : [],
-        assetMentionsCount: (m.metadata as ChatMessageMetadata | undefined)?.assetMentions?.length ?? 0,
-      })),
-    },
-    "Incoming chat request"
-  );
-
   const filteredMessages = messages.filter(
     (message) => typeof message.role === "string" && message.role.length > 0
   );
@@ -271,20 +242,6 @@ export async function POST(req: Request) {
 
   // Inject attachment parts into user messages
   const messagesWithAttachments = injectAttachmentParts(messagesWithMetadata);
-
-  logger.info(
-    {
-      filteredCount: filteredMessages.length,
-      withAttachmentsCount: messagesWithAttachments.length,
-      messagesWithAttachments: messagesWithAttachments.map((m) => ({
-        id: m.id,
-        role: m.role,
-        partsCount: Array.isArray(m.parts) ? m.parts.length : 0,
-        partTypes: Array.isArray(m.parts) ? m.parts.map((p) => p.type) : [],
-      })),
-    },
-    "After processing messages"
-  );
 
   // Gemini API requires at least one user message
   if (messagesWithAttachments.length === 0) {
@@ -323,20 +280,6 @@ export async function POST(req: Request) {
     ...messagesWithAttachments,
   ]);
 
-  logger.info(
-    {
-      modelMessagesCount: modelMessages.length,
-      modelMessages: modelMessages.map((m) => ({
-        role: m.role,
-        contentLength: Array.isArray(m.content) ? m.content.length : 0,
-        contentTypes: Array.isArray(m.content)
-          ? m.content.map((c) => c.type)
-          : [],
-      })),
-    },
-    "Converted model messages"
-  );
-
   const result = streamText({
     model: google(process.env.AI_CHAT_GOOGLE_MODEL ?? "gemini-3-pro-preview"),
     providerOptions: {
@@ -350,23 +293,35 @@ export async function POST(req: Request) {
     stopWhen: stepCountIs(5),
     toolChoice: activeMode === "ask" ? "none" : undefined,
     tools,
-    // Inject media as user message when watchAsset returns _injectMedia flag
-    // This is needed because Gemini doesn't support multimodal tool results
+    // When a tool returns _injectMedia + fileUri, optionally inject as user message (fallback).
+    // Our local @ai-sdk/google already sends the file in the tool result (file-url → fileData),
+    // so the model receives the video there; this injection supports videoMetadata (time range) and legacy paths.
     prepareStep: async ({ stepNumber, steps, messages }) => {
       if (stepNumber > 0 && steps.length > 0) {
         const lastStep = steps[steps.length - 1];
         for (const toolResult of lastStep.toolResults) {
           // Check if tool result has _injectMedia flag in meta (output is raw ToolExecutionResult)
-          const output = toolResult.output as { meta?: { _injectMedia?: boolean; fileUri?: string; mimeType?: string; startOffset?: string; endOffset?: string; assetName?: string } } | undefined;
+          const output = toolResult.output as { meta?: { _injectMedia?: boolean; fileUri?: string; mimeType?: string; startOffset?: string; endOffset?: string; assetName?: string; jobId?: string; projectName?: string } } | undefined;
           const meta = output?.meta;
           if (meta?._injectMedia && meta?.fileUri) {
-            logger.info({ assetName: meta.assetName, startOffset: meta.startOffset, endOffset: meta.endOffset }, "Injecting media as user message");
-            
-            // Build file content with optional videoMetadata for time range
-            const fileContent: Record<string, unknown> = {
-              type: "file",
-              data: meta.fileUri,
-              mediaType: meta.mimeType,
+            // Build file content - prepareStep receives model messages (already converted)
+            // Model messages require 'data' field (not 'url' - that's for UI messages)
+            const fileContent: {
+              type: "file";
+              data: string;
+              mediaType: string;
+              providerOptions?: {
+                google: {
+                  videoMetadata?: {
+                    startOffset?: string;
+                    endOffset?: string;
+                  };
+                };
+              };
+            } = {
+              type: "file" as const,
+              data: meta.fileUri, // Model messages use 'data', UI messages use 'url'
+              mediaType: meta.mimeType || "video/mp4",
             };
             
             // Add videoMetadata for time range if specified
@@ -381,24 +336,49 @@ export async function POST(req: Request) {
               };
             }
             
-            // Append media as user message
-            return {
-              messages: [
-                ...messages,
-                {
-                  role: "user" as const,
-                  content: [
-                    { 
-                      type: "text" as const, 
-                      text: meta.startOffset || meta.endOffset
-                        ? `Here is the video segment (${meta.startOffset || '0s'} - ${meta.endOffset || 'end'}) for "${meta.assetName || 'asset'}":`
-                        : `Here is the media "${meta.assetName || 'asset'}":`,
-                    },
-                    fileContent as { type: "file"; data: string; mediaType: string },
-                  ],
+            const textContent = meta.startOffset || meta.endOffset
+              ? `Here is the video segment (${meta.startOffset || '0s'} - ${meta.endOffset || 'end'}) for "${meta.assetName || 'asset'}":`
+              : `Here is the media "${meta.assetName || 'asset'}":`;
+            
+            // prepareStep receives model messages, so return in model message format
+            // Model messages have content as array of parts with 'data' field
+            const injectedMessage: {
+              role: "user";
+              content: Array<
+                | { type: "text"; text: string }
+                | { type: "file"; data: string; mediaType: string; providerOptions?: { google: { videoMetadata?: { startOffset?: string; endOffset?: string } } } }
+              >;
+            } = {
+              role: "user" as const,
+              content: [
+                { 
+                  type: "text" as const, 
+                  text: textContent,
                 },
+                fileContent,
               ],
             };
+            
+            const newMessages = [
+              ...messages,
+              injectedMessage,
+            ];
+            
+            // Append media as user message
+            return {
+              messages: newMessages,
+            };
+          } else {
+            // Log when _injectMedia is missing or fileUri is missing
+            const hasInjectMedia = meta?._injectMedia;
+            const hasFileUri = meta?.fileUri;
+            if (hasInjectMedia && !hasFileUri) {
+              logger.warn({
+                stepNumber,
+                toolName: toolResult.toolName,
+                meta: output?.meta,
+              }, "[CHAT] _injectMedia=true but fileUri missing - media not injected");
+            }
           }
         }
       }
@@ -409,6 +389,19 @@ export async function POST(req: Request) {
   return result.toUIMessageStreamResponse({
     sendReasoning: true,
     onError: (err) => {
+      // Log detailed error information
+      if (err && typeof err === "object" && "cause" in err) {
+        const apiError = err as any;
+        logger.error({
+          errorType: "AI_APICallError",
+          statusCode: apiError.statusCode,
+          url: apiError.url,
+          requestBody: apiError.requestBodyValues,
+          responseBody: apiError.responseBody,
+          isRetryable: apiError.isRetryable,
+        }, "[CHAT] Gemini API error - check request format");
+      }
+      
       if (err == null) {
         return "Unknown error while contacting Gemini.";
       }
@@ -431,20 +424,8 @@ function isChatMode(value: unknown): value is ChatMode {
  * Build context text for asset mentions so the agent knows the actual assetIds
  */
 function buildAssetMentionContext(metadata: ChatMessageMetadata | undefined): string | null {
-  logger.info({
-    hasMetadata: !!metadata,
-    metadataKeys: metadata ? Object.keys(metadata) : [],
-    assetMentions: metadata?.assetMentions,
-    assetMentionsCount: metadata?.assetMentions?.length ?? 0,
-  }, "buildAssetMentionContext called");
-
   const mentions = metadata?.assetMentions;
-  if (!mentions || mentions.length === 0) {
-    logger.info("No asset mentions found in metadata");
-    return null;
-  }
-
-  logger.info({ mentions }, "Building context for asset mentions");
+  if (!mentions || mentions.length === 0) return null;
 
   const lines = mentions.map((mention) => {
     const parts = [
@@ -466,7 +447,6 @@ function buildAssetMentionContext(metadata: ChatMessageMetadata | undefined): st
     "━━━━━━━━━━━━━━━━━━━━━━━━━",
   ].join("\n");
 
-  logger.info({ contextLength: context.length }, "Built asset mention context");
   return context;
 }
 

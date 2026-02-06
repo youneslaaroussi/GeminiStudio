@@ -82,8 +82,11 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
     },
   ],
   async run(input, context) {
+    const toolCallId = `watchVideo_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
     try {
       if (typeof window === "undefined") {
+        console.error(`[watchVideo:${toolCallId}] ERROR: Must run from client side`);
         return {
           status: "error" as const,
           error: "watchVideo must be run from the client side.",
@@ -91,6 +94,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
       }
 
       if (!context.project) {
+        console.error(`[watchVideo:${toolCallId}] ERROR: No project available`);
         return {
           status: "error" as const,
           error: "No project available. Cannot render without a timeline.",
@@ -98,6 +102,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
       }
 
       if (!context.projectId) {
+        console.error(`[watchVideo:${toolCallId}] ERROR: No project ID available`);
         return {
           status: "error" as const,
           error: "No project ID available.",
@@ -135,6 +140,11 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
 
       if (!renderResponse.ok) {
         const errorData = await renderResponse.json().catch(() => ({}));
+        console.error(`[watchVideo:${toolCallId}] ERROR: Render API failed`, {
+          status: renderResponse.status,
+          statusText: renderResponse.statusText,
+          error: errorData.error,
+        });
         return {
           status: "error" as const,
           error: `Failed to start preview render: ${errorData.error || renderResponse.statusText}`,
@@ -155,6 +165,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
         });
 
         if (!statusResponse.ok) {
+          console.error(`[watchVideo:${toolCallId}] Failed to check render status`, statusResponse.status, statusResponse.statusText);
           return {
             status: "error" as const,
             error: `Failed to check render status: ${statusResponse.statusText}`,
@@ -163,11 +174,10 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
 
         jobStatus = (await statusResponse.json()) as JobStatusResponse;
 
-        if (jobStatus.state === "completed") {
-          break;
-        }
+        if (jobStatus.state === "completed") break;
 
         if (jobStatus.state === "failed") {
+          console.error(`[watchVideo:${toolCallId}] Render failed`, jobStatus.failedReason);
           return {
             status: "error" as const,
             error: `Preview render failed: ${jobStatus.failedReason || "Unknown error"}`,
@@ -179,6 +189,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
       }
 
       if (!jobStatus || jobStatus.state !== "completed") {
+        console.error(`[watchVideo:${toolCallId}] Render timeout`);
         return {
           status: "error" as const,
           error: "Preview render timed out after 5 minutes.",
@@ -186,6 +197,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
       }
 
       if (!jobStatus.downloadUrl) {
+        console.error(`[watchVideo:${toolCallId}] No download URL from render`);
         return {
           status: "error" as const,
           error: "Preview render completed but no download URL was provided.",
@@ -209,20 +221,22 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
       const geminiData = (await geminiResponse.json()) as GeminiFilesResponse;
 
       if (!geminiResponse.ok || !geminiData.fileUri) {
+        console.error(`[watchVideo:${toolCallId}] Gemini Files API failed`, geminiResponse.status, geminiData.error);
         return {
           status: "error" as const,
           error: geminiData.error || "Failed to prepare video for viewing",
         };
       }
 
-      // Step 4: Return with _injectMedia flag for media injection
-      // Gemini doesn't support multimodal tool results, so prepareStep injects as user message
-      // For Live API (which can't use fileUri with tokens), we also include downloadUrl
+      // Step 4: Return with _injectMedia + fileUri for multimodal tool result
+      // Our local @ai-sdk/google (ai-sdk/packages/google) sends file-url tool results as fileData,
+      // so the model receives this video in the tool result. prepareStep also injects as user message (fallback).
+      // For Live API we also include downloadUrl.
       const renderTime = Math.round((Date.now() - startTime) / 1000);
       const rangeNote =
         range != null ? ` (segment ${range[0]}s–${range[1]}s)` : "";
 
-      return {
+      const result = {
         status: "success" as const,
         outputs: [
           {
@@ -241,8 +255,14 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
           renderTimeSeconds: renderTime,
         },
       };
+
+      return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
+      console.error(`[watchVideo:${toolCallId}] ERROR: Exception caught`, {
+        error: message,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       return {
         status: "error" as const,
         error: message,

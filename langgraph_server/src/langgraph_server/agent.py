@@ -23,9 +23,11 @@ logger = logging.getLogger(__name__)
 def _build_media_message(result: dict[str, Any], source_tool: str | None = None) -> HumanMessage | None:
     """Build a HumanMessage with media content for injection after tool result.
     
-    When a tool returns _injectMedia: True, we need to inject the media as a
-    HumanMessage because Gemini doesn't support multimodal content in function
-    responses (tool results). This workaround appends the media as a user message.
+    When watchVideo/watchAsset return _injectMedia: True, we inject the media as a
+    HumanMessage so the model sees/hears it. LangChain's Google GenAI adapter supports
+    multimodal HumanMessage (file_uri), so the model receives the video/audio/image.
+    (The Next.js app uses a patched @ai-sdk/google that sends media inside the tool
+    result instead; both approaches deliver the media to Gemini.)
     
     Returns HumanMessage with media, or None if not a media injection result.
     """
@@ -148,9 +150,9 @@ def create_graph(settings: Settings | None = None):
                     else:
                         result = tool.invoke(args, config=config)
                     
-                    # Check if this result needs media injection (Gemini workaround)
-                    # We inject media as HumanMessage after ToolMessage because Gemini
-                    # doesn't support multimodal content in function responses
+                    # Check if this result needs media injection (watchVideo/watchAsset)
+                    # We inject media as HumanMessage; langchain-google-genai supports
+                    # multimodal user messages (file_uri), so the model receives the media
                     if isinstance(result, dict) and result.get("_injectMedia"):
                         media_msg = _build_media_message(result, source_tool=tool_name)
                         if media_msg:

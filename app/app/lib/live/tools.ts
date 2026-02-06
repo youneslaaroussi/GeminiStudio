@@ -214,19 +214,38 @@ export async function executeToolByName(
   // Pass through media injection metadata for tools like watchVideo/watchAsset
   const meta = result.meta as Record<string, unknown> | undefined;
   if (meta?._injectMedia && meta?.mimeType) {
+    console.log(`[LiveTools] Media injection metadata detected`, {
+      toolName: result.toolName,
+      hasMimeType: !!meta.mimeType,
+      hasDownloadUrl: !!meta.downloadUrl,
+      hasFileUri: !!meta.fileUri,
+      assetType: meta.assetType,
+      mimeType: meta.mimeType,
+    });
     response._injectMedia = true;
     response._mimeType = meta.mimeType;
     // downloadUrl is preferred for Live API (which can't use fileUri with tokens)
     if (meta.downloadUrl) {
       response._downloadUrl = meta.downloadUrl;
+      console.log(`[LiveTools] Added downloadUrl to response`, {
+        downloadUrl: meta.downloadUrl as string, // FULL URL - don't truncate
+      });
     }
     if (meta.fileUri) {
       response._fileUri = meta.fileUri;
+      console.log(`[LiveTools] Added fileUri to response`, {
+        fileUri: meta.fileUri,
+      });
     }
     // Pass asset type for proper handling (video needs frame extraction, image can be sent directly)
     if (meta.assetType) {
       response._assetType = meta.assetType;
     }
+  } else if (meta?._injectMedia) {
+    console.warn(`[LiveTools] WARNING: _injectMedia=true but mimeType missing`, {
+      toolName: result.toolName,
+      meta: Object.keys(meta || {}),
+    });
   }
 
   return response;

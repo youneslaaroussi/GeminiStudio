@@ -427,6 +427,7 @@ gcloud compute ssh gemini-studio --zone=us-central1-a --command='
 ```
 GeminiStudio/
 ├── app/                    # Next.js app (editor, chat, assets UI)
+├── ai-sdk/                 # Patched Vercel AI SDK (file-url in tool results for Gemini); see Credits
 ├── scene/                  # Motion Canvas project (Vite)
 ├── renderer/               # Render service (Express, BullMQ, headless bundle)
 ├── langgraph_server/       # LangGraph agent (FastAPI, Gemini 3, tools)
@@ -445,6 +446,7 @@ GeminiStudio/
 | Area          | Path |
 |---------------|------|
 | Agent & tools | `langgraph_server/agent.py`, `langgraph_server/tools/` |
+| AI SDK fork   | `ai-sdk/` (patched `@ai-sdk/google` for multimodal tool results; app uses `file:../ai-sdk/packages/google`) |
 | Tool manifest | `shared/tools/manifest.json` |
 | Renderer      | `renderer/` |
 | Scene         | `scene/` |
@@ -467,7 +469,7 @@ Gemini Studio is built on top of incredible open-source projects and cloud servi
 
 ### AI & Agent
 
-- **[Vercel AI SDK](https://sdk.vercel.ai/)** — React hooks and streaming for the chat UI. We use `ai`, `@ai-sdk/react`, and `@ai-sdk/google` for the frontend agent experience.
+- **[Vercel AI SDK](https://sdk.vercel.ai/)** — React hooks and streaming for the chat UI. We use `ai`, `@ai-sdk/react`, and `@ai-sdk/google` for the frontend agent experience. **Multimodal tool results:** The upstream SDK did not support sending video, image, or audio from *tool results* to Gemini (tool-returned files were serialized as JSON text, so the model never saw the media). We implemented **`file-url` handling** in the Google provider so that when a tool returns a file (e.g. our `watchVideo` / `watchAsset` tools), the model receives it as real `fileData` and can see/hear the content. This is a significant contribution: it enables the “agent watches its own work” loop and any agent that returns media from tools. We ship a patched copy under `ai-sdk/` (Apache 2.0, see [ai-sdk/LICENSE](ai-sdk/LICENSE)) and **plan to submit this as a PR** to [vercel/ai](https://github.com/vercel/ai).
 - **[LangGraph](https://langchain-ai.github.io/langgraph/)** — Agent orchestration and tool execution. Powers our conversational agent. [GitHub](https://github.com/langchain-ai/langgraph)
 - **[Google Gemini 3 Pro](https://deepmind.google/technologies/gemini/)** — Reasoning, tool use, multimodal understanding (video, images, audio), and generative APIs (Veo, Imagen, Lyria, Chirp).
 

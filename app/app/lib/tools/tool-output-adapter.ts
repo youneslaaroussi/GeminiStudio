@@ -23,6 +23,21 @@ export function toolResultOutputFromExecution(
     appendContentFromToolOutput(content, output);
   });
 
+  // Multi-modal tool results: when a tool sets meta._injectMedia + meta.fileUri, add file-url
+  // so the model receives the media (video, image, or audio). Handled by our local @ai-sdk/google (ai-sdk/packages/google).
+  const meta = result.meta as
+    | { _injectMedia?: boolean; fileUri?: string; mimeType?: string; assetName?: string }
+    | undefined;
+  if (meta?._injectMedia && meta?.fileUri) {
+    content.push({
+      type: "file-url",
+      url: meta.fileUri,
+      ...(meta.mimeType && {
+        providerOptions: { google: { mimeType: meta.mimeType } } as Record<string, unknown>,
+      }),
+    } as ContentEntry);
+  }
+
   if (content.length === 0) {
     content.push({
       type: "text",

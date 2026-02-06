@@ -120,9 +120,9 @@ export const watchAssetTool: ToolDefinition<typeof watchAssetSchema, Project> = 
         };
       }
 
-      // Return file info with _injectMedia flag
-      // The chat route will inject this as a user message for Gemini to see
-      // For Live API (which can't use fileUri with tokens), we also include downloadUrl
+      // Return with _injectMedia + fileUri so the model receives the media in the tool result.
+      // Our local @ai-sdk/google sends file-url as fileData (video, image, or audio).
+      // prepareStep also injects as user message (fallback). downloadUrl is for Live API.
       const timeRange = input.startTime || input.endTime
         ? ` (${input.startTime || '0'}s - ${input.endTime || 'end'})`
         : '';

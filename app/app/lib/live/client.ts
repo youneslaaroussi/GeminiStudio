@@ -218,20 +218,51 @@ export class LiveSession {
     const responses: ToolCallResponse[] = [];
     const mediaToInject: Array<{ downloadUrl: string; mimeType: string; assetType?: string }> = [];
 
+    console.log(`[LiveSession] Handling ${functionCalls.length} tool call(s)`, {
+      toolNames: functionCalls.map(c => c.name),
+    });
+
     for (const call of functionCalls) {
       try {
+        console.log(`[LiveSession] Executing tool: ${call.name}`, {
+          toolId: call.id,
+          args: call.args,
+        });
+
         const result = await this.callbacks.onToolCall?.({
           id: call.id,
           name: call.name,
           args: call.args,
         });
 
+        console.log(`[LiveSession] Tool ${call.name} completed`, {
+          toolId: call.id,
+          hasResult: !!result,
+          hasInjectMedia: result?._injectMedia,
+          hasFileUri: !!(result as any)?._fileUri,
+          hasDownloadUrl: !!(result as any)?._downloadUrl,
+          mimeType: (result as any)?._mimeType,
+        });
+
         // Check for media injection request - prefer downloadUrl for Live API
         if (result?._injectMedia && result._downloadUrl && result._mimeType) {
+          console.log(`[LiveSession] Media injection detected for ${call.name}`, {
+            toolId: call.id,
+            downloadUrl: result._downloadUrl, // FULL URL - don't truncate
+            mimeType: result._mimeType,
+            assetType: result._assetType,
+          });
           mediaToInject.push({
             downloadUrl: result._downloadUrl as string,
             mimeType: result._mimeType as string,
             assetType: result._assetType as string | undefined,
+          });
+        } else if (result?._injectMedia) {
+          console.warn(`[LiveSession] WARNING: _injectMedia=true but missing downloadUrl or mimeType for ${call.name}`, {
+            toolId: call.id,
+            hasDownloadUrl: !!result._downloadUrl,
+            hasMimeType: !!result._mimeType,
+            hasFileUri: !!(result as any)?._fileUri,
           });
         }
 
@@ -241,6 +272,10 @@ export class LiveSession {
           response: result ?? { result: "ok" },
         });
       } catch (error) {
+        console.error(`[LiveSession] Tool ${call.name} failed`, {
+          toolId: call.id,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
         responses.push({
           id: call.id,
           name: call.name,
@@ -252,20 +287,32 @@ export class LiveSession {
     }
 
     // Send tool responses first
+    console.log(`[LiveSession] Sending ${responses.length} tool response(s)`);
     this.sendToolResponses(responses);
 
     // Then inject any media so the model can see it
+    console.log(`[LiveSession] Injecting ${mediaToInject.length} media item(s)`);
     for (const media of mediaToInject) {
       const isVideo = media.assetType === "video" || media.mimeType.startsWith("video/");
       const isImage = media.assetType === "image" || media.mimeType.startsWith("image/");
       const isAudio = media.assetType === "audio" || media.mimeType.startsWith("audio/");
 
+      console.log(`[LiveSession] Injecting media`, {
+        type: isVideo ? "video" : isImage ? "image" : isAudio ? "audio" : "unknown",
+        mimeType: media.mimeType,
+        downloadUrl: media.downloadUrl, // FULL URL - don't truncate
+      });
+
       if (isVideo) {
         // Video: extract frames using mediabunny
+        console.log(`[LiveSession] Extracting video frames from: ${media.downloadUrl}`);
         await this.sendVideoFrames(media.downloadUrl, this.authToken ?? undefined, 4);
+        console.log(`[LiveSession] Video frames sent to model`);
       } else if (isImage) {
         // Image: send directly
+        console.log(`[LiveSession] Sending image: ${media.downloadUrl}`);
         await this.sendImage(media.downloadUrl, this.authToken ?? undefined);
+        console.log(`[LiveSession] Image sent to model`);
       } else if (isAudio) {
         // Audio: Live API doesn't support injecting audio files mid-conversation
         // The model already received the tool response text
