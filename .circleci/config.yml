@@ -15,12 +15,18 @@ jobs:
       - run:
           name: Build ai-sdk/google dist
           command: |
-            apk add --no-cache nodejs npm
+            set -euo pipefail
+            apk add --no-cache nodejs npm rsync
             npm install -g pnpm@9
-            cd ai-sdk
-            pnpm install --frozen-lockfile || pnpm install
+            ROOT_DIR=$(pwd)
+            TMP_DIR=$(mktemp -d)
+            rsync -a --delete ai-sdk/ "$TMP_DIR"/ai-sdk
+            cd "$TMP_DIR"/ai-sdk
+            pnpm install --no-frozen-lockfile
             pnpm --filter @ai-sdk/google build
-            rm -rf node_modules
+            mkdir -p "$ROOT_DIR"/ai-sdk/packages/google/dist
+            rsync -a --delete packages/google/dist/ "$ROOT_DIR"/ai-sdk/packages/google/dist/
+            rm -rf "$TMP_DIR"
 
       - run:
           name: Authenticate to Google Cloud
