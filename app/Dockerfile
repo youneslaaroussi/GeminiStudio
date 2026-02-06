@@ -16,8 +16,14 @@ COPY ai-sdk/packages/google ./ai-sdk/packages/google
 # Install dependencies
 RUN pnpm install --frozen-lockfile || pnpm install
 
-# Build @ai-sdk/google (dist/ is gitignored, so it's missing in CI)
-RUN pnpm add -D tsup typescript -w && cd ai-sdk/packages/google && pnpm exec tsup --tsconfig tsconfig.build.json
+# Build @ai-sdk/google (dist/ is gitignored, so it's missing in CI).
+# Package tsconfig extends ./node_modules/@vercel/ai-tsconfig and needs deps in its node_modules.
+RUN pnpm add -D tsup typescript @vercel/ai-tsconfig -w \
+  && mkdir -p ai-sdk/packages/google/node_modules \
+  && ln -s ../../../../node_modules/@vercel ai-sdk/packages/google/node_modules/@vercel \
+  && ln -s ../../../../node_modules/@ai-sdk ai-sdk/packages/google/node_modules/@ai-sdk \
+  && ln -s ../../../../node_modules/zod ai-sdk/packages/google/node_modules/zod \
+  && cd ai-sdk/packages/google && pnpm exec tsup --tsconfig tsconfig.build.json
 
 # Copy source
 COPY app ./app
