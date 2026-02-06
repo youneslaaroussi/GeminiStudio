@@ -17,7 +17,7 @@ COPY ai-sdk/packages/google ./ai-sdk/packages/google
 RUN pnpm install --frozen-lockfile || pnpm install
 
 # Build @ai-sdk/google (dist/ is gitignored, so it's missing in CI)
-RUN cd ai-sdk/packages/google && npx tsup@8 --tsconfig tsconfig.build.json
+RUN pnpm add -D tsup typescript -w && cd ai-sdk/packages/google && pnpm exec tsup --tsconfig tsconfig.build.json
 
 # Copy source
 COPY app ./app
