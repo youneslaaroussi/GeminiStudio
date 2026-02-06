@@ -54,10 +54,9 @@ services:
       - AI_TITLE_GOOGLE_MODEL=${AI_TITLE_GOOGLE_MODEL:-gemini-2.0-flash}
       - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
       - ASSET_GCS_BUCKET=${ASSET_GCS_BUCKET}
-      # Service accounts
+      # Service accounts: Firebase only for Firebase; GCP for everything else (Speech, Veo, Lyria, GCS)
       - FIREBASE_SERVICE_ACCOUNT_KEY=/app/secrets/firebase-service-account.json
       - GOOGLE_SERVICE_ACCOUNT_KEY=/app/secrets/google-service-account.json
-      - SPEECH_SERVICE_ACCOUNT_KEY=/app/secrets/google-service-account.json
       # Veo configuration
       - VEO_PROJECT_ID=${GOOGLE_PROJECT_ID}
       - VEO_LOCATION=${VEO_LOCATION:-us-central1}
@@ -210,10 +209,9 @@ services:
       - VEO_PROJECT_ID=${GOOGLE_PROJECT_ID}
       - VEO_LOCATION=${VEO_LOCATION:-us-central1}
       - VEO_MODEL_ID=${VEO_MODEL_ID:-veo-3.0-generate-001}
-      # Lyria music (Vertex AI; same key + cloud-platform scope as app Lyria)
+      # Lyria music (Vertex AI; uses same GCP service account as GOOGLE_APPLICATION_CREDENTIALS)
       - LYRIA_MODEL=${LYRIA_MODEL:-lyria-002}
       - LYRIA_LOCATION=${LYRIA_LOCATION:-us-central1}
-      - LYRIA_SERVICE_ACCOUNT_KEY=${LYRIA_SERVICE_ACCOUNT_KEY:-/app/secrets/google-service-account.json}
       # Telegram
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET:-}
@@ -241,8 +239,8 @@ services:
     environment:
       - PORT=4000
       - REDIS_URL=redis://redis:6379/2
-      - RENDERER_CONCURRENCY=${RENDERER_CONCURRENCY:-5}
-      - RENDERER_HEADLESS_CONCURRENCY=${RENDERER_HEADLESS_CONCURRENCY:-5}
+      - RENDERER_CONCURRENCY=${RENDERER_CONCURRENCY:-10}
+      - RENDERER_HEADLESS_CONCURRENCY=${RENDERER_HEADLESS_CONCURRENCY:-10}
       - RENDERER_TMP_DIR=/tmp/gemini-renderer
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - RENDERER_HEADLESS=true

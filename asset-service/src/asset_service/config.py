@@ -34,12 +34,10 @@ class Settings(BaseSettings):
     speech_model: str = Field(default="chirp_3", alias="SPEECH_MODEL")
     speech_language_codes: str = Field(default="en-US", alias="SPEECH_LANGUAGE_CODES")
     speech_gcs_bucket: str | None = Field(default=None, alias="SPEECH_GCS_BUCKET")
-    speech_service_account_key: str | None = Field(default=None, alias="SPEECH_SERVICE_ACCOUNT_KEY")
 
-    # Transcoder API
+    # Transcoder API (uses same GCP service account as GOOGLE_SERVICE_ACCOUNT_KEY)
     transcoder_project_id: str | None = Field(default=None, alias="TRANSCODER_PROJECT_ID")
     transcoder_location: str = Field(default="us-central1", alias="TRANSCODER_LOCATION")
-    transcoder_service_account_key: str | None = Field(default=None, alias="TRANSCODER_SERVICE_ACCOUNT_KEY")
     # Target height for transcoding - width auto-calculated to preserve aspect ratio
     # Common values: 720 (HD), 1080 (Full HD), 480 (SD). If None, preserves original dimensions.
     transcode_target_height: int | None = Field(default=None, alias="TRANSCODE_TARGET_HEIGHT")

@@ -126,7 +126,7 @@ jobs:
               printf "SPEECH_LOCATION=us\n"
               printf "SPEECH_MODEL=chirp_3\n"
               printf "SPEECH_LANGUAGE_CODES=en-US\n"
-              printf "RENDERER_CONCURRENCY=2\n"
+              printf "RENDERER_CONCURRENCY=10\n"
               printf "DEBUG=false\n"
               printf "DOMAIN=geminivideo.studio\n"
               printf "FRONTEND_URL=https://geminivideo.studio\n"

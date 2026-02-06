@@ -5,10 +5,8 @@ const PROJECT_ID = process.env.SPEECH_PROJECT_ID || process.env.VEO_PROJECT_ID |
 const LOCATION = process.env.SPEECH_LOCATION || "global";
 const RECOGNIZER_ID = process.env.SPEECH_RECOGNIZER_ID || "_";
 const MODEL = process.env.SPEECH_MODEL || DEFAULT_SPEECH_MODEL;
-const SERVICE_ACCOUNT_KEY =
-  process.env.SPEECH_SERVICE_ACCOUNT_KEY ||
-  process.env.GOOGLE_SERVICE_ACCOUNT_KEY ||
-  process.env.ASSET_SERVICE_ACCOUNT_KEY;
+/** Same GCP service account as all other non-Firebase usage. */
+const SERVICE_ACCOUNT_KEY = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
 const LANGUAGE_CODES = (process.env.SPEECH_LANGUAGE_CODES || "en-US")
   .split(",")
   .map((code) => code.trim())
@@ -29,7 +27,7 @@ function assertSpeechEnv(): void {
     throw new Error("SPEECH_PROJECT_ID (or VEO_PROJECT_ID / GOOGLE_CLOUD_PROJECT) is not configured");
   }
   if (!SERVICE_ACCOUNT_KEY) {
-    throw new Error("SPEECH_SERVICE_ACCOUNT_KEY (or GOOGLE_SERVICE_ACCOUNT_KEY) is not configured");
+    throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY is not configured (required for Speech-to-Text)");
   }
   if (!BUCKET) {
     throw new Error("SPEECH_GCS_BUCKET is not configured");

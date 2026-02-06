@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { captureThumbnail } from "@/app/lib/utils/thumbnail";
+import { MobileTimelineControls } from "./MobileTimelineControls";
 
 function userInitials(user: { displayName?: string | null; email?: string | null }): string {
   if (user.displayName) {
@@ -402,8 +403,8 @@ export function MobileEditorLayout() {
               <ChatPanel />
             </div>
           </div>
-          <div className={cn("absolute inset-0", activeTab === "preview" ? "visible" : "invisible pointer-events-none")}>
-            <div className="h-full w-full bg-card overflow-hidden">
+          <div className={cn("absolute inset-0 flex flex-col", activeTab === "preview" ? "visible" : "invisible pointer-events-none")}>
+            <div className="flex-1 min-h-0 bg-card overflow-hidden">
               <PreviewPanel
                 ref={previewRef}
                 onPlayerChange={setPlayer}
@@ -428,6 +429,20 @@ export function MobileEditorLayout() {
                 }}
               />
             </div>
+            <MobileTimelineControls
+              hasPlayer={!!player}
+              playing={isPlaying}
+              onTogglePlay={togglePlay}
+              muted={isMuted}
+              loop={isLooping}
+              speed={playbackSpeed}
+              onToggleMute={() => setMuted(!isMuted)}
+              onToggleLoop={() => setLooping(!isLooping)}
+              onSpeedChange={setPlaybackSpeed}
+              currentTime={currentTime}
+              duration={getDuration()}
+              onSeek={setCurrentTime}
+            />
           </div>
           <div className={cn("absolute inset-0", activeTab === "assets" ? "visible" : "invisible pointer-events-none")}>
             <div className="h-full w-full bg-card overflow-hidden">

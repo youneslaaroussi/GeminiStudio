@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 
 
 def _get_gcs_credentials(settings: Settings):
-    """Get GCP credentials from service account key."""
-    key_path = settings.firebase_service_account_key
+    """Get GCP credentials specifically from the Google service account key."""
+    key_path = settings.google_service_account_key
     if not key_path:
         return None
 

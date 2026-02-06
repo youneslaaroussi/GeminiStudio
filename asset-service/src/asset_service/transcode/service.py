@@ -179,8 +179,7 @@ def get_transcode_access_token() -> str:
     """Get access token for Transcoder API."""
     settings = get_settings()
 
-    # Prefer transcoder-specific service account
-    key_source = settings.transcoder_service_account_key or settings.google_service_account_key
+    key_source = settings.google_service_account_key
 
     if not key_source:
         raise ValueError("No service account key configured for Transcoder API")

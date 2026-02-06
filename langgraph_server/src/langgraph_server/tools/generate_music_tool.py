@@ -131,9 +131,18 @@ def _wav_to_mp3(wav_data: bytes) -> bytes:
 _DURATION_CHOICES = {10, 20, 30, 60}  # seconds (Vertex Lyria returns ~30s clips; duration is informational)
 
 
+def _get_gcp_key_path(settings: Settings) -> str | None:
+    """Resolve GCP service account key path (for Vertex, GCS, etc.). Never use Firebase key."""
+    key = (
+        getattr(settings, "google_service_account_key", None)
+        or getattr(settings, "google_application_credentials", None)
+    )
+    return key if key and str(key).strip() else None
+
+
 def _get_gcs_credentials(settings: Settings):
-    """Get GCP credentials from service account key."""
-    key_path = settings.firebase_service_account_key
+    """Get GCP credentials from service account key (GCP key only, not Firebase)."""
+    key_path = _get_gcp_key_path(settings)
     if not key_path:
         return None
 
@@ -168,18 +177,9 @@ def _get_credentials_from_key(key_value: str | None) -> service_account.Credenti
 
 
 def _get_vertex_access_token(settings: Settings) -> str | None:
-    """Get an access token for Vertex AI with cloud-platform scope (same as app Lyria).
-    Prefer LYRIA_SERVICE_ACCOUNT_KEY then GOOGLE_SERVICE_ACCOUNT_KEY then FIREBASE_SERVICE_ACCOUNT_KEY.
-    """
-    creds = None
-    for key_value in (
-        getattr(settings, "lyria_service_account_key", None),
-        getattr(settings, "google_service_account_key", None),
-        settings.firebase_service_account_key,
-    ):
-        creds = _get_credentials_from_key(key_value)
-        if creds:
-            break
+    """Get an access token for Vertex AI with cloud-platform scope. Uses GCP service account only (GOOGLE_SERVICE_ACCOUNT_KEY or GOOGLE_APPLICATION_CREDENTIALS). Never uses Firebase key."""
+    key_value = _get_gcp_key_path(settings)
+    creds = _get_credentials_from_key(key_value) if key_value else None
     if not creds:
         return None
     creds = creds.with_scopes(_VERTEX_SCOPE)
@@ -371,10 +371,10 @@ def generateMusic(
     # Lyria is only available on Vertex AI (predict endpoint), not Gemini generateContent
     token = _get_vertex_access_token(settings)
     if not token:
-        logger.warning("[LYRIA] No Vertex AI credentials (FIREBASE_SERVICE_ACCOUNT_KEY)")
+        logger.warning("[LYRIA] No Vertex AI credentials (GCP service account)")
         return {
             "status": "error",
-            "message": "Music generation requires Vertex AI credentials (service account). Configure FIREBASE_SERVICE_ACCOUNT_KEY with a key that has Vertex AI access.",
+            "message": "Music generation requires a GCP service account with Vertex AI access. Set GOOGLE_SERVICE_ACCOUNT_KEY or GOOGLE_APPLICATION_CREDENTIALS to your GCP service account JSON (not the Firebase key).",
             "reason": "missing_credentials",
         }
 

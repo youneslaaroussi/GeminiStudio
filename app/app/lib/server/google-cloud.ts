@@ -3,11 +3,8 @@ import path from "path";
 import { GoogleAuth } from "google-auth-library";
 
 const PROJECT_ROOT = process.env.PROJECT_ROOT || process.cwd();
-const DEFAULT_SERVICE_ACCOUNT_ENV_ORDER = [
-  "ASSET_SERVICE_ACCOUNT_KEY",
-  "SPEECH_SERVICE_ACCOUNT_KEY",
-  "GOOGLE_SERVICE_ACCOUNT_KEY",
-] as const;
+/** Single GCP service account for all non-Firebase usage (Speech, Lyria, Veo, GCS, etc.). Firebase uses FIREBASE_SERVICE_ACCOUNT_KEY. */
+const DEFAULT_SERVICE_ACCOUNT_ENV_ORDER = ["GOOGLE_SERVICE_ACCOUNT_KEY"] as const;
 
 type ServiceAccountEnvVar = (typeof DEFAULT_SERVICE_ACCOUNT_ENV_ORDER)[number];
 
@@ -35,7 +32,7 @@ export function assertGoogleCredentials(options?: { preferredEnvVars?: string[] 
   const source = getServiceAccountSource(options?.preferredEnvVars);
   if (!source) {
     throw new Error(
-      "A Google Cloud service account JSON is required (set ASSET_SERVICE_ACCOUNT_KEY or GOOGLE_SERVICE_ACCOUNT_KEY)"
+      "A Google Cloud service account JSON is required (set GOOGLE_SERVICE_ACCOUNT_KEY)"
     );
   }
 }
@@ -55,7 +52,7 @@ function resolveServiceAccountKey(options?: { preferredEnvVars?: string[] }) {
   const source = getServiceAccountSource(options?.preferredEnvVars);
   if (!source) {
     throw new Error(
-      "A Google Cloud service account JSON is required (set ASSET_SERVICE_ACCOUNT_KEY or GOOGLE_SERVICE_ACCOUNT_KEY)"
+      "A Google Cloud service account JSON is required (set GOOGLE_SERVICE_ACCOUNT_KEY)"
     );
   }
   const cached = keyCache.get(source.envName);

@@ -51,13 +51,9 @@ def get_speech_env() -> SpeechEnv:
 
 
 def get_speech_access_token() -> str:
-    """Get an access token for Speech-to-Text API."""
+    """Get an access token for Speech-to-Text API. Uses GCP service account only (GOOGLE_SERVICE_ACCOUNT_KEY or GOOGLE_APPLICATION_CREDENTIALS)."""
     settings = get_settings()
-    key_path = (
-        settings.speech_service_account_key
-        or settings.google_service_account_key
-        or settings.firebase_service_account_key
-    )
+    key_path = settings.google_service_account_key
 
     if key_path:
         path = Path(key_path).expanduser()

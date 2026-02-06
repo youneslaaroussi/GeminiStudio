@@ -99,11 +99,11 @@ class Settings(BaseSettings):
     banana_model: str = Field(default="gemini-3-pro-image-preview", alias="BANANA_MODEL")
 
     # Lyria music generation (Vertex AI; model lyria-002, predict endpoint)
+    # Vertex/Lyria use the GCP service account only (never Firebase). Resolved from GOOGLE_SERVICE_ACCOUNT_KEY or GOOGLE_APPLICATION_CREDENTIALS.
     lyria_model: str = Field(default="lyria-002", alias="LYRIA_MODEL")
     lyria_location: str = Field(default="us-central1", alias="LYRIA_LOCATION")
-    # Optional: use same key as app Lyria (LYRIA_SERVICE_ACCOUNT_KEY or GOOGLE_SERVICE_ACCOUNT_KEY) for Vertex token
-    lyria_service_account_key: str | None = Field(default=None, alias="LYRIA_SERVICE_ACCOUNT_KEY")
     google_service_account_key: str | None = Field(default=None, alias="GOOGLE_SERVICE_ACCOUNT_KEY")
+    google_application_credentials: str | None = Field(default=None, alias="GOOGLE_APPLICATION_CREDENTIALS")
 
     # TTS (Text-to-Speech)
     tts_model: str = Field(default="gemini-2.5-flash-preview-tts", alias="TTS_MODEL")

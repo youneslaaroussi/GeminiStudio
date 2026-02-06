@@ -117,7 +117,7 @@ def register_pending_operation(
 
 def _get_gcs_credentials(settings: Settings):
     """Get GCP credentials from service account key."""
-    key_path = settings.firebase_service_account_key
+    key_path = settings.google_service_account_key
     if not key_path:
         return None
 
