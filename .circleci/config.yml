@@ -23,7 +23,8 @@ jobs:
             rsync -a --delete ai-sdk/ "$TMP_DIR"/ai-sdk
             cd "$TMP_DIR"/ai-sdk
             pnpm install --no-frozen-lockfile
-            pnpm --filter @ai-sdk/google build
+            # Use turbo so @ai-sdk/provider and @ai-sdk/provider-utils are built first (needed for DTS)
+            pnpm exec turbo build --filter=@ai-sdk/google
             mkdir -p "$ROOT_DIR"/ai-sdk/packages/google/dist
             rsync -a --delete packages/google/dist/ "$ROOT_DIR"/ai-sdk/packages/google/dist/
             rm -rf "$TMP_DIR"
