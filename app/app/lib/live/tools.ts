@@ -215,7 +215,7 @@ export async function executeToolByName(
   const meta = result.meta as Record<string, unknown> | undefined;
   if (meta?._injectMedia && meta?.mimeType) {
     console.log(`[LiveTools] Media injection metadata detected`, {
-      toolName: result.toolName,
+      toolName,
       hasMimeType: !!meta.mimeType,
       hasDownloadUrl: !!meta.downloadUrl,
       hasFileUri: !!meta.fileUri,
@@ -243,7 +243,7 @@ export async function executeToolByName(
     }
   } else if (meta?._injectMedia) {
     console.warn(`[LiveTools] WARNING: _injectMedia=true but mimeType missing`, {
-      toolName: result.toolName,
+      toolName,
       meta: Object.keys(meta || {}),
     });
   }
