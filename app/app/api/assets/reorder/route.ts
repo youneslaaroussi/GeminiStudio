@@ -12,14 +12,14 @@ export const runtime = "nodejs";
 
 /**
  * Convert asset service response to RemoteAsset format.
- * Note: userId is NOT included in proxy URL - auth is via session cookie.
  */
 function toRemoteAsset(asset: AssetServiceAsset, projectId: string): RemoteAsset {
-  const proxyUrl = `/api/assets/${asset.id}/file?projectId=${projectId}`;
+  const playbackPath = `/api/assets/${asset.id}/playback?projectId=${projectId}`;
+  const url = asset.signedUrl ?? playbackPath;
   return {
     id: asset.id,
     name: asset.name,
-    url: proxyUrl,
+    url,
     mimeType: asset.mimeType,
     size: asset.size,
     type: asset.type as RemoteAsset["type"],

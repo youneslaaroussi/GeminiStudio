@@ -197,6 +197,8 @@ export interface VideoClip extends BaseClip {
   animation?: ClipAnimationType;
   /** Animation intensity 0–5x (1 = normal, 5 = 5x). Default 1. */
   animationIntensity?: number;
+  /** Audio volume 0–1 (1 = full). Default 1. */
+  audioVolume?: number;
 }
 
 export interface AudioClip extends BaseClip {
@@ -337,7 +339,7 @@ export function createVideoClip(
   name: string,
   start: number,
   duration: number,
-  options?: { assetId?: string; width?: number; height?: number; sourceDuration?: number }
+  options?: { assetId?: string; width?: number; height?: number; sourceDuration?: number; audioVolume?: number }
 ): VideoClip {
   return {
     id: crypto.randomUUID(),
@@ -354,6 +356,7 @@ export function createVideoClip(
     width: options?.width,
     height: options?.height,
     sourceDuration: options?.sourceDuration,
+    audioVolume: options?.audioVolume,
     objectFit: 'contain',
   };
 }

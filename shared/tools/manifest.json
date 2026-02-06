@@ -993,7 +993,7 @@
           "label": "Video Settings",
           "type": "json",
           "placeholder": "{\"width\":1920,\"height\":1080,\"objectFit\":\"contain\",\"focus\":{\"x\":0.5,\"y\":0.5,\"zoom\":1},\"colorGrading\":{...},\"chromaKey\":{...}}",
-          "description": "Do not pass src—media URL is derived from clip's assetId. focus: center (x,y 0–1) and zoom (1 = full frame, 2 = 2×). colorGrading: exposure (-2 to 2), contrast/saturation/temperature/tint/highlights/shadows (-100 to 100). chromaKey: key color (hex), threshold and smoothness 0–1 for green screen."
+          "description": "Do not pass src—media URL is derived from clip's assetId. focus: center (x,y 0–1) and zoom (1 = full frame, 2 = 2×). colorGrading: exposure only is -2 to 2; contrast, saturation, temperature, tint, highlights, shadows are -100 to 100 (use e.g. 20 or -30 for visible change—values like 1.4 are too small). chromaKey: key color (hex), threshold and smoothness 0–1 for green screen."
         },
         {
           "name": "audioSettings",
@@ -1007,7 +1007,7 @@
           "label": "Image Settings",
           "type": "json",
           "placeholder": "{\"width\":1920,\"height\":1080}",
-          "description": "Do not pass src—media URL is derived from clip's assetId."
+          "description": "Do not pass src—media URL is derived from clip's assetId. colorGrading: exposure -2 to 2; contrast, saturation, temperature, tint, highlights, shadows -100 to 100 (use e.g. 20 or -30, not 1.4)."
         },
         {
           "name": "textSettings",
@@ -1131,41 +1131,49 @@
                   },
                   "colorGrading": {
                     "type": "object",
+                    "description": "Exposure: -2 to 2. All others (contrast, saturation, temperature, tint, highlights, shadows): -100 to 100. Use values like 20 or -30 for visible effect; values like 1.4 are too small.",
                     "properties": {
                       "exposure": {
                         "type": "number",
                         "minimum": -2,
-                        "maximum": 2
+                        "maximum": 2,
+                        "description": "Range -2 to 2 (only field that uses this scale)."
                       },
                       "contrast": {
                         "type": "number",
                         "minimum": -100,
-                        "maximum": 100
+                        "maximum": 100,
+                        "description": "Range -100 to 100. Use ~20–50 for visible change."
                       },
                       "saturation": {
                         "type": "number",
                         "minimum": -100,
-                        "maximum": 100
+                        "maximum": 100,
+                        "description": "Range -100 to 100. Use ~20–50 for visible change."
                       },
                       "temperature": {
                         "type": "number",
                         "minimum": -100,
-                        "maximum": 100
+                        "maximum": 100,
+                        "description": "Range -100 to 100 (cool to warm). Use ~20–50 for visible change."
                       },
                       "tint": {
                         "type": "number",
                         "minimum": -100,
-                        "maximum": 100
+                        "maximum": 100,
+                        "description": "Range -100 to 100 (green to magenta). Use ~20–50 for visible change."
                       },
                       "highlights": {
                         "type": "number",
                         "minimum": -100,
-                        "maximum": 100
+                        "maximum": 100,
+                        "description": "Range -100 to 100. Use ~20–50 for visible change."
                       },
                       "shadows": {
                         "type": "number",
                         "minimum": -100,
-                        "maximum": 100
+                        "maximum": 100,
+                        "description": "Range -100 to 100. Use ~20–50 for visible change."
                       }
                     },
                     "additionalProperties": false

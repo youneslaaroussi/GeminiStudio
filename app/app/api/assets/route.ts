@@ -20,19 +20,18 @@ export const dynamic = "force-dynamic";
 
 /**
  * Convert asset service response to RemoteAsset format.
- * Uses proxy URL to avoid CORS issues with GCS signed URLs.
- * Note: userId is NOT included in proxy URL - auth is via session cookie.
+ * Uses signed URL when available for direct GCS playback; otherwise a playback path
+ * that the client resolves via GET /api/assets/[id]/playback-url.
  */
 function toRemoteAsset(asset: AssetServiceAsset, projectId: string): RemoteAsset {
-  // Use proxy URL to avoid CORS issues (auth via session cookie, not query param)
-  // Include version param (updatedAt) for cache busting - allows browser to cache stable assets
   const version = asset.updatedAt ? new Date(asset.updatedAt).getTime() : Date.now();
-  const proxyUrl = `/api/assets/${asset.id}/file?projectId=${projectId}&v=${version}`;
+  const playbackPath = `/api/assets/${asset.id}/playback?projectId=${projectId}&v=${version}`;
+  const url = asset.signedUrl ?? playbackPath;
 
   return {
     id: asset.id,
     name: asset.name,
-    url: proxyUrl,
+    url,
     mimeType: asset.mimeType,
     size: asset.size,
     type: asset.type as RemoteAsset["type"],

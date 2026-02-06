@@ -38,8 +38,6 @@ export interface CoordinatePickerProps {
   aspectRatio?: string;
   /** Class name for the container */
   className?: string;
-  /** Whether to proxy the URL through /api/proxy/media to avoid CORS (default: true) */
-  useProxy?: boolean;
 }
 
 /**
@@ -58,17 +56,6 @@ function detectMediaType(url: string): MediaType {
     return 'video';
   }
   return 'image';
-}
-
-/**
- * Helper to get proxied media URL
- */
-export function getProxiedMediaUrl(url: string): string {
-  // Don't proxy local URLs or data URLs
-  if (url.startsWith('/') || url.startsWith('data:') || url.startsWith('blob:')) {
-    return url;
-  }
-  return `/api/proxy/media?url=${encodeURIComponent(url)}`;
 }
 
 /**
@@ -97,13 +84,11 @@ export function CoordinatePicker({
   disabled = false,
   aspectRatio = '16/9',
   className = '',
-  useProxy = true,
 }: CoordinatePickerProps) {
   // Auto-detect media type if not provided
   const mediaType = mediaTypeProp ?? detectMediaType(src);
 
-  // Apply proxy if enabled
-  const mediaSrc = useProxy ? getProxiedMediaUrl(src) : src;
+  const mediaSrc = src;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [isHovering, setIsHovering] = useState(false);

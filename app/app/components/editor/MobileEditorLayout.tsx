@@ -14,7 +14,7 @@ import { useProjectsListStore } from "@/app/lib/store/projects-list-store";
 import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { usePipelineStates } from "@/app/lib/hooks/usePipelineStates";
 import { useAutoSave } from "@/app/lib/hooks/useAutoSave";
-import { getProxiedMediaUrl } from "@/app/components/ui/CoordinatePicker";
+import { usePlaybackResolvedLayers } from "@/app/lib/hooks/usePlaybackResolvedLayers";
 import type { ProjectTranscription } from "@/app/types/transcription";
 import { Button } from "@/components/ui/button";
 import { useRender } from "@/app/hooks/useRender";
@@ -83,23 +83,9 @@ export function MobileEditorLayout() {
   const layers = project.layers;
   const visibleLayers = useMemo(() => layers.filter((l) => !l.hidden), [layers]);
 
-  // Proxy maskSrc URLs to avoid CORS issues with WebGL shaders in preview
-  const layersWithProxiedMasks = useMemo(() => {
-    return visibleLayers.map(layer => {
-      if (layer.type !== 'video') return layer;
-      return {
-        ...layer,
-        clips: layer.clips.map(clip => {
-          const videoClip = clip as any;
-          if (!videoClip.maskSrc) return clip;
-          return {
-            ...clip,
-            maskSrc: getProxiedMediaUrl(videoClip.maskSrc),
-          };
-        }),
-      };
-    });
-  }, [visibleLayers]);
+  const { layers: playbackResolvedLayers } = usePlaybackResolvedLayers(visibleLayers, projectId);
+
+  const layersWithProxiedMasks = useMemo(() => playbackResolvedLayers, [playbackResolvedLayers]);
   const currentTime = useProjectStore((s) => s.currentTime);
   const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
   const getDuration = useProjectStore((s) => s.getDuration);

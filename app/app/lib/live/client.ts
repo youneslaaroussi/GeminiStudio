@@ -417,7 +417,7 @@ export class LiveSession {
 
   /**
    * Send an image to the model.
-   * Uses proxy to avoid CORS issues with GCS signed URLs.
+   * Fetches from url directly (GCS signed URLs have CORS configured).
    */
   async sendImage(url: string, authToken?: string): Promise<void> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -425,14 +425,12 @@ export class LiveSession {
     }
 
     try {
-      // Use proxy to avoid CORS issues with GCS
-      const proxyUrl = `/api/proxy/media?url=${encodeURIComponent(url)}`;
       const headers: HeadersInit = {};
       if (authToken) {
         headers["Authorization"] = `Bearer ${authToken}`;
       }
 
-      const response = await fetch(proxyUrl, { headers });
+      const response = await fetch(url, { headers });
       if (!response.ok) {
         throw new Error(`Failed to fetch image: ${response.status}`);
       }
@@ -464,7 +462,7 @@ export class LiveSession {
   /**
    * Send video frames to the model by extracting frames using mediabunny.
    * Live API requires individual image frames, not encoded video files.
-   * Uses proxy to avoid CORS issues with GCS signed URLs.
+   * Fetches from url directly (GCS signed URLs have CORS configured).
    */
   async sendVideoFrames(url: string, authToken?: string, frameCount: number = 4): Promise<void> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -472,8 +470,6 @@ export class LiveSession {
     }
 
     try {
-      // Use proxy URL to avoid CORS
-      const proxyUrl = `/api/proxy/media?url=${encodeURIComponent(url)}`;
       const headers: HeadersInit = {};
       if (authToken) {
         headers["Authorization"] = `Bearer ${authToken}`;
@@ -482,8 +478,7 @@ export class LiveSession {
       // Dynamically import mediabunny (it's a client-side library)
       const { Input, UrlSource, CanvasSink, MP4 } = await import("mediabunny");
 
-      // Create input with custom fetch that includes auth
-      const source = new UrlSource(proxyUrl, {
+      const source = new UrlSource(url, {
         requestInit: { headers },
       });
 

@@ -64,6 +64,8 @@ const addClipSchema = baseClipSchema.extend({
   sourceDuration: z.number().positive().optional(),
   focus: focusSchema.optional(),
   objectFit: z.enum(["contain", "cover", "fill"]).optional(),
+  // Video clip audio volume (0–1)
+  audioVolume: z.number().min(0).max(1).optional(),
   // Audio properties
   volume: z
     .number()
@@ -315,8 +317,25 @@ export const timelineAddClipTool: ToolDefinition<
             resolvedType = assetType;
           }
         }
-        // Always use asset's proxy URL (asset.url), never signed URLs
-        resolvedSrc = asset.url;
+        // Fetch GCS signed URL for direct playback (no proxy lag)
+        // Fallback to proxy URL if fetch fails or not in browser context
+        resolvedSrc = asset.url; // Default fallback
+        if (typeof window !== "undefined" && projectId) {
+          try {
+            const res = await fetch(
+              `/api/assets/${input.assetId}/playback-url?projectId=${encodeURIComponent(projectId)}`,
+              { credentials: "include" }
+            );
+            if (res.ok) {
+              const data = await res.json();
+              if (data?.url) {
+                resolvedSrc = data.url;
+              }
+            }
+          } catch {
+            // Fallback to proxy URL on error
+          }
+        }
 
         if (!resolvedWidth && asset.width) resolvedWidth = asset.width;
         if (!resolvedHeight && asset.height) resolvedHeight = asset.height;
@@ -325,8 +344,29 @@ export const timelineAddClipTool: ToolDefinition<
           if (!resolvedDuration) resolvedDuration = asset.duration;
         }
       } else if (projectId) {
-        // Asset not in store yet (e.g. just generated)—build proxy URL from assetId
-        resolvedSrc = `/api/assets/${input.assetId}/file?projectId=${encodeURIComponent(projectId)}`;
+        // Asset not in store yet (e.g. just generated)—try to fetch playback URL
+        if (typeof window !== "undefined") {
+          try {
+            const res = await fetch(
+              `/api/assets/${input.assetId}/playback-url?projectId=${encodeURIComponent(projectId)}`,
+              { credentials: "include" }
+            );
+            if (res.ok) {
+              const data = await res.json();
+              if (data?.url) {
+                resolvedSrc = data.url;
+              } else {
+                resolvedSrc = `/api/assets/${input.assetId}/playback?projectId=${encodeURIComponent(projectId)}`;
+              }
+            } else {
+              resolvedSrc = `/api/assets/${input.assetId}/playback?projectId=${encodeURIComponent(projectId)}`;
+            }
+          } catch {
+            resolvedSrc = `/api/assets/${input.assetId}/playback?projectId=${encodeURIComponent(projectId)}`;
+          }
+        } else {
+          resolvedSrc = `/api/assets/${input.assetId}/playback?projectId=${encodeURIComponent(projectId)}`;
+        }
       }
     }
 
@@ -373,6 +413,7 @@ export const timelineAddClipTool: ToolDefinition<
             width: resolvedWidth,
             height: resolvedHeight,
             sourceDuration: resolvedSourceDuration,
+            audioVolume: input.audioVolume,
           }
         );
         applyCommonOverrides(clip, { ...input, type: resolvedType, start, duration: resolvedDuration });

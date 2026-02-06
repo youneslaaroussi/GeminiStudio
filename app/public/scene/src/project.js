@@ -12987,6 +12987,14 @@ function* playVideo({
     const safeOffset = Math.max(0, offset);
     video.seek(safeOffset);
     video.playbackRate(safeSpeed);
+    try {
+      const htmlVideo = video.video();
+      if (htmlVideo) {
+        const trackVolume = Math.min(Math.max(clip.audioVolume ?? 1, 0), 1);
+        htmlVideo.volume = trackVolume;
+      }
+    } catch {
+    }
     if (maskVideo) {
       maskVideo.seek(safeOffset);
       maskVideo.playbackRate(safeSpeed);

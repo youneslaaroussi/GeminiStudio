@@ -254,6 +254,16 @@ export function* playVideo({
     video.seek(safeOffset);
     video.playbackRate(safeSpeed);
 
+    try {
+      const htmlVideo = (video as any).video() as HTMLVideoElement | undefined;
+      if (htmlVideo) {
+        const trackVolume = Math.min(Math.max(clip.audioVolume ?? 1, 0), 1);
+        htmlVideo.volume = trackVolume;
+      }
+    } catch {
+      // ignore volume errors
+    }
+
     if (maskVideo) {
       maskVideo.seek(safeOffset);
       maskVideo.playbackRate(safeSpeed);

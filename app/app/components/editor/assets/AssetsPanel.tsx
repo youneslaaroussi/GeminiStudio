@@ -427,7 +427,7 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
 
   // Add asset to timeline
   const handleAddToTimeline = useCallback(
-    (asset: RemoteAsset) => {
+    async (asset: RemoteAsset) => {
       const name = asset.name || "Asset";
       const start = getDuration();
       const assetMetadata = metadata[asset.id];
@@ -437,20 +437,46 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
         height: asset.height ?? assetMetadata?.height,
       };
 
+      // Fetch GCS signed URL for direct playback (no proxy lag)
+      let playbackUrl = asset.url; // Fallback to proxy URL
+      if (projectId && asset.id) {
+        try {
+          const res = await fetch(
+            `/api/assets/${asset.id}/playback-url?projectId=${encodeURIComponent(projectId)}`,
+            { credentials: "include" }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.url) {
+              playbackUrl = data.url;
+              console.log(`[AssetsPanel] Using GCS signed URL for asset ${asset.id}`);
+            } else {
+              console.warn(`[AssetsPanel] Playback URL response missing url field for asset ${asset.id}`);
+            }
+          } else {
+            const errorText = await res.text().catch(() => "");
+            console.warn(`[AssetsPanel] Failed to get playback URL for asset ${asset.id}: ${res.status} ${errorText}`);
+          }
+        } catch (err) {
+          console.warn(`[AssetsPanel] Error fetching playback URL for asset ${asset.id}:`, err);
+          // Fallback to proxy URL on error
+        }
+      }
+
       if (asset.type === "video" || asset.type === "other") {
         const duration = resolveAssetDuration(asset);
-        addClip(createVideoClip(asset.url, name, start, duration, { ...clipOptions, sourceDuration: duration }));
+        addClip(createVideoClip(playbackUrl, name, start, duration, { ...clipOptions, sourceDuration: duration }));
       } else if (asset.type === "audio") {
         const duration = resolveAssetDuration(asset);
-        addClip(createAudioClip(asset.url, name, start, duration, { assetId: asset.id, sourceDuration: duration }));
+        addClip(createAudioClip(playbackUrl, name, start, duration, { assetId: asset.id, sourceDuration: duration }));
       } else {
-        addClip(createImageClip(asset.url, name, start, 5, clipOptions));
+        addClip(createImageClip(playbackUrl, name, start, 5, clipOptions));
       }
 
       // Refresh pipeline states so captions appear when transcription completes
       void refreshPipelineStates();
     },
-    [addClip, getDuration, resolveAssetDuration, metadata, refreshPipelineStates]
+    [addClip, getDuration, resolveAssetDuration, metadata, refreshPipelineStates, projectId]
   );
 
 

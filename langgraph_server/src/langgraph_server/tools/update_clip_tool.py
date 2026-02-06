@@ -77,6 +77,8 @@ def updateClipInTimeline(
     chroma_key: str | None = None,
     # Video focus area (crop/ken-burns region; video clips only)
     focus: str | None = None,
+    # Video clip audio volume 0-1 (video clips only)
+    audio_volume: float | None = None,
     # Idle animation (video, text, image clips only): hover, pulse, float, glow
     animation: str | None = None,
     animation_intensity: float | None = None,
@@ -91,7 +93,9 @@ def updateClipInTimeline(
     to set in/out effects. Types: fade, slide-left, slide-right, slide-up, slide-down,
     zoom, dip-to-black. Duration 0.1-5s. Use type "none" to clear.
     For video/image clips, use color_grading (JSON) to set exposure, contrast, saturation,
-    temperature, tint, highlights, shadows (values typically -100 to 100; exposure can be -2 to 2).
+    temperature, tint, highlights, shadows. IMPORTANT: exposure is the only field with range -2 to 2;
+    all others (contrast, saturation, temperature, tint, highlights, shadows) use range -100 to 100.
+    Use values like 20 or -30 for visible changes—values like 1.4 are far too small.
     Use chroma_key (JSON) to make a key color transparent: {"color": "#00ff00", "threshold": 0.4, "smoothness": 0.1}.
     color and threshold are required; smoothness is optional (0-1). Omit or set to null to remove chroma key.
     For video clips, use focus (JSON) to set focus/zoom: {"x": 0.5, "y": 0.5, "zoom": 1}. x,y = center (0–1), zoom = 1 for full frame, 2 for 2×. Pass null to clear.
@@ -116,9 +120,10 @@ def updateClipInTimeline(
         text_settings: Optional JSON string with text settings (overrides flat params)
         enter_transition: Optional JSON {"type":"fade","duration":0.5} for in transition
         exit_transition: Optional JSON {"type":"fade","duration":0.5} for out transition
-        color_grading: Optional JSON for video/image clips: {"exposure":0,"contrast":0,"saturation":0,"temperature":0,"tint":0,"highlights":0,"shadows":0}. Values -100 to 100 (exposure often -2 to 2).
+        color_grading: Optional JSON for video/image clips. exposure: -2 to 2 only; contrast, saturation, temperature, tint, highlights, shadows: -100 to 100 (use e.g. 20 or -30 for visible effect—do not use 1.4 or other small values).
         chroma_key: Optional JSON for video/image clips: {"color":"#00ff00","threshold":0.4,"smoothness":0.1}. Key color (hex), threshold 0-1, smoothness 0-1. Pass null to remove.
         focus: Optional JSON for video clips: {"x":0.5,"y":0.5,"zoom":1}. Center (0–1) and zoom ratio. Pass null to clear.
+        audio_volume: Optional 0-1 for video clips. Controls the volume of the video's audio track.
         animation: Optional idle animation for video/text/image: hover, pulse, float, glow. "none" to clear.
         animation_intensity: Optional 0-5 (1=normal, 5=5x). Only used when animation is set.
 
@@ -286,6 +291,12 @@ def updateClipInTimeline(
         val = float(animation_intensity)
         if 0 <= val <= 5:
             updates["animationIntensity"] = val
+
+    # Video clip audio volume (video clips only) 0-1.
+    if audio_volume is not None and isinstance(audio_volume, (int, float)):
+        val = float(audio_volume)
+        if 0 <= val <= 1:
+            updates["audioVolume"] = val
 
     # Focus/zoom (video clips only). Clear if "null" or "". Format: {"x": 0.5, "y": 0.5, "zoom": 1}.
     focus_clear = False

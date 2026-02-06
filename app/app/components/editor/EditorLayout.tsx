@@ -39,7 +39,7 @@ import { useAutoSave } from "@/app/lib/hooks/useAutoSave";
 import { CommandMenu } from "./CommandMenu";
 import type { ProjectTranscription } from "@/app/types/transcription";
 import type { VideoClip, ImageClip } from "@/app/types/timeline";
-import { getProxiedMediaUrl } from "@/app/components/ui/CoordinatePicker";
+import { usePlaybackResolvedLayers } from "@/app/lib/hooks/usePlaybackResolvedLayers";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -156,23 +156,11 @@ export function EditorLayout() {
   const layers = project.layers;
   const visibleLayers = useMemo(() => layers.filter((l) => !l.hidden), [layers]);
 
-  // Proxy maskSrc URLs to avoid CORS issues with WebGL shaders in preview
-  const layersWithProxiedMasks = useMemo(() => {
-    return visibleLayers.map(layer => {
-      if (layer.type !== 'video') return layer;
-      return {
-        ...layer,
-        clips: layer.clips.map(clip => {
-          const videoClip = clip as VideoClip;
-          if (!videoClip.maskSrc) return clip;
-          return {
-            ...clip,
-            maskSrc: getProxiedMediaUrl(videoClip.maskSrc),
-          };
-        }),
-      };
-    });
-  }, [visibleLayers]);
+  // Resolve /api/assets/.../playback (and legacy /file) paths to signed GCS URLs for direct playback
+  const { layers: playbackResolvedLayers } = usePlaybackResolvedLayers(visibleLayers, projectId);
+
+  // Pass through maskSrc as-is (GCS signed URLs and playback paths have CORS / are resolved)
+  const layersWithProxiedMasks = useMemo(() => playbackResolvedLayers, [playbackResolvedLayers]);
   const currentTime = useProjectStore((s) => s.currentTime);
   const setCurrentTime = useProjectStore((s) => s.setCurrentTime);
   const getDuration = useProjectStore((s) => s.getDuration);

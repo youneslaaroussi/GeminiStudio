@@ -84,14 +84,14 @@ export function createMentionSuggestion(
       if (!response.ok) return [];
 
       const data = await response.json();
-      // Search hits from Algolia don't include url; use proxy URL for thumbnails
-      const proxyBase = `/api/assets`;
+      // Search hits may not include url; use playback path (resolved to signed URL when used)
+      const playbackBase = `/api/assets`;
       return (data.hits || []).map((hit: Record<string, unknown>) => ({
         id: hit.id as string,
         name: hit.name as string,
         type: hit.type as string,
         description: hit.description as string | undefined,
-        url: (hit.url as string | undefined) ?? `${proxyBase}/${hit.id}/file?projectId=${projectId}`,
+        url: (hit.url as string | undefined) ?? `${playbackBase}/${hit.id}/playback?projectId=${projectId}`,
         thumbnailUrl: hit.thumbnailUrl as string | undefined,
         highlights: hit.highlights as { name?: string; description?: string } | undefined,
       }));

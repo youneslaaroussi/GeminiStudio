@@ -146,9 +146,22 @@ async function preloadQueue(
 }
 
 /**
+ * Stable key for the set of media URLs in the timeline so the preload effect
+ * reruns whenever we add/remove a clip that changes which assets are used.
+ */
+function getTimelineMediaUrlsKey(layers: Layer[]): string {
+  const urls = getTimelineMediaUrls(layers);
+  return urls
+    .map((u) => u.src)
+    .sort()
+    .join("\n");
+}
+
+/**
  * Preloads all video and audio URLs used in the timeline so that when Motion Canvas
  * reaches each clip during preview, the media is already in the browser cache.
  * Runs in the background with limited concurrency; does not block the UI.
+ * Reruns whenever the set of media URLs in the timeline changes (e.g. adding a new clip).
  * Returns progress { total, loaded } for showing a preload indicator.
  */
 export function usePreloadTimelineMedia(
@@ -159,6 +172,8 @@ export function usePreloadTimelineMedia(
   const preloadedUrlsRef = useRef<Set<string>>(new Set());
   const controllerRef = useRef<AbortController | null>(null);
   const [progress, setProgress] = useState<PreloadProgress>({ total: 0, loaded: 0 });
+
+  const urlsKey = getTimelineMediaUrlsKey(layers);
 
   useEffect(() => {
     if (!enabled || typeof document === "undefined") return;
@@ -198,7 +213,7 @@ export function usePreloadTimelineMedia(
       controller.abort();
       controllerRef.current = null;
     };
-  }, [layers, enabled]);
+  }, [urlsKey, enabled, layers]);
 
   return progress;
 }

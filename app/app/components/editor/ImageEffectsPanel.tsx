@@ -248,10 +248,10 @@ export function ImageEffectsPanel({ clip }: ImageEffectsPanelProps) {
         toast.error("Cannot apply", { description: "Result not ready." });
         return;
       }
-      // Use proxy URL to avoid CORS issues with direct GCS URLs
-      const proxySrc = `/api/assets/${job.resultAssetId}/file?projectId=${encodeURIComponent(projectId ?? "")}`;
+      // Use playback path (resolved to signed GCS URL by usePlaybackResolvedLayers)
+      const playbackSrc = `/api/assets/${job.resultAssetId}/playback?projectId=${encodeURIComponent(projectId ?? "")}`;
       updateClip(clip.id, {
-        src: proxySrc,
+        src: playbackSrc,
         assetId: job.resultAssetId,
       });
       toast.success("Applied!", {

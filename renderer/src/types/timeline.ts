@@ -138,6 +138,8 @@ export interface VideoClip extends BaseClip {
   animation?: ClipAnimationType;
   /** Animation intensity 0–5x (1 = normal, 5 = 5x). Default 1. */
   animationIntensity?: number;
+  /** Audio volume 0–1 (1 = full). Default 1. */
+  audioVolume?: number;
 }
 
 export interface AudioClip extends BaseClip {

@@ -156,7 +156,9 @@ const buildClipEntry = (
   }
 
   const delayMs = Math.max(0, overlapStart - rangeStart) * 1000;
-  const volume = clip.type === 'audio' ? clip.volume ?? 1 : 1;
+  const volume = clip.type === 'audio'
+    ? (clip.volume ?? 1)
+    : ((clip as VideoClip).audioVolume ?? 1);
 
   return {
     source,

@@ -25,7 +25,7 @@ const focusSchema: z.ZodType<Focus> = z.object({
   zoom: z.number().min(1),
 });
 
-/** Color grading: -100 to 100 (exposure often -2 to 2) */
+/** Color grading: exposure -2 to 2; contrast/saturation/temperature/tint/highlights/shadows -100 to 100 (use 10–50 for visible effect, not 0–2). */
 const colorGradingSchema = z
   .object({
     exposure: z.number().min(-2).max(2).optional(),
@@ -84,6 +84,7 @@ const clipUpdateSchema = z.object({
       focus: focusSchema.optional(),
       colorGrading: colorGradingSchema,
       chromaKey: chromaKeySchema,
+      audioVolume: z.number().min(0).max(1).optional(),
     })
     .optional(),
   audioSettings: z
@@ -178,7 +179,7 @@ function buildUpdates(
     case "video": {
       const videoUpdates: Partial<VideoClip> = {};
       if (input.videoSettings) {
-        const { width, height, objectFit, focus, colorGrading, chromaKey } = input.videoSettings;
+        const { width, height, objectFit, focus, colorGrading, chromaKey, audioVolume } = input.videoSettings;
         if (width !== undefined) videoUpdates.width = width;
         if (height !== undefined) videoUpdates.height = height;
         if (objectFit !== undefined) videoUpdates.objectFit = objectFit;
@@ -188,6 +189,7 @@ function buildUpdates(
           videoUpdates.colorGrading = { ...DEFAULT_COLOR_GRADING, ...current, ...colorGrading };
         }
         if (chromaKey !== undefined) videoUpdates.chromaKey = chromaKey;
+        if (audioVolume !== undefined) videoUpdates.audioVolume = audioVolume;
       }
       return { ...updates, ...videoUpdates };
     }
@@ -293,9 +295,9 @@ export const timelineUpdateClipTool: ToolDefinition<
       label: "Video Settings",
       type: "json",
       placeholder:
-        '{"width":1920,"height":1080,"objectFit":"contain","focus":{"x":0.5,"y":0.5,"zoom":1},"colorGrading":{...},"chromaKey":{...}}',
+        '{"width":1920,"height":1080,"objectFit":"contain","focus":{"x":0.5,"y":0.5,"zoom":1},"colorGrading":{...},"chromaKey":{...},"audioVolume":1}',
       description:
-        "Do not pass src—media URL is derived from clip's assetId. focus: center (x,y 0–1) and zoom (1 = full frame, 2 = 2×). colorGrading: exposure (-2 to 2), contrast/saturation/temperature/tint/highlights/shadows (-100 to 100). chromaKey: key color (hex), threshold and smoothness 0–1 for green screen.",
+        "Do not pass src—media URL is derived from clip's assetId. focus: center (x,y 0–1) and zoom (1 = full frame, 2 = 2×). colorGrading: exposure only is -2 to 2; contrast, saturation, temperature, tint, highlights, shadows are -100 to 100 (use e.g. 20 or -30 for visible change—values like 1.4 are too small). chromaKey: key color (hex), threshold and smoothness 0–1 for green screen. audioVolume: 0–1 for video clip audio track.",
     },
     {
       name: "audioSettings",
@@ -309,7 +311,8 @@ export const timelineUpdateClipTool: ToolDefinition<
       label: "Image Settings",
       type: "json",
       placeholder: '{"width":1920,"height":1080}',
-      description: "Do not pass src—media URL is derived from clip's assetId.",
+      description:
+        "Do not pass src—media URL is derived from clip's assetId. colorGrading: exposure -2 to 2; contrast, saturation, temperature, tint, highlights, shadows -100 to 100 (use e.g. 20 or -30, not 1.4).",
     },
     {
       name: "textSettings",

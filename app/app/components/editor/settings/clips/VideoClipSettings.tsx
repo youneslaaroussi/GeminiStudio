@@ -26,7 +26,7 @@ import {
   type ClipUpdateHandler,
 } from "../utils";
 import { Button } from "@/components/ui/button";
-import { Settings, Captions, Layers, Palette, RotateCcw, Pipette } from "lucide-react";
+import { Settings, Captions, Layers, Palette, RotateCcw, Pipette, Volume2 } from "lucide-react";
 
 const CHROMA_KEY_PRESETS = [
   { label: "Green", color: "#00ff00" },
@@ -255,6 +255,27 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className={labelClassName}>Audio volume</label>
+                <span className="text-xs font-mono text-muted-foreground">
+                  {Math.round((clip.audioVolume ?? 1) * 100)}%
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Volume2 className="size-4 text-muted-foreground shrink-0" />
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={clip.audioVolume ?? 1}
+                  onChange={(e) => onUpdate({ audioVolume: Number(e.target.value) })}
+                  className="flex-1 h-2 rounded accent-primary"
+                />
+              </div>
             </div>
 
             <div>

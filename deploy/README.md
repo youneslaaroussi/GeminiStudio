@@ -242,6 +242,17 @@ This creates:
 - Pub/Sub topics
 - `generated.env` file with all configuration
 
+### 4b. GCS CORS (for direct playback from GCS)
+
+Preview uses signed URLs so the browser loads media directly from GCS. The bucket must allow your app origins:
+
+```bash
+# From repo root; bucket name from terraform.tfvars / gcs_bucket_name
+gsutil cors set deploy/gcs-cors.json gs://geminivideostudio-storage
+```
+
+If the bucket name differs, use your actual bucket. CORS allows `https://www.geminivideo.studio`, `https://geminivideo.studio`, and `http://localhost:3000`.
+
 ### 5. Setup the VM
 
 **Important:** CI/CD does NOT copy service account files - they must be manually provisioned on the VM. The `secrets/` folder is gitignored and excluded from deployments.

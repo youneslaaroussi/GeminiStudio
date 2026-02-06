@@ -123,10 +123,11 @@ resource "google_storage_bucket" "assets" {
 
   uniform_bucket_level_access = true
 
+  # CORS for direct GCS playback from app (signed URLs); avoids proxy lag in prod
   cors {
-    origin          = ["*"]
-    method          = ["GET", "HEAD", "PUT", "POST", "DELETE"]
-    response_header = ["*"]
+    origin          = ["https://www.geminivideo.studio", "https://geminivideo.studio", "http://localhost:3000"]
+    method          = ["GET", "HEAD"]
+    response_header = ["Content-Type", "Content-Length", "Accept-Ranges", "Content-Range"]
     max_age_seconds = 3600
   }
 }
