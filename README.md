@@ -405,6 +405,21 @@ pnpm dev:simple
 
 3. Open **http://localhost:3000**. If the LangGraph server is elsewhere, set `NEXT_PUBLIC_LANGGRAPH_URL` in the app env.
 
+### Production Deployment
+
+See [deploy/README.md](deploy/README.md) for full instructions. Key step: **CI/CD does not copy service account files** — you must manually provision them on the VM:
+
+```bash
+# Copy service accounts to VM (one-time setup)
+gcloud compute scp secrets/google-service-account.json gemini-studio:/tmp/ --zone=us-central1-a
+gcloud compute scp secrets/firebase-service-account.json gemini-studio:/tmp/ --zone=us-central1-a
+gcloud compute ssh gemini-studio --zone=us-central1-a --command='
+  sudo mv /tmp/google-service-account.json /opt/gemini-studio/deploy/secrets/
+  sudo mv /tmp/firebase-service-account.json /opt/gemini-studio/deploy/secrets/
+  sudo chmod 644 /opt/gemini-studio/deploy/secrets/*.json
+'
+```
+
 ---
 
 ## Repository structure

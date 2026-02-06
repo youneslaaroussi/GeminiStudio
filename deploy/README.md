@@ -244,21 +244,44 @@ This creates:
 
 ### 5. Setup the VM
 
+**Important:** CI/CD does NOT copy service account files - they must be manually provisioned on the VM. The `secrets/` folder is gitignored and excluded from deployments.
+
+You need TWO service account files:
+
+1. **google-service-account.json** - GCP service account for Storage, Pub/Sub, Vertex AI, etc.
+2. **firebase-service-account.json** - Firebase Admin SDK service account for Auth token verification
+
+**Critical:** The Firebase service account MUST be from the same Firebase project as your client app. If your Firebase project ID is `my-app` but you use a service account from GCP project `my-app-backend`, auth will fail with "incorrect audience claim".
+
 ```bash
+# Create secrets directory on VM
+gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo mkdir -p /opt/gemini-studio/deploy/secrets'
+
 # Copy the generated .env file
 gcloud compute scp ../generated.env gemini-studio:/opt/gemini-studio/deploy/.env \
   --zone=us-central1-a
 
-# Copy your backend service account JSON (created in Prerequisites step 4)
-gcloud compute scp ./google-service-account.json gemini-studio:/opt/gemini-studio/deploy/secrets/google-service-account.json \
+# Copy GCP service account (for Storage, Pub/Sub, Vertex AI, Speech)
+gcloud compute scp ./google-service-account.json gemini-studio:/tmp/google-sa.json \
   --zone=us-central1-a
+gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo mv /tmp/google-sa.json /opt/gemini-studio/deploy/secrets/google-service-account.json && sudo chmod 644 /opt/gemini-studio/deploy/secrets/google-service-account.json'
 
-# Also copy as firebase-service-account.json (some services expect this name)
-gcloud compute scp ./google-service-account.json gemini-studio:/opt/gemini-studio/deploy/secrets/firebase-service-account.json \
+# Copy Firebase service account (MUST match your Firebase project ID)
+# Download from: Firebase Console → Project Settings → Service Accounts → Generate new private key
+gcloud compute scp ./firebase-service-account.json gemini-studio:/tmp/firebase-sa.json \
   --zone=us-central1-a
+gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo mv /tmp/firebase-sa.json /opt/gemini-studio/deploy/secrets/firebase-service-account.json && sudo chmod 644 /opt/gemini-studio/deploy/secrets/firebase-service-account.json'
 
 # SSH into the VM
 gcloud compute ssh gemini-studio --zone=us-central1-a
+```
+
+**Verify the Firebase service account project matches your app:**
+```bash
+# Check what project the service account belongs to
+cat firebase-service-account.json | python3 -c "import sys,json; print(json.load(sys.stdin)['project_id'])"
+
+# This MUST match NEXT_PUBLIC_FIREBASE_PROJECT_ID in your .env
 ```
 
 ### 6. Setup CI/CD (GitHub Actions)
@@ -366,6 +389,28 @@ docker compose logs <service-name>
 docker compose down
 docker compose up -d --build
 ```
+
+### Auth 401 errors / "incorrect audience claim"
+
+If you see errors like:
+```
+Firebase ID token has incorrect "aud" (audience) claim. Expected "project-a" but got "project-b"
+```
+
+This means your `firebase-service-account.json` is from a different project than your Firebase Auth. The service account MUST be from the same Firebase project where users authenticate.
+
+**Fix:**
+1. Go to [Firebase Console](https://console.firebase.google.com) → Your Project → Project Settings → Service Accounts
+2. Click "Generate new private key"
+3. Copy to VM:
+   ```bash
+   gcloud compute scp firebase-service-account.json gemini-studio:/tmp/firebase-sa.json --zone=us-central1-a
+   gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo mv /tmp/firebase-sa.json /opt/gemini-studio/deploy/secrets/firebase-service-account.json && sudo chmod 644 /opt/gemini-studio/deploy/secrets/firebase-service-account.json'
+   ```
+4. Restart frontend:
+   ```bash
+   gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml restart frontend'
+   ```
 
 ### Out of memory
 

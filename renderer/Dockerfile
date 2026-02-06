@@ -31,12 +31,12 @@ FROM base AS production
 
 ENV NODE_ENV=production
 
-WORKDIR /app
+WORKDIR /app/renderer
 
-COPY --from=base /app/node_modules ./node_modules
-COPY --from=base /app/renderer/dist ./renderer/dist
-COPY --from=base /app/renderer/package.json ./renderer/package.json
+COPY --from=base /app/node_modules ../node_modules
+COPY --from=base /app/renderer/dist ./dist
+COPY --from=base /app/renderer/package.json ./package.json
 
 EXPOSE 4000
 
-CMD ["node", "renderer/dist/index.js"]
+CMD ["node", "dist/index.js"]
