@@ -4,7 +4,7 @@ export default defineConfig([
   {
     entry: ['src/index.ts'],
     format: ['cjs', 'esm'],
-    dts: true,
+    dts: { tsconfig: 'tsconfig.dts.json' },
     sourcemap: true,
     define: {
       __PACKAGE_VERSION__: JSON.stringify(
@@ -17,7 +17,7 @@ export default defineConfig([
     entry: ['src/internal/index.ts'],
     outDir: 'dist/internal',
     format: ['cjs', 'esm'],
-    dts: true,
+    dts: { tsconfig: 'tsconfig.dts.json' },
     sourcemap: true,
     define: {
       __PACKAGE_VERSION__: JSON.stringify(
