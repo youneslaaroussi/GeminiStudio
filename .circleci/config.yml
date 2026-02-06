@@ -180,7 +180,7 @@ jobs:
                 rm /tmp/repo.tar.gz
                 cd deploy
                 mv /tmp/deploy.env .env
-                sudo docker compose --env-file .env build --no-cache
+                sudo docker compose --env-file .env build
                 sudo docker compose --env-file .env up -d
                 sudo docker compose --env-file .env ps
               '
