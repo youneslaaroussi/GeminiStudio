@@ -65,10 +65,18 @@ jobs:
             npm install -g pnpm
             pnpm install --frozen-lockfile || pnpm install
             pnpm add -D tsup typescript -w
+            # Wire up tsconfig and local workspace deps for @ai-sdk/google
             mkdir -p ai-sdk/packages/google/node_modules/@vercel
-            ln -sf ../../../../../tools/tsconfig ai-sdk/packages/google/node_modules/@vercel/ai-tsconfig
-            ln -sf ../../../node_modules/@ai-sdk ai-sdk/packages/google/node_modules/@ai-sdk
-            ln -sf ../../../node_modules/zod ai-sdk/packages/google/node_modules/zod
+            # symlink target paths are relative to the symlink's parent dir
+            ln -sf ../../../../tools/tsconfig ai-sdk/packages/google/node_modules/@vercel/ai-tsconfig
+
+            # Point @ai-sdk scoped deps to local workspace packages
+            mkdir -p ai-sdk/packages/google/node_modules/@ai-sdk
+            ln -sf ../../../packages/provider ai-sdk/packages/google/node_modules/@ai-sdk/provider
+            ln -sf ../../../packages/provider-utils ai-sdk/packages/google/node_modules/@ai-sdk/provider-utils
+
+            # Ensure zod is resolvable (from repo root node_modules)
+            ln -sf ../../../../node_modules/zod ai-sdk/packages/google/node_modules/zod
             cd ai-sdk/packages/google && NODE_PATH=../../../node_modules npx -y tsup@8 --config tsup.config.ts
 
       - run:
