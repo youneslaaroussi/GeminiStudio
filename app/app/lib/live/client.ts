@@ -417,20 +417,16 @@ export class LiveSession {
 
   /**
    * Send an image to the model.
-   * Fetches from url directly (GCS signed URLs have CORS configured).
+   * Fetches from url directly. Do not send Authorization header: signed URLs
+   * use the query string, and custom headers trigger CORS preflight which can fail.
    */
-  async sendImage(url: string, authToken?: string): Promise<void> {
+  async sendImage(url: string, _authToken?: string): Promise<void> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error("Not connected");
     }
 
     try {
-      const headers: HeadersInit = {};
-      if (authToken) {
-        headers["Authorization"] = `Bearer ${authToken}`;
-      }
-
-      const response = await fetch(url, { headers });
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Failed to fetch image: ${response.status}`);
       }
@@ -462,25 +458,19 @@ export class LiveSession {
   /**
    * Send video frames to the model by extracting frames using mediabunny.
    * Live API requires individual image frames, not encoded video files.
-   * Fetches from url directly (GCS signed URLs have CORS configured).
+   * Fetches from url directly. Do not send Authorization header: signed URLs
+   * use the query string, and custom headers trigger CORS preflight which can fail.
    */
-  async sendVideoFrames(url: string, authToken?: string, frameCount: number = 4): Promise<void> {
+  async sendVideoFrames(url: string, _authToken?: string, frameCount: number = 4): Promise<void> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error("Not connected");
     }
 
     try {
-      const headers: HeadersInit = {};
-      if (authToken) {
-        headers["Authorization"] = `Bearer ${authToken}`;
-      }
-
       // Dynamically import mediabunny (it's a client-side library)
       const { Input, UrlSource, CanvasSink, MP4 } = await import("mediabunny");
 
-      const source = new UrlSource(url, {
-        requestInit: { headers },
-      });
+      const source = new UrlSource(url);
 
       const input = new Input({
         formats: [MP4],
