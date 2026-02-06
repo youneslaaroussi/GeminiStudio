@@ -59,6 +59,19 @@ jobs:
             done
 
       - run:
+          name: Build @ai-sdk/google
+          command: |
+            apk add --no-cache nodejs npm
+            npm install -g pnpm
+            pnpm install --frozen-lockfile || pnpm install
+            pnpm add -D tsup typescript -w
+            mkdir -p ai-sdk/packages/google/node_modules/@vercel
+            ln -sf ../../../tools/tsconfig ai-sdk/packages/google/node_modules/@vercel/ai-tsconfig
+            ln -sf ../../../node_modules/@ai-sdk ai-sdk/packages/google/node_modules/@ai-sdk
+            ln -sf ../../../node_modules/zod ai-sdk/packages/google/node_modules/zod
+            cd ai-sdk/packages/google && NODE_PATH=../../../node_modules npx -y tsup@8 --config tsup.config.ts --no-dts
+
+      - run:
           name: Copy code to VM
           command: |
             tar --exclude='.git' \
