@@ -13,6 +13,16 @@ jobs:
       - checkout
 
       - run:
+          name: Build ai-sdk/google dist
+          command: |
+            apk add --no-cache nodejs npm
+            npm install -g pnpm@9
+            cd ai-sdk
+            pnpm install --frozen-lockfile || pnpm install
+            pnpm --filter @ai-sdk/google build
+            rm -rf node_modules
+
+      - run:
           name: Authenticate to Google Cloud
           command: |
             echo "$GCP_SERVICE_ACCOUNT_KEY" > /tmp/gcp-key.json
@@ -163,14 +173,6 @@ jobs:
                 rm /tmp/repo.tar.gz
                 cd deploy
                 mv /tmp/deploy.env .env
-                # Build AI SDK (@ai-sdk/google) on the host workspace before app/renderer builds
-                # Use a Node container to avoid host toolchain dependencies
-                docker run --rm -v /opt/gemini-studio:/work -w /work node:20 bash -lc '
-                  set -e
-                  npm i -g pnpm@9
-                  pnpm install --frozen-lockfile || pnpm install
-                  pnpm --filter @ai-sdk/google build
-                '
                 sudo docker compose --env-file .env build --no-cache
                 sudo docker compose --env-file .env up -d
                 sudo docker compose --env-file .env ps
