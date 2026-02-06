@@ -22,6 +22,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 import type { RemoteAsset } from "@/app/types/assets";
 import type { ProjectTranscription } from "@/app/types/transcription";
+import type { PipelineStepState } from "@/app/types/pipeline";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -39,8 +40,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatBytes, formatDuration } from "./utils";
-import { SharedMediaLoader } from "@/app/lib/media/shared-media-loader";
-import { toAbsoluteAssetUrl } from "@/app/lib/tools/asset-utils";
+import { useAssetThumbnail } from "@/app/hooks/use-asset-thumbnail";
+import { useProjectStore } from "@/app/lib/store/project-store";
 
 function AssetIcon({ type }: { type: RemoteAsset["type"] }) {
   if (type === "video")
@@ -52,69 +53,66 @@ function AssetIcon({ type }: { type: RemoteAsset["type"] }) {
   return <FileIcon className="size-4 text-muted-foreground" />;
 }
 
-/** Memoized thumbnail that only updates when URL changes */
+/** Memoized thumbnail - uses asset service (no client-side extraction) */
 const AssetThumbnail = memo(function AssetThumbnail({
   type,
   url,
   thumbnailUrl,
+  assetId,
 }: {
   type: RemoteAsset["type"];
   url: string;
   thumbnailUrl?: string;
+  assetId: string;
 }) {
   const [showFallback, setShowFallback] = useState(false);
-  const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null);
-  const [isLoadingThumbnail, setIsLoadingThumbnail] = useState(false);
+  const projectId = useProjectStore((s) => s.projectId);
+  const { thumbnailUrl: apiThumbnail, isLoading: isLoadingThumbnail } = useAssetThumbnail(
+    type === "video" || type === "image" ? assetId : undefined,
+    projectId
+  );
+  const displayThumbnail = apiThumbnail ?? thumbnailUrl ?? null;
+  // Only use url for image if it's already on GCP (signed URL); don't load before upload is ready
+  const imageLoadableUrl =
+    displayThumbnail || (url && url.startsWith("http") ? url : null);
 
-  // For video assets, use SharedMediaLoader to extract first frame as thumbnail
-  useEffect(() => {
-    if (type === "video" && !thumbnailUrl && !videoThumbnail && !isLoadingThumbnail) {
-      setIsLoadingThumbnail(true);
-      const absoluteUrl = toAbsoluteAssetUrl(url);
-      SharedMediaLoader.requestThumbnail(absoluteUrl)
-        .then((result) => {
-          if (result?.dataUrl) {
-            setVideoThumbnail(result.dataUrl);
-          } else {
-            setShowFallback(true);
-          }
-        })
-        .catch((err) => {
-          console.error("[AssetThumbnail] Failed to load thumbnail:", err);
-          setShowFallback(true);
-        })
-        .finally(() => {
-          setIsLoadingThumbnail(false);
-        });
+  if (type === "image") {
+    if (imageLoadableUrl && !showFallback) {
+      return (
+        <>
+          <img
+            src={imageLoadableUrl}
+            alt=""
+            className="size-full object-cover"
+            loading="lazy"
+            onError={() => setShowFallback(true)}
+          />
+          {showFallback && (
+            <div className="flex items-center justify-center">
+              <AssetIcon type={type} />
+            </div>
+          )}
+        </>
+      );
     }
-  }, [type, url, thumbnailUrl, videoThumbnail, isLoadingThumbnail]);
-
-  if (type === "image" && !showFallback) {
     return (
-      <>
-        <img
-          src={thumbnailUrl || url}
-          alt=""
-          className="size-full object-cover"
-          loading="lazy"
-          onError={() => setShowFallback(true)}
-        />
-        {showFallback && (
-          <div className="flex items-center justify-center">
-            <AssetIcon type={type} />
-          </div>
+      <div className="flex items-center justify-center size-full">
+        {isLoadingThumbnail ? (
+          <Loader2 className="size-4 animate-spin text-muted-foreground" />
+        ) : (
+          <AssetIcon type={type} />
         )}
-      </>
+      </div>
     );
   }
 
   if (type === "video") {
-    // Use extracted thumbnail from SharedMediaLoader, or fallback to icon
-    if (videoThumbnail && !showFallback) {
+    // Use thumbnail from API (fresh signed URL), or fallback to icon
+    if (displayThumbnail && !showFallback) {
       return (
         <>
           <img
-            src={videoThumbnail}
+            src={displayThumbnail}
             alt=""
             className="size-full object-cover"
             loading="lazy"
@@ -156,6 +154,8 @@ export interface AssetRowProps {
   asset: RemoteAsset;
   transcription?: ProjectTranscription;
   duration: number;
+  /** Pipeline steps for this asset (show progress when any step is running/queued/waiting) */
+  pipelineSteps?: PipelineStepState[];
   isSelected: boolean;
   isDeleting: boolean;
   isDownloading: boolean;
@@ -185,6 +185,7 @@ export const AssetRow = memo(function AssetRow({
   asset,
   transcription,
   duration,
+  pipelineSteps = [],
   isSelected,
   isDeleting,
   isDownloading,
@@ -216,7 +217,39 @@ export const AssetRow = memo(function AssetRow({
   const isTranscribing = transcription?.status === "processing" || transcription?.status === "pending";
   const hasTranscript = transcription?.status === "completed";
   const hasTranscodeError = asset.transcodeStatus === "error";
-  const isProcessing = isDeleting || isDownloading || isTranscoding;
+
+  // Pipeline progress: first running step, else first queued/waiting
+  const activeStep = pipelineSteps.find(
+    (s) => s.status === "running" || s.status === "queued" || s.status === "waiting"
+  );
+  const completedCount = pipelineSteps.filter(
+    (s) => s.status === "succeeded" || s.status === "failed"
+  ).length;
+  const totalSteps = pipelineSteps.length;
+  const allIdle =
+    totalSteps > 0 && pipelineSteps.every((s) => s.status === "idle");
+
+  // Required for playback: upload to GCP and metadata extraction must be done
+  const REQUIRED_STEP_IDS = ["cloud-upload", "metadata"] as const;
+  const stepDone = (id: string) => {
+    const step = pipelineSteps.find((s) => s.id === id);
+    return !step || step.status === "succeeded" || step.status === "failed";
+  };
+  const requiredStepsDone = REQUIRED_STEP_IDS.every(stepDone);
+  /** Locked when pipeline not initialized yet (e.g. first ~seconds after upload) or when upload + metadata not done */
+  const isPipelineLocked =
+    totalSteps === 0 || !requiredStepsDone;
+
+  const isLocked = isTranscoding || isPipelineLocked;
+  const isProcessing = isDeleting || isDownloading || isTranscoding || isPipelineLocked;
+
+  const pipelineProgress =
+    totalSteps > 0
+      ? activeStep?.status === "running" && activeStep.progress != null
+        ? (completedCount + activeStep.progress) / totalSteps
+        : completedCount / totalSteps
+      : 0;
+  const showPipelineProgress = activeStep != null || allIdle;
 
   useEffect(() => {
     if (isEditing) {
@@ -256,8 +289,8 @@ export const AssetRow = memo(function AssetRow({
         <div
           data-asset-id={asset.id}
           className={cn(
-            "group relative flex items-center gap-2 p-2 hover:bg-muted/50 transition-colors rounded-md",
-            isTranscoding ? "cursor-not-allowed opacity-90" : "cursor-grab",
+            "group relative flex items-center gap-2 p-2 min-h-[5rem] hover:bg-muted/50 transition-colors rounded-md",
+            isLocked ? "cursor-not-allowed opacity-90" : "cursor-grab",
             isDragOver && "bg-primary/10 ring-1 ring-primary/30",
             isHighlighted && "highlight-flash",
             hasTranscodeError && "bg-destructive/5 border border-destructive/20"
@@ -320,6 +353,7 @@ export const AssetRow = memo(function AssetRow({
               type={asset.type}
               url={asset.url}
               thumbnailUrl={asset.thumbnailUrl}
+              assetId={asset.id}
             />
           </div>
 
@@ -375,6 +409,26 @@ export const AssetRow = memo(function AssetRow({
                 </>
               )}
             </div>
+            {showPipelineProgress && (
+              <div
+                className="mt-1.5 flex flex-col gap-1 min-w-0"
+                title={activeStep ? `${activeStep.label} · ${activeStep.status}` : "Pipeline idle"}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex-1 min-w-0 h-1 rounded-full bg-muted/80 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary/90 transition-all duration-300"
+                      style={{ width: `${Math.round(pipelineProgress * 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-[11px] text-muted-foreground truncate shrink-0 max-w-[100px] capitalize">
+                    {activeStep
+                      ? `${activeStep.label}${activeStep.status === "running" && activeStep.progress != null ? ` ${Math.round(activeStep.progress * 100)}%` : ""}`
+                      : "Idle"}
+                  </span>
+                </div>
+              </div>
+            )}
             {isTranscribing && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
                 <Loader2 className="size-3 animate-spin" />
@@ -413,7 +467,7 @@ export const AssetRow = memo(function AssetRow({
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-xs"
-              disabled={isTranscoding}
+              disabled={isLocked}
               onClick={(e) => {
                 e.stopPropagation();
                 onAddToTimeline(asset);
@@ -439,7 +493,7 @@ export const AssetRow = memo(function AssetRow({
                   Rename
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  disabled={isTranscoding}
+                  disabled={isLocked}
                   onClick={() => onAddToTimeline(asset)}
                 >
                   <Plus className="size-4 mr-2" />
@@ -499,7 +553,7 @@ export const AssetRow = memo(function AssetRow({
           Rename
         </ContextMenuItem>
         <ContextMenuItem
-          disabled={isTranscoding}
+          disabled={isLocked}
           onClick={() => onAddToTimeline(asset)}
         >
           <Plus className="size-4 mr-2" />

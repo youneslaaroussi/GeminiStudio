@@ -115,7 +115,7 @@ def getTimelineState(
                 "end": round(clip_end, 2),
                 "speed": clip_speed,
             }
-            # Include assetId for reference; do not expose src so LLM does not pass it to add/update clip (proxy is derived from assetId)
+            # Include assetId for reference; do not expose src so LLM does not pass it to add/update clip (src is resolved from assetId)
             if clip.get("assetId"):
                 clip_info["assetId"] = clip.get("assetId")
             if clip.get("text"):

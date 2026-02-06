@@ -7,7 +7,6 @@ import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { toast } from "sonner";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
-import { extractMetadataFromUrl } from "@/app/lib/media/mediabunny";
 
 const TRANSCODE_POLL_MS = 10000;
 
@@ -95,18 +94,28 @@ export function useAssets() {
           // If transcodeStatus is not set (undefined), check if transcode was never triggered
           // This handles the case where transcode was disabled or not applicable
           if (!transcodeStatus) {
-            // Check if asset is already in final form (mp4 for video, png for image)
             const name = asset.name?.toLowerCase() ?? "";
             const isVideoComplete = asset.type === "video" && (name.endsWith(".mp4") || asset.mimeType === "video/mp4");
+            // Video: must be mp4. Image: asset service only converts HEIC/HEIF → PNG; other formats need no conversion
+            const imageMime = (asset.mimeType ?? "").toLowerCase();
+            const supportedImageMimes = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp", "image/tiff"];
+            const isImageNoConversionNeeded =
+              asset.type === "image" && supportedImageMimes.some((m) => imageMime === m);
             const isImageComplete = asset.type === "image" && (name.endsWith(".png") || asset.mimeType === "image/png");
-            if (isVideoComplete || isImageComplete) {
+            if (isVideoComplete || isImageComplete || isImageNoConversionNeeded) {
               next.delete(id);
               return;
             }
           }
 
-          // Fallback: also check mimeType for image conversion (no transcodeStatus for images)
-          if (asset.type === "image" && asset.mimeType === "image/png") {
+          // Fallback: image in a format that doesn't need conversion (no transcodeStatus for images)
+          const imageMimeFallback = (asset.mimeType ?? "").toLowerCase();
+          if (
+            asset.type === "image" &&
+            ["image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp", "image/tiff"].some(
+              (m) => imageMimeFallback === m
+            )
+          ) {
             next.delete(id);
           }
         });
@@ -525,73 +534,25 @@ export function useAssets() {
       return true;
     });
 
-    // Process assets using mediabunny for metadata extraction
-    const processAssets = async () => {
+    // Use defaults for assets missing metadata - no client-side extraction
+    const processAssets = () => {
       for (const asset of assetsMissingMetadata) {
-        if (cancelled) break;
-
         const defaultDuration =
           DEFAULT_ASSET_DURATIONS[asset.type] ?? DEFAULT_ASSET_DURATIONS.other;
-        const hasServerDimensions = asset.width != null && asset.height != null;
 
-        // For images, use default duration and only extract dimensions if needed
-        if (asset.type === "image") {
-          setAssetDurations((prev) => {
-            if (prev[asset.id] != null) return prev;
-            return { ...prev, [asset.id]: defaultDuration };
-          });
-          upsertAssetMetadata(asset.id, { duration: defaultDuration });
-
-          if (hasServerDimensions) {
-            upsertAssetMetadata(asset.id, {
-              width: asset.width,
-              height: asset.height,
-            });
-            continue;
-          }
-        }
-
-        try {
-          // Use mediabunny to extract metadata
-          const mediaType = asset.type === "other" ? "video" : asset.type;
-          const metadata = await extractMetadataFromUrl(asset.url, mediaType);
-          
-          if (cancelled) break;
-
-          const duration =
-            metadata.duration != null && metadata.duration > 0
-              ? metadata.duration
-              : defaultDuration;
-
-          setAssetDurations((prev) => {
-            if (prev[asset.id] && prev[asset.id] === duration) return prev;
-            return { ...prev, [asset.id]: duration };
-          });
-
-          const width = metadata.width;
-          const height = metadata.height;
-
-          upsertAssetMetadata(asset.id, { duration, width, height });
-
-          // Persist to server if we extracted new information
-          if (!hasServerDimensions && (width || height || duration !== defaultDuration)) {
-            void persistMetadataToServer(asset.id, { width, height, duration });
-          }
-        } catch (err) {
-          if (cancelled) break;
-          console.warn(`Failed to extract metadata for asset ${asset.id}:`, err);
-          
-          // Fall back to default duration on error
-          setAssetDurations((prev) => {
-            if (prev[asset.id] != null) return prev;
-            return { ...prev, [asset.id]: defaultDuration };
-          });
-          upsertAssetMetadata(asset.id, { duration: defaultDuration });
-        }
+        setAssetDurations((prev) => {
+          if (prev[asset.id] != null) return prev;
+          return { ...prev, [asset.id]: defaultDuration };
+        });
+        upsertAssetMetadata(asset.id, {
+          duration: defaultDuration,
+          width: asset.width ?? undefined,
+          height: asset.height ?? undefined,
+        });
       }
     };
 
-    void processAssets();
+    processAssets();
 
     return () => {
       cancelled = true;

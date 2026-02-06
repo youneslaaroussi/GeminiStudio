@@ -177,17 +177,10 @@ def _upload_to_asset_service(
         if not asset_id:
             logger.error("[TTS] Asset service did not return asset ID")
             return None
-        
-        # Get filename from asset for proper extension in proxy URL
-        asset_filename = asset.get("fileName", "audio.mp3")
-        
-        # Build proxy URL for CORS-safe access (include filename for proper extension)
-        proxy_url = f"/api/assets/{asset_id}/file/{asset_filename}?projectId={project_id}&userId={user_id}"
-        
+
         logger.info("[TTS] Uploaded audio to asset service: asset_id=%s", asset_id)
         return {
             "assetId": asset_id,
-            "proxyUrl": proxy_url,
             "gcsUri": asset.get("gcsUri"),
             "signedUrl": asset.get("signedUrl"),
         }
@@ -439,7 +432,7 @@ def generateSpeech(
     text_slug = "".join(c for c in text_slug if c.isalnum() or c == "-")
     filename = f"tts-{voice.lower()}-{text_slug}-{request_id[:8]}{ext}"
 
-    # Try asset service first (provides proxy URL for CORS-safe access)
+    # Try asset service first (returns signed URL for direct access)
     asset_data = _upload_to_asset_service(
         audio_bytes, filename, mime_type, user_id, effective_project_id, settings
     )
@@ -451,13 +444,11 @@ def generateSpeech(
             text[:50],
             asset_data["assetId"],
         )
-        # Prefer signed URL for external clients (like Telegram)
-        audio_url = asset_data.get("signedUrl") or asset_data["proxyUrl"]
+        audio_url = asset_data.get("signedUrl")
         return {
             "status": "success",
             "message": f"Speech generated successfully (voice: {voice}). IMPORTANT: Include this URL in your response so the user can hear the audio: {audio_url}",
             "audioUrl": audio_url,
-            "proxyUrl": asset_data["proxyUrl"],
             "assetId": asset_data["assetId"],
             "gcsUri": asset_data.get("gcsUri"),
             "mimeType": mime_type,

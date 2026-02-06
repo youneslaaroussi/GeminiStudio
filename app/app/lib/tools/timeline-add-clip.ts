@@ -57,7 +57,7 @@ const baseClipSchema = z.object({
 const addClipSchema = baseClipSchema.extend({
   // Type is optional for media clips - can be inferred from assetId
   type: z.enum(["video", "audio", "image", "text"]).optional(),
-  // Do not accept src from LLM - proxy URL is derived from assetId only
+  // Do not accept src from LLM - playback URL is resolved from assetId only
   // Media properties (video/image)
   width: z.number().positive().optional(),
   height: z.number().positive().optional(),
@@ -112,7 +112,7 @@ export const timelineAddClipTool: ToolDefinition<
   name: "timelineAddClip",
   label: "Add Timeline Clip",
   description:
-    "Insert a new clip on the timeline. For media clips (video/audio/image), provide type and assetId only—do not pass src (proxy URL is derived from assetId). For text clips, provide type='text' and text content. Use template, subtitle, backgroundColor for text styling. Use enterTransition and exitTransition for fade/slide/zoom in/out (type, duration 0.1-5s).",
+    "Insert a new clip on the timeline. For media clips (video/audio/image), provide type and assetId only—do not pass src (playback URL is resolved from assetId). For text clips, provide type='text' and text content. Use template, subtitle, backgroundColor for text styling. Use enterTransition and exitTransition for fade/slide/zoom in/out (type, duration 0.1-5s).",
   runLocation: "client",
   inputSchema: addClipSchema,
   fields: [
@@ -297,7 +297,7 @@ export const timelineAddClipTool: ToolDefinition<
     const store = useProjectStore.getState();
     const projectId = store.projectId;
 
-    // Resolve asset details from assetId only—never use LLM-provided src (breaks proxy)
+    // Resolve asset details from assetId only—never use LLM-provided src
     let resolvedSrc: string | undefined;
     let resolvedType = input.type;
     let resolvedDuration = input.duration;
@@ -317,10 +317,9 @@ export const timelineAddClipTool: ToolDefinition<
             resolvedType = assetType;
           }
         }
-        // Fetch GCS signed URL for direct playback (no proxy lag)
-        // Fallback to proxy URL if fetch fails or not in browser context
-        resolvedSrc = asset.url; // Default fallback
-        if (typeof window !== "undefined" && projectId) {
+        // Use signed URL for direct playback (from store or playback-url)
+        resolvedSrc = asset.url || undefined;
+        if (typeof window !== "undefined" && projectId && !resolvedSrc) {
           try {
             const res = await fetch(
               `/api/assets/${input.assetId}/playback-url?projectId=${encodeURIComponent(projectId)}`,
@@ -328,12 +327,10 @@ export const timelineAddClipTool: ToolDefinition<
             );
             if (res.ok) {
               const data = await res.json();
-              if (data?.url) {
-                resolvedSrc = data.url;
-              }
+              if (data?.url) resolvedSrc = data.url;
             }
           } catch {
-            // Fallback to proxy URL on error
+            // Leave resolvedSrc undefined on error
           }
         }
 
@@ -343,29 +340,19 @@ export const timelineAddClipTool: ToolDefinition<
           resolvedSourceDuration = asset.duration;
           if (!resolvedDuration) resolvedDuration = asset.duration;
         }
-      } else if (projectId) {
-        // Asset not in store yet (e.g. just generated)—try to fetch playback URL
-        if (typeof window !== "undefined") {
-          try {
-            const res = await fetch(
-              `/api/assets/${input.assetId}/playback-url?projectId=${encodeURIComponent(projectId)}`,
-              { credentials: "include" }
-            );
-            if (res.ok) {
-              const data = await res.json();
-              if (data?.url) {
-                resolvedSrc = data.url;
-              } else {
-                resolvedSrc = `/api/assets/${input.assetId}/playback?projectId=${encodeURIComponent(projectId)}`;
-              }
-            } else {
-              resolvedSrc = `/api/assets/${input.assetId}/playback?projectId=${encodeURIComponent(projectId)}`;
-            }
-          } catch {
-            resolvedSrc = `/api/assets/${input.assetId}/playback?projectId=${encodeURIComponent(projectId)}`;
+      } else if (projectId && typeof window !== "undefined") {
+        // Asset not in store yet (e.g. just generated)—fetch signed playback URL
+        try {
+          const res = await fetch(
+            `/api/assets/${input.assetId}/playback-url?projectId=${encodeURIComponent(projectId)}`,
+            { credentials: "include" }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.url) resolvedSrc = data.url;
           }
-        } else {
-          resolvedSrc = `/api/assets/${input.assetId}/playback?projectId=${encodeURIComponent(projectId)}`;
+        } catch {
+          // Leave resolvedSrc undefined
         }
       }
     }
@@ -386,7 +373,7 @@ export const timelineAddClipTool: ToolDefinition<
     if (resolvedType !== "text" && !resolvedSrc) {
       return {
         status: "error",
-        error: "For media clips provide type and assetId (proxy URL is derived from assetId). Do not pass src.",
+        error: "For media clips provide type and assetId (signed URL is resolved from assetId). Do not pass src.",
       };
     }
 
@@ -409,7 +396,6 @@ export const timelineAddClipTool: ToolDefinition<
           start,
           resolvedDuration,
           {
-            assetId: input.assetId,
             width: resolvedWidth,
             height: resolvedHeight,
             sourceDuration: resolvedSourceDuration,
@@ -431,7 +417,7 @@ export const timelineAddClipTool: ToolDefinition<
           baseName || "Audio Clip",
           start,
           resolvedDuration,
-          { assetId: input.assetId, sourceDuration: resolvedSourceDuration }
+          { sourceDuration: resolvedSourceDuration }
         );
         applyCommonOverrides(clip, { ...input, type: resolvedType, start, duration: resolvedDuration });
         if (input.volume !== undefined) {
@@ -446,7 +432,6 @@ export const timelineAddClipTool: ToolDefinition<
           start,
           resolvedDuration,
           {
-            assetId: input.assetId,
             width: resolvedWidth,
             height: resolvedHeight,
           }

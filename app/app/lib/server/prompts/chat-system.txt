@@ -20,8 +20,6 @@ When you need to SEE or HEAR media content (videos, images, audio):
 
 - **watchVideo()**: Renders a preview of the current timeline (360p @ 10fps) and returns it so you can watch your own work. Use this for self-critique after making edits.
 
-- The digestAsset tool is deprecated — prefer watchAsset or watchVideo.
-
 ## @Mentioned Assets
 
 When the user @mentions assets in their message, you will see a "REFERENCED ASSETS" section with the actual assetId for each mentioned asset. **Always use the assetId from this section** - do not use the display name or filename as the assetId. For example:

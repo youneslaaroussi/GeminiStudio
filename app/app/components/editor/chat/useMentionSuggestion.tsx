@@ -84,14 +84,13 @@ export function createMentionSuggestion(
       if (!response.ok) return [];
 
       const data = await response.json();
-      // Search hits may not include url; use playback path (resolved to signed URL when used)
-      const playbackBase = `/api/assets`;
+      // Search hits may include signed url; otherwise client should resolve via playback-url when needed
       return (data.hits || []).map((hit: Record<string, unknown>) => ({
         id: hit.id as string,
         name: hit.name as string,
         type: hit.type as string,
         description: hit.description as string | undefined,
-        url: (hit.url as string | undefined) ?? `${playbackBase}/${hit.id}/playback?projectId=${projectId}`,
+        url: (hit.url as string | undefined) ?? "",
         thumbnailUrl: hit.thumbnailUrl as string | undefined,
         highlights: hit.highlights as { name?: string; description?: string } | undefined,
       }));

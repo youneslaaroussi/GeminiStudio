@@ -21,7 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 
 interface ImageEffectsPanelProps {
-  clip: ImageClip;
+  clip: import("@/app/types/timeline").ResolvedImageClip;
 }
 
 const EMPTY_JOB_IDS: string[] = [];
@@ -42,7 +42,7 @@ function JobStatusIcon({ status }: { status: VideoEffectJob["status"] }) {
 /**
  * Resolve the lookup key for jobs: assetId if clip has one, otherwise "url:" + src for imageUrl-based jobs.
  */
-function getJobsLookupKey(clip: ImageClip, assetUrl: string | undefined): string | null {
+function getJobsLookupKey(clip: import("@/app/types/timeline").ResolvedImageClip): string | null {
   if (clip.assetId) return clip.assetId;
   if (clip.src) return `url:${clip.src.slice(0, 80)}`;
   return null;
@@ -69,7 +69,7 @@ export function ImageEffectsPanel({ clip }: ImageEffectsPanelProps) {
   const upsertJob = useVideoEffectsStore((state) => state.upsertJob);
   const upsertJobs = useVideoEffectsStore((state) => state.upsertJobs);
   const jobsMap = useVideoEffectsStore((state) => state.jobs);
-  const lookupKey = getJobsLookupKey(clip, asset?.signedUrl ?? asset?.url);
+  const lookupKey = getJobsLookupKey(clip);
   const jobIds = useVideoEffectsStore(
     useCallback(
       (state) => {
@@ -243,20 +243,36 @@ export function ImageEffectsPanel({ clip }: ImageEffectsPanelProps) {
   }, [clip, asset, selectedEffect, isSubmitting, projectId, upsertJob, ensurePolling]);
 
   const handleApply = useCallback(
-    (job: VideoEffectJob) => {
+    async (job: VideoEffectJob) => {
       if (!job.resultAssetId) {
         toast.error("Cannot apply", { description: "Result not ready." });
         return;
       }
-      // Use playback path (resolved to signed GCS URL by usePlaybackResolvedLayers)
-      const playbackSrc = `/api/assets/${job.resultAssetId}/playback?projectId=${encodeURIComponent(projectId ?? "")}`;
-      updateClip(clip.id, {
-        src: playbackSrc,
-        assetId: job.resultAssetId,
-      });
-      toast.success("Applied!", {
-        description: "Clip updated with processed image.",
-      });
+      const pid = projectId ?? "";
+      try {
+        const res = await fetch(
+          `/api/assets/${job.resultAssetId}/playback-url?projectId=${encodeURIComponent(pid)}`,
+          { credentials: "include" }
+        );
+        if (!res.ok) {
+          toast.error("Cannot apply", { description: "Failed to get playback URL." });
+          return;
+        }
+        const data = await res.json();
+        const signedUrl = data?.url;
+        if (!signedUrl) {
+          toast.error("Cannot apply", { description: "No playback URL available." });
+          return;
+        }
+        updateClip(clip.id, {
+          assetId: job.resultAssetId,
+        });
+        toast.success("Applied!", {
+          description: "Clip updated with processed image.",
+        });
+      } catch {
+        toast.error("Cannot apply", { description: "Failed to get playback URL." });
+      }
     },
     [clip.id, projectId, updateClip]
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Layer } from "@/app/types/timeline";
+import type { ResolvedLayer } from "@/app/types/timeline";
 import {
   getTimelineMediaUrls,
   type TimelineMediaUrl,
@@ -149,7 +149,7 @@ async function preloadQueue(
  * Stable key for the set of media URLs in the timeline so the preload effect
  * reruns whenever we add/remove a clip that changes which assets are used.
  */
-function getTimelineMediaUrlsKey(layers: Layer[]): string {
+function getTimelineMediaUrlsKey(layers: ResolvedLayer[]): string {
   const urls = getTimelineMediaUrls(layers);
   return urls
     .map((u) => u.src)
@@ -165,7 +165,7 @@ function getTimelineMediaUrlsKey(layers: Layer[]): string {
  * Returns progress { total, loaded } for showing a preload indicator.
  */
 export function usePreloadTimelineMedia(
-  layers: Layer[],
+  layers: ResolvedLayer[],
   options?: { enabled?: boolean }
 ): PreloadProgress {
   const enabled = options?.enabled !== false;

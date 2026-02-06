@@ -1,9 +1,9 @@
 /**
  * Collects unique video, audio, and image URLs from timeline layers for preloading.
- * Used so the preview can warm the browser cache before playback.
+ * Call with resolved layers (src set at preview time; never stored).
  */
 
-import type { Layer, VideoClip, AudioClip, ImageClip } from "@/app/types/timeline";
+import type { ResolvedLayer, ResolvedVideoClip, ResolvedAudioClip, ResolvedImageClip } from "@/app/types/timeline";
 
 export interface TimelineMediaUrl {
   src: string;
@@ -13,16 +13,15 @@ export interface TimelineMediaUrl {
 }
 
 /**
- * Returns a deduplicated list of media URLs (video, audio, image) from the given layers.
- * Includes main clip src and, for video clips, maskSrc when present.
+ * Returns a deduplicated list of media URLs from resolved layers (for preload).
  */
-export function getTimelineMediaUrls(layers: Layer[]): TimelineMediaUrl[] {
+export function getTimelineMediaUrls(layers: ResolvedLayer[]): TimelineMediaUrl[] {
   const seen = new Set<string>();
   const result: TimelineMediaUrl[] = [];
 
   for (const layer of layers) {
     if (layer.type === "video") {
-      for (const clip of layer.clips as VideoClip[]) {
+      for (const clip of layer.clips as ResolvedVideoClip[]) {
         if (clip.src && !seen.has(clip.src)) {
           seen.add(clip.src);
           result.push({
@@ -41,7 +40,7 @@ export function getTimelineMediaUrls(layers: Layer[]): TimelineMediaUrl[] {
         }
       }
     } else if (layer.type === "audio") {
-      for (const clip of layer.clips as AudioClip[]) {
+      for (const clip of layer.clips as ResolvedAudioClip[]) {
         if (clip.src && !seen.has(clip.src)) {
           seen.add(clip.src);
           result.push({
@@ -52,7 +51,7 @@ export function getTimelineMediaUrls(layers: Layer[]): TimelineMediaUrl[] {
         }
       }
     } else if (layer.type === "image") {
-      for (const clip of layer.clips as ImageClip[]) {
+      for (const clip of layer.clips as ResolvedImageClip[]) {
         if (clip.src && !seen.has(clip.src)) {
           seen.add(clip.src);
           result.push({

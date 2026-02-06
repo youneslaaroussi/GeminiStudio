@@ -1914,133 +1914,6 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
     },
-    "digestAsset": {
-      "name": "digestAsset",
-      "label": "Digest Asset (Deprecated)",
-      "description": "DEPRECATED: Use watchAsset instead for context-aware analysis. This tool analyzes media in isolation without conversation context. Only use this if you specifically need isolated analysis without considering prior discussion.",
-      "runLocation": "client",
-      "implementations": {
-        "app": true,
-        "langgraph": false
-      },
-      "fields": [
-        {
-          "name": "assetId",
-          "label": "Asset ID",
-          "type": "text",
-          "placeholder": "e.g. asset_abc123",
-          "description": "The ID of the asset to analyze.",
-          "required": true
-        },
-        {
-          "name": "query",
-          "label": "Question (optional)",
-          "type": "textarea",
-          "placeholder": "What specific aspects would you like to know about?",
-          "description": "Optional: Ask a specific question about the asset instead of getting a general analysis."
-        },
-        {
-          "name": "depth",
-          "label": "Analysis Depth",
-          "type": "select",
-          "options": [
-            {
-              "value": "quick",
-              "label": "Quick (2-3 sentences)"
-            },
-            {
-              "value": "detailed",
-              "label": "Detailed (comprehensive analysis)"
-            },
-            {
-              "value": "exhaustive",
-              "label": "Exhaustive (scene-by-scene, every detail)"
-            }
-          ],
-          "defaultValue": "detailed",
-          "description": "How thorough should the analysis be?"
-        },
-        {
-          "name": "startOffset",
-          "label": "Start Time (optional)",
-          "type": "text",
-          "placeholder": "e.g. 30s or 1m30s",
-          "description": "For videos only: analyze from this timestamp. Use when the user asks about a specific part of a video or to limit analysis to a segment. Format: 30s, 1m30s, 2m."
-        },
-        {
-          "name": "endOffset",
-          "label": "End Time (optional)",
-          "type": "text",
-          "placeholder": "e.g. 60s or 2m",
-          "description": "For videos only: stop analyzing at this timestamp. Use with startOffset to analyze only a segment (e.g. 30s to 2m). Saves tokens on long videos."
-        },
-        {
-          "name": "mediaResolution",
-          "label": "Resolution (optional)",
-          "type": "select",
-          "options": [
-            {
-              "value": "low",
-              "label": "Low (fewer tokens, good for long videos)"
-            },
-            {
-              "value": "medium",
-              "label": "Medium (balanced)"
-            },
-            {
-              "value": "high",
-              "label": "High (more detail, more tokens)"
-            }
-          ],
-          "description": "Media resolution affects token usage. Low = ~100 tokens/sec, High = ~300 tokens/sec."
-        }
-      ],
-      "inputSchema": {
-        "$ref": "#/definitions/digestAssetInput",
-        "definitions": {
-          "digestAssetInput": {
-            "type": "object",
-            "properties": {
-              "assetId": {
-                "type": "string",
-                "minLength": 1
-              },
-              "query": {
-                "type": "string"
-              },
-              "depth": {
-                "type": "string",
-                "enum": [
-                  "quick",
-                  "detailed",
-                  "exhaustive"
-                ],
-                "default": "detailed"
-              },
-              "startOffset": {
-                "type": "string"
-              },
-              "endOffset": {
-                "type": "string"
-              },
-              "mediaResolution": {
-                "type": "string",
-                "enum": [
-                  "low",
-                  "medium",
-                  "high"
-                ]
-              }
-            },
-            "required": [
-              "assetId"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "$schema": "http://json-schema.org/draft-07/schema#"
-      }
-    },
     "watchAsset": {
       "name": "watchAsset",
       "label": "Watch Asset",
@@ -2157,7 +2030,7 @@
     "applyVideoEffectToClip": {
       "name": "applyVideoEffectToClip",
       "label": "Apply Video Effect to Clip",
-      "description": "Apply a video effect (e.g. segmentation) to a clip/asset. Before using: digest the clip (digestAsset or getAssetMetadata) to understand the video content and choose where to place tracking points (click coordinates and frames) for the segmentation effect.",
+      "description": "Apply a video effect (e.g. segmentation) to a clip/asset. Before using: digest the clip (getAssetMetadata or watchAsset) to understand the video content and choose where to place tracking points (click coordinates and frames) for the segmentation effect.",
       "runLocation": "client",
       "implementations": {
         "app": true,

@@ -87,7 +87,6 @@ export async function POST(request: NextRequest) {
         size: asset.size,
         category: getMediaCategory(asset.mimeType),
         uploadedAt: asset.uploadedAt,
-        localUrl: asset.signedUrl || "",
         gcsUri: asset.gcsUri,
         signedUrl: asset.signedUrl,
       });

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import base64
+import hmac
+import hashlib
 import json
 import logging
 import time
 import uuid
 from typing import Any
 
+import httpx
 from langchain_core.tools import tool
 
 from ..config import get_settings
@@ -20,6 +23,31 @@ ADD_CLIP_TRANSITION_TYPES = (
     "fade", "slide-left", "slide-right", "slide-up", "slide-down",
     "cross-dissolve", "zoom", "blur", "dip-to-black",
 )
+
+
+def _sign_asset_request(timestamp: int, secret: str) -> str:
+    payload = f"{timestamp}."
+    return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+
+def _get_asset_signed_url(settings: Any, user_id: str, project_id: str, asset_id: str) -> str | None:
+    """Fetch asset from asset service and return signedUrl. Returns None if not available."""
+    if not settings.asset_service_url:
+        return None
+    endpoint = f"{settings.asset_service_url.rstrip('/')}/api/assets/{user_id}/{project_id}/{asset_id}"
+    headers = {}
+    if getattr(settings, "asset_service_shared_secret", None):
+        ts = int(time.time() * 1000)
+        headers["X-Signature"] = _sign_asset_request(ts, settings.asset_service_shared_secret)
+        headers["X-Timestamp"] = str(ts)
+    try:
+        resp = httpx.get(endpoint, headers=headers, timeout=10.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data.get("signedUrl")
+    except Exception as e:
+        logger.warning("[ADD_CLIP] Failed to get signed URL for %s: %s", asset_id, e)
+    return None
 
 
 def _parse_transition(param: str | None) -> dict | None:
@@ -290,7 +318,6 @@ def addClipToTimeline(
 
             asset_duration = asset_data.get("duration")
 
-            # Get filename for proxy URL
             asset_filename = asset_data.get("name") or asset_data.get("fileName")
         else:
             logger.warning("[ADD_CLIP] Asset not found: %s", asset_id)
@@ -313,12 +340,19 @@ def addClipToTimeline(
             "message": f"Invalid clip_type '{resolved_type}'. Must be video, audio, image, or text.",
         }
 
-    # Media clips need asset_id
-    if resolved_type in ("video", "audio", "image") and not asset_id:
-        return {
-            "status": "error",
-            "message": f"asset_id is required for {resolved_type} clips.",
-        }
+    # Media clips need asset_id and a playback URL (signed URL from asset service)
+    if resolved_type in ("video", "audio", "image"):
+        if not asset_id:
+            return {
+                "status": "error",
+                "message": f"asset_id is required for {resolved_type} clips.",
+            }
+        signed_url = _get_asset_signed_url(settings, user_id, project_id, asset_id)
+        if not signed_url:
+            return {
+                "status": "error",
+                "message": "Asset has no playback URL yet. Wait for upload to complete and try again.",
+            }
 
     # Text clips need type and text
     if not resolved_type:
@@ -419,17 +453,10 @@ def addClipToTimeline(
             "scale": {"x": 1, "y": 1},
         }
 
-        # For media clips, build proxy URL from asset_id
+        # For media clips, store only assetId; src is resolved at preview/render time, never persisted
         if asset_id and resolved_type in ("video", "audio", "image"):
-            # Build proxy URL - include filename for proper extension detection
-            if asset_filename:
-                from urllib.parse import quote
-                proxy_src = f"/api/assets/{asset_id}/file/{quote(asset_filename)}?projectId={project_id}&userId={user_id}"
-            else:
-                proxy_src = f"/api/assets/{asset_id}/file?projectId={project_id}&userId={user_id}"
-            clip["src"] = proxy_src
             clip["assetId"] = asset_id
-            logger.info("[ADD_CLIP] Using proxy URL: %s", proxy_src)
+            logger.info("[ADD_CLIP] Added media clip asset_id=%s (URL resolved at render)", asset_id)
         
         if text:
             clip["text"] = text

@@ -121,7 +121,7 @@ docker-compose up
 | `GOOGLE_PROJECT_ID` | GCP project ID | Yes |
 | `GOOGLE_SERVICE_ACCOUNT_KEY` | Path to service account JSON | No* |
 | `ASSET_GCS_BUCKET` | GCS bucket for assets | Yes |
-| `ASSET_SIGNED_URL_TTL_SECONDS` | Signed URL expiration (default: 7 days) | No |
+| `ASSET_SIGNED_URL_TTL_SECONDS` | Signed URL expiration (default: 1 hour) | No |
 | `FIREBASE_SERVICE_ACCOUNT_KEY` | Firebase service account | No* |
 | `PIPELINE_EVENT_TOPIC` | Pub/Sub topic for pipeline events (default: gemini-pipeline-events) | No |
 | `SPEECH_PROJECT_ID` | Speech-to-Text project ID | No |
@@ -129,6 +129,7 @@ docker-compose up
 | `SPEECH_MODEL` | Speech model (default: chirp_3) | No |
 | `SPEECH_LANGUAGE_CODES` | Comma-separated language codes | No |
 | `REDIS_URL` | Redis URL for task queue (default: redis://localhost:6379/0) | No |
+| `WORKER_CONCURRENCY` | Parallel pipeline jobs (default: 4, range: 1-32) | No |
 | `APP_HOST` | Server host (default: 0.0.0.0) | No |
 | `APP_PORT` | Server port (default: 8081) | No |
 | `DEBUG` | Enable debug mode | No |

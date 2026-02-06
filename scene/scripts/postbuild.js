@@ -25,15 +25,25 @@ if (!existsSync(distDir)) {
 cpSync(distDir, appSceneDir, { recursive: true, force: true });
 console.log('postbuild: copied dist to app/public/scene');
 
-// Inject __SCENE_PROJECT__ so the app can read it after loading the script
+// Inject __SCENE_PROJECT__ and Video crossOrigin for CORS (avoid tainted canvas)
 let js = readFileSync(projectPath, 'utf8');
 const exportRegex = /export \{\s*project as default\s*\};?/;
 if (!exportRegex.test(js)) {
   console.warn('postbuild: could not find "export { project as default }" in project.js');
 } else {
   js = js.replace(exportRegex, (m) => PATCH + m);
-  writeFileSync(projectPath, js);
   console.log('postbuild: patched project.js (__SCENE_PROJECT__)');
 }
+
+// Video crossOrigin: must be set before src for CORS (prevents tainted canvas on reload)
+const videoCreatePattern = /(video = document\.createElement\("video"\);)\s*(video\.src = src;)/;
+if (!videoCreatePattern.test(js)) {
+  console.warn('postbuild: could not find Video createElement block for crossOrigin patch');
+} else {
+  js = js.replace(videoCreatePattern, '$1\n      video.crossOrigin = "anonymous";\n      $2');
+  console.log('postbuild: patched project.js (Video crossOrigin)');
+}
+
+writeFileSync(projectPath, js);
 
 console.log('  →', appSceneDir);

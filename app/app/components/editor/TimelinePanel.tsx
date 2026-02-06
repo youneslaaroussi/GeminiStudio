@@ -24,14 +24,15 @@ import { Playhead } from "../timeline/Playhead";
 import type { ClipType } from "@/app/types/timeline";
 import { createLayerTemplate } from "@/app/lib/store/project-store";
 import { TRACK_LABEL_WIDTH } from "../timeline/constants";
+import { addAssetToTimeline } from "@/app/lib/assets/add-asset-to-timeline";
 import {
-  createClipFromAsset,
   hasAssetDragData,
   readDraggedAsset,
   hasTemplateDragData,
   readDraggedTemplate,
   createClipFromTemplate,
 } from "@/app/lib/assets/drag";
+import { usePlaybackResolvedLayers } from "@/app/lib/hooks/usePlaybackResolvedLayers";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 export type TimelineTool = "selection" | "hand";
@@ -76,6 +77,8 @@ export function TimelinePanel({
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
   const splitClipAtTime = useProjectStore((s) => s.splitClipAtTime);
   const layers = useProjectStore((s) => s.project.layers);
+  const projectId = useProjectStore((s) => s.projectId);
+  const { layers: resolvedLayers } = usePlaybackResolvedLayers(layers, projectId);
   const addLayer = useProjectStore((s) => s.addLayer);
   const addClip = useProjectStore((s) => s.addClip);
   const reorderLayers = useProjectStore((s) => s.reorderLayers);
@@ -150,20 +153,32 @@ export function TimelinePanel({
   );
 
   const handleTimelineDrop = useCallback(
-    (event: React.DragEvent<HTMLDivElement>) => {
+    async (event: React.DragEvent<HTMLDivElement>) => {
       const area = timelineAreaRef.current;
       if (!area) return;
       const rect = area.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const start = Math.max(0, x / zoom);
 
-      // Handle asset drops
+      // Handle asset drops (same path as Add button: fetch playback URL then add)
       if (hasAssetDragData(event)) {
         event.preventDefault();
         const asset = readDraggedAsset(event);
         if (!asset) return;
-        const clip = createClipFromAsset(asset, start);
-        addClip(clip);
+        const duration =
+          asset.type === "image" ? 5 : (asset.duration ?? 10);
+        await addAssetToTimeline({
+          assetId: asset.id,
+          projectId,
+          type: asset.type,
+          name: asset.name || "Asset",
+          duration,
+          start,
+          width: asset.width,
+          height: asset.height,
+          sourceDuration: asset.duration,
+          addClip,
+        });
         return;
       }
 
@@ -177,7 +192,7 @@ export function TimelinePanel({
         return;
       }
     },
-    [addClip, zoom]
+    [addClip, projectId, zoom]
   );
 
   // Handlers for empty state drop zone
@@ -198,15 +213,27 @@ export function TimelinePanel({
   }, []);
 
   const handleEmptyDrop = useCallback(
-    (event: React.DragEvent<HTMLDivElement>) => {
-      // Handle asset drops
+    async (event: React.DragEvent<HTMLDivElement>) => {
+      // Handle asset drops (same path as Add button: fetch playback URL then add)
       if (hasAssetDragData(event)) {
         event.preventDefault();
         setIsEmptyDropTarget(false);
         const asset = readDraggedAsset(event);
         if (!asset) return;
-        const clip = createClipFromAsset(asset, 0);
-        addClip(clip);
+        const duration =
+          asset.type === "image" ? 5 : (asset.duration ?? 10);
+        await addAssetToTimeline({
+          assetId: asset.id,
+          projectId,
+          type: asset.type,
+          name: asset.name || "Asset",
+          duration,
+          start: 0,
+          width: asset.width,
+          height: asset.height,
+          sourceDuration: asset.duration,
+          addClip,
+        });
         return;
       }
 
@@ -221,7 +248,7 @@ export function TimelinePanel({
         return;
       }
     },
-    [addClip]
+    [addClip, projectId]
   );
 
   // Update container width on resize
@@ -724,7 +751,7 @@ export function TimelinePanel({
                 className="shrink-0 h-6 border-b border-border bg-muted/30"
                 style={{ width: TRACK_LABEL_WIDTH }}
               />
-              {layers.map((layer, index) => (
+              {resolvedLayers.map((layer, index) => (
                 <LayerTrackLabel
                   key={layer.id}
                   layer={layer}
@@ -778,7 +805,7 @@ export function TimelinePanel({
                   width={Math.max(containerWidth - TRACK_LABEL_WIDTH, duration * zoom)}
                 />
                 <div className="relative">
-                  {layers.map((layer) => (
+                  {resolvedLayers.map((layer) => (
                     <LayerTrackBody
                       key={layer.id}
                       layer={layer}

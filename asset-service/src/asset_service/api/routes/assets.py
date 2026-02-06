@@ -30,6 +30,7 @@ from ...storage.firestore import (
     batch_update_sort_orders,
 )
 from ...storage.gcs import create_signed_url, delete_from_gcs, upload_to_gcs
+from ...pipeline.store import get_pipeline_state
 from ...tasks.queue import get_task_queue
 from ...search.algolia import index_asset, delete_asset_index, update_asset_index
 
@@ -160,13 +161,13 @@ async def upload_asset(
     except Exception as e:
         logger.warning(f"Failed to extract metadata: {e}")
 
-    # Upload to GCS immediately (so we have a signed URL right away)
+    # Upload to GCS immediately
     # Run blocking GCS operations in thread pool
     object_name = f"{user_id}/{project_id}/assets/{asset_id}/{original_filename}"
     gcs_result = await asyncio.to_thread(upload_to_gcs, content, object_name, mime_type, settings)
-    signed_url = await asyncio.to_thread(create_signed_url, object_name, settings=settings)
+    # Do NOT store signedUrl - it expires. Generate on-demand in list/get.
 
-    # Create asset data with GCS info
+    # Create asset data with GCS info (objectName only, no signed URLs)
     now = datetime.utcnow().isoformat() + "Z"
     asset_data = {
         "id": asset_id,
@@ -181,7 +182,6 @@ async def upload_asset(
         "gcsUri": gcs_result["gcs_uri"],
         "bucket": gcs_result["bucket"],
         "objectName": gcs_result["object_name"],
-        "signedUrl": signed_url,
         **metadata,
     }
 
@@ -276,8 +276,13 @@ async def upload_asset(
     except Exception as e:
         logger.warning(f"Failed to index new asset to Algolia: {e}")
 
+    # Add fresh signedUrl to response only (not stored - expires)
+    response_asset = dict(saved_asset)
+    response_asset["signedUrl"] = await asyncio.to_thread(
+        create_signed_url, saved_asset["objectName"], settings=settings
+    )
     return UploadResponse(
-        asset=AssetResponse(**saved_asset),
+        asset=AssetResponse(**response_asset),
         pipelineStarted=pipeline_started,
         transcodeStarted=transcode_started,
     )
@@ -344,10 +349,7 @@ async def register_gcs_asset(
         logger.error(f"Failed to get GCS file info: {e}")
         raise HTTPException(status_code=404, detail="GCS file not found")
 
-    # Generate signed URL
-    signed_url = await asyncio.to_thread(
-        create_signed_url, object_name, bucket=bucket_name, settings=settings
-    )
+    # Do NOT store signedUrl - it expires. Generate on-demand in list/get.
 
     # Extract video metadata if it's a video
     metadata: dict[str, Any] = {}
@@ -375,7 +377,7 @@ async def register_gcs_asset(
             if temp_path and os.path.exists(temp_path):
                 os.unlink(temp_path)
 
-    # Create asset data
+    # Create asset data (objectName only, no signed URLs - generated on-demand)
     now = datetime.utcnow().isoformat() + "Z"
     asset_data = {
         "id": asset_id,
@@ -390,7 +392,6 @@ async def register_gcs_asset(
         "gcsUri": body.gcsUri,
         "bucket": bucket_name,
         "objectName": object_name,
-        "signedUrl": signed_url,
         **metadata,
     }
 
@@ -430,8 +431,13 @@ async def register_gcs_asset(
     except Exception as e:
         logger.warning(f"Failed to index registered asset to Algolia: {e}")
 
+    # Add fresh signedUrl to response only (not stored - expires)
+    response_asset = dict(saved_asset)
+    response_asset["signedUrl"] = await asyncio.to_thread(
+        create_signed_url, object_name, bucket=bucket_name, settings=settings
+    )
     return UploadResponse(
-        asset=AssetResponse(**saved_asset),
+        asset=AssetResponse(**response_asset),
         pipelineStarted=pipeline_started,
         transcodeStarted=False,
     )
@@ -439,24 +445,13 @@ async def register_gcs_asset(
 
 @router.get("/{user_id}/{project_id}", response_model=list[AssetResponse])
 async def list_project_assets(user_id: str, project_id: str):
-    """List all assets for a project."""
+    """List all assets for a project. No signed URLs - use playback-url for on-demand URLs."""
     settings = get_settings()
 
     # Run blocking Firestore call in thread pool
     assets = await asyncio.to_thread(list_assets, user_id, project_id, settings)
-
-    # Generate fresh signed URLs in parallel using thread pool
-    async def get_signed_url(asset: dict) -> None:
-        object_name = asset.get("objectName")
-        if object_name:
-            try:
-                url = await asyncio.to_thread(create_signed_url, object_name, settings=settings)
-                asset["signedUrl"] = url
-            except Exception as e:
-                logger.warning(f"Failed to create signed URL for {object_name}: {e}")
-
-    await asyncio.gather(*[get_signed_url(asset) for asset in assets])
-
+    # Do NOT generate signed URLs here - list is polled frequently (e.g. every 10s during transcode).
+    # Client uses playback path; playback-url generates URL only when actually needed.
     return [AssetResponse(**asset) for asset in assets]
 
 
@@ -476,18 +471,8 @@ async def reorder_assets(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    # Return list in new order (re-fetch to get signed URLs)
+    # Return list in new order (no signed URLs - use playback-url on demand)
     assets = await asyncio.to_thread(list_assets, user_id, project_id, settings)
-    async def get_signed_url(asset: dict) -> None:
-        object_name = asset.get("objectName")
-        if object_name:
-            try:
-                url = await asyncio.to_thread(create_signed_url, object_name, settings=settings)
-                asset["signedUrl"] = url
-            except Exception as e:
-                logger.warning(f"Failed to create signed URL for {object_name}: {e}")
-
-    await asyncio.gather(*[get_signed_url(asset) for asset in assets])
     return [AssetResponse(**asset) for asset in assets]
 
 
@@ -550,6 +535,16 @@ async def update_asset_by_id(
         except Exception as e:
             logger.warning("Failed to update Algolia index after asset update: %s", e)
 
+    # Add fresh signedUrl to response (not stored - expires)
+    object_name = updated.get("objectName")
+    if object_name:
+        try:
+            updated["signedUrl"] = await asyncio.to_thread(
+                create_signed_url, object_name, settings=settings
+            )
+        except Exception as e:
+            logger.warning(f"Failed to create signed URL for {object_name}: {e}")
+
     return AssetResponse(**updated)
 
 
@@ -603,6 +598,74 @@ class TranscodeResponse(BaseModel):
     queued: bool
     jobId: str | None = None
     message: str
+
+
+@router.get("/{user_id}/{project_id}/{asset_id}/thumbnail")
+async def get_asset_thumbnail(
+    user_id: str, project_id: str, asset_id: str = ASSET_ID_PATH
+):
+    """Get fresh signed thumbnail URL. objectName stored in Firestore, URL generated on-demand."""
+    settings = get_settings()
+    asset = await asyncio.to_thread(get_asset, user_id, project_id, asset_id, settings)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    state = await get_pipeline_state(user_id, project_id, asset_id, settings)
+    thumb_step = next(
+        (s for s in state.get("steps", []) if s.get("id") == "thumbnail"),
+        None,
+    )
+    if not thumb_step or thumb_step.get("status") != "succeeded":
+        return {"url": None, "available": False}
+
+    meta = thumb_step.get("metadata", {})
+    object_name = meta.get("objectName")
+    if not object_name:
+        return {"url": None, "available": False}
+
+    url = await asyncio.to_thread(create_signed_url, object_name, None, None, settings)
+    return {"url": url, "available": True}
+
+
+@router.get("/{user_id}/{project_id}/{asset_id}/frames")
+async def get_asset_frames(
+    user_id: str, project_id: str, asset_id: str = ASSET_ID_PATH
+):
+    """Get fresh signed frame URLs. objectNames stored in Firestore, URLs generated on-demand."""
+    settings = get_settings()
+    asset = await asyncio.to_thread(get_asset, user_id, project_id, asset_id, settings)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    if asset.get("type") != "video":
+        raise HTTPException(status_code=400, detail="Only video assets have sampled frames")
+
+    state = await get_pipeline_state(user_id, project_id, asset_id, settings)
+    frame_step = next(
+        (s for s in state.get("steps", []) if s.get("id") == "frame-sampling"),
+        None,
+    )
+    if not frame_step or frame_step.get("status") != "succeeded":
+        return {
+            "frames": [],
+            "duration": asset.get("duration") or 0,
+            "frameCount": 0,
+        }
+
+    meta = frame_step.get("metadata", {})
+    object_names = meta.get("objectNames", [])
+    duration = meta.get("duration") or asset.get("duration") or 0
+
+    frames = []
+    for i, obj in enumerate(object_names):
+        url = await asyncio.to_thread(create_signed_url, obj, None, None, settings)
+        ts = duration * (i + 0.5) / len(object_names) if object_names else 0
+        frames.append({"url": url, "timestamp": ts, "index": i})
+
+    return {
+        "frames": frames,
+        "duration": duration,
+        "frameCount": len(frames),
+    }
 
 
 @router.post("/{user_id}/{project_id}/{asset_id}/transcode", response_model=TranscodeResponse)

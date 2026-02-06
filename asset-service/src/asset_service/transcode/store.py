@@ -35,8 +35,7 @@ class TranscodeJob:
     user_id: str = ""
     project_id: str = ""
 
-    # Output metadata (populated on completion)
-    output_signed_url: str | None = None
+    # Output metadata (populated on completion). output_signed_url is never persisted (expires).
     output_file_name: str | None = None
     output_size: int | None = None
     output_duration: float | None = None
@@ -69,8 +68,7 @@ async def save_transcode_job(job: TranscodeJob) -> None:
 
     if job.error:
         data["error"] = job.error
-    if job.output_signed_url:
-        data["outputSignedUrl"] = job.output_signed_url
+    # Do NOT store outputSignedUrl - it expires. Asset document is updated with objectName; signed URLs generated on-demand.
     if job.output_file_name:
         data["outputFileName"] = job.output_file_name
     if job.output_size:
@@ -176,7 +174,6 @@ def _doc_to_job(data: dict[str, Any], user_id: str, project_id: str) -> Transcod
         updated_at=data.get("updatedAt", ""),
         user_id=user_id,
         project_id=project_id,
-        output_signed_url=data.get("outputSignedUrl"),
         output_file_name=data.get("outputFileName"),
         output_size=data.get("outputSize"),
         output_duration=data.get("outputDuration"),

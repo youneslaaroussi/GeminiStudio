@@ -11336,6 +11336,7 @@ let Video = Video_1 = class Video2 extends Rect {
     let video = Video_1.pool[key];
     if (!video) {
       video = document.createElement("video");
+      video.crossOrigin = "anonymous";
       video.src = src;
       Video_1.pool[key] = video;
     }

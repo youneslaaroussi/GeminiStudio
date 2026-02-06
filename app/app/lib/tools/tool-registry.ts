@@ -29,7 +29,6 @@ import {
   videoEffectsJobStatusTool,
 } from "./video-effects-run";
 import { veoGenerateTool, veoJobStatusTool } from "./veo-generate";
-import { digestAssetTool } from "./digest-asset";
 import { watchAssetTool } from "./watch-asset";
 import { watchVideoTool } from "./watch-video";
 import { applyVideoEffectToClipTool } from "./apply-video-effect-to-clip";
@@ -81,7 +80,6 @@ toolRegistry.register(videoEffectsRunTool);
 toolRegistry.register(videoEffectsJobStatusTool);
 toolRegistry.register(veoGenerateTool);
 toolRegistry.register(veoJobStatusTool);
-toolRegistry.register(digestAssetTool);
 toolRegistry.register(watchAssetTool);
 toolRegistry.register(watchVideoTool);
 toolRegistry.register(applyVideoEffectToClipTool);

@@ -8,6 +8,7 @@ import {
   deleteAssetFromService,
   updateAssetFromService,
 } from "@/app/lib/server/asset-service-client";
+import { verifyAuth, verifyBearerToken } from "@/app/lib/server/auth";
 
 export const runtime = "nodejs";
 
@@ -15,22 +16,9 @@ interface RouteContext {
   params: Promise<{ assetId: string }>;
 }
 
+/** Bearer-only (used for DELETE/PATCH from API clients). */
 async function verifyToken(request: NextRequest): Promise<string | null> {
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-
-  try {
-    await initAdmin();
-    const decoded = await getAuth().verifyIdToken(token);
-    return decoded.uid;
-  } catch (error) {
-    console.error("Token verification failed:", error);
-    return null;
-  }
+  return verifyBearerToken(request);
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -41,7 +29,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     );
   }
 
-  const userId = await verifyToken(request);
+  const userId = await verifyAuth(request);
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

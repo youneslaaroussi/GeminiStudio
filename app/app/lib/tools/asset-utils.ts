@@ -57,6 +57,15 @@ export function toAbsoluteAssetUrl(url: string) {
   return new URL(url, window.location.origin).toString();
 }
 
+/** Returns a loadable URL for an asset (signed or url). Throws if none. */
+function getAssetLoadableUrl(asset: RemoteAsset): string {
+  const url = asset.signedUrl ?? asset.url;
+  if (!url) {
+    throw new Error("Asset has no accessible URL.");
+  }
+  return url.startsWith("http") ? url : toAbsoluteAssetUrl(url);
+}
+
 export async function canvasToPngDataUrl(
   canvas: HTMLCanvasElement | OffscreenCanvas
 ) {
@@ -88,7 +97,7 @@ function blobToDataUrl(blob: Blob) {
 }
 
 export async function captureVideoFrame(asset: RemoteAsset, timecode: number) {
-  const absoluteUrl = toAbsoluteAssetUrl(asset.url);
+  const absoluteUrl = getAssetLoadableUrl(asset);
   const input = new Input({
     formats: ALL_FORMATS,
     source: new UrlSource(absoluteUrl),
@@ -180,7 +189,7 @@ export async function loadImageDimensions(url: string) {
 }
 
 export async function buildImagePreview(asset: RemoteAsset) {
-  const absoluteUrl = toAbsoluteAssetUrl(asset.url);
+  const absoluteUrl = getAssetLoadableUrl(asset);
   const metadata = useAssetsStore.getState().metadata[asset.id] ?? null;
   if (
     metadata?.width &&
@@ -244,7 +253,7 @@ export async function captureVideoFrameWithBoxes(
     labelFont = "bold 16px sans-serif",
   } = options;
 
-  const absoluteUrl = toAbsoluteAssetUrl(asset.url);
+  const absoluteUrl = getAssetLoadableUrl(asset);
   const input = new Input({
     formats: ALL_FORMATS,
     source: new UrlSource(absoluteUrl),

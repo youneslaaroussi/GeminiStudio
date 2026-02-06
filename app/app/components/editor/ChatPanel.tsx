@@ -2487,30 +2487,9 @@ function AttachmentDisplay({
   isUser: boolean;
 }) {
   const Icon = getAttachmentIcon(attachment.category);
-  const previewUrl = attachment.signedUrl || attachment.localUrl;
-  const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null);
-  const [isLoadingThumbnail, setIsLoadingThumbnail] = useState(false);
-
-  // For video, extract first frame as thumbnail
-  useEffect(() => {
-    if (attachment.category === "video" && previewUrl && !videoThumbnail && !isLoadingThumbnail) {
-      setIsLoadingThumbnail(true);
-      import("@/app/lib/tools/asset-utils").then(({ extractVideoFrameAtTimestamp }) => {
-        extractVideoFrameAtTimestamp(previewUrl, 0)
-          .then((dataUrl) => {
-            if (dataUrl) {
-              setVideoThumbnail(dataUrl);
-            }
-          })
-          .catch((err) => {
-            console.error("[AttachmentDisplay] Failed to extract thumbnail:", err);
-          })
-          .finally(() => {
-            setIsLoadingThumbnail(false);
-          });
-      });
-    }
-  }, [attachment.category, previewUrl, videoThumbnail, isLoadingThumbnail]);
+  const previewUrl = attachment.signedUrl;
+  // Use thumbnail from attachment if available (e.g. from asset service). No client-side extraction.
+  const videoThumbnail = attachment.thumbnailUrl ?? null;
 
   // For images, show thumbnail
   if (attachment.category === "image" && previewUrl) {
@@ -2531,15 +2510,11 @@ function AttachmentDisplay({
     );
   }
 
-  // For video, show first frame thumbnail
+  // For video, show thumbnail if available (from attachment) or icon
   if (attachment.category === "video" && previewUrl) {
     return (
       <div className="rounded-lg overflow-hidden border border-border/50 max-w-[200px]">
-        {isLoadingThumbnail ? (
-          <div className="flex items-center justify-center max-h-32 bg-muted/50">
-            <Loader2 className="size-4 animate-spin text-muted-foreground" />
-          </div>
-        ) : videoThumbnail ? (
+        {videoThumbnail ? (
           <img
             src={videoThumbnail}
             alt={attachment.name}

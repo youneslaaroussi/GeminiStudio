@@ -61,11 +61,8 @@ export const getTimelineStateTool: ToolDefinition<
             duration: clip.duration,
             end: clip.start + clip.duration / clip.speed,
             speed: clip.speed,
-            ...(clip.type === "video" && clip.src ? { src: clip.src } : {}),
-            ...(clip.type === "audio" && clip.src ? { src: clip.src } : {}),
-            ...(clip.type === "image" && clip.src ? { src: clip.src } : {}),
             ...(clip.type === "text" && clip.text ? { text: clip.text } : {}),
-            ...(clip.assetId ? { assetId: clip.assetId } : {}),
+            ...(clip.type !== "text" && "assetId" in clip && clip.assetId ? { assetId: clip.assetId } : {}),
           };
         }
         return {

@@ -1,123 +1,100 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { Layer } from "@/app/types/timeline";
-
-// Match legacy /file and logical /playback paths (both resolved via playback-url API)
-const PLAYBACK_PATH_RE = /^\/api\/assets\/([^/]+)\/(?:file|playback)\?projectId=([^&]+)(&|$)/;
-
-function isPlaybackPath(src: string): boolean {
-  return PLAYBACK_PATH_RE.test(src);
-}
-
-function parsePlaybackPath(src: string): { assetId: string; projectId: string } | null {
-  const m = src.match(PLAYBACK_PATH_RE);
-  if (!m) return null;
-  return { assetId: m[1]!, projectId: m[2]! };
-}
+import { useMemo, useState, useEffect } from "react";
+import type {
+  Layer,
+  ResolvedLayer,
+  ResolvedTimelineClip,
+  VideoClip,
+  AudioClip,
+  ImageClip,
+} from "@/app/types/timeline";
 
 /**
- * Resolves /api/assets/.../file or .../playback paths to signed GCS playback URLs
- * so the browser loads media directly from GCS.
- * Returns resolved layers and a ready flag (false while fetching).
+ * Resolve assetId → signed playback URL for each clip.
+ * Returns layers with src (and maskSrc for video) set — for preview/render only; never persisted.
  */
 export function usePlaybackResolvedLayers(
   layers: Layer[],
   projectId: string | null,
-  options?: { enabled?: boolean }
-): { layers: Layer[]; ready: boolean } {
-  const enabled = options?.enabled !== false && !!projectId;
-  const [urlMap, setUrlMap] = useState<Record<string, string>>({});
-  const [ready, setReady] = useState(!enabled);
+  _options?: { enabled?: boolean }
+): { layers: ResolvedLayer[]; ready: boolean } {
+  const [urlCache, setUrlCache] = useState<Map<string, string>>(new Map());
+  const [fetchPassDone, setFetchPassDone] = useState(false);
 
-  const playbackPaths = useMemo(() => {
-    if (!enabled) return [];
-    const out: string[] = [];
+  // Collect unique asset IDs (main + mask)
+  const assetIds = useMemo(() => {
+    const ids = new Set<string>();
     for (const layer of layers) {
-      if (layer.type === "video") {
-        for (const clip of layer.clips) {
-          const v = clip as { src?: string; maskSrc?: string };
-          if (v.src && isPlaybackPath(v.src) && !out.includes(v.src)) out.push(v.src);
-          if (v.maskSrc && isPlaybackPath(v.maskSrc) && !out.includes(v.maskSrc)) out.push(v.maskSrc);
+      for (const clip of layer.clips) {
+        if (clip.type !== "text" && "assetId" in clip && clip.assetId) {
+          ids.add(clip.assetId);
         }
-      } else if (layer.type === "audio" || layer.type === "image") {
-        for (const clip of layer.clips) {
-          const c = clip as { src?: string };
-          if (c.src && isPlaybackPath(c.src) && !out.includes(c.src)) out.push(c.src);
+        if (clip.type === "video" && "maskAssetId" in clip && clip.maskAssetId) {
+          ids.add(clip.maskAssetId);
         }
       }
     }
-    return out;
-  }, [enabled, layers]);
+    return Array.from(ids);
+  }, [layers]);
 
+  // Fetch playback URLs for all asset IDs
   useEffect(() => {
-    if (!enabled || playbackPaths.length === 0) {
-      setUrlMap({});
-      setReady(true);
+    if (!projectId || assetIds.length === 0) {
+      setUrlCache(new Map());
+      setFetchPassDone(true);
       return;
     }
-
+    setFetchPassDone(false);
     let cancelled = false;
-    setReady(false);
+    const next = new Map<string, string>();
 
-    const fetchAll = async () => {
-      const map: Record<string, string> = {};
-      await Promise.all(
-        playbackPaths.map(async (path) => {
-          const parsed = parsePlaybackPath(path);
-          if (!parsed || cancelled) return;
-          try {
-            const res = await fetch(
-              `/api/assets/${parsed.assetId}/playback-url?projectId=${encodeURIComponent(parsed.projectId)}`,
-              { credentials: "include" }
-            );
-            if (!res.ok || cancelled) return;
-            const data = await res.json();
-            if (data?.url && !cancelled) map[path] = data.url;
-          } catch {
-            // Leave path unresolved (will 404 if used as src)
-          }
-        })
-      );
-      if (!cancelled) {
-        setUrlMap((prev) => ({ ...prev, ...map }));
-        setReady(true);
+    Promise.all(
+      assetIds.map(async (assetId) => {
+        const res = await fetch(
+          `/api/assets/${assetId}/playback-url?projectId=${encodeURIComponent(projectId)}`,
+          { credentials: "include" }
+        );
+        if (!res.ok || cancelled) return { assetId, url: null };
+        const data = (await res.json()) as { url?: string };
+        const url = data?.url && data.url.startsWith("http") ? data.url : null;
+        return { assetId, url };
+      })
+    ).then((results) => {
+      if (cancelled) return;
+      for (const { assetId, url } of results) {
+        if (url) next.set(assetId, url);
       }
-    };
+      setUrlCache(next);
+      setFetchPassDone(true);
+    });
 
-    fetchAll();
     return () => {
       cancelled = true;
     };
-  }, [enabled, playbackPaths.join(" ")]);
+  }, [projectId, assetIds.join(",")]);
 
-  const resolvedLayers = useMemo((): Layer[] => {
-    if (!enabled || Object.keys(urlMap).length === 0) return layers;
-    return layers.map((layer) => {
-      if (layer.type === "video") {
-        return {
-          ...layer,
-          clips: layer.clips.map((clip) => {
-            const v = clip as unknown as { src?: string; maskSrc?: string };
-            const src = (v.src && urlMap[v.src] ? urlMap[v.src] : v.src) ?? (clip as { src: string }).src;
-            const maskSrc = v.maskSrc && urlMap[v.maskSrc] ? urlMap[v.maskSrc] : v.maskSrc;
-            return { ...clip, src, ...(maskSrc !== undefined && { maskSrc }) };
-          }),
-        };
-      }
-      if (layer.type === "audio" || layer.type === "image") {
-        return {
-          ...layer,
-          clips: layer.clips.map((clip) => {
-            const c = clip as unknown as { src?: string };
-            const src = (c.src && urlMap[c.src] ? urlMap[c.src] : c.src) ?? (clip as { src: string }).src;
-            return { ...clip, src };
-          }),
-        };
-      }
-      return layer;
-    });
-  }, [enabled, layers, urlMap]);
+  const resolvedLayers = useMemo((): ResolvedLayer[] => {
+    return layers.map((layer) => ({
+      ...layer,
+      clips: layer.clips.map((clip): ResolvedTimelineClip => {
+        if (clip.type === "text") return clip;
+        const assetId = "assetId" in clip ? clip.assetId : undefined;
+        const src = assetId ? urlCache.get(assetId) ?? "" : "";
+        if (clip.type === "video") {
+          const v = clip as VideoClip;
+          const maskSrc = v.maskAssetId ? urlCache.get(v.maskAssetId) ?? "" : undefined;
+          return { ...v, src, maskSrc };
+        }
+        if (clip.type === "audio") {
+          return { ...(clip as AudioClip), src };
+        }
+        return { ...(clip as ImageClip), src };
+      }),
+    }));
+  }, [layers, urlCache]);
+
+  const ready = assetIds.length === 0 || fetchPassDone;
 
   return { layers: resolvedLayers, ready };
 }

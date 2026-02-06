@@ -38,6 +38,10 @@ EARLY_STEP_IDS = {
     "cloud-upload",
     "metadata",
     "image-convert",
+    "thumbnail",
+    "frame-sampling",
+    "waveform",
+    "audio-extract",
 }
 
 

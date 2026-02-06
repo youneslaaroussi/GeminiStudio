@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # GCS Storage
     asset_gcs_bucket: str = Field(..., alias="ASSET_GCS_BUCKET")
-    signed_url_ttl_seconds: int = Field(default=60 * 60 * 24 * 7, alias="ASSET_SIGNED_URL_TTL_SECONDS")
+    signed_url_ttl_seconds: int = Field(default=60 * 60, alias="ASSET_SIGNED_URL_TTL_SECONDS")  # 1 hour for security
 
     # Firebase
     firebase_service_account_key: str | None = Field(default=None, alias="FIREBASE_SERVICE_ACCOUNT_KEY")
@@ -48,6 +48,9 @@ class Settings(BaseSettings):
 
     # Redis
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
+
+    # Worker: number of parallel pipeline jobs (default 4 for throughput)
+    worker_concurrency: int = Field(default=4, alias="WORKER_CONCURRENCY", ge=1, le=32)
 
     # FastAPI
     app_host: str = Field(default="0.0.0.0", alias="APP_HOST")

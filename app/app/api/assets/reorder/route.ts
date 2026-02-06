@@ -12,10 +12,10 @@ export const runtime = "nodejs";
 
 /**
  * Convert asset service response to RemoteAsset format.
+ * Uses signed URL for playback; client should call playback-url when url is empty.
  */
 function toRemoteAsset(asset: AssetServiceAsset, projectId: string): RemoteAsset {
-  const playbackPath = `/api/assets/${asset.id}/playback?projectId=${projectId}`;
-  const url = asset.signedUrl ?? playbackPath;
+  const url = asset.signedUrl ?? "";
   return {
     id: asset.id,
     name: asset.name,

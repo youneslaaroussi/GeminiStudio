@@ -161,15 +161,17 @@ async def _poll_until_complete(
                     if len(parts) > 1:
                         output_object_name = parts[1].rstrip("/") + "/" + output_filename
                         output_gcs_uri_full = f"gs://{parts[0]}/{output_object_name}"
-                        try:
-                            output_signed_url = create_signed_url(output_object_name, settings=settings)
-                        except Exception as e:
-                            logger.warning(f"Failed to create signed URL for output: {e}")
-                await update_transcode_job(user_id, project_id, job_id, {
+                        await update_transcode_job(user_id, project_id, job_id, {
                     "status": "completed",
-                    "outputSignedUrl": output_signed_url,
                     "outputFileName": output_filename,
                 })
+                # Generate signed URL for in-memory metadata only (not persisted)
+                output_signed_url = None
+                if output_object_name:
+                    try:
+                        output_signed_url = create_signed_url(output_object_name, settings=settings)
+                    except Exception as e:
+                        logger.warning(f"Failed to create signed URL for output: {e}")
                 return True, {
                     "message": "Transcoding completed",
                     "jobId": job_id,
@@ -348,10 +350,8 @@ async def _update_asset_with_transcoded_url(
     asset_id: str,
     original_gcs_uri: str,
     original_object_name: str,
-    original_signed_url: str | None,
     transcoded_gcs_uri: str,
     transcoded_object_name: str,
-    transcoded_signed_url: str | None,
     current_file_name: str | None = None,
 ) -> None:
     """Update the asset document so the asset points at the transcoded file (MP4)."""
@@ -359,13 +359,12 @@ async def _update_asset_with_transcoded_url(
         raise ValueError("transcoded_object_name is required; transcode must update the asset")
     settings = get_settings()
 
+    # Store objectNames only - signed URLs generated on-demand in list/get
     updates = {
         "originalGcsUri": original_gcs_uri,
         "originalObjectName": original_object_name,
-        "originalSignedUrl": original_signed_url,
         "gcsUri": transcoded_gcs_uri,
         "objectName": transcoded_object_name,
-        "signedUrl": transcoded_signed_url,
         "mimeType": "video/mp4",
         "transcoded": True,
         "transcodedAt": datetime.utcnow().isoformat() + "Z",
@@ -547,9 +546,9 @@ async def _transcode_impl(
                     transcoded_object_name = f"{folder_path}/{output_filename}"
                     transcoded_gcs_uri_full = f"gs://{parts[0]}/{transcoded_object_name}"
 
-            # Signed URL: use stored one, or create from object name for older jobs
-            transcoded_signed_url = existing_job.output_signed_url
-            if not transcoded_signed_url and transcoded_object_name:
+            # Generate signed URL from object name (never stored - expires)
+            transcoded_signed_url = None
+            if transcoded_object_name:
                 try:
                     transcoded_signed_url = create_signed_url(transcoded_object_name, settings=settings)
                 except Exception as e:
@@ -573,10 +572,8 @@ async def _transcode_impl(
                     asset_id=context.asset.id,
                     original_gcs_uri=existing_job.input_gcs_uri,
                     original_object_name=context.asset.object_name or "",
-                    original_signed_url=context.asset.signed_url,
                     transcoded_gcs_uri=transcoded_gcs_uri_full,
                     transcoded_object_name=transcoded_object_name,
-                    transcoded_signed_url=transcoded_signed_url,
                     current_file_name=context.asset.file_name,
                 )
                 
@@ -639,10 +636,8 @@ async def _transcode_impl(
                     asset_id=context.asset.id,
                     original_gcs_uri=existing_job.input_gcs_uri,
                     original_object_name=context.asset.object_name or "",
-                    original_signed_url=context.asset.signed_url,
                     transcoded_gcs_uri=metadata.get("outputGcsUri", ""),
                     transcoded_object_name=output_object_name,
-                    transcoded_signed_url=metadata.get("outputSignedUrl"),
                     current_file_name=context.asset.file_name,
                 )
                 
@@ -747,10 +742,8 @@ async def _transcode_impl(
             asset_id=context.asset.id,
             original_gcs_uri=input_gcs_uri,
             original_object_name=context.asset.object_name or "",
-            original_signed_url=context.asset.signed_url,
             transcoded_gcs_uri=metadata.get("outputGcsUri", ""),
             transcoded_object_name=output_object_name,
-            transcoded_signed_url=metadata.get("outputSignedUrl"),
             current_file_name=context.asset.file_name,
         )
         
@@ -774,7 +767,7 @@ async def _transcode_impl(
                     "status": "succeeded",
                     "metadata": {
                         "gcsUri": metadata.get("outputGcsUri"),
-                        "signedUrl": metadata.get("outputSignedUrl"),
+                        "objectName": metadata.get("outputObjectName"),
                         "transcoded": True,
                         "originalGcsUri": input_gcs_uri,
                     },

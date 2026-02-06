@@ -202,11 +202,11 @@ async def _update_asset_with_converted_file(
     asset_id: str,
     original_gcs_uri: str,
     original_object_name: str,
-    original_signed_url: str | None,
+    _original_signed_url: str | None,  # Unused - do not store, expires
     original_mime_type: str,
     converted_gcs_uri: str,
     converted_object_name: str,
-    converted_signed_url: str,
+    _converted_signed_url: str,  # Unused - do not store, expires
     converted_filename: str,
     output_format: str,
 ) -> None:
@@ -223,16 +223,15 @@ async def _update_asset_with_converted_file(
     }
     new_mime_type = mime_map.get(output_format.lower(), f"image/{output_format}")
     
+    # Store objectNames only - signed URLs generated on-demand in list/get
     updates = {
         # Backup original
         "originalGcsUri": original_gcs_uri,
         "originalObjectName": original_object_name,
-        "originalSignedUrl": original_signed_url,
         "originalMimeType": original_mime_type,
         # Set converted as primary
         "gcsUri": converted_gcs_uri,
         "objectName": converted_object_name,
-        "signedUrl": converted_signed_url,
         "mimeType": new_mime_type,
         "name": converted_filename,
         "fileName": converted_filename,

@@ -112,18 +112,18 @@ class TestListProjectAssets:
     @patch("langgraph_server.tools.list_project_assets_tool.get_settings")
     @patch("langgraph_server.tools.list_project_assets_tool.httpx.get")
     def test_calls_correct_endpoint(self, mock_get, mock_get_settings, mock_settings):
-        """Should call the correct asset service endpoint."""
+        """Should call the asset service list endpoint (ASSET_SERVICE_URL/api/assets/...)."""
         mock_get_settings.return_value = mock_settings
-        
+
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = []
         mock_get.return_value = mock_response
-        
+
         invoke_with_context(listProjectAssets, user_id="user-456", project_id="proj-123")
-        
+
         mock_get.assert_called_once()
         call_url = mock_get.call_args[0][0]
         assert "user-456" in call_url
         assert "proj-123" in call_url
-        assert "/api/assets/" in call_url
+        assert "/api/assets/" in call_url  # asset service API path, not app proxy

@@ -24,7 +24,7 @@ import {
   Type,
 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
-import { createVideoClip, createAudioClip, createImageClip } from "@/app/types/timeline";
+import { addAssetToTimeline } from "@/app/lib/assets/add-asset-to-timeline";
 import type { RemoteAsset, AssetType } from "@/app/types/assets";
 import type { VeoJob } from "@/app/types/veo";
 import type { VideoEffectJob } from "@/app/types/video-effects";
@@ -285,6 +285,18 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
     };
   }, [onSetAssetTabReady]);
 
+  // Period auto-refresh when Assets tab is active (assets list + pipeline state)
+  const ASSETS_TAB_POLL_MS = 15000;
+  useEffect(() => {
+    if (activeTab !== "assets" || !projectId) return;
+    const tick = () => {
+      void fetchAssets();
+      void refreshPipelineStates();
+    };
+    const id = setInterval(tick, ASSETS_TAB_POLL_MS);
+    return () => clearInterval(id);
+  }, [activeTab, projectId, fetchAssets, refreshPipelineStates]);
+
   // Fetch Veo jobs for project (so agent-started jobs appear in Jobs tab)
   const fetchVeoJobsForProject = useCallback(async () => {
     if (!projectId) return;
@@ -425,55 +437,30 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
     [addAssets, fetchAssets]
   );
 
-  // Add asset to timeline
+  // Add asset to timeline (single path: fetch playback URL then add clip)
   const handleAddToTimeline = useCallback(
     async (asset: RemoteAsset) => {
-      const name = asset.name || "Asset";
       const start = getDuration();
+      const duration = resolveAssetDuration(asset);
       const assetMetadata = metadata[asset.id];
-      const clipOptions = {
+      const ok = await addAssetToTimeline({
         assetId: asset.id,
+        projectId,
+        type: asset.type,
+        name: asset.name || "Asset",
+        duration,
+        start,
         width: asset.width ?? assetMetadata?.width,
         height: asset.height ?? assetMetadata?.height,
-      };
-
-      // Fetch GCS signed URL for direct playback (no proxy lag)
-      let playbackUrl = asset.url; // Fallback to proxy URL
-      if (projectId && asset.id) {
-        try {
-          const res = await fetch(
-            `/api/assets/${asset.id}/playback-url?projectId=${encodeURIComponent(projectId)}`,
-            { credentials: "include" }
-          );
-          if (res.ok) {
-            const data = await res.json();
-            if (data?.url) {
-              playbackUrl = data.url;
-              console.log(`[AssetsPanel] Using GCS signed URL for asset ${asset.id}`);
-            } else {
-              console.warn(`[AssetsPanel] Playback URL response missing url field for asset ${asset.id}`);
-            }
-          } else {
-            const errorText = await res.text().catch(() => "");
-            console.warn(`[AssetsPanel] Failed to get playback URL for asset ${asset.id}: ${res.status} ${errorText}`);
-          }
-        } catch (err) {
-          console.warn(`[AssetsPanel] Error fetching playback URL for asset ${asset.id}:`, err);
-          // Fallback to proxy URL on error
-        }
+        sourceDuration: duration,
+        addClip,
+      });
+      if (!ok) {
+        toast.error("Could not add to timeline", {
+          description: "Playback URL not available for this asset yet. Try again in a moment.",
+        });
+        return;
       }
-
-      if (asset.type === "video" || asset.type === "other") {
-        const duration = resolveAssetDuration(asset);
-        addClip(createVideoClip(playbackUrl, name, start, duration, { ...clipOptions, sourceDuration: duration }));
-      } else if (asset.type === "audio") {
-        const duration = resolveAssetDuration(asset);
-        addClip(createAudioClip(playbackUrl, name, start, duration, { assetId: asset.id, sourceDuration: duration }));
-      } else {
-        addClip(createImageClip(playbackUrl, name, start, 5, clipOptions));
-      }
-
-      // Refresh pipeline states so captions appear when transcription completes
       void refreshPipelineStates();
     },
     [addClip, getDuration, resolveAssetDuration, metadata, refreshPipelineStates, projectId]
@@ -693,6 +680,7 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
                   onDeleteMany={deleteAssets}
                   onRefresh={fetchAssets}
                   transcodingAssetIds={transcodingAssetIds}
+                  pipelineStates={pipelineStates}
                 />
               </ScrollArea>
             </div>

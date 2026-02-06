@@ -1,8 +1,9 @@
 'use client';
 
 import { Player, Stage, Vector2, type Project, type Scene } from '@motion-canvas/core';
+import equal from 'fast-deep-equal';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import type { Layer, TimelineClip } from '@/app/types/timeline';
+import type { ResolvedLayer, ResolvedTimelineClip } from '@/app/types/timeline';
 import type { ProjectTranscription } from '@/app/types/transcription';
 import { useDrag } from '@/app/hooks/use-drag';
 import { SelectionOverlay } from './SelectionOverlay';
@@ -32,7 +33,11 @@ interface ScenePlayerProps {
   onPlayerChange?: (player: Player | null) => void;
   onCanvasReady?: (canvas: HTMLCanvasElement | null) => void;
   onVariablesUpdated?: () => void;
-  layers?: Layer[];
+  /** When true, variable updates are queued and applied when playback stops */
+  isPlaying?: boolean;
+  /** Called when an update is queued (true) or cleared (false) during playback */
+  onUpdateQueued?: (queued: boolean) => void;
+  layers?: ResolvedLayer[];
   duration?: number;
   currentTime?: number;
   onTimeUpdate?: (time: number) => void;
@@ -62,6 +67,8 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   onPlayerChange,
   onCanvasReady,
   onVariablesUpdated,
+  isPlaying = false,
+  onUpdateQueued,
   layers = [],
   duration = 10,
   currentTime = 0,
@@ -88,7 +95,12 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   const latestCaptionSettingsRef = useRef(captionSettings);
   const latestTextClipSettingsRef = useRef(textClipSettings);
   const onVariablesUpdatedRef = useRef(onVariablesUpdated);
+  const onUpdateQueuedRef = useRef(onUpdateQueued);
   const latestCurrentTimeRef = useRef(currentTime);
+
+  useEffect(() => {
+    onUpdateQueuedRef.current = onUpdateQueued;
+  }, [onUpdateQueued]);
   
   const setSelectedClip = useProjectStore((s) => s.setSelectedClip);
 
@@ -585,7 +597,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
 
         // Check clips in forward order
         for (let j = 0; j < layer.clips.length && !foundClipId; j++) {
-          const clip = layer.clips[j] as TimelineClip;
+          const clip = layer.clips[j] as ResolvedTimelineClip;
           const speed = clip.speed ?? 1;
           const safeSpeed = Math.max(speed, 0.0001);
           const clipStart = clip.start;
@@ -779,8 +791,9 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
     });
 
     // Provide initial variables so the scene can render immediately.
-    playerInstance.setVariables({
-      layers: latestLayersRef.current,
+    const initialLayers = latestLayersRef.current;
+    const initialVariables = {
+      layers: initialLayers,
       duration,
       transcriptions: latestTranscriptionsRef.current,
       transitions: latestTransitionsRef.current,
@@ -797,7 +810,8 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
         defaultFontSize: 48,
         defaultFill: '#ffffff',
       },
-    });
+    };
+    playerInstance.setVariables(initialVariables);
     (playerInstance as unknown as { requestRecalculation?: () => void }).requestRecalculation?.();
     
     // Seek to current playhead position so we don't reset to frame 0
@@ -872,11 +886,24 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
     sceneConfig.background,
   ]);
 
-  // Update variables when clips or duration change
+  // Update variables when clips or duration change (deep compare to avoid unnecessary updates)
+  // During playback, variable updates are queued and applied when play stops
+  const lastVariablesRef = useRef<Record<string, unknown> | null>(null);
+  const lastPlayerRef = useRef<Player | null>(null);
+  const pendingVariablesRef = useRef<Record<string, unknown> | null>(null);
+
+  const applyVariables = useCallback((vars: Record<string, unknown>) => {
+    if (!player) return;
+    player.setVariables(vars);
+    (player as unknown as { requestRecalculation?: () => void }).requestRecalculation?.();
+    player.requestRender();
+    onVariablesUpdatedRef.current?.();
+  }, [player]);
+
   useEffect(() => {
     if (!player) return;
 
-    player.setVariables({
+    const variables = {
       layers,
       duration,
       transcriptions,
@@ -894,13 +921,46 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
         defaultFontSize: 48,
         defaultFill: '#ffffff',
       },
-    });
-    (player as unknown as { requestRecalculation?: () => void }).requestRecalculation?.();
-    player.requestRender();
+    };
 
-    // Notify parent that variables were updated
-    onVariablesUpdatedRef.current?.();
-  }, [player, layers, duration, transcriptions, transitions, captionSettings, textClipSettings]);
+    const isNewPlayer = lastPlayerRef.current !== player;
+    lastPlayerRef.current = player;
+    if (isNewPlayer) {
+      lastVariablesRef.current = null;
+      pendingVariablesRef.current = null;
+      onUpdateQueuedRef.current?.(false);
+    }
+
+    if (lastVariablesRef.current && equal(lastVariablesRef.current, variables)) {
+      return; // No change - skip update
+    }
+
+    if (isPlaying) {
+      pendingVariablesRef.current = variables;
+      onUpdateQueuedRef.current?.(true);
+      return; // Defer until playback stops
+    }
+
+    lastVariablesRef.current = variables;
+    pendingVariablesRef.current = null;
+    onUpdateQueuedRef.current?.(false);
+    applyVariables(variables);
+  }, [player, isPlaying, layers, duration, transcriptions, transitions, captionSettings, textClipSettings, applyVariables]);
+
+  // When playback stops, apply any queued variable update
+  const prevIsPlayingRef = useRef(isPlaying);
+  useEffect(() => {
+    const wasPlaying = prevIsPlayingRef.current;
+    prevIsPlayingRef.current = isPlaying;
+
+    if (wasPlaying && !isPlaying && player && pendingVariablesRef.current) {
+      const pending = pendingVariablesRef.current;
+      pendingVariablesRef.current = null;
+      lastVariablesRef.current = pending;
+      onUpdateQueuedRef.current?.(false);
+      applyVariables(pending);
+    }
+  }, [isPlaying, player, applyVariables]);
 
   // Sync playhead time from player back to the store during playback
   useEffect(() => {

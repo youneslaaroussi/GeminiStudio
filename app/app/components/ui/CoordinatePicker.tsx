@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { X, Plus, MousePointer2, Loader2 } from 'lucide-react';
-import { extractVideoFrameAtTimestamp } from '@/app/lib/tools/asset-utils';
+import { useAssetFrames, getFrameAtTimestamp } from '@/app/hooks/use-asset-frames';
 
 export interface Point {
   x: number;
@@ -18,6 +18,10 @@ export interface CoordinatePickerProps {
   src: string;
   /** Media type - 'image' or 'video' (default: auto-detect from URL) */
   mediaType?: MediaType;
+  /** Asset ID for video - when provided with projectId, uses sampled frames for preview */
+  assetId?: string;
+  /** Project ID for video - when provided with assetId, uses sampled frames for preview */
+  projectId?: string;
   /** Alt text for the image */
   alt?: string;
   /** Current points */
@@ -74,6 +78,8 @@ function formatTime(seconds: number): string {
 export function CoordinatePicker({
   src,
   mediaType: mediaTypeProp,
+  assetId,
+  projectId,
   alt = 'Click to select points',
   points,
   onChange,
@@ -95,11 +101,16 @@ export function CoordinatePicker({
   const [hoverPosition, setHoverPosition] = useState<{ x: number; y: number } | null>(null);
   const [mediaDimensions, setMediaDimensions] = useState<{ width: number; height: number } | null>(null);
 
-  // Video-specific state - using frame extraction instead of playback
+  // Video-specific state - use sampled frames when assetId+projectId provided
   const [currentTimestamp, setCurrentTimestamp] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [frameDataUrl, setFrameDataUrl] = useState<string | null>(null);
-  const [isExtractingFrame, setIsExtractingFrame] = useState(false);
+  const { frames, duration: framesDuration, isLoading: framesLoading } = useAssetFrames(
+    mediaType === 'video' && assetId && projectId ? assetId : undefined,
+    mediaType === 'video' && assetId ? projectId ?? null : null
+  );
+  const duration = framesDuration || 0;
+  const frame = getFrameAtTimestamp(frames, duration, currentTimestamp);
+  const frameDataUrl = frame?.url ?? null;
+  const isExtractingFrame = mediaType === 'video' && assetId && framesLoading;
 
   // Track the natural dimensions of the loaded media
   const handleImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -107,57 +118,14 @@ export function CoordinatePicker({
     setMediaDimensions({ width: img.naturalWidth, height: img.naturalHeight });
   }, []);
 
-  // Extract video frame when timestamp changes
+  // Set dimensions from first frame when using sampled frames
   useEffect(() => {
-    if (mediaType !== 'video' || !mediaSrc) {
-      setFrameDataUrl(null);
-      return;
+    if (mediaType === 'video' && frameDataUrl && !mediaDimensions) {
+      const img = new Image();
+      img.onload = () => setMediaDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+      img.src = frameDataUrl;
     }
-
-    setIsExtractingFrame(true);
-    extractVideoFrameAtTimestamp(mediaSrc, currentTimestamp)
-      .then((dataUrl) => {
-        if (dataUrl) {
-          setFrameDataUrl(dataUrl);
-          // Try to get dimensions from the extracted frame
-          const img = new Image();
-          img.onload = () => {
-            setMediaDimensions({ width: img.width, height: img.height });
-            if (!duration || duration === 0) {
-              // Estimate duration if not available (default to 10s)
-              setDuration(10);
-            }
-          };
-          img.src = dataUrl;
-        }
-      })
-      .catch((err) => {
-        console.error('[CoordinatePicker] Failed to extract frame:', err);
-        setFrameDataUrl(null);
-      })
-      .finally(() => {
-        setIsExtractingFrame(false);
-      });
-  }, [mediaType, mediaSrc, currentTimestamp]);
-
-  // Get video duration from metadata if available
-  useEffect(() => {
-    if (mediaType === 'video' && mediaSrc && !duration) {
-      // Try to get duration from SharedMediaLoader
-      import('@/app/lib/media/shared-media-loader').then(({ SharedMediaLoader }) => {
-        SharedMediaLoader.requestExtraction(mediaSrc, {})
-          .then((result) => {
-            if (result.metadata?.duration) {
-              setDuration(result.metadata.duration);
-            }
-          })
-          .catch(() => {
-            // Fallback to default duration
-            setDuration(10);
-          });
-      });
-    }
-  }, [mediaType, mediaSrc, duration]);
+  }, [mediaType, frameDataUrl, mediaDimensions]);
 
   const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     e.stopPropagation();

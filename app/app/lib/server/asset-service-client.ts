@@ -267,6 +267,59 @@ export async function deleteAssetFromService(
 }
 
 /**
+ * Sampled frame for video preview/filmstrip.
+ */
+export interface AssetFrame {
+  url: string;
+  timestamp: number;
+  index: number;
+}
+
+export interface AssetFramesResponse {
+  frames: AssetFrame[];
+  duration: number;
+  frameCount: number;
+}
+
+/**
+ * Get fresh signed thumbnail URL (generated on-demand, not stored - they expire).
+ */
+export async function getAssetThumbnailFromService(
+  userId: string,
+  projectId: string,
+  assetId: string
+): Promise<{ url: string | null; available: boolean }> {
+  const response = await fetch(
+    `${ASSET_SERVICE_URL}/api/assets/${userId}/${projectId}/${assetId}/thumbnail`,
+    { method: "GET", headers: getAuthHeaders("") }
+  );
+  if (!response.ok) {
+    if (response.status === 404) throw new Error("Asset not found");
+    return { url: null, available: false };
+  }
+  return response.json();
+}
+
+/**
+ * Get fresh signed frame URLs (generated on-demand, not stored - they expire).
+ */
+export async function getAssetFramesFromService(
+  userId: string,
+  projectId: string,
+  assetId: string
+): Promise<AssetFramesResponse> {
+  const response = await fetch(
+    `${ASSET_SERVICE_URL}/api/assets/${userId}/${projectId}/${assetId}/frames`,
+    { method: "GET", headers: getAuthHeaders("") }
+  );
+  if (!response.ok) {
+    if (response.status === 404) throw new Error("Asset not found");
+    throw new Error(`Asset service frames get failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+/**
  * Get pipeline state for an asset.
  */
 export async function getPipelineStateFromService(

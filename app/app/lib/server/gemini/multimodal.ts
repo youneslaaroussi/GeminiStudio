@@ -107,7 +107,7 @@ export function createAttachmentFromBuffer(
   buffer: Buffer,
   fileName: string,
   mimeType: string
-): Omit<ChatAttachment, "id" | "uploadedAt" | "gcsUri" | "localUrl" | "signedUrl" | "inlineData"> {
+): Omit<ChatAttachment, "id" | "uploadedAt" | "gcsUri" | "signedUrl" | "inlineData"> {
   return {
     name: fileName,
     mimeType: normalizeGeminiMimeType(mimeType),

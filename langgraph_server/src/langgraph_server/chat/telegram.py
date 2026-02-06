@@ -13,6 +13,7 @@ import httpx
 
 from ..config import Settings
 from ..gemini_files import upload_file as upload_to_gemini
+from ..hmac_auth import get_asset_service_headers
 from ..firebase import (
     lookup_email_by_phone,
     verify_telegram_link_code,
@@ -648,10 +649,10 @@ class TelegramProvider(ChatProvider):
             status = job_data.get("status", "pending")
             
             if status == "completed":
-                # Get the transcoded file URL
-                signed_url = job_data.get("outputSignedUrl")
+                # Fetch fresh signed URL from asset-service (transcode job no longer stores it)
+                signed_url = await self._get_asset_signed_url(user_id, project_id, asset_id)
                 if not signed_url:
-                    logger.error("[TELEGRAM] Transcode completed but no outputSignedUrl")
+                    logger.error("[TELEGRAM] Transcode completed but could not fetch asset signedUrl")
                     return None, None
                 
                 # Download the transcoded file
@@ -689,6 +690,27 @@ class TelegramProvider(ChatProvider):
         
         logger.warning("[TELEGRAM] Transcode timeout after %.1fs", timeout)
         return None, None
+
+    async def _get_asset_signed_url(
+        self, user_id: str, project_id: str, asset_id: str
+    ) -> str | None:
+        """Fetch asset from asset-service and return fresh signedUrl."""
+        if not self.settings.asset_service_url:
+            return None
+        endpoint = (
+            f"{self.settings.asset_service_url.rstrip('/')}"
+            f"/api/assets/{user_id}/{project_id}/{asset_id}"
+        )
+        try:
+            headers = get_asset_service_headers("")
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(endpoint, headers=headers, timeout=10.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data.get("signedUrl")
+        except Exception as e:
+            logger.warning("[TELEGRAM] Failed to get asset signedUrl for %s: %s", asset_id, e)
+        return None
 
     async def _do_upload(
         self,

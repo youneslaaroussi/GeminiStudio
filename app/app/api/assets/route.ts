@@ -20,13 +20,10 @@ export const dynamic = "force-dynamic";
 
 /**
  * Convert asset service response to RemoteAsset format.
- * Uses signed URL when available for direct GCS playback; otherwise a playback path
- * that the client resolves via GET /api/assets/[id]/playback-url.
+ * Uses signed URL for direct GCS playback; client should call playback-url when url is empty.
  */
 function toRemoteAsset(asset: AssetServiceAsset, projectId: string): RemoteAsset {
-  const version = asset.updatedAt ? new Date(asset.updatedAt).getTime() : Date.now();
-  const playbackPath = `/api/assets/${asset.id}/playback?projectId=${projectId}&v=${version}`;
-  const url = asset.signedUrl ?? playbackPath;
+  const url = asset.signedUrl ?? "";
 
   return {
     id: asset.id,

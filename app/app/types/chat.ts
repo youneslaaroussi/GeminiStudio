@@ -43,9 +43,7 @@ export interface ChatAttachment {
   category: AttachmentCategory;
   /** GCS URI if uploaded to cloud storage */
   gcsUri?: string;
-  /** Local URL for display (e.g., /uploads/...) */
-  localUrl?: string;
-  /** Signed URL for temporary access */
+  /** Signed URL for temporary access (use for display/playback) */
   signedUrl?: string;
   /** Base64 data for small inline files (for display) */
   inlineData?: string;

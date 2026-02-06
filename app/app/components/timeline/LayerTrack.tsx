@@ -2,12 +2,13 @@
 
 import React, { useCallback, useRef, useState } from "react";
 import { Video, Music, Type, Image as ImageIcon, Trash2, GripVertical, Eye, EyeOff } from "lucide-react";
-import type { Layer } from "@/app/types/timeline";
+import type { ResolvedLayer } from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { Clip } from "./Clip";
 import { TransitionHandle } from "./TransitionHandle";
 import { cn } from "@/lib/utils";
-import { assetMatchesLayer, createClipFromAsset, hasAssetDragData, readDraggedAsset } from "@/app/lib/assets/drag";
+import { addAssetToTimeline } from "@/app/lib/assets/add-asset-to-timeline";
+import { assetMatchesLayer, hasAssetDragData, readDraggedAsset } from "@/app/lib/assets/drag";
 import { makeTransitionKey } from "@/app/types/timeline";
 import {
   Dialog,
@@ -21,7 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 
 interface LayerTrackProps {
-  layer: Layer;
+  layer: ResolvedLayer;
   layerIndex: number;
   width: number;
   labelWidth: number;
@@ -33,7 +34,7 @@ interface LayerTrackProps {
   dropPosition: "above" | "below" | null;
 }
 
-const typeIcon: Record<Layer["type"], React.JSX.Element> = {
+const typeIcon: Record<ResolvedLayer["type"], React.JSX.Element> = {
   video: <Video className="size-3.5 text-blue-400" />,
   audio: <Music className="size-3.5 text-green-400" />,
   text: <Type className="size-3.5 text-purple-400" />,
@@ -42,7 +43,7 @@ const typeIcon: Record<Layer["type"], React.JSX.Element> = {
 
 /** Fixed left column: layer label only (for two-column timeline layout) */
 export interface LayerTrackLabelProps {
-  layer: Layer;
+  layer: ResolvedLayer;
   layerIndex: number;
   labelWidth: number;
   onDragStart: (index: number) => void;
@@ -212,13 +213,14 @@ export function LayerTrackLabel({
 
 /** Scrollable right column: track content only (for two-column timeline layout) */
 export interface LayerTrackBodyProps {
-  layer: Layer;
+  layer: ResolvedLayer;
   trackWidth: number;
 }
 
 export function LayerTrackBody({ layer, trackWidth }: LayerTrackBodyProps) {
   const zoom = useProjectStore((s) => s.zoom);
   const project = useProjectStore((s) => s.project);
+  const projectId = useProjectStore((s) => s.projectId);
   const selectedTransitionKey = useProjectStore((s) => s.selectedTransitionKey);
   const setSelectedTransition = useProjectStore((s) => s.setSelectedTransition);
   const addClip = useProjectStore((s) => s.addClip);
@@ -243,7 +245,7 @@ export function LayerTrackBody({ layer, trackWidth }: LayerTrackBodyProps) {
   }, []);
 
   const handleDrop = useCallback(
-    (event: React.DragEvent<HTMLDivElement>) => {
+    async (event: React.DragEvent<HTMLDivElement>) => {
       if (!hasAssetDragData(event)) return;
       event.preventDefault();
       event.stopPropagation();
@@ -254,16 +256,24 @@ export function LayerTrackBody({ layer, trackWidth }: LayerTrackBodyProps) {
       if (!rect) return;
       const x = event.clientX - rect.left;
       const start = Math.max(0, x / zoom);
-      const clip = createClipFromAsset(asset, start);
-      // If asset type matches layer, add to this layer; otherwise add without layerId
-      // to trigger automatic layer creation for the correct type
-      if (assetMatchesLayer(asset.type, layer.type)) {
-        addClip(clip, layer.id);
-      } else {
-        addClip(clip);
-      }
+      const duration =
+        asset.type === "image" ? 5 : (asset.duration ?? 10);
+      const layerId = assetMatchesLayer(asset.type, layer.type) ? layer.id : undefined;
+      await addAssetToTimeline({
+        assetId: asset.id,
+        projectId,
+        type: asset.type,
+        name: asset.name || "Asset",
+        duration,
+        start,
+        width: asset.width,
+        height: asset.height,
+        sourceDuration: asset.duration,
+        layerId,
+        addClip,
+      });
     },
-    [addClip, layer.id, layer.type, zoom]
+    [addClip, layer.id, layer.type, projectId, zoom]
   );
 
   const sortedClips = [...layer.clips].sort((a, b) => a.start - b.start);
@@ -313,6 +323,7 @@ export function LayerTrackBody({ layer, trackWidth }: LayerTrackBodyProps) {
 export function LayerTrack({ layer, layerIndex, width, labelWidth, onDragStart, onDragOver, onDrop, onDragEnd, isDragTarget, dropPosition }: LayerTrackProps) {
   const zoom = useProjectStore((s) => s.zoom);
   const project = useProjectStore((s) => s.project);
+  const projectId = useProjectStore((s) => s.projectId);
   const selectedTransitionKey = useProjectStore((s) => s.selectedTransitionKey);
   const setSelectedTransition = useProjectStore((s) => s.setSelectedTransition);
   const duration = useProjectStore((s) => s.getDuration());
@@ -401,7 +412,7 @@ export function LayerTrack({ layer, layerIndex, width, labelWidth, onDragStart, 
   }, []);
 
   const handleDrop = useCallback(
-    (event: React.DragEvent<HTMLDivElement>) => {
+    async (event: React.DragEvent<HTMLDivElement>) => {
       if (!hasAssetDragData(event)) return;
       event.preventDefault();
       event.stopPropagation();
@@ -412,16 +423,24 @@ export function LayerTrack({ layer, layerIndex, width, labelWidth, onDragStart, 
       if (!rect) return;
       const x = event.clientX - rect.left;
       const start = Math.max(0, x / zoom);
-      const clip = createClipFromAsset(asset, start);
-      // If asset type matches layer, add to this layer; otherwise add without layerId
-      // to trigger automatic layer creation for the correct type
-      if (assetMatchesLayer(asset.type, layer.type)) {
-        addClip(clip, layer.id);
-      } else {
-        addClip(clip);
-      }
+      const duration =
+        asset.type === "image" ? 5 : (asset.duration ?? 10);
+      const layerId = assetMatchesLayer(asset.type, layer.type) ? layer.id : undefined;
+      await addAssetToTimeline({
+        assetId: asset.id,
+        projectId,
+        type: asset.type,
+        name: asset.name || "Asset",
+        duration,
+        start,
+        width: asset.width,
+        height: asset.height,
+        sourceDuration: asset.duration,
+        layerId,
+        addClip,
+      });
     },
-    [addClip, layer.id, layer.type, zoom]
+    [addClip, layer.id, layer.type, projectId, zoom]
   );
 
   const sortedClips = [...layer.clips].sort((a, b) => a.start - b.start);

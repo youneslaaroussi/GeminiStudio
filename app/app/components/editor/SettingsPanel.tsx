@@ -12,8 +12,10 @@ import {
   type AudioClip, 
   type TextClip, 
   type ImageClip,
+  type ResolvedImageClip,
   type TransitionType 
 } from "@/app/types/timeline";
+import { usePlaybackResolvedLayers } from "@/app/lib/hooks/usePlaybackResolvedLayers";
 import { VideoEffectsPanel } from "./VideoEffectsPanel";
 import { ImageEffectsPanel } from "./ImageEffectsPanel";
 
@@ -21,7 +23,9 @@ export function SettingsPanel() {
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
   const selectedTransitionKey = useProjectStore((s) => s.selectedTransitionKey);
   const project = useProjectStore((s) => s.project);
+  const projectId = useProjectStore((s) => s.projectId);
   const layers = project.layers;
+  const { layers: resolvedLayers } = usePlaybackResolvedLayers(layers, projectId);
   const updateClip = useProjectStore((s) => s.updateClip);
   const updateProjectSettings = useProjectStore((s) => s.updateProjectSettings);
   const addTransition = useProjectStore((s) => s.addTransition);
@@ -29,6 +33,10 @@ export function SettingsPanel() {
 
   const allClips = layers.flatMap((layer) => layer.clips);
   const selectedClip = allClips.find((clip) => clip.id === selectedClipId);
+  const resolvedImageClip =
+    selectedClipId && selectedClip?.type === "image"
+      ? (resolvedLayers.flatMap((l) => l.clips).find((c) => c.id === selectedClipId) as ResolvedImageClip | undefined)
+      : undefined;
   const selectedTransition = selectedTransitionKey ? project.transitions?.[selectedTransitionKey as `${string}->${string}`] : null;
 
   const toNumber = (raw: string) => {
@@ -442,18 +450,6 @@ export function SettingsPanel() {
                   <option value="cover">Cover</option>
                 </select>
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  Source URL
-                </label>
-                <EditableInput
-                  type="url"
-                  value={(selectedClip as VideoClip).src}
-                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                  onValueCommit={(val) => handleUpdate({ src: val })}
-                />
-              </div>
-
               <div className="pt-4 border-t border-border mt-4">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-medium text-muted-foreground">
@@ -560,17 +556,6 @@ export function SettingsPanel() {
               Audio Properties
             </h3>
             <div className="space-y-2">
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  Source URL
-                </label>
-                <EditableInput
-                  type="url"
-                  value={(selectedClip as AudioClip).src}
-                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                  onValueCommit={(val) => handleUpdate({ src: val })}
-                />
-              </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">
                   Volume: {(((selectedClip as AudioClip).volume) * 100).toFixed(0)}%
@@ -681,17 +666,6 @@ export function SettingsPanel() {
               Image Properties
             </h3>
             <div className="space-y-2">
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
-                  Source URL
-                </label>
-                <EditableInput
-                  type="url"
-                  value={(selectedClip as ImageClip).src}
-                  className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                  onValueCommit={(val) => handleUpdate({ src: val })}
-                />
-              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">
@@ -727,9 +701,11 @@ export function SettingsPanel() {
                 </div>
               </div>
             </div>
-            <div className="pt-4 border-t border-border mt-4">
-              <ImageEffectsPanel clip={selectedClip as ImageClip} />
-            </div>
+            {resolvedImageClip && (
+              <div className="pt-4 border-t border-border mt-4">
+                <ImageEffectsPanel clip={resolvedImageClip} />
+              </div>
+            )}
           </div>
         )}
         </>

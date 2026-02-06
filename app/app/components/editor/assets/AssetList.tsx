@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import type { RemoteAsset, AssetDragPayload } from "@/app/types/assets";
 import { ASSET_DRAG_DATA_MIME } from "@/app/types/assets";
 import type { ProjectTranscription } from "@/app/types/transcription";
+import type { PipelineStepState } from "@/app/types/pipeline";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -43,6 +44,8 @@ interface AssetListProps {
   onRefresh: () => void;
   /** Asset IDs currently transcoding (locked, no drag, shimmer overlay) */
   transcodingAssetIds?: ReadonlySet<string>;
+  /** Pipeline steps per asset (for progress indicator in row) */
+  pipelineStates?: Record<string, PipelineStepState[]>;
 }
 
 export function AssetList({
@@ -62,6 +65,7 @@ export function AssetList({
   onDeleteMany,
   onRefresh,
   transcodingAssetIds = new Set<string>(),
+  pipelineStates = {},
 }: AssetListProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
@@ -406,6 +410,7 @@ export function AssetList({
             asset={asset}
             transcription={transcriptions[asset.id]}
             duration={resolveAssetDuration(asset)}
+            pipelineSteps={pipelineStates[asset.id] ?? []}
             isSelected={selectedIds.has(asset.id)}
             isDeleting={deletingIds.has(asset.id)}
             isDownloading={downloadingIds.has(asset.id)}

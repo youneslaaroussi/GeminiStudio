@@ -4,7 +4,7 @@ import { Volume2 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { EditableInput } from "@/app/components/ui/EditableInput";
 import { Combobox } from "@/components/ui/combobox";
-import type { AudioClip } from "@/app/types/timeline";
+import type { ResolvedAudioClip } from "@/app/types/timeline";
 import { DEFAULT_CAPTION_SETTINGS, type CaptionStyleType } from "@/app/types/timeline";
 import { FONT_FAMILIES } from "@/fonts-config";
 import {
@@ -16,7 +16,7 @@ import {
 } from "../utils";
 
 interface AudioClipSettingsProps {
-  clip: AudioClip;
+  clip: ResolvedAudioClip;
   onUpdate: ClipUpdateHandler;
 }
 
@@ -30,16 +30,6 @@ export function AudioClipSettings({ clip, onUpdate }: AudioClipSettingsProps) {
   return (
     <div className="space-y-3">
       <div className={cardClassName}>
-        <div>
-          <label className={labelClassName}>Source URL</label>
-          <EditableInput
-            type="url"
-            value={clip.src}
-            className={inputClassName}
-            onValueCommit={(val) => onUpdate({ src: val })}
-          />
-        </div>
-
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className={labelClassName}>Volume</label>

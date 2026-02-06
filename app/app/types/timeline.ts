@@ -177,15 +177,15 @@ export type MaskMode = 'include' | 'exclude';
 
 export interface VideoClip extends BaseClip {
   type: 'video';
-  src: string;        // External URL
+  /** Asset ID; playback URL is resolved at preview/render time, never stored. */
+  assetId: string;
   width?: number;     // Width in pixels
   height?: number;    // Height in pixels
   sourceDuration?: number;  // Total duration of source media (seconds)
   focus?: Focus;
   objectFit?: ObjectFit;
   // Mask compositing properties
-  maskAssetId?: string;   // Reference to mask asset (binary video)
-  maskSrc?: string;       // Resolved URL for mask video (populated at render time)
+  maskAssetId?: string;   // Reference to mask asset (binary video). maskSrc resolved at render time.
   maskMode?: MaskMode;    // 'include' = show only masked area, 'exclude' = show everything except masked area
   /** Optional visual effect (glitch, ripple, vhs, etc.) */
   effect?: VisualEffectType;
@@ -203,7 +203,8 @@ export interface VideoClip extends BaseClip {
 
 export interface AudioClip extends BaseClip {
   type: 'audio';
-  src: string;        // External URL
+  /** Asset ID; playback URL is resolved at preview/render time, never stored. */
+  assetId: string;
   volume: number;     // 0-1
   sourceDuration?: number;  // Total duration of source media (seconds)
 }
@@ -230,7 +231,8 @@ export interface TextClip extends BaseClip {
 
 export interface ImageClip extends BaseClip {
   type: 'image';
-  src: string;        // External URL
+  /** Asset ID; playback URL is resolved at preview/render time, never stored. */
+  assetId: string;
   width?: number;     // Width in pixels
   height?: number;    // Height in pixels
   /** Optional visual effect (glitch, ripple, vhs, etc.) */
@@ -247,12 +249,23 @@ export interface ImageClip extends BaseClip {
 
 export type TimelineClip = VideoClip | AudioClip | TextClip | ImageClip;
 
+/** Clips with playback URLs resolved (for preview/render only; never persisted). */
+export type ResolvedVideoClip = VideoClip & { src: string; maskSrc?: string };
+export type ResolvedAudioClip = AudioClip & { src: string };
+export type ResolvedImageClip = ImageClip & { src: string };
+export type ResolvedTimelineClip = ResolvedVideoClip | ResolvedAudioClip | TextClip | ResolvedImageClip;
+
 export interface Layer {
   id: string;
   name: string;
   type: ClipType;
   clips: TimelineClip[];
   hidden?: boolean;
+}
+
+/** Layer with clips that have resolved playback URLs (preview/render only). */
+export interface ResolvedLayer extends Omit<Layer, "clips"> {
+  clips: ResolvedTimelineClip[];
 }
 
 export interface Project {
@@ -333,26 +346,25 @@ export const TEST_IMAGES = [
   },
 ];
 
-// Helper to create a new video clip
+// Helper to create a new video clip (playback URL resolved at preview/render time)
 export function createVideoClip(
-  src: string,
+  assetId: string,
   name: string,
   start: number,
   duration: number,
-  options?: { assetId?: string; width?: number; height?: number; sourceDuration?: number; audioVolume?: number }
+  options?: { width?: number; height?: number; sourceDuration?: number; audioVolume?: number }
 ): VideoClip {
   return {
     id: crypto.randomUUID(),
     type: 'video',
     name,
-    src,
+    assetId,
     start,
     duration,
     offset: 0,
     speed: 1,
     position: { x: 0, y: 0 },
     scale: { x: 1, y: 1 },
-    assetId: options?.assetId,
     width: options?.width,
     height: options?.height,
     sourceDuration: options?.sourceDuration,
@@ -361,19 +373,19 @@ export function createVideoClip(
   };
 }
 
-// Helper to create a new audio clip
+// Helper to create a new audio clip (playback URL resolved at preview/render time)
 export function createAudioClip(
-  src: string,
+  assetId: string,
   name: string,
   start: number,
   duration: number,
-  options?: { assetId?: string; sourceDuration?: number }
+  options?: { sourceDuration?: number }
 ): AudioClip {
   return {
     id: crypto.randomUUID(),
     type: 'audio',
     name,
-    src,
+    assetId,
     start,
     duration,
     offset: 0,
@@ -381,7 +393,6 @@ export function createAudioClip(
     volume: 1,
     position: { x: 0, y: 0 },
     scale: { x: 1, y: 1 },
-    assetId: options?.assetId,
     sourceDuration: options?.sourceDuration,
   };
 }
@@ -501,26 +512,25 @@ export function createTextClipFromTemplate(
   };
 }
 
-// Helper to create a new image clip
+// Helper to create a new image clip (playback URL resolved at preview/render time)
 export function createImageClip(
-  src: string,
+  assetId: string,
   name: string,
   start: number,
   duration: number,
-  options?: { assetId?: string; width?: number; height?: number }
+  options?: { width?: number; height?: number }
 ): ImageClip {
   return {
     id: crypto.randomUUID(),
     type: 'image',
     name,
-    src,
+    assetId,
     start,
     duration,
     offset: 0,
     speed: 1,
     position: { x: 0, y: 0 },
     scale: { x: 1, y: 1 },
-    assetId: options?.assetId,
     width: options?.width,
     height: options?.height,
   };

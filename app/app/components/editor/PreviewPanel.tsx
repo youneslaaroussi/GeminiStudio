@@ -4,12 +4,11 @@ import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardR
 import type { Player } from "@motion-canvas/core";
 import { ScenePlayer, type ScenePlayerHandle } from "../ScenePlayer";
 import { useProjectStore, setOnFirebaseSync } from "@/app/lib/store/project-store";
-import type { Layer, CaptionSettings, TextClipSettings } from "@/app/types/timeline";
+import type { ResolvedLayer, CaptionSettings, TextClipSettings } from "@/app/types/timeline";
 import type { ProjectTranscription } from "@/app/types/transcription";
 import { Button } from "@/components/ui/button";
 import { Crosshair, Maximize2, Minimize2, Play, Pause, RotateCw } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
-import { SharedMediaLoader } from "@/app/lib/media/shared-media-loader";
 import { usePreloadTimelineMedia } from "@/app/hooks/use-preload-timeline-media";
 
 /**
@@ -91,7 +90,7 @@ interface PreviewPanelProps {
   isPlaying?: boolean;
   onTogglePlay?: () => void;
   onSeek?: (time: number) => void;
-  layers: Layer[];
+  layers: ResolvedLayer[];
   duration: number;
   currentTime: number;
   onTimeUpdate: (time: number) => void;
@@ -131,6 +130,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   sceneConfig,
 }, ref) {
   const [showUpdateIndicator, setShowUpdateIndicator] = useState(false);
+  const [hasPendingUpdate, setHasPendingUpdate] = useState(false);
   const [showFirebaseIndicator, setShowFirebaseIndicator] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [playerKey, setPlayerKey] = useState(0);
@@ -142,11 +142,6 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   const fullscreenRef = useRef<HTMLDivElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
 
-  // Notify SharedMediaLoader of playback state to pause extractions during playback
-  useEffect(() => {
-    SharedMediaLoader.setPlaybackActive(isPlaying);
-  }, [isPlaying]);
-
   const handleRecenter = useCallback(() => {
     scenePlayerRef.current?.recenter();
   }, []);
@@ -154,6 +149,33 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   const handleRefresh = useCallback(() => {
     setPlayerKey((k) => k + 1);
   }, []);
+
+  // Refresh player when resolved signed URLs change (e.g. new asset added and URL resolved)
+  const resolvedUrlsFingerprint = useMemo(() => {
+    const entries: string[] = [];
+    for (const layer of layers) {
+      for (const clip of layer.clips) {
+        if (clip.type === "text") continue;
+        const c = clip as { id: string; src?: string; maskSrc?: string };
+        const src = "src" in clip ? c.src : undefined;
+        const maskSrc = "maskSrc" in clip ? c.maskSrc : undefined;
+        entries.push(`${clip.id}:${!!src}:${!!maskSrc}`);
+      }
+    }
+    return entries.sort().join("|");
+  }, [layers]);
+
+  const prevResolvedUrlsRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevResolvedUrlsRef.current === null) {
+      prevResolvedUrlsRef.current = resolvedUrlsFingerprint;
+      return;
+    }
+    if (prevResolvedUrlsRef.current !== resolvedUrlsFingerprint) {
+      prevResolvedUrlsRef.current = resolvedUrlsFingerprint;
+      setPlayerKey((k) => k + 1);
+    }
+  }, [resolvedUrlsFingerprint]);
 
   const enterFullscreen = useCallback(() => {
     const el = fullscreenRef.current;
@@ -231,6 +253,10 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     }
     setShowUpdateIndicator(true);
     timeoutRef.current = setTimeout(() => setShowUpdateIndicator(false), 600);
+  }, []);
+
+  const handleUpdateQueued = useCallback((queued: boolean) => {
+    setHasPendingUpdate(queued);
   }, []);
 
   const handleFirebaseSync = useCallback(() => {
@@ -333,6 +359,23 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
             </Tooltip>
             {/* Asset preload pie indicator */}
             <PreloadPieIndicator loaded={preloadProgress.loaded} total={preloadProgress.total} />
+            {/* Update queued (waiting for pause) dot */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className={`size-2 rounded-full bg-amber-500 transition-opacity duration-300 ${
+                    hasPendingUpdate ? 'opacity-100' : 'opacity-0'
+                  } ${hasPendingUpdate ? 'animate-pulse' : ''}`}
+                  style={{
+                    boxShadow: hasPendingUpdate ? '0 0 6px rgba(245, 158, 11, 0.8)' : 'none',
+                  }}
+                  title="Preview update queued – will apply when playback pauses"
+                />
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>Preview update queued – will apply when playback pauses</p>
+              </TooltipContent>
+            </Tooltip>
           </TooltipProvider>
           {/* Motion Canvas update dot */}
           <div
@@ -363,6 +406,8 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
           onPlayerChange={onPlayerChange}
           onCanvasReady={onCanvasReady}
           onVariablesUpdated={handleVariablesUpdated}
+          onUpdateQueued={handleUpdateQueued}
+          isPlaying={isPlaying}
           layers={layers}
           duration={duration}
           currentTime={currentTime}

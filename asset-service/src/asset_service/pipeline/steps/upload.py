@@ -8,7 +8,7 @@ from pathlib import Path
 from ..registry import register_step
 from ..types import PipelineContext, PipelineResult, StepStatus
 from ...config import get_settings
-from ...storage.gcs import upload_to_gcs, create_signed_url
+from ...storage.gcs import upload_to_gcs
 
 logger = logging.getLogger(__name__)
 
@@ -36,18 +36,12 @@ async def upload_step(context: PipelineContext) -> PipelineResult:
     existing_bucket = context.params.get("bucket")
 
     if existing_gcs_uri and existing_object_name:
-        # Already uploaded, just refresh the signed URL
-        signed_url = create_signed_url(
-            object_name=existing_object_name,
-            bucket=existing_bucket or settings.asset_gcs_bucket,
-            settings=settings,
-        )
+        # Already uploaded - store objectName only (signed URLs generated on-demand)
         logger.info(f"Asset already in GCS: {existing_gcs_uri}")
         return PipelineResult(
             status=StepStatus.SUCCEEDED,
             metadata={
                 "gcsUri": existing_gcs_uri,
-                "signedUrl": signed_url,
                 "bucket": existing_bucket or settings.asset_gcs_bucket,
                 "objectName": existing_object_name,
             },
@@ -61,7 +55,7 @@ async def upload_step(context: PipelineContext) -> PipelineResult:
     with open(path, "rb") as f:
         data = f.read()
 
-    # Upload to GCS
+    # Upload to GCS - store objectName only (signed URLs generated on-demand)
     object_name = f"assets/{context.asset.id}/{context.asset.file_name}"
     result = upload_to_gcs(
         data=data,
@@ -70,18 +64,10 @@ async def upload_step(context: PipelineContext) -> PipelineResult:
         settings=settings,
     )
 
-    # Generate signed URL
-    signed_url = create_signed_url(
-        object_name=result["object_name"],
-        bucket=result["bucket"],
-        settings=settings,
-    )
-
     return PipelineResult(
         status=StepStatus.SUCCEEDED,
         metadata={
             "gcsUri": result["gcs_uri"],
-            "signedUrl": signed_url,
             "bucket": result["bucket"],
             "objectName": result["object_name"],
         },

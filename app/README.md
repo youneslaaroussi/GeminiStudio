@@ -43,7 +43,7 @@ Create an `.env.local` based on `env.template` with the following values:
 - `VEO_MODEL_ID`: Veo model id, defaults to `veo-3.0-generate-001`.
 - Veo uses `GOOGLE_SERVICE_ACCOUNT_KEY` (service-account JSON with `aiplatform.predict` permissions).
 - `ASSET_GCS_BUCKET`: Google Cloud Storage bucket where uploaded assets are stored (objects stay private).
-- `ASSET_SIGNED_URL_TTL_SECONDS` (optional): Lifetime of generated download URLs in seconds (defaults to 7 days).
+- `ASSET_SIGNED_URL_TTL_SECONDS` (optional): Lifetime of generated download URLs in seconds (asset-service default: 1 hour). The app auto-reloads before expiry when `NEXT_PUBLIC_SIGNED_URL_MAX_AGE_SECONDS` is not set (default 55 min).
 - `BANANA_MODEL_ID` (optional): override Gemini Banana Pro model id, defaults to `gemini-3-pro-image-preview`.
 - `PROMPT_MODEL_ID` (optional): Gemini text model used to expand prompts (defaults to `gemini-1.5-flash-latest`).
 

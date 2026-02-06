@@ -149,6 +149,7 @@ import "@fontsource/pt-serif/700.css";
 import { Toaster } from "@/components/ui/sonner";
 import { Copyright } from "@/app/components/Copyright";
 import { CookieNotice } from "@/app/components/CookieNotice";
+import { SignedUrlRefreshHandler } from "@/app/components/SignedUrlRefreshHandler";
 import { AnalyticsProvider } from "@/app/lib/analytics/AnalyticsProvider";
 
 export const metadata: Metadata = {
@@ -266,6 +267,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
         <AnalyticsProvider>
+          <SignedUrlRefreshHandler />
           {children}
           <Copyright />
           <CookieNotice />

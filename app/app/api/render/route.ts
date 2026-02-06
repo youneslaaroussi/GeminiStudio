@@ -47,28 +47,20 @@ async function verifyToken(request: NextRequest): Promise<string | null> {
   }
 }
 
-/**
- * Collect asset IDs from clips that need to wait for upload.
- * Skips clips that already have a valid src URL (not blob:).
- */
+/** Collect asset IDs from media clips (src is never stored; we resolve at render time). */
 function collectPendingAssetIds(project: Project): string[] {
   const assetIds: string[] = [];
   for (const layer of project.layers) {
     for (const clip of layer.clips) {
-      if ("assetId" in clip && clip.assetId && "src" in clip) {
-        const src = clip.src || "";
-        // Skip if already has a valid URL (http/https or local api proxy)
-        if (src.startsWith("http") || src.startsWith("/api/")) {
-          console.log(`[Render] Clip ${clip.assetId} already has valid src, skipping upload wait`);
-          continue;
-        }
-        // Need to wait for blob: URLs or empty src
-        console.log(`[Render] Clip ${clip.assetId} needs upload wait, src: ${src.substring(0, 50)}`);
+      if (clip.type !== "text" && "assetId" in clip && clip.assetId) {
         assetIds.push(clip.assetId);
+      }
+      if (clip.type === "video" && "maskAssetId" in clip && clip.maskAssetId) {
+        assetIds.push(clip.maskAssetId);
       }
     }
   }
-  return [...new Set(assetIds)]; // dedupe
+  return [...new Set(assetIds)];
 }
 
 /**
@@ -171,46 +163,38 @@ async function getAssetSignedUrl(userId: string, projectId: string, assetId: str
 }
 
 /**
- * Transform clip URLs from local to signed GCS URLs
- * Returns the transformed clip and optionally the assetId -> signedUrl mapping
- * For video clips with masks, also resolves maskAssetId to maskSrc
+ * Resolve assetId → signed URL for preview/render. Never stored in schema.
+ * Returns clip with src (and maskSrc for video) set for the renderer.
  */
 async function transformClipUrls(
   clip: TimelineClip,
   urlMap: Map<string, string>,
   userId: string,
   projectId: string
-): Promise<TimelineClip> {
-  if (!("src" in clip) || !clip.assetId) {
-    return clip;
-  }
+): Promise<TimelineClip & { src?: string; maskSrc?: string }> {
+  if (clip.type === "text") return clip;
 
-  // Transform main asset URL
-  const signedUrl = await getAssetSignedUrl(userId, projectId, clip.assetId);
-  
-  // Handle video clips with masks separately to satisfy TypeScript
-  if (clip.type === 'video') {
-    let videoClip = signedUrl ? { ...clip, src: signedUrl } : clip;
-    if (signedUrl) {
-      urlMap.set(clip.assetId, signedUrl);
-    }
-    
-    // Resolve maskAssetId to maskSrc for masked video clips
-    if (clip.maskAssetId) {
-      const maskSignedUrl = await getAssetSignedUrl(userId, projectId, clip.maskAssetId);
-      if (maskSignedUrl) {
-        urlMap.set(clip.maskAssetId, maskSignedUrl);
-        videoClip = { ...videoClip, maskSrc: maskSignedUrl };
+  const assetId = "assetId" in clip ? clip.assetId : undefined;
+  if (!assetId) return clip;
+
+  const signedUrl = await getAssetSignedUrl(userId, projectId, assetId);
+  if (signedUrl) urlMap.set(assetId, signedUrl);
+
+  if (clip.type === "video") {
+    const v = clip as import("@/app/types/timeline").VideoClip;
+    let maskSrc: string | undefined;
+    if (v.maskAssetId) {
+      const maskSigned = await getAssetSignedUrl(userId, projectId, v.maskAssetId);
+      if (maskSigned) {
+        urlMap.set(v.maskAssetId, maskSigned);
+        maskSrc = maskSigned;
       }
     }
-    
-    return videoClip;
+    return { ...v, src: signedUrl ?? "", maskSrc };
   }
 
-  // Non-video clips
-  if (signedUrl) {
-    urlMap.set(clip.assetId, signedUrl);
-    return { ...clip, src: signedUrl };
+  if (clip.type === "audio" || clip.type === "image") {
+    return { ...clip, src: signedUrl ?? "" };
   }
 
   return clip;

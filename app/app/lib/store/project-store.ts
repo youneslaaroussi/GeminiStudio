@@ -48,6 +48,8 @@ interface ProjectStore {
   addLayer: (layer: Layer) => void;
   setLayerHidden: (layerId: string, hidden: boolean) => void;
   addClip: (clip: TimelineClip, layerId?: string) => void;
+  /** Add a new layer above the layer with layerId and place the clip there. */
+  addClipOnNewLayerAbove: (layerId: string, clip: TimelineClip) => void;
   deleteLayer: (layerId: string) => void;
   reorderLayers: (fromIndex: number, toIndex: number) => void;
   updateClip: (id: string, updates: Partial<TimelineClip>) => void;
@@ -363,6 +365,20 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
         return project;
       };
 
+      // Never persist src/maskSrc; strip when loading so store stays canonical
+      const stripClipUrlFields = (project: Project): Project => {
+        return {
+          ...project,
+          layers: project.layers.map((layer) => ({
+            ...layer,
+            clips: layer.clips.map((clip) => {
+              const { src, maskSrc, ...rest } = clip as TimelineClip & { src?: string; maskSrc?: string };
+              return rest as TimelineClip;
+            }),
+          })),
+        };
+      };
+
       syncManager = new ProjectSyncManager(
         userId,
         projectId,
@@ -381,7 +397,7 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
           } else {
             project = automergeToProject(doc);
           }
-          // Preserve the metadata name as source of truth (Automerge name can be stale)
+          project = stripClipUrlFields(project);
           project = applyMetadataName(project);
           set({ project, currentBranch: branchId, isOnline: syncManager?.getIsOnline() ?? true });
           scheduleCorrection();
@@ -402,7 +418,7 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
         console.log('[SYNC] Loading project from Firebase', automergeDoc.projectJSON.length, 'chars');
         try {
           let project = JSON.parse(automergeDoc.projectJSON);
-          // Use metadata name as source of truth (Automerge name can be stale)
+          project = stripClipUrlFields(project);
           project = applyMetadataName(project);
           console.log('[SYNC] Loaded project from Firebase:', project.name, 'with', project.layers.length, 'layers');
           set({ project, syncManager, currentBranch: branchId, projectId });
@@ -595,6 +611,43 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
               ...state.project,
               ...resolutionUpdate,
               layers,
+            },
+          };
+        });
+      },
+
+      addClipOnNewLayerAbove: (layerId: string, clip: TimelineClip) => {
+        applySyncedChange((state) => {
+          const layers = [...state.project.layers];
+          const layerIndex = layers.findIndex((l) => l.id === layerId);
+          if (layerIndex === -1) return null;
+
+          const hasExistingClips = state.project.layers.some((l) => l.clips.length > 0);
+          let resolutionUpdate = {};
+          if (!hasExistingClips && (clip.type === "video" || clip.type === "image")) {
+            const visualClip = clip as VideoClip | ImageClip;
+            if (visualClip.width && visualClip.height) {
+              resolutionUpdate = {
+                resolution: { width: visualClip.width, height: visualClip.height },
+              };
+            }
+          }
+
+          const newLayer: Layer = {
+            ...createLayerTemplate(clip.type),
+            clips: [clip],
+          };
+          const nextLayers = [
+            ...layers.slice(0, layerIndex),
+            newLayer,
+            ...layers.slice(layerIndex),
+          ];
+
+          return {
+            project: {
+              ...state.project,
+              ...resolutionUpdate,
+              layers: nextLayers,
             },
           };
         });

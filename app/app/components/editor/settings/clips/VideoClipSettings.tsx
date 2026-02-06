@@ -4,9 +4,9 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { EditableInput } from "@/app/components/ui/EditableInput";
-import type { VideoClip, MaskMode, VisualEffectType, ColorGradingSettings, ChromaKeySettings } from "@/app/types/timeline";
+import type { ResolvedVideoClip, VideoClip, MaskMode, VisualEffectType, ColorGradingSettings, ChromaKeySettings } from "@/app/types/timeline";
 import { DEFAULT_COLOR_GRADING } from "@/app/types/timeline";
-import { extractVideoFrameAtTimestamp } from "@/app/lib/tools/asset-utils";
+import { useAssetFrames, getFrameAtTimestamp } from "@/app/hooks/use-asset-frames";
 import { Loader2 } from "lucide-react";
 
 const VISUAL_EFFECT_OPTIONS: { value: VisualEffectType; label: string }[] = [
@@ -36,7 +36,7 @@ const CHROMA_KEY_PRESETS = [
 ] as const;
 
 interface VideoClipSettingsProps {
-  clip: VideoClip;
+  clip: ResolvedVideoClip;
   onUpdate: ClipUpdateHandler;
 }
 
@@ -174,36 +174,18 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
     return assets.find((a) => a.id === clip.maskAssetId) ?? null;
   }, [assets, clip.maskAssetId]);
 
-  // Frame extraction state for mask preview
+  // Mask preview - use sampled frames from asset service
   const [maskFrameTimestamp, setMaskFrameTimestamp] = useState(0);
-  const [maskFrameDataUrl, setMaskFrameDataUrl] = useState<string | null>(null);
-  const [isExtractingMaskFrame, setIsExtractingMaskFrame] = useState(false);
+  const projectId = useProjectStore((s) => s.projectId);
   const maskAssetMetadata = useAssetsStore((s) => s.metadata[clip.maskAssetId ?? ""]);
-  const maskDuration = maskAssetMetadata?.duration ?? selectedMaskAsset?.duration ?? 10;
-
-  // Extract frame when timestamp changes
-  useEffect(() => {
-    if (!selectedMaskAsset) {
-      setMaskFrameDataUrl(null);
-      return;
-    }
-
-    const url = selectedMaskAsset.signedUrl || selectedMaskAsset.url;
-    if (!url) return;
-
-    setIsExtractingMaskFrame(true);
-    extractVideoFrameAtTimestamp(url, maskFrameTimestamp)
-      .then((dataUrl) => {
-        setMaskFrameDataUrl(dataUrl);
-      })
-      .catch((err) => {
-        console.error("[VideoClipSettings] Failed to extract mask frame:", err);
-        setMaskFrameDataUrl(null);
-      })
-      .finally(() => {
-        setIsExtractingMaskFrame(false);
-      });
-  }, [selectedMaskAsset, maskFrameTimestamp]);
+  const { frames: maskFrames, duration: maskFramesDuration, isLoading: isExtractingMaskFrame } = useAssetFrames(
+    selectedMaskAsset?.id,
+    projectId
+  );
+  const maskDuration =
+    (maskFramesDuration || maskAssetMetadata?.duration) ?? selectedMaskAsset?.duration ?? 10;
+  const maskFrame = getFrameAtTimestamp(maskFrames, maskDuration, maskFrameTimestamp);
+  const maskFrameDataUrl = maskFrame?.url ?? null;
 
   return (
     <div className="space-y-3">
@@ -278,15 +260,6 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
               </div>
             </div>
 
-            <div>
-              <label className={labelClassName}>Source URL</label>
-              <EditableInput
-                type="url"
-                value={clip.src}
-                className={inputClassName}
-                onValueCommit={(val) => onUpdate({ src: val })}
-              />
-            </div>
           </div>
 
           {/* Focus / Zoom */}
@@ -394,7 +367,7 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
                   variant="ghost"
                   size="sm"
                   className="h-6 text-xs text-destructive"
-                  onClick={() => onUpdate({ maskAssetId: undefined, maskSrc: undefined, maskMode: undefined })}
+                  onClick={() => onUpdate({ maskAssetId: undefined, maskMode: undefined })}
                 >
                   Remove
                 </Button>
@@ -415,7 +388,6 @@ export function VideoClipSettings({ clip, onUpdate }: VideoClipSettingsProps) {
                     const asset = assetId ? assets.find((a) => a.id === assetId) : null;
                     onUpdate({
                       maskAssetId: assetId,
-                      maskSrc: asset?.signedUrl || asset?.url || undefined,
                       maskMode: assetId ? (clip.maskMode ?? "include") : undefined,
                     });
                   }}

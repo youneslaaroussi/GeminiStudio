@@ -50,7 +50,7 @@ def _upload_to_asset_service(
     project_id: str,
     settings: Settings,
 ) -> dict | None:
-    """Upload image to asset service and return asset data with proxy URL."""
+    """Upload image to asset service and return asset data with signed URL."""
     if not settings.asset_service_url:
         logger.warning("[BANANA] Asset service URL not configured")
         return None
@@ -76,17 +76,10 @@ def _upload_to_asset_service(
         if not asset_id:
             logger.error("[BANANA] Asset service did not return asset ID")
             return None
-        
-        # Get filename from asset for proper extension in proxy URL
-        asset_filename = asset.get("fileName", filename)
-        
-        # Build proxy URL for CORS-safe access (include filename for proper extension)
-        proxy_url = f"/api/assets/{asset_id}/file/{asset_filename}?projectId={project_id}&userId={user_id}"
-        
+
         logger.info("[BANANA] Uploaded image to asset service: asset_id=%s", asset_id)
         return {
             "assetId": asset_id,
-            "proxyUrl": proxy_url,
             "gcsUri": asset.get("gcsUri"),
             "signedUrl": asset.get("signedUrl"),
         }
@@ -308,7 +301,7 @@ def generateImage(
     prompt_slug = prompt[:30].replace(" ", "-").lower()
     filename = f"banana-{prompt_slug}-{request_id[:8]}{ext}"
 
-    # Try asset service first (provides proxy URL for CORS-safe access)
+    # Try asset service first (returns signed URL for direct access)
     asset_data = _upload_to_asset_service(
         image_bytes, filename, mime_type, user_id, effective_project_id, settings
     )
@@ -321,15 +314,11 @@ def generateImage(
             image_size,
             asset_data["assetId"],
         )
-        # Prefer signed URL for external clients (like Telegram) over proxy URL
-        # Signed URL is a full https:// URL with the image extension, which can be
-        # detected and sent as media. Proxy URL is relative and for CORS-safe web access.
-        image_url = asset_data.get("signedUrl") or asset_data["proxyUrl"]
+        image_url = asset_data.get("signedUrl")
         return {
             "status": "success",
             "message": f"Image generated successfully. IMPORTANT: Include this URL in your response so the user can see the image: {image_url}",
             "imageUrl": image_url,
-            "proxyUrl": asset_data["proxyUrl"],  # Keep proxy URL for web app use
             "assetId": asset_data["assetId"],
             "gcsUri": asset_data.get("gcsUri"),
             "mimeType": mime_type,

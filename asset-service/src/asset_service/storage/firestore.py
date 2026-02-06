@@ -71,7 +71,7 @@ def get_firestore_client(settings: Settings | None = None):
 #   size: number
 #   type: "video" | "audio" | "image" | "other"
 #   gcsUri: string
-#   signedUrl: string (optional, refreshed on access)
+#   objectName: string (for signed URL generation on read - never store signedUrl, it expires)
 #   width: number (optional)
 #   height: number (optional)
 #   duration: number (optional)
@@ -107,15 +107,18 @@ def save_asset(
     if not asset_id:
         raise ValueError("asset_data must include 'id'")
 
+    # Never persist signed URLs - they expire (typically 1hr)
+    data_to_save = {k: v for k, v in asset_data.items() if k not in ("signedUrl", "originalSignedUrl")}
+
     now = datetime.utcnow().isoformat() + "Z"
-    asset_data.setdefault("uploadedAt", now)
-    asset_data["updatedAt"] = now
+    data_to_save.setdefault("uploadedAt", now)
+    data_to_save["updatedAt"] = now
 
     doc_ref = db.collection("users").document(user_id).collection("projects").document(project_id).collection("assets").document(asset_id)
-    doc_ref.set(asset_data)
+    doc_ref.set(data_to_save)
 
     logger.info(f"Saved asset {asset_id} for user {user_id} project {project_id}")
-    return asset_data
+    return asset_data  # Return original (caller may have added signedUrl for response)
 
 
 def get_asset(
@@ -178,6 +181,9 @@ def update_asset(
     if not doc.exists:
         return None
 
+    # Never persist signed URLs - they expire
+    updates.pop("signedUrl", None)
+    updates.pop("originalSignedUrl", None)
     updates["updatedAt"] = datetime.utcnow().isoformat() + "Z"
     doc_ref.update(updates)
 

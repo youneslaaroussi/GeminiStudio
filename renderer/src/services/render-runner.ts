@@ -464,17 +464,28 @@ export class RenderRunner {
         logger.error({ jobId: job.id, segment, err: error }, 'Segment task failed');
       });
 
-      const segmentProgressWeight = segments.length > 0 ? 70 / segments.length : 70;
+      // Shared progress map: segment index -> ratio [0..1]. Used to aggregate progress
+      // across parallel segments so the reported value is monotonic, not jumping.
+      const segmentProgressMap = new Map<number, number>();
+      for (let i = 0; i < segments.length; i++) {
+        segmentProgressMap.set(i, 0);
+      }
+
+      const segmentProgressWeight = 70; // 5..75 for rendering, rest for merge/upload
 
       await cluster.task(async ({ page, data: segment }) => {
-        const segmentBaseProgress = 5 + segment.index * segmentProgressWeight;
-
         await page.exposeFunction(
           'nodeHandleRenderProgress',
           async (frame: number, total: number) => {
             if (total <= 0) return;
             const ratio = Math.min(1, Math.max(0, frame / total));
-            const progress = Math.min(80, Math.floor(segmentBaseProgress + ratio * segmentProgressWeight));
+            segmentProgressMap.set(segment.index, ratio);
+            let sum = 0;
+            for (let i = 0; i < segments.length; i++) {
+              sum += segmentProgressMap.get(i) ?? 0;
+            }
+            const overallRatio = segments.length > 0 ? sum / segments.length : 0;
+            const progress = Math.min(80, Math.floor(5 + overallRatio * segmentProgressWeight));
             await job.updateProgress(progress).catch(() => undefined);
           },
         );
@@ -557,9 +568,15 @@ export class RenderRunner {
           );
         }
 
-        await job
-          .updateProgress(Math.min(80, Math.floor(segmentBaseProgress + segmentProgressWeight)))
-          .catch(() => undefined);
+        // Mark this segment as complete and recompute overall progress
+        segmentProgressMap.set(segment.index, 1);
+        let sum = 0;
+        for (let i = 0; i < segments.length; i++) {
+          sum += segmentProgressMap.get(i) ?? 0;
+        }
+        const overallRatio = segments.length > 0 ? sum / segments.length : 0;
+        const progress = Math.min(80, Math.floor(5 + overallRatio * segmentProgressWeight));
+        await job.updateProgress(progress).catch(() => undefined);
       });
 
       for (const segment of segments) {

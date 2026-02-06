@@ -5,10 +5,11 @@ import { Video, Music, Type, Image as ImageIcon, MousePointer2 } from "lucide-re
 import { useProjectStore } from "@/app/lib/store/project-store";
 import type {
   TimelineClip,
-  VideoClip,
-  AudioClip,
+  ResolvedLayer,
+  ResolvedVideoClip,
+  ResolvedAudioClip,
+  ResolvedImageClip,
   TextClip,
-  ImageClip,
 } from "@/app/types/timeline";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -28,19 +29,25 @@ const CLIP_ICONS = {
   image: <ImageIcon className="size-4 text-amber-500" />,
 };
 
-export function SettingsPanel() {
+interface SettingsPanelProps {
+  /** Resolved layers (with src set) for display; selected clip is taken from here when provided. */
+  resolvedLayers?: ResolvedLayer[];
+}
+
+export function SettingsPanel({ resolvedLayers }: SettingsPanelProps = {}) {
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
   const selectedTransitionKey = useProjectStore((s) => s.selectedTransitionKey);
   const layers = useProjectStore((s) => s.project.layers);
   const updateClip = useProjectStore((s) => s.updateClip);
 
-  const allClips = layers.flatMap((layer) => layer.clips);
+  const allClips = (resolvedLayers ?? layers).flatMap((layer) => layer.clips);
   const selectedClip = allClips.find((clip) => clip.id === selectedClipId);
 
   const handleUpdate = useCallback(
     (updates: Partial<TimelineClip>) => {
       if (!selectedClipId) return;
-      updateClip(selectedClipId, updates);
+      const { src, maskSrc, ...rest } = updates as Record<string, unknown>;
+      updateClip(selectedClipId, rest as Partial<TimelineClip>);
     },
     [selectedClipId, updateClip]
   );
@@ -101,13 +108,13 @@ export function SettingsPanel() {
               >
                 {selectedClip.type === "video" && (
                   <VideoClipSettings
-                    clip={selectedClip as VideoClip}
+                    clip={selectedClip as ResolvedVideoClip}
                     onUpdate={handleUpdate}
                   />
                 )}
                 {selectedClip.type === "audio" && (
                   <AudioClipSettings
-                    clip={selectedClip as AudioClip}
+                    clip={selectedClip as ResolvedAudioClip}
                     onUpdate={handleUpdate}
                   />
                 )}
@@ -119,7 +126,7 @@ export function SettingsPanel() {
                 )}
                 {selectedClip.type === "image" && (
                   <ImageClipSettings
-                    clip={selectedClip as ImageClip}
+                    clip={selectedClip as ResolvedImageClip}
                     onUpdate={handleUpdate}
                   />
                 )}

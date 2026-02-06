@@ -9,7 +9,6 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Any, Dict, Optional
-from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 import httpx
@@ -31,7 +30,6 @@ def _sign_renderer_request(body: str, timestamp: int, secret: str) -> str:
 
 _FORMAT_CHOICES = {"mp4", "webm", "gif"}
 _QUALITY_CHOICES = {"low", "web", "social", "studio"}
-_ASSET_URL_PATTERN = re.compile(r"^/api/assets/([^/]+)/file")
 
 # Maximum render resolution to prevent timeouts
 # Cap at 720p (1280 on longest dimension) - higher resolutions cause renderer timeouts
@@ -129,77 +127,54 @@ def _extract_project(projects: list[dict[str, Any]], project_id: str | None) -> 
 
 def _sign_asset_request(timestamp: int, secret: str) -> str:
   """Sign an asset service GET request with HMAC-SHA256."""
-  # For GET requests, we sign just the timestamp (no body)
   payload = f"{timestamp}."
   return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
 
 
-def _resolve_asset_url(src: str, settings: Settings, user_id: str | None = None) -> str | None:
-  """Resolve /api/assets/{assetId}/file?projectId=... to a signed GCS URL."""
-  match = _ASSET_URL_PATTERN.match(src)
-  if not match:
+def _get_asset_signed_url(
+  settings: Settings, user_id: str, project_id: str, asset_id: str
+) -> str | None:
+  """Fetch signed playback URL for an asset. Used only for render payload, never stored."""
+  if not settings.asset_service_url:
     return None
-
-  asset_id = match.group(1)
-  parsed = urlparse(src)
-  params = parse_qs(parsed.query)
-  project_id = params.get("projectId", [None])[0]
-  # Use provided user_id or fallback to URL param (for backwards compatibility)
-  effective_user_id = user_id or params.get("userId", [None])[0]
-
-  if not all([asset_id, project_id, effective_user_id, settings.asset_service_url]):
-    logger.warning("Cannot resolve asset URL %s: missing asset_id=%s, project_id=%s, user_id=%s", 
-                   src, asset_id, project_id, effective_user_id)
-    return None
-
-  endpoint = f"{settings.asset_service_url.rstrip('/')}/api/assets/{effective_user_id}/{project_id}/{asset_id}"
-  
-  # Build auth headers
+  endpoint = f"{settings.asset_service_url.rstrip('/')}/api/assets/{user_id}/{project_id}/{asset_id}"
   headers: dict[str, str] = {}
   if settings.asset_service_shared_secret:
-    timestamp = int(time.time() * 1000)
-    signature = _sign_asset_request(timestamp, settings.asset_service_shared_secret)
-    headers["X-Signature"] = signature
-    headers["X-Timestamp"] = str(timestamp)
-  
+    ts = int(time.time() * 1000)
+    headers["X-Signature"] = _sign_asset_request(ts, settings.asset_service_shared_secret)
+    headers["X-Timestamp"] = str(ts)
   try:
-    response = httpx.get(endpoint, headers=headers, timeout=10.0)
-    if response.status_code == 200:
-      data = response.json()
-      signed_url = data.get("signedUrl")
-      if signed_url:
-        logger.debug("Resolved asset %s to signed URL", asset_id)
-        return signed_url
-    else:
-      logger.warning("Asset service returned %d for %s: %s", response.status_code, endpoint, response.text[:200])
+    resp = httpx.get(endpoint, headers=headers, timeout=10.0)
+    if resp.status_code == 200:
+      return resp.json().get("signedUrl")
   except Exception as e:
-    logger.warning("Failed to resolve asset URL %s: %s", src, e)
-
+    logger.warning("Failed to get signed URL for asset %s: %s", asset_id, e)
   return None
 
 
-def _resolve_project_assets(project_data: dict[str, Any], settings: Settings, user_id: str | None = None) -> dict[str, Any]:
-  """Resolve all /api/assets/... URLs in project clips to signed GCS URLs."""
+def _resolve_project_assets_for_render(
+  project_data: dict[str, Any], settings: Settings, user_id: str, project_id: str
+) -> dict[str, Any]:
+  """Resolve assetId -> signed URL for all media clips. Payload only; never persisted."""
   project = dict(project_data)
   layers = project.get("layers", [])
-  resolved_count = 0
-  failed_count = 0
-  
+
   for layer in layers:
     for clip in layer.get("clips", []):
-      src = clip.get("src", "")
-      if src.startswith("/api/assets/"):
-        signed_url = _resolve_asset_url(src, settings, user_id)
-        if signed_url:
-          clip["src"] = signed_url
-          resolved_count += 1
-        else:
-          failed_count += 1
-          logger.warning("Failed to resolve asset URL for clip: %s", src)
-  
-  if resolved_count > 0 or failed_count > 0:
-    logger.info("Asset URL resolution: %d resolved, %d failed", resolved_count, failed_count)
-  
+      ctype = clip.get("type")
+      if ctype not in ("video", "audio", "image"):
+        continue
+      asset_id = clip.get("assetId")
+      if not asset_id:
+        continue
+      url = _get_asset_signed_url(settings, user_id, project_id, asset_id)
+      if url:
+        clip["src"] = url
+      if ctype == "video" and clip.get("maskAssetId"):
+        mask_url = _get_asset_signed_url(settings, user_id, project_id, clip["maskAssetId"])
+        if mask_url:
+          clip["maskSrc"] = mask_url
+
   project["layers"] = layers
   return project
 
@@ -314,8 +289,10 @@ def renderVideo(
   slug = _slugify(project_name)
   destination = f"/tmp/gemini-renderer/{slug}-{request_id}.{output_format}"
 
-  # Resolve /api/assets/... URLs to signed GCS URLs
-  project_payload = _resolve_project_assets(project_data, settings, effective_user_id)
+  # Resolve assetId -> signed URLs for render payload only (never stored)
+  project_payload = _resolve_project_assets_for_render(
+    project_data, settings, effective_user_id, effective_project_id or ""
+  )
   project_payload.setdefault("renderScale", project_payload.get("renderScale", 1))
   project_payload.setdefault("background", project_payload.get("background", "#000000"))
   project_payload.setdefault("fps", project_payload.get("fps", output_fps))

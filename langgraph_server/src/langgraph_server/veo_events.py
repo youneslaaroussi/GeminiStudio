@@ -139,7 +139,7 @@ def _upload_to_asset_service(
     project_id: str,
     settings: Settings,
 ) -> Dict[str, Any] | None:
-    """Upload video to asset service and return asset data with proxy URL."""
+    """Upload video to asset service and return asset data with signed URL."""
     if not settings.asset_service_url:
         logger.warning("[VEO_EVENTS] Asset service URL not configured")
         return None
@@ -166,17 +166,10 @@ def _upload_to_asset_service(
         if not asset_id:
             logger.error("[VEO_EVENTS] Asset service did not return asset ID")
             return None
-        
-        # Get filename from asset for proper extension in proxy URL
-        asset_filename = asset.get("fileName", filename)
-        
-        # Build proxy URL for CORS-safe access (include filename for proper extension)
-        proxy_url = f"/api/assets/{asset_id}/file/{asset_filename}?projectId={project_id}&userId={user_id}"
-        
+
         logger.info("[VEO_EVENTS] Uploaded video to asset service: asset_id=%s", asset_id)
         return {
             "assetId": asset_id,
-            "proxyUrl": proxy_url,
             "gcsUri": asset.get("gcsUri"),
             "signedUrl": asset.get("signedUrl"),
         }
@@ -409,8 +402,7 @@ class VeoEventPoller:
             
             if asset_data:
                 # Prefer signedUrl for external clients (Telegram) - it's a full https:// URL
-                # Fall back to proxyUrl for web app (CORS-safe)
-                download_url = asset_data.get("signedUrl") or asset_data.get("proxyUrl")
+                download_url = asset_data.get("signedUrl")
 
                 # Update Firestore with completion status
                 if job_id:
@@ -615,10 +607,7 @@ class VeoEventPoller:
                             "category": "video",
                             "uploadedAt": datetime.utcnow().isoformat() + "Z",
                         }
-                        # Use localUrl for proxy URLs (starts with /api/), signedUrl for GCS URLs
-                        if download_url.startswith("/api/"):
-                            attachment["localUrl"] = download_url
-                        else:
+                        if download_url:
                             attachment["signedUrl"] = download_url
                         new_message["metadata"] = {"attachments": [attachment]}
                     current_messages.append(new_message)

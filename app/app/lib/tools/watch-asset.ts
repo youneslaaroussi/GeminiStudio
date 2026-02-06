@@ -2,8 +2,7 @@
  * Watch Asset Tool
  *
  * Prepares an asset (video, image, or audio) for multimodal analysis by the agent.
- * Unlike digestAsset which analyzes in isolation, this tool returns the media
- * directly to the agent so it can analyze with full conversation context.
+ * This tool returns the media directly to the agent so it can analyze with full conversation context.
  *
  * Use this when the agent needs to see the actual media content to answer questions
  * that require understanding prior context (e.g. "does this video match the style
@@ -13,6 +12,8 @@
 import { z } from "zod";
 import type { ToolDefinition } from "./types";
 import type { Project } from "@/app/types/timeline";
+import type { RemoteAsset } from "@/app/types/assets";
+import { useProjectStore } from "@/app/lib/store/project-store";
 import { loadAssetsSnapshot, toAbsoluteAssetUrl } from "./asset-utils";
 
 const watchAssetSchema = z.object({
@@ -57,7 +58,7 @@ export const watchAssetTool: ToolDefinition<typeof watchAssetSchema, Project> = 
       required: false,
     },
   ],
-  async run(input) {
+  async run(input, context) {
     try {
       // This tool requires browser context to fetch assets
       if (typeof window === "undefined") {
@@ -67,14 +68,51 @@ export const watchAssetTool: ToolDefinition<typeof watchAssetSchema, Project> = 
         };
       }
 
-      // Find the asset
+      const projectId = context?.projectId ?? useProjectStore.getState().projectId;
+      if (!projectId) {
+        return {
+          status: "error" as const,
+          error: "Project context is required. Open a project and try again.",
+        };
+      }
+
+      // Find the asset (from snapshot or by ID)
       const assets = await loadAssetsSnapshot();
-      const asset = assets.find((a) => a.id === input.assetId);
+      let asset = assets.find((a) => a.id === input.assetId);
+
+      // If not in snapshot, try to fetch single asset by ID for metadata + signed URL
+      if (!asset) {
+        try {
+          const res = await fetch(
+            `/api/assets/${encodeURIComponent(input.assetId)}?projectId=${encodeURIComponent(projectId)}`,
+            { credentials: "include" }
+          );
+          if (res.ok) {
+            const data = (await res.json()) as { asset?: { id: string; name: string; mimeType: string; type: string; signedUrl?: string; gcsUri?: string; url?: string } };
+            if (data.asset) {
+              const a = data.asset;
+              asset = {
+                id: a.id,
+                name: a.name,
+                mimeType: a.mimeType,
+                type: a.type as RemoteAsset["type"],
+                signedUrl: a.signedUrl,
+                gcsUri: a.gcsUri,
+                url: a.signedUrl ?? (a as { url?: string }).url ?? "",
+                size: 0,
+                uploadedAt: "",
+              } satisfies RemoteAsset;
+            }
+          }
+        } catch {
+          // Fall through to not-found error
+        }
+      }
 
       if (!asset) {
         return {
           status: "error" as const,
-          error: `Asset "${input.assetId}" not found. Use listAssets to see available assets.`,
+          error: `Asset "${input.assetId}" not found. Use listProjectAssets to see available assets.`,
         };
       }
 
@@ -87,15 +125,36 @@ export const watchAssetTool: ToolDefinition<typeof watchAssetSchema, Project> = 
         };
       }
 
-      // Get the asset URL - prefer signed URL or GCS URI
+      // Resolve URL: prefer signed URL; if not http(s), fetch signed URL on demand
       let assetUrl = asset.signedUrl ?? asset.gcsUri ?? asset.url;
-
-      // If it's a relative URL, make it absolute
-      if (!assetUrl.startsWith("http") && !assetUrl.startsWith("gs://")) {
+      if (asset.url && !assetUrl.startsWith("http") && !assetUrl.startsWith("gs://")) {
         assetUrl = toAbsoluteAssetUrl(asset.url);
       }
+      const hasHttpUrl = assetUrl && (assetUrl.startsWith("http://") || assetUrl.startsWith("https://"));
+      if (!hasHttpUrl && projectId) {
+        try {
+          const playbackRes = await fetch(
+            `/api/assets/${encodeURIComponent(input.assetId)}/playback-url?projectId=${encodeURIComponent(projectId)}`,
+            { credentials: "include" }
+          );
+          if (playbackRes.ok) {
+            const playbackData = (await playbackRes.json()) as { url?: string };
+            if (playbackData?.url?.startsWith("http")) {
+              assetUrl = playbackData.url;
+            }
+          }
+        } catch {
+          // Keep existing assetUrl; will error below if still not http(s)
+        }
+      }
+      if (!assetUrl || (!assetUrl.startsWith("http://") && !assetUrl.startsWith("https://"))) {
+        return {
+          status: "error" as const,
+          error: "Asset has no accessible URL. The file may still be processing—try again in a moment.",
+        };
+      }
 
-      // Upload to Gemini Files API
+      // Upload to Gemini Files API (only accepts http/https URLs)
       const response = await fetch("/api/gemini-files", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

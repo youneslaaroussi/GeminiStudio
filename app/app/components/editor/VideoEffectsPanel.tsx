@@ -313,17 +313,16 @@ export function VideoEffectsPanel({ clip }: VideoEffectsPanelProps) {
         updateClip(clip.id, {
           name: `${baseName} (Foreground)`,
           maskAssetId: job.resultAssetId,
-          maskSrc: job.resultAssetUrl,
           maskMode: "include",
         });
 
-        // Create background clip with same properties but exclude mask
+        // Create background clip with same properties but exclude mask (no src/maskSrc stored)
+        const { ...clipBase } = clip;
         const backgroundClip: VideoClip = {
-          ...clip,
+          ...clipBase,
           id: crypto.randomUUID(),
           name: `${baseName} (Background)`,
           maskAssetId: job.resultAssetId,
-          maskSrc: job.resultAssetUrl,
           maskMode: "exclude",
         };
 
@@ -444,6 +443,8 @@ export function VideoEffectsPanel({ clip }: VideoEffectsPanelProps) {
                       <CoordinatePicker
                         src={assetPreviewUrl}
                         mediaType={isVideo ? "video" : "image"}
+                        assetId={isVideo ? asset.id : undefined}
+                        projectId={projectId ?? undefined}
                         alt={`Select points on ${asset.name}`}
                         points={points}
                         onChange={(newPoints: Point[]) => {

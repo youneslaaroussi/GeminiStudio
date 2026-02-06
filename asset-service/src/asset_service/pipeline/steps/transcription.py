@@ -334,15 +334,30 @@ async def transcription_step(context: PipelineContext) -> PipelineResult:
 
     # No existing job - start a new one
 
-    # Get GCS URI - either from params or from upload step
+    # Get GCS URI: prefer audio-extract FLAC (reliable for Speech-to-Text), then transcode
+    # output, then cloud-upload. Raw video/audio codecs are often decoded as silence by the API.
     gcs_uri = context.params.get("audioGcsUri")
     if not gcs_uri:
         state = await get_pipeline_state(context.user_id, context.project_id, context.asset.id)
-        upload_step = next((s for s in state.get("steps", []) if s["id"] == "cloud-upload"), None)
-        gcs_uri = upload_step.get("metadata", {}).get("gcsUri") if upload_step else None
+        steps = state.get("steps", [])
+
+        audio_extract_step_state = next((s for s in steps if s["id"] == "audio-extract"), None)
+        if audio_extract_step_state and audio_extract_step_state.get("status") == "succeeded":
+            gcs_uri = (audio_extract_step_state.get("metadata") or {}).get("audioForTranscriptionGcsUri")
+
+        if not gcs_uri:
+            transcode_step = next((s for s in steps if s["id"] == "transcode"), None)
+            if transcode_step and transcode_step.get("status") == "succeeded":
+                gcs_uri = (transcode_step.get("metadata") or {}).get("outputGcsUri")
+
+        if not gcs_uri:
+            upload_step = next((s for s in steps if s["id"] == "cloud-upload"), None)
+            gcs_uri = upload_step.get("metadata", {}).get("gcsUri") if upload_step else None
 
     if not gcs_uri:
         raise ValueError("Cloud upload step must complete before transcription")
+
+    logger.info(f"Using GCS URI for transcription: {gcs_uri}")
 
     # Get access token
     token = get_speech_access_token()

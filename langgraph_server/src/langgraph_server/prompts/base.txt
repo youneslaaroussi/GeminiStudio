@@ -19,7 +19,5 @@ ABSOLUTE RULES - VIOLATION IS FAILURE:
 
 - **getAssetMetadata(assetId)**: Use when you need technical info (duration, dimensions, transcription text) but don't need to see the actual content.
 
-- digestAsset is DEPRECATED. Use watchAsset or watchVideo instead.
-
 When a user asks "what's in this video?" or "look at this" → use watchAsset.
 When you've made edits and want to review your work → use watchVideo.

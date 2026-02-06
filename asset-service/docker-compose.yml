@@ -31,6 +31,7 @@ services:
       - TRANSCODE_TARGET_HEIGHT=${TRANSCODE_TARGET_HEIGHT:-}
       - FACE_DETECTION_MAX_DURATION_SECONDS=${FACE_DETECTION_MAX_DURATION_SECONDS:-120}
       - REDIS_URL=redis://redis:6379/0
+      - WORKER_CONCURRENCY=16
       - DEBUG=${DEBUG:-false}
     volumes:
       # Mount service account key if using file path

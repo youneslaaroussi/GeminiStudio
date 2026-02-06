@@ -1,7 +1,7 @@
 "use client";
 
 import { EditableInput } from "@/app/components/ui/EditableInput";
-import type { ImageClip, VisualEffectType } from "@/app/types/timeline";
+import type { ResolvedImageClip, ImageClip, VisualEffectType } from "@/app/types/timeline";
 
 const VISUAL_EFFECT_OPTIONS: { value: VisualEffectType; label: string }[] = [
   { value: "none", label: "None" },
@@ -20,7 +20,7 @@ import {
 } from "../utils";
 
 interface ImageClipSettingsProps {
-  clip: ImageClip;
+  clip: ResolvedImageClip;
   onUpdate: ClipUpdateHandler;
 }
 
@@ -40,16 +40,6 @@ export function ImageClipSettings({ clip, onUpdate }: ImageClipSettingsProps) {
             </option>
           ))}
         </select>
-      </div>
-
-      <div>
-        <label className={labelClassName}>Source URL</label>
-        <EditableInput
-          type="url"
-          value={clip.src}
-          className={inputClassName}
-          onValueCommit={(val) => onUpdate({ src: val })}
-        />
       </div>
 
       <div className="grid grid-cols-2 gap-2">

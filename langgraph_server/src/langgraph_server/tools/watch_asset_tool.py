@@ -1,7 +1,6 @@
 """Tool to load an asset for multimodal viewing by the agent.
 
-Unlike digestAsset which analyzes in isolation, this tool returns the media
-directly to the agent so it can analyze with full conversation context.
+Returns the media directly to the agent so it can analyze with full conversation context.
 """
 
 from __future__ import annotations

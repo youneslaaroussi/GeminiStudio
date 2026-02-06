@@ -137,10 +137,10 @@ export function AssetDetailsDialog({
             <section className="space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-semibold">Cloud Storage</h4>
-                {uploadMetadata.signedUrl && (
+                {(uploadMetadata.signedUrl ?? asset.signedUrl ?? asset.url) && (
                   <Button variant="outline" size="sm" asChild>
                     <a
-                      href={uploadMetadata.signedUrl}
+                      href={uploadMetadata.signedUrl ?? asset.signedUrl ?? asset.url}
                       target="_blank"
                       rel="noreferrer"
                     >

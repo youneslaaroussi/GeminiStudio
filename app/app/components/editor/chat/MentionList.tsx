@@ -5,8 +5,8 @@ import { Loader2, Image, Video, Music, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MentionListProps, MentionListRef, MentionSuggestionItem } from "./types";
 import type { AssetType } from "@/app/types/assets";
-import { SharedMediaLoader } from "@/app/lib/media/shared-media-loader";
-import { toAbsoluteAssetUrl } from "@/app/lib/tools/asset-utils";
+import { useAssetThumbnail } from "@/app/hooks/use-asset-thumbnail";
+import { useProjectStore } from "@/app/lib/store/project-store";
 
 function getAssetIcon(type: AssetType) {
   switch (type) {
@@ -21,43 +21,26 @@ function getAssetIcon(type: AssetType) {
   }
 }
 
-/** Thumbnail matching console Assets tab AssetRow - uses SharedMediaLoader for video thumbnails */
+/** Thumbnail - uses asset service for video (no client-side extraction) */
 const MentionThumbnail = memo(function MentionThumbnail({
   type,
   url,
   thumbnailUrl,
+  assetId,
 }: {
   type: AssetType;
   url?: string;
   thumbnailUrl?: string;
+  assetId: string;
 }) {
   const [showFallback, setShowFallback] = useState(false);
-  const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null);
-  const [isLoadingThumbnail, setIsLoadingThumbnail] = useState(false);
+  const projectId = useProjectStore((s) => s.projectId);
+  const { thumbnailUrl: apiThumbnail, isLoading: isLoadingThumbnail } = useAssetThumbnail(
+    type === "video" || type === "image" ? assetId : undefined,
+    projectId
+  );
+  const displayThumbnail = apiThumbnail ?? thumbnailUrl ?? null;
   const Icon = getAssetIcon(type);
-
-  // For video assets, use SharedMediaLoader to extract first frame as thumbnail
-  useEffect(() => {
-    if (type === "video" && url && !thumbnailUrl && !videoThumbnail && !isLoadingThumbnail) {
-      setIsLoadingThumbnail(true);
-      const absoluteUrl = toAbsoluteAssetUrl(url);
-      SharedMediaLoader.requestThumbnail(absoluteUrl)
-        .then((result) => {
-          if (result?.dataUrl) {
-            setVideoThumbnail(result.dataUrl);
-          } else {
-            setShowFallback(true);
-          }
-        })
-        .catch((err) => {
-          console.error("[MentionThumbnail] Failed to load thumbnail:", err);
-          setShowFallback(true);
-        })
-        .finally(() => {
-          setIsLoadingThumbnail(false);
-        });
-    }
-  }, [type, url, thumbnailUrl, videoThumbnail, isLoadingThumbnail]);
 
   if (!url && !thumbnailUrl) {
     return (
@@ -74,7 +57,7 @@ const MentionThumbnail = memo(function MentionThumbnail({
           <Icon className="size-4 text-muted-foreground" />
         ) : (
           <img
-            src={thumbnailUrl || url}
+            src={displayThumbnail || url}
             alt=""
             className="size-full object-cover"
             loading="lazy"
@@ -86,12 +69,12 @@ const MentionThumbnail = memo(function MentionThumbnail({
   }
 
   if (type === "video") {
-    // Use extracted thumbnail from SharedMediaLoader, or fallback to icon
-    if (videoThumbnail && !showFallback) {
+    // Use thumbnail from API (fresh signed URL), or fallback to icon
+    if (displayThumbnail && !showFallback) {
       return (
         <div className="size-8 shrink-0 rounded bg-muted overflow-hidden flex items-center justify-center">
           <img
-            src={videoThumbnail}
+            src={displayThumbnail}
             alt=""
             className="size-full object-cover"
             loading="lazy"
@@ -180,6 +163,7 @@ export const MentionList = forwardRef<MentionListRef, MentionListProps>(
                 type={item.type}
                 url={item.url}
                 thumbnailUrl={item.thumbnailUrl}
+                assetId={item.id}
               />
               <div className="flex-1 min-w-0">
                 <div className="truncate font-medium">{item.name}</div>

@@ -38,26 +38,25 @@ import { usePageReloadBlocker } from "@/app/hooks/use-page-reload-blocker";
 import { useAutoSave } from "@/app/lib/hooks/useAutoSave";
 import { CommandMenu } from "./CommandMenu";
 import type { ProjectTranscription } from "@/app/types/transcription";
-import type { VideoClip, ImageClip } from "@/app/types/timeline";
+import type { ResolvedVideoClip, ResolvedImageClip } from "@/app/types/timeline";
 import { usePlaybackResolvedLayers } from "@/app/lib/hooks/usePlaybackResolvedLayers";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-// Wrapper component that gets selected video or image clip for the Effects tab
-function EffectsPanelWrapper() {
+// Wrapper component that gets selected video or image clip for the Effects tab (from resolved layers so clip has src for APIs)
+function EffectsPanelWrapper({ resolvedLayers }: { resolvedLayers: import("@/app/types/timeline").ResolvedLayer[] }) {
   const selectedClipId = useProjectStore((s) => s.selectedClipId);
-  const layers = useProjectStore((s) => s.project.layers);
 
   const selectedClip = useMemo(() => {
     if (!selectedClipId) return null;
-    for (const layer of layers) {
+    for (const layer of resolvedLayers) {
       const clip = layer.clips.find((c) => c.id === selectedClipId);
       if (clip && (clip.type === "video" || clip.type === "image")) {
         return clip;
       }
     }
     return null;
-  }, [selectedClipId, layers]);
+  }, [selectedClipId, resolvedLayers]);
 
   if (!selectedClip) {
     return (
@@ -75,10 +74,10 @@ function EffectsPanelWrapper() {
     <ScrollArea className="h-full">
       <div className="p-3">
         {selectedClip.type === "video" && (
-          <VideoEffectsPanel clip={selectedClip as VideoClip} />
+          <VideoEffectsPanel clip={selectedClip as ResolvedVideoClip} />
         )}
         {selectedClip.type === "image" && (
-          <ImageEffectsPanel clip={selectedClip as ImageClip} />
+          <ImageEffectsPanel clip={selectedClip as ResolvedImageClip} />
         )}
       </div>
     </ScrollArea>
@@ -156,7 +155,7 @@ export function EditorLayout() {
   const layers = project.layers;
   const visibleLayers = useMemo(() => layers.filter((l) => !l.hidden), [layers]);
 
-  // Resolve /api/assets/.../playback (and legacy /file) paths to signed GCS URLs for direct playback
+  // Resolve asset refs (asset://...) to signed GCS URLs for direct playback
   const { layers: playbackResolvedLayers } = usePlaybackResolvedLayers(visibleLayers, projectId);
 
   // Pass through maskSrc as-is (GCS signed URLs and playback paths have CORS / are resolved)
@@ -719,7 +718,7 @@ export function EditorLayout() {
                     {/* Settings */}
                     <ResizablePanel defaultSize={layoutConfig.settingsPanelSize} minSize={15} maxSize={30}>
                       <div className="h-full bg-card border-l border-border min-w-[260px]">
-                        <SettingsPanel />
+                        <SettingsPanel resolvedLayers={playbackResolvedLayers} />
                       </div>
                     </ResizablePanel>
                   </ResizablePanelGroup>
@@ -803,7 +802,7 @@ export function EditorLayout() {
                         <ToolboxPanel />
                       </div>
                       <div className={`absolute inset-0 ${rightPanelTab === "effects" ? "visible" : "invisible"}`}>
-                        <EffectsPanelWrapper />
+                        <EffectsPanelWrapper resolvedLayers={playbackResolvedLayers} />
                       </div>
                       <div className={`absolute inset-0 ${rightPanelTab === "chat" ? "visible" : "invisible"}`}>
                         <ChatPanel />

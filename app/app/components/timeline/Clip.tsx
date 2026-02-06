@@ -1,11 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ClipType, TimelineClip, VideoClip, AudioClip, ImageClip } from "@/app/types/timeline";
+import type {
+  ClipType,
+  TimelineClip,
+  VideoClip,
+  AudioClip,
+  ImageClip,
+  ResolvedTimelineClip,
+  ResolvedVideoClip,
+  ResolvedAudioClip,
+  ResolvedImageClip,
+} from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
+import { addAssetToTimeline } from "@/app/lib/assets/add-asset-to-timeline";
+import { hasAssetDragData, readDraggedAsset } from "@/app/lib/assets/drag";
 import { cn } from "@/lib/utils";
 import { useWaveform } from "@/app/hooks/use-waveform";
-import { useFilmstrip } from "@/app/hooks/use-filmstrip";
+import { useAssetFrames } from "@/app/hooks/use-asset-frames";
 import { Trash2 } from "lucide-react";
 import {
   Dialog,
@@ -19,7 +31,7 @@ import {
 import { Button } from "@/components/ui/button";
 
 interface ClipProps {
-  clip: TimelineClip;
+  clip: ResolvedTimelineClip;
   layerId: string;
 }
 
@@ -30,12 +42,15 @@ export function Clip({ clip, layerId }: ClipProps) {
   const updateClip = useProjectStore((s) => s.updateClip);
   const deleteClip = useProjectStore((s) => s.deleteClip);
   const moveClipToLayer = useProjectStore((s) => s.moveClipToLayer);
+  const addClipOnNewLayerAbove = useProjectStore((s) => s.addClipOnNewLayerAbove);
   const layers = useProjectStore((s) => s.project.layers);
   const currentTime = useProjectStore((s) => s.currentTime);
+  const projectId = useProjectStore((s) => s.projectId);
 
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState<"left" | "right" | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isAssetDragOver, setIsAssetDragOver] = useState(false);
   const dragStartRef = useRef({ x: 0, start: 0, duration: 0, offset: 0 });
   const activeLayerIdRef = useRef(layerId);
   const clipRef = useRef<HTMLDivElement>(null);
@@ -134,49 +149,56 @@ export function Clip({ clip, layerId }: ClipProps) {
   const width = displayDuration * zoom;
   const waveformWidth = Math.max(width, 4);
   const hasWaveform = clip.type === "audio" || clip.type === "video";
-  const waveformCacheKey = clip.assetId ?? (clip.type !== 'text' ? clip.src : undefined);
+  const waveformAssetId = (clip as VideoClip | AudioClip).assetId;
+  const waveformCacheKey = waveformAssetId;
   const { path: waveformPath, isLoading: waveformLoading } = useWaveform({
-    src: hasWaveform ? (clip as VideoClip | AudioClip).src : undefined,
+    src: hasWaveform ? (clip as ResolvedVideoClip | ResolvedAudioClip).src : undefined,
     cacheKey: hasWaveform ? waveformCacheKey : undefined,
     width: waveformWidth,
     height: clipHeight || 1,
     offsetSeconds: clip.offset,
     durationSeconds: clip.duration,
-    // Use consolidated cache for video to share fetch with filmstrip
     mediaType: clip.type === "video" ? "video" : "audio",
+    assetId: hasWaveform ? waveformAssetId : undefined,
+    projectId,
   });
 
   const isVideo = clip.type === "video";
-  const videoSrc = isVideo ? (clip as VideoClip).src : undefined;
-  // Filmstrip is generated at fixed dimensions and cached once per source
-  // CSS handles scaling/cropping to fit the clip width
-  const shouldLoadFilmstrip = isVideo && clipHeight >= 10;
-  const {
-    filmstripDataUrl,
-    sourceDurationSeconds: filmstripSourceDuration,
-    filmstripWidth: fixedFilmstripWidth,
-    isLoading: filmstripLoading,
-  } = useFilmstrip({
-    src: shouldLoadFilmstrip ? videoSrc : undefined,
-  });
-  
-  // Scale the fixed-size filmstrip to fit the clip width, cropping for trimmed clips
-  const filmstripStyle = useMemo(() => {
-    if (!filmstripDataUrl || !filmstripSourceDuration || filmstripSourceDuration <= 0 || !fixedFilmstripWidth) {
-      return null;
-    }
-    // Calculate how much of the source this clip shows
+  const clipAssetId = (clip as VideoClip).assetId;
+  const shouldLoadFilmstrip = isVideo && clipHeight >= 10 && !!clipAssetId;
+  const { frames: filmstripFrames, duration: filmstripDuration, isLoading: filmstripLoading } = useAssetFrames(
+    shouldLoadFilmstrip ? clipAssetId : undefined,
+    projectId
+  );
+
+  // Build filmstrip from sampled frames - scale and crop for clip's visible region
+  // Frame count scales with zoom: narrow clips use fewer frames, wide clips use more
+  const FRAMES_PER_PIXEL = 25; // ~1 frame per 25px of clip width
+  const filmstripData = useMemo(() => {
+    if (!filmstripFrames.length || !filmstripDuration || filmstripDuration <= 0) return null;
     const clipVisibleDuration = clip.duration;
-    // Scale factor: how much to stretch the filmstrip to match clip width
-    const scaleFactor = (filmstripSourceDuration / clipVisibleDuration) * (waveformWidth / fixedFilmstripWidth);
-    // Offset within the scaled filmstrip
-    const offsetX = (clip.offset / filmstripSourceDuration) * fixedFilmstripWidth * scaleFactor;
-    
-    return {
-      width: fixedFilmstripWidth * scaleFactor,
-      marginLeft: -offsetX,
-    };
-  }, [filmstripDataUrl, filmstripSourceDuration, fixedFilmstripWidth, clip.duration, clip.offset, waveformWidth]);
+    const stripWidthPercent = (filmstripDuration / clipVisibleDuration) * 100;
+    const offsetPercent = (clip.offset / filmstripDuration) * stripWidthPercent;
+
+    const frameCount = Math.min(
+      filmstripFrames.length,
+      Math.max(3, Math.floor(waveformWidth / FRAMES_PER_PIXEL))
+    );
+    const framesToShow =
+      frameCount >= filmstripFrames.length
+        ? filmstripFrames
+        : Array.from({ length: frameCount }, (_, i) =>
+            filmstripFrames[Math.floor((i * (filmstripFrames.length - 1)) / (frameCount - 1 || 1))]
+          );
+
+    return { stripWidthPercent, offsetPercent, framesToShow };
+  }, [
+    filmstripFrames,
+    filmstripDuration,
+    clip.duration,
+    clip.offset,
+    waveformWidth,
+  ]);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent, action: "drag" | "resize-left" | "resize-right") => {
@@ -303,6 +325,53 @@ export function Clip({ clip, layerId }: ClipProps) {
     []
   );
 
+  const handleAssetDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasAssetDragData(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+    if (!isAssetDragOver) setIsAssetDragOver(true);
+  }, [isAssetDragOver]);
+
+  const handleAssetDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && event.currentTarget.contains(nextTarget)) return;
+    setIsAssetDragOver(false);
+  }, []);
+
+  const handleAssetDrop = useCallback(
+    async (event: React.DragEvent<HTMLDivElement>) => {
+      if (!hasAssetDragData(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setIsAssetDragOver(false);
+      const asset = readDraggedAsset(event);
+      if (!asset) return;
+      const rect = clipRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const x = event.clientX - rect.left;
+      const start = Math.max(0, clip.start + x / zoom);
+      const duration =
+        asset.type === "image" ? 5 : (asset.duration ?? 10);
+      const addClipWithNewLayer = (c: Parameters<typeof addClipOnNewLayerAbove>[1]) => {
+        addClipOnNewLayerAbove(layerId, c);
+      };
+      await addAssetToTimeline({
+        assetId: asset.id,
+        projectId,
+        type: asset.type,
+        name: asset.name || "Asset",
+        duration,
+        start,
+        width: asset.width,
+        height: asset.height,
+        sourceDuration: asset.duration,
+        addClip: addClipWithNewLayer,
+      });
+    },
+    [clip.start, projectId, zoom, layerId, addClipOnNewLayerAbove]
+  );
+
   return (
     <>
       <div
@@ -317,10 +386,14 @@ export function Clip({ clip, layerId }: ClipProps) {
             ? "bg-purple-500/80 border-purple-400"
             : "bg-orange-500/80 border-orange-400",
           isSelected && "ring-2 ring-white ring-offset-1 ring-offset-background",
-          (isDragging || isResizing) && "opacity-80"
+          (isDragging || isResizing) && "opacity-80",
+          isAssetDragOver && "ring-2 ring-primary ring-offset-1 ring-offset-background"
         )}
         style={{ left, width: waveformWidth }}
         onMouseDown={(e) => handleMouseDown(e, "drag")}
+        onDragOver={handleAssetDragOver}
+        onDragLeave={handleAssetDragLeave}
+        onDrop={handleAssetDrop}
         onPointerDown={(e) => {
           if (e.button !== 0) {
             e.stopPropagation();
@@ -342,22 +415,26 @@ export function Clip({ clip, layerId }: ClipProps) {
         >
           <Trash2 className="size-3.5" />
         </button>
-        {/* Video filmstrip: fixed-size strip scaled/cropped via CSS */}
+        {/* Video filmstrip: built from sampled frames, scaled/cropped via CSS */}
         {isVideo && (
           <div className="pointer-events-none absolute inset-[2px] rounded-sm overflow-hidden bg-black/30">
-            {filmstripDataUrl ? (
-              <img
-                src={filmstripDataUrl}
-                alt=""
-                className="h-full object-cover object-left"
-                style={filmstripStyle ? {
-                  width: filmstripStyle.width,
-                  minWidth: filmstripStyle.width,
-                  marginLeft: filmstripStyle.marginLeft,
-                } : {
-                  width: '100%',
+            {filmstripFrames.length > 0 && filmstripData ? (
+              <div
+                className="h-full flex"
+                style={{
+                  width: `${filmstripData.stripWidthPercent}%`,
+                  marginLeft: `-${filmstripData.offsetPercent}%`,
                 }}
-              />
+              >
+                {filmstripData.framesToShow.map((f) => (
+                  <img
+                    key={f.index}
+                    src={f.url}
+                    alt=""
+                    className="h-full flex-1 min-w-0 object-cover"
+                  />
+                ))}
+              </div>
             ) : (
               filmstripLoading && (
                 <div className="h-full w-full animate-pulse bg-white/10" />
@@ -367,10 +444,10 @@ export function Clip({ clip, layerId }: ClipProps) {
         )}
 
         {/* Image thumbnail on strip */}
-        {clip.type === "image" && (clip as ImageClip).src && (
+        {clip.type === "image" && (clip as ResolvedImageClip).src && (
           <div className="pointer-events-none absolute inset-[2px] rounded-sm overflow-hidden bg-black/30">
             <img
-              src={(clip as ImageClip).src}
+              src={(clip as ResolvedImageClip).src}
               alt=""
               className="h-full w-full object-cover object-center"
             />

@@ -686,12 +686,9 @@ def update_project_name(
     })
 
 
-def _extract_media_url(text: str, base_url: str | None = None) -> tuple[str | None, str | None]:
+def _extract_media_url(text: str) -> tuple[str | None, str | None]:
     """Extract media URL from text. Returns (url, media_type) or (None, None).
-    
-    Args:
-        text: The text to search for media URLs
-        base_url: Optional base URL to prepend to relative URLs (e.g., "https://app.example.com")
+    Only absolute https URLs are detected (signed or public media links).
     """
     import re
     import logging
@@ -699,8 +696,8 @@ def _extract_media_url(text: str, base_url: str | None = None) -> tuple[str | No
 
     url = None
 
-    # 1. Markdown [text](url) – supports both absolute and relative URLs
-    md = re.search(r'\[([^\]]*)\]\((https?://[^\)]+|/api/assets/[^\)]+)\)', text)
+    # 1. Markdown [text](url) – absolute URLs only (signed or public)
+    md = re.search(r'\[([^\]]*)\]\((https?://[^\)]+)\)', text)
     if md:
         url = md.group(2)
         logger.debug(f"[MEDIA_EXTRACT] Found markdown URL: {url[:80]}...")
@@ -715,21 +712,6 @@ def _extract_media_url(text: str, base_url: str | None = None) -> tuple[str | No
         if raw:
             url = raw.group(1)
             logger.info(f"[MEDIA_EXTRACT] Found raw absolute URL: ...{url[-50:]}")
-
-    # 3. Raw relative proxy URL (/api/assets/...)
-    if not url:
-        proxy = re.search(
-            r'(/api/assets/[a-f0-9-]+/file/[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|m4a|aac|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?)',
-            text,
-            re.IGNORECASE,
-        )
-        if proxy:
-            url = proxy.group(1)
-            logger.info(f"[MEDIA_EXTRACT] Found proxy URL: {url[:80]}...")
-            # Convert relative proxy URL to absolute if base_url provided
-            if base_url:
-                url = base_url.rstrip('/') + url
-                logger.info(f"[MEDIA_EXTRACT] Converted to absolute: {url[:80]}...")
 
     if not url:
         logger.info(f"[MEDIA_EXTRACT] No media URL found in text ({len(text)} chars)")
@@ -903,20 +885,16 @@ async def send_telegram_message(
             chat_id, text, attachments, telegram_base_url, italic, logger
         )
 
-    # Check if message contains a media URL (pass public_app_url to convert relative proxy URLs)
-    media_url, media_type = _extract_media_url(text, base_url=settings.public_app_url)
+    # Check if message contains a media URL (absolute https only)
+    media_url, media_type = _extract_media_url(text)
     logger.info(f"[TELEGRAM] Media detection: url_found={media_url is not None}, type={media_type}, text_preview={text[:150]}...")
-    
+
     async with httpx.AsyncClient() as client:
         if media_url and media_type:
             # Remove markdown [text](url) or raw URL from caption
             import re
-            # Handle both absolute URLs and relative proxy URLs in markdown
-            caption = re.sub(r'\[[^\]]*\]\((https?://[^\)]+|/api/assets/[^\)]+)\)', '', text)
-            # Remove raw absolute URLs
+            caption = re.sub(r'\[[^\]]*\]\((https?://[^\)]+)\)', '', text)
             caption = re.sub(r'https?://[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|m4a|aac|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?', '', caption, flags=re.IGNORECASE)
-            # Remove raw relative proxy URLs
-            caption = re.sub(r'/api/assets/[^\s\)]+\.(?:mp4|webm|mov|avi|mkv|gif|mp3|wav|ogg|m4a|aac|jpg|jpeg|png|webp)(?:\?[^\s\)]*)?', '', caption, flags=re.IGNORECASE)
             caption = re.sub(r'\s+', ' ', caption).strip().strip('.:')
             
             # Convert caption to MarkdownV2

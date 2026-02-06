@@ -295,7 +295,7 @@ export async function POST(req: Request) {
     tools,
     // When a tool returns _injectMedia + fileUri, optionally inject as user message (fallback).
     // Our local @ai-sdk/google already sends the file in the tool result (file-url → fileData),
-    // so the model receives the video there; this injection supports videoMetadata (time range) and legacy paths.
+    // so the model receives the video there; this injection supports videoMetadata (time range).
     prepareStep: async ({ stepNumber, steps, messages }) => {
       if (stepNumber > 0 && steps.length > 0) {
         const lastStep = steps[steps.length - 1];

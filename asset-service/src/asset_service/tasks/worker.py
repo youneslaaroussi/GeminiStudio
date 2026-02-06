@@ -38,47 +38,78 @@ def reset_shutdown() -> None:
     _shutdown_event.clear()
 
 
+def _run_pipeline_in_thread(
+    user_id: str,
+    project_id: str,
+    asset: StoredAsset,
+    asset_path: str,
+    agent_metadata: dict[str, Any] | None,
+) -> None:
+    """
+    Run the pipeline in a dedicated thread with its own event loop.
+    Keeps blocking I/O (ffmpeg, GCS) from blocking the main server event loop.
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(
+            run_auto_steps(user_id, project_id, asset, asset_path, agent_metadata)
+        )
+    finally:
+        loop.close()
+
+
 class PipelineWorker:
     """Background worker that processes pipeline tasks from Redis queue."""
 
     def __init__(self, queue: TaskQueue):
         self.queue = queue
         self.running = False
-        self._task: asyncio.Task | None = None
+        self._tasks: list[asyncio.Task[None]] = []
         self._shutdown_event = asyncio.Event()
 
     async def start(self) -> None:
-        """Start the worker loop."""
+        """Start the worker loops (concurrency determined by config)."""
         if self.running:
             logger.warning("Worker already running")
             return
 
+        settings = get_settings()
+        concurrency = settings.worker_concurrency
+
         self.running = True
         self._shutdown_event.clear()
         reset_shutdown()  # Reset thread shutdown event
-        self._task = asyncio.create_task(self._run())
-        logger.info("Pipeline worker started")
+
+        self._tasks = [
+            asyncio.create_task(self._run(worker_id=i)) for i in range(concurrency)
+        ]
+        logger.info("Pipeline worker started with %d concurrent workers", concurrency)
 
     async def stop(self) -> None:
-        """Stop the worker loop gracefully."""
+        """Stop the worker loops gracefully."""
         logger.info("Stopping pipeline worker...")
         self.running = False
         self._shutdown_event.set()
         signal_shutdown()  # Signal threads to stop
-        
-        if self._task:
-            self._task.cancel()
+
+        if self._tasks:
+            for task in self._tasks:
+                task.cancel()
             try:
-                # Give it a short timeout to finish gracefully
-                await asyncio.wait_for(asyncio.shield(self._task), timeout=2.0)
+                await asyncio.wait_for(
+                    asyncio.gather(*self._tasks, return_exceptions=True),
+                    timeout=3.0,
+                )
             except (asyncio.CancelledError, asyncio.TimeoutError):
                 pass
             except Exception as e:
-                logger.warning(f"Error waiting for worker task: {e}")
+                logger.warning(f"Error waiting for worker tasks: {e}")
+            self._tasks = []
         logger.info("Pipeline worker stopped")
 
-    async def _run(self) -> None:
-        """Main worker loop."""
+    async def _run(self, worker_id: int = 0) -> None:
+        """Main worker loop. Multiple instances run in parallel for concurrency."""
         while self.running:
             try:
                 # Use shorter timeout and check shutdown more frequently
@@ -89,7 +120,7 @@ class PipelineWorker:
                 if not self.running:
                     break
 
-                await self._process_task(task)
+                await self._process_task(task, worker_id)
 
             except asyncio.CancelledError:
                 logger.info("Worker loop cancelled")
@@ -112,13 +143,20 @@ class PipelineWorker:
         except asyncio.CancelledError:
             raise
 
-    async def _process_task(self, task: dict[str, Any]) -> None:
+    async def _process_task(
+        self, task: dict[str, Any], worker_id: int = 0
+    ) -> None:
         """Process a single task."""
         task_id = task["id"]
         task_type = task["type"]
         payload = task["payload"]
 
-        logger.info(f"Processing task {task_id} (type: {task_type})")
+        logger.info(
+            "Processing task %s (type: %s) [worker %d]",
+            task_id,
+            task_type,
+            worker_id,
+        )
 
         try:
             await self.queue.update_task_status(task_id, "running")
@@ -159,7 +197,7 @@ class PipelineWorker:
         if not asset_path or not os.path.exists(asset_path):
             if is_shutting_down():
                 raise asyncio.CancelledError("Shutdown in progress")
-                
+
             gcs_uri = asset_data.get("gcsUri")
             if gcs_uri:
                 settings = get_settings()
@@ -178,8 +216,15 @@ class PipelineWorker:
             raise asyncio.CancelledError("Shutdown in progress")
 
         try:
-            await run_auto_steps(
-                user_id, project_id, asset, asset_path, agent_metadata
+            # Run pipeline in thread pool so blocking I/O (ffmpeg, GCS uploads)
+            # doesn't block the server event loop - keeps API responsive
+            await asyncio.to_thread(
+                _run_pipeline_in_thread,
+                user_id,
+                project_id,
+                asset,
+                asset_path,
+                agent_metadata,
             )
         finally:
             # Clean up temp file
