@@ -20,6 +20,8 @@ COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
 COPY app/package.json app/pnpm-workspace.yaml ./app/
 COPY scene/package.json ./scene/
 COPY renderer/package.json renderer/tsconfig.json renderer/tsconfig.build.json ./renderer/
+# app depends on local @ai-sdk/google (file:../ai-sdk/packages/google); workspace install resolves it
+COPY ai-sdk/packages/google ./ai-sdk/packages/google
 RUN pnpm install --filter @gemini-studio/renderer... --filter @gemini-studio/scene... --prefer-offline
 
 COPY . .

@@ -10,6 +10,8 @@ WORKDIR /app
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY app/package.json ./app/
 COPY scene/package.json ./scene/
+# app depends on local @ai-sdk/google (file:../ai-sdk/packages/google)
+COPY ai-sdk/packages/google ./ai-sdk/packages/google
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile || pnpm install
