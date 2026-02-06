@@ -199,6 +199,7 @@ services:
       - GEMINI_STATUS_MODEL=${GEMINI_STATUS_MODEL:-gemini-2.5-flash}
       - GEMINI_TITLE_MODEL=${GEMINI_TITLE_MODEL:-gemini-2.0-flash}
       - GOOGLE_CLOUD_STORAGE_BUCKET=${CHECKPOINT_GCS_BUCKET:-${ASSET_GCS_BUCKET}}
+      - GOOGLE_SERVICE_ACCOUNT_KEY=/app/secrets/google-service-account.json
       - ASSET_SERVICE_URL=http://asset-service:8081
       - ASSET_SERVICE_SHARED_SECRET=${ASSET_SERVICE_SHARED_SECRET:-}
       - RENDERER_BASE_URL=http://renderer:4000
