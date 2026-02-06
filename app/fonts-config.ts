@@ -1,4 +1,4 @@
-// Font configuration - reads from shared/fonts.json (single source of truth)
+// Font configuration
 // Used by text clips, captions, and the LangGraph setCaptionSettings tool
 
 import fontsData from "../shared/fonts.json";
