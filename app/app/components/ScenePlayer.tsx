@@ -61,6 +61,7 @@ interface ScenePlayerProps {
     renderScale: number;
     background: string;
   };
+  onReloadPreview?: () => void;
 }
 
 export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(function ScenePlayer({
@@ -78,6 +79,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   captionSettings,
   textClipSettings,
   sceneConfig,
+  onReloadPreview,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
@@ -1067,7 +1069,9 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
         )}
         {project && !hasRenderedFirstFrame && !error && layers.some(layer => layer.clips.length > 0) && (
           <motion.div
-            className="absolute inset-0 pointer-events-none flex items-center justify-center bg-black/50"
+            className={`absolute inset-0 flex items-center justify-center bg-black/50 ${
+              showSlowLoadHint && onReloadPreview ? "pointer-events-auto" : "pointer-events-none"
+            }`}
             initial={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
@@ -1076,14 +1080,27 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
               <div className="size-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
               <span className="text-xs text-white/60">Loading preview...</span>
               {showSlowLoadHint && (
-                <motion.span
-                  className="text-xs text-white/50 text-center max-w-[220px]"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.4 }}
-                >
-                  If it takes too long, try the reload button at the top.
-                </motion.span>
+                onReloadPreview ? (
+                  <motion.button
+                    type="button"
+                    onClick={onReloadPreview}
+                    className="pointer-events-auto text-xs text-white/80 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-black/50"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.4 }}
+                  >
+                    Preview stuck? Click here to reload.
+                  </motion.button>
+                ) : (
+                  <motion.span
+                    className="text-xs text-white/50 text-center max-w-[220px]"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.4 }}
+                  >
+                    If it takes too long, try the reload button at the top.
+                  </motion.span>
+                )
               )}
             </div>
           </motion.div>

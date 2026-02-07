@@ -417,7 +417,18 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
           captionSettings={captionSettings}
           textClipSettings={textClipSettings}
           sceneConfig={sceneConfig}
+          onReloadPreview={handleRefresh}
         />
+        <div className="pointer-events-none absolute inset-x-0 bottom-3 z-[5] flex justify-center">
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-3 py-1 text-[11px] text-muted-foreground shadow-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            <RotateCw className="size-3.5" />
+            Preview stuck? Reload preview
+          </button>
+        </div>
         {/* Fullscreen overlay controls */}
         {isFullscreen && (
           <div
