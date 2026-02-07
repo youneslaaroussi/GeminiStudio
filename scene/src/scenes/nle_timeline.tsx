@@ -1,5 +1,5 @@
 import { Rect, makeScene2D } from '@motion-canvas/2d';
-import { all, createRef, Reference, useScene } from '@motion-canvas/core';
+import { all, createRef, createSignal, useScene } from '@motion-canvas/core';
 import { AnimatedCaptions, TranscriptionEntry } from '../components/AnimatedCaptions';
 import {
   createVideoElements,
@@ -85,12 +85,21 @@ export default makeScene2D(function* (view) {
           if (trans) entry.exit = trans;
         }
       }
+      // Use clip’s own enter/exit transitions when no between-clips transition is set (same as images)
+      if (!entry.enter && clip.enterTransition && clip.enterTransition.type !== 'none') {
+        entry.enter = clip.enterTransition;
+      }
+      if (!entry.exit && clip.exitTransition && clip.exitTransition.type !== 'none') {
+        entry.exit = clip.exitTransition;
+      }
       clipTransitions.set(clip.id, entry);
     }
   }
 
-  // Caption helpers
-  const captionRefs = new Map<string, Reference<AnimatedCaptions>>();
+  // Caption helpers: single shared caption; prefer next clip (take over immediately to avoid desync)
+  const sharedCaptionRef = createRef<AnimatedCaptions>();
+  const currentCaptionData = createSignal<TranscriptionEntry[]>([]);
+  const activeCaptionClipId = createSignal<string | null>(null);
   const clipCaptionData = new Map<string, TranscriptionEntry[]>();
 
   const normalizeSegmentsForClip = (clip: VideoClip | AudioClip, segments?: TranscriptionEntry[]) => {
@@ -117,21 +126,56 @@ export default makeScene2D(function* (view) {
     if (!rawNormalized.length) return;
     const normalized = normalizeSegmentsForClip(clip, rawNormalized);
     if (!normalized.length) return;
-
-    const ref = createRef<AnimatedCaptions>();
-    captionRefs.set(clip.id, ref);
     clipCaptionData.set(clip.id, normalized);
+  };
+
+  const createCaptionRunner = (clip: VideoClip | AudioClip) => {
+    const data = clipCaptionData.get(clip.id);
+    if (!data?.length) return undefined;
+    const clipId = clip.id;
+    return function* () {
+      // Prefer next: take over immediately so captions stay in sync (don't wait for previous to finish)
+      activeCaptionClipId(clipId);
+      currentCaptionData(data);
+      const captionNode = sharedCaptionRef();
+      if (captionNode) {
+        captionNode.ShowCaptions(true);
+        yield* captionNode.animate(() => activeCaptionClipId() === clipId);
+        if (activeCaptionClipId() === clipId) {
+          captionNode.ShowCaptions(false);
+        }
+      }
+      if (activeCaptionClipId() === clipId) {
+        activeCaptionClipId(null);
+      }
+    };
+  };
+
+  // Background
+  view.add(<Rect width={'100%'} height={'100%'} fill="#141417" />);
+
+  // Register captions for all video and audio clips (data only; one shared caption component below)
+  for (const layer of layers) {
+    if (layer.type === 'video') {
+      (layer.clips as VideoClip[]).forEach(registerCaptionForClip);
+    } else if (layer.type === 'audio') {
+      (layer.clips as AudioClip[]).forEach(registerCaptionForClip);
+    }
+  }
+
+  // Single shared caption component — only one video/audio caption visible at a time
+  if (clipCaptionData.size > 0) {
     view.add(
       <AnimatedCaptions
-        key={`captions-${clip.id}`}
-        ref={ref}
+        key="scene-captions"
+        ref={sharedCaptionRef}
         SceneHeight={height}
         SceneWidth={width}
         y={height / 2 - captionSettings.distanceFromBottom}
         CaptionsSize={1.1}
         CaptionsDuration={3}
         ShowCaptions={false}
-        TranscriptionData={() => normalized}
+        TranscriptionData={() => currentCaptionData()}
         CaptionsFontFamily={captionSettings.fontFamily}
         CaptionsFontWeight={captionSettings.fontWeight}
         CaptionsFontSize={() => scene.variables.get<CaptionSettings>('captionSettings', defaultCaptionSettings)().fontSize ?? 18}
@@ -139,32 +183,6 @@ export default makeScene2D(function* (view) {
         zIndex={1000}
       />
     );
-  };
-
-  const createCaptionRunner = (clip: VideoClip | AudioClip) => {
-    const ref = captionRefs.get(clip.id);
-    const data = clipCaptionData.get(clip.id);
-    if (!ref || !data?.length) return undefined;
-    return function* () {
-      const captionNode = ref();
-      if (!captionNode) return;
-      captionNode.TranscriptionData(data);
-      captionNode.ShowCaptions(true);
-      yield* captionNode.animate();
-      captionNode.ShowCaptions(false);
-    };
-  };
-
-  // Background
-  view.add(<Rect width={'100%'} height={'100%'} fill="#141417" />);
-
-  // Register captions for all video and audio clips
-  for (const layer of layers) {
-    if (layer.type === 'video') {
-      (layer.clips as VideoClip[]).forEach(registerCaptionForClip);
-    } else if (layer.type === 'audio') {
-      (layer.clips as AudioClip[]).forEach(registerCaptionForClip);
-    }
   }
 
   // Storage for all entries (for playback)
@@ -258,6 +276,16 @@ export default makeScene2D(function* (view) {
     );
   }
 
+  // Pause all video/audio at scene start so that after a project reset or seek-to-zero
+  // no media keeps playing (the generator may be aborted before "Final cleanup" runs).
+  // Yield once so refs are populated after view.add().
+  yield;
+  videoEntries.forEach(({ ref, maskRef }) => {
+    ref()?.pause();
+    maskRef?.()?.pause();
+  });
+  audioEntries.forEach(({ ref }) => ref()?.pause());
+
   // Run all tracks in parallel
   yield* all(
     processVideoClips(),
@@ -266,15 +294,17 @@ export default makeScene2D(function* (view) {
     processImageClips()
   );
 
-  // Final cleanup
+  // Final cleanup (runs when playback completes normally; start-of-scene pause handles reset)
   videoEntries.forEach(({ ref, maskRef, containerRef }) => {
     const video = ref();
-    if (video) video.pause();
+    if (video) {
+      video.pause();
+      video.opacity(0);
+    }
     const mask = maskRef?.();
     if (mask) mask.pause();
     const container = containerRef?.();
     if (container) container.opacity(0);
-    else if (video) video.opacity(0);
   });
   audioEntries.forEach(({ ref }) => ref()?.pause());
 });

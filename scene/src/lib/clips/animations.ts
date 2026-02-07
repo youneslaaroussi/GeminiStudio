@@ -1,4 +1,4 @@
-import { Vector2, waitFor, easeInOutCubic, type ThreadGenerator } from '@motion-canvas/core';
+import { Vector2, waitFor, easeInOutCubic, easeOutCubic, type ThreadGenerator } from '@motion-canvas/core';
 import type { Node } from '@motion-canvas/2d';
 import type { ClipAnimationType } from '../types';
 
@@ -6,6 +6,8 @@ const HOVER_CYCLE = 1.8;
 const PULSE_CYCLE = 2.2;
 const FLOAT_CYCLE = 2.5;
 const GLOW_CYCLE = 1.6;
+/** Scale factor per intensity for zoom animations (e.g. 1 = 10% zoom range, 5 = 50%) */
+const ZOOM_INTENSITY_SCALE = 0.1;
 
 /** Clamp intensity to 0–5 (1 = normal, 5 = 5x) and default to 1. */
 function normalizeIntensity(intensity: number | undefined): number {
@@ -61,6 +63,27 @@ function* glowCycle(node: Node, cycleDuration: number, baseOpacity: number, inte
 }
 
 /**
+ * Zoom-out: start scaled up, animate to base scale over duration.
+ * Start scale and speed increase with intensity (higher = more zoom range, same duration).
+ */
+function* zoomOutOverDuration(node: Node, duration: number, intensity: number): ThreadGenerator {
+  const base = node.scale();
+  const startScale = base.mul(1 + ZOOM_INTENSITY_SCALE * intensity);
+  node.scale(startScale);
+  yield* node.scale(base, duration, easeOutCubic);
+}
+
+/**
+ * Zoom-in: start at base scale, animate to scaled up over duration.
+ * End scale and perceived speed increase with intensity.
+ */
+function* zoomInOverDuration(node: Node, duration: number, intensity: number): ThreadGenerator {
+  const base = node.scale();
+  const endScale = base.mul(1 + ZOOM_INTENSITY_SCALE * intensity);
+  yield* node.scale(endScale, duration, easeOutCubic);
+}
+
+/**
  * Apply clip idle animation for the given duration.
  * Runs in parallel with the clip's main visibility window (e.g. with waitFor(mainDuration)).
  * @param intensity 0–5x, scales the effect strength (default 1).
@@ -81,6 +104,15 @@ export function* applyClipAnimation(
 
   let elapsed = 0;
   const baseOpacity = node.opacity();
+
+  // Zoom-in / zoom-out run once over the full duration (no loop)
+  if (animation === 'zoom-out') {
+    yield* zoomOutOverDuration(node, duration, i);
+    elapsed = duration;
+  } else if (animation === 'zoom-in') {
+    yield* zoomInOverDuration(node, duration, i);
+    elapsed = duration;
+  }
 
   while (elapsed < duration) {
     const cycleDuration =

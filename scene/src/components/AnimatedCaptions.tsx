@@ -315,7 +315,11 @@ export class AnimatedCaptions extends Node {
     );
   }
 
-  public *animate() {
+  /**
+   * Run caption animation. If shouldContinue is provided and returns false
+   * (e.g. another clip took over), the animation exits early so the next caption can run.
+   */
+  public *animate(shouldContinue?: () => boolean) {
     // Calculate MAX_LENGTH based on aspect ratio
     // Vertical layouts (portrait) need shorter lines to fit the narrower width
     const width = this.SceneWidth();
@@ -360,6 +364,9 @@ export class AnimatedCaptions extends Node {
     const captionEntries = Array.from(captions.entries());
     
     for (let index = 0; index < captionEntries.length; index++) {
+      yield;
+      if (shouldContinue && !shouldContinue()) return;
+
       const [seconds, shortcut] = captionEntries[index];
       const prevEntry = captionEntries[index - 1];
       const nextEntry = captionEntries[index + 1];
@@ -374,6 +381,7 @@ export class AnimatedCaptions extends Node {
           this.Blur(map(100, 0, easeInCubic(value)));
         });
       }
+      if (shouldContinue && !shouldContinue()) return;
 
       let prevSeconds = seconds;
       if (prevEntry && !shouldFadeIn) {
@@ -395,6 +403,8 @@ export class AnimatedCaptions extends Node {
         yield* waitFor(startSeconds - prevSeconds);
         prevSeconds = startSeconds;
         i++;
+        yield;
+        if (shouldContinue && !shouldContinue()) return;
       }
 
       // Check if next group is close - if so, don't fade out
@@ -407,6 +417,7 @@ export class AnimatedCaptions extends Node {
             this.CaptionsDuration() - prevSeconds + seconds - GO_DOWN - GO_UP,
           );
         }
+        if (shouldContinue && !shouldContinue()) return;
 
         yield* tween(GO_DOWN, value => {
           this.Opacity(map(1, 0, easeOutCubic(value)));

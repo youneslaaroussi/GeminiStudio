@@ -24,13 +24,15 @@ export type VisualEffectType =
   | 'pixelate'
   | 'chromatic';
 
-/** Idle animation applied while a clip is visible (hover-style scale, pulse, float, glow) */
+/** Idle animation applied while a clip is visible (hover-style scale, pulse, float, glow, zoom) */
 export type ClipAnimationType =
   | 'none'
-  | 'hover'   // Subtle scale up and back
-  | 'pulse'   // Scale in/out
-  | 'float'   // Gentle vertical drift
-  | 'glow';   // Opacity breathe
+  | 'hover'    // Subtle scale up and back
+  | 'pulse'    // Scale in/out
+  | 'float'    // Gentle vertical drift
+  | 'glow'     // Opacity breathe
+  | 'zoom-in'  // Start at 1, zoom in over duration (speed by intensity)
+  | 'zoom-out'; // Start at scaled up, zoom out to 1 over duration (speed by intensity)
 
 /** Text template styles */
 export type TextTemplateType =
