@@ -211,7 +211,7 @@ export async function executeToolByName(
     data: outputData.length === 1 ? outputData[0] : outputData.length > 0 ? outputData : undefined,
   };
 
-  // Pass through media injection metadata for tools like watchVideo/watchAsset
+  // Pass through media injection metadata for tools like previewTimeline/inspectAsset
   const meta = result.meta as Record<string, unknown> | undefined;
   if (meta?._injectMedia && meta?.mimeType) {
     console.log(`[LiveTools] Media injection metadata detected`, {

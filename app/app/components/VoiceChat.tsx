@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Mic, Square, ChevronDown, RefreshCw, Volume2 } from "lucide-react";
+import { Mic, Square, ChevronDown, RefreshCw, Volume2, Loader2, Wrench } from "lucide-react";
+import { Howl } from "howler";
 import ReactMarkdown from "react-markdown";
 import { useLiveSession } from "@/app/hooks/useLiveSession";
 import { getAudioInputDevices, executeToolByName } from "@/app/lib/live";
@@ -37,6 +38,11 @@ export function VoiceChat({ onToolCall, className = "" }: VoiceChatProps) {
   const [isRefreshingDevices, setIsRefreshingDevices] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState<LiveVoiceName>("Puck");
   const [showVoiceSelector, setShowVoiceSelector] = useState(false);
+  const [isToolRunningLong, setIsToolRunningLong] = useState(false);
+  const [isToolExecuting, setIsToolExecuting] = useState(false);
+  const toolWorkingSoundRef = useRef<Howl | null>(null);
+  const toolDoneSoundRef = useRef<Howl | null>(null);
+  const disconnectSoundRef = useRef<Howl | null>(null);
 
   // Get project context for tool execution
   const project = useProjectStore((state) => state.project);
@@ -87,6 +93,32 @@ export function VoiceChat({ onToolCall, className = "" }: VoiceChatProps) {
   }, []);
 
   const REFRESH_MIN_DURATION_MS = 500;
+  const LONG_TOOL_THRESHOLD_MS = 3000;
+
+  // Preload voice chat sounds (see app/public/sounds/README.md for attribution)
+  useEffect(() => {
+    toolWorkingSoundRef.current = new Howl({
+      src: ["/sounds/840284__thearbuzikyt__mobile-phone-notification-sound.wav"],
+      volume: 0.25,
+      loop: true,
+    });
+    toolDoneSoundRef.current = new Howl({
+      src: ["/sounds/740423__anthonyrox__message-notification-4.wav"],
+      volume: 0.3,
+    });
+    disconnectSoundRef.current = new Howl({
+      src: ["/sounds/716448__scottyd0es__tone12_msg_notification_2.wav"],
+      volume: 0.3,
+    });
+    return () => {
+      toolWorkingSoundRef.current?.unload();
+      toolWorkingSoundRef.current = null;
+      toolDoneSoundRef.current?.unload();
+      toolDoneSoundRef.current = null;
+      disconnectSoundRef.current?.unload();
+      disconnectSoundRef.current = null;
+    };
+  }, []);
 
   const refreshAudioDevices = useCallback(() => {
     setIsRefreshingDevices(true);
@@ -119,18 +151,37 @@ export function VoiceChat({ onToolCall, className = "" }: VoiceChatProps) {
   }, []);
 
   // Handle tool calls: always update UI, then delegate to custom handler or execute via registry
+  // If execution exceeds 3s: show indicator, play working sound (loop); when done, play tool-done sound
   const handleToolCall = useCallback(
     async (toolCall: ToolCallRequest) => {
       setLastAction({ name: toolCall.name, args: toolCall.args });
+      setIsToolExecuting(true);
+      setIsToolRunningLong(false);
 
-      // Use custom handler if provided, otherwise execute tool from registry
-      if (onToolCall) {
-        return onToolCall(toolCall);
+      const ranLongRef = { current: false };
+      const timeoutId = setTimeout(() => {
+        ranLongRef.current = true;
+        setIsToolRunningLong(true);
+        toolWorkingSoundRef.current?.play();
+      }, LONG_TOOL_THRESHOLD_MS);
+
+      try {
+        if (onToolCall) {
+          return await onToolCall(toolCall);
+        }
+        return await executeToolByName(toolCall.name, toolCall.args, {
+          project,
+          projectId: projectId ?? undefined,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+        toolWorkingSoundRef.current?.stop();
+        if (ranLongRef.current) {
+          toolDoneSoundRef.current?.play();
+        }
+        setIsToolExecuting(false);
+        setIsToolRunningLong(false);
       }
-      return executeToolByName(toolCall.name, toolCall.args, {
-        project,
-        projectId: projectId ?? undefined,
-      });
     },
     [onToolCall, project, projectId]
   );
@@ -151,6 +202,15 @@ export function VoiceChat({ onToolCall, className = "" }: VoiceChatProps) {
     onToolCall: handleToolCall,
     onOutputLevel: setOutputLevel,
   });
+
+  // Play sound when connection succeeds
+  const prevStatusRef = useRef<string>(state.status);
+  useEffect(() => {
+    if (prevStatusRef.current !== "connected" && state.status === "connected") {
+      toolDoneSoundRef.current?.play();
+    }
+    prevStatusRef.current = state.status;
+  }, [state.status]);
 
   const handleMicClick = async () => {
     if (!isConnected) {
@@ -174,6 +234,8 @@ export function VoiceChat({ onToolCall, className = "" }: VoiceChatProps) {
   };
 
   const handleDisconnect = () => {
+    toolWorkingSoundRef.current?.stop();
+    disconnectSoundRef.current?.play();
     disconnect();
     setTranscript("");
     setLastAction(null);
@@ -183,6 +245,21 @@ export function VoiceChat({ onToolCall, className = "" }: VoiceChatProps) {
 
   return (
     <div className={`relative flex flex-col items-center gap-4 w-[calc(100%+48px)] -ml-6 -mb-6 ${className}`}>
+      {/* Tool-running icon */}
+      {isToolExecuting && (
+        <div
+          className="absolute right-2 bottom-2 z-20 flex size-6 items-center justify-center"
+          title="Tool running"
+          aria-hidden
+        >
+          <div
+            className="absolute rounded-full size-6 d-full border-2 border-amber-500/40 border-t-amber-500 animate-spin"
+            aria-hidden
+          />
+          <Wrench className="relative size-4 text-amber-500" />
+        </div>
+      )}
+
       {/* AI speech wave visualizer - full bleed to panel edges, z-0 */}
       {isConnected && (
         <div
@@ -285,6 +362,12 @@ export function VoiceChat({ onToolCall, className = "" }: VoiceChatProps) {
 
           {lastAction && !transcript && (
             <p className="text-zinc-500 text-xs mt-2 max-w-xs mx-auto line-clamp-2 break-words">
+              {isToolRunningLong && (
+                <span className="inline-flex items-center gap-1 text-amber-400 mr-1.5">
+                  <Loader2 className="size-3 animate-spin shrink-0" aria-hidden />
+                  <span>Running…</span>
+                </span>
+              )}
               <strong className="text-zinc-400 font-medium">{lastAction.name}</strong>
               {Object.keys(lastAction.args).length > 0 && (
                 <>

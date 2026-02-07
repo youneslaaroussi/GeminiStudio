@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 def _build_media_message(result: dict[str, Any], source_tool: str | None = None) -> HumanMessage | None:
     """Build a HumanMessage with media content for injection after tool result.
     
-    When watchVideo/watchAsset return _injectMedia: True, we inject the media as a
+    When previewTimeline/inspectAsset return _injectMedia: True, we inject the media as a
     HumanMessage so the model sees/hears it. LangChain's Google GenAI adapter supports
     multimodal HumanMessage (file_uri), so the model receives the video/audio/image.
     (The Next.js app uses a patched @ai-sdk/google that sends media inside the tool
@@ -39,7 +39,7 @@ def _build_media_message(result: dict[str, Any], source_tool: str | None = None)
     asset_name = result.get("assetName", "asset")
     start_offset = result.get("startOffset")
     end_offset = result.get("endOffset")
-    preview_only = source_tool == "watchVideo"
+    preview_only = source_tool == "previewTimeline"
     
     # Build text description
     if preview_only:
@@ -69,7 +69,7 @@ def _build_media_message(result: dict[str, Any], source_tool: str | None = None)
     if start_offset or end_offset:
         logger.info("[AGENT] Media injection with time range: %s - %s", start_offset, end_offset)
     if preview_only:
-        logger.info("[AGENT] watchVideo preview marked as internal-only media injection")
+        logger.info("[AGENT] previewTimeline marked as internal-only media injection")
     
     return HumanMessage(content=content)
 
@@ -150,7 +150,7 @@ def create_graph(settings: Settings | None = None):
                     else:
                         result = tool.invoke(args, config=config)
                     
-                    # Check if this result needs media injection (watchVideo/watchAsset)
+                    # Check if this result needs media injection (previewTimeline/inspectAsset)
                     # We inject media as HumanMessage; langchain-google-genai supports
                     # multimodal user messages (file_uri), so the model receives the media
                     if isinstance(result, dict) and result.get("_injectMedia"):

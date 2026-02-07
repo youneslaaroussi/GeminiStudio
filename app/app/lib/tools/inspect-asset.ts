@@ -1,5 +1,5 @@
 /**
- * Watch Asset Tool
+ * Inspect Asset Tool
  *
  * Prepares an asset (video, image, or audio) for multimodal analysis by the agent.
  * This tool returns the media directly to the agent so it can analyze with full conversation context.
@@ -16,29 +16,29 @@ import type { RemoteAsset } from "@/app/types/assets";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { loadAssetsSnapshot, toAbsoluteAssetUrl } from "./asset-utils";
 
-const watchAssetSchema = z.object({
+const inspectAssetSchema = z.object({
   assetId: z.string().min(1, "Asset ID is required"),
   startTime: z.string().optional().describe("Start time in seconds (e.g. '2.5' or '10') to view a specific segment"),
   endTime: z.string().optional().describe("End time in seconds (e.g. '5.0' or '15') to view a specific segment"),
 });
 
-export const watchAssetTool: ToolDefinition<typeof watchAssetSchema, Project> = {
-  name: "watchAsset",
-  label: "Watch Asset",
+export const inspectAssetTool: ToolDefinition<typeof inspectAssetSchema, Project> = {
+  name: "inspectAsset",
+  label: "Inspect Asset",
   description:
-    "Load an asset (video, image, or audio) so you can see/hear it directly. " +
+    "Load an asset (video, image, or audio) by ID so you can see/hear it directly. " +
     "Use startTime/endTime (in seconds) to focus on a specific segment of video. " +
     "Use this when you need to analyze media with conversation context, compare to discussed styles, " +
-    "answer follow-up questions, or when the user wants you to 'look at' or 'watch' something.",
+    "answer follow-up questions, or when the user wants you to 'look at' or 'inspect' a specific asset.",
   runLocation: "client",
-  inputSchema: watchAssetSchema,
+  inputSchema: inspectAssetSchema,
   fields: [
     {
       name: "assetId",
       label: "Asset ID",
       type: "text",
       placeholder: "e.g. asset_abc123",
-      description: "The ID of the asset to watch/view.",
+      description: "The ID of the asset to inspect/view.",
       required: true,
     },
     {
@@ -60,11 +60,10 @@ export const watchAssetTool: ToolDefinition<typeof watchAssetSchema, Project> = 
   ],
   async run(input, context) {
     try {
-      // This tool requires browser context to fetch assets
       if (typeof window === "undefined") {
         return {
           status: "error" as const,
-          error: "Watch tool must be run from the client side.",
+          error: "Inspect asset tool must be run from the client side.",
         };
       }
 
@@ -80,7 +79,6 @@ export const watchAssetTool: ToolDefinition<typeof watchAssetSchema, Project> = 
       const assets = await loadAssetsSnapshot();
       let asset = assets.find((a) => a.id === input.assetId);
 
-      // If not in snapshot, try to fetch single asset by ID for metadata + signed URL
       if (!asset) {
         try {
           const res = await fetch(
@@ -116,7 +114,6 @@ export const watchAssetTool: ToolDefinition<typeof watchAssetSchema, Project> = 
         };
       }
 
-      // Check if asset type is supported
       const supportedTypes = ["video", "audio", "image"];
       if (!supportedTypes.includes(asset.type)) {
         return {
@@ -125,7 +122,6 @@ export const watchAssetTool: ToolDefinition<typeof watchAssetSchema, Project> = 
         };
       }
 
-      // Resolve URL: prefer signed URL; if not http(s), fetch signed URL on demand
       let assetUrl = asset.signedUrl ?? asset.gcsUri ?? asset.url;
       if (asset.url && !assetUrl.startsWith("http") && !assetUrl.startsWith("gs://")) {
         assetUrl = toAbsoluteAssetUrl(asset.url);
@@ -144,7 +140,7 @@ export const watchAssetTool: ToolDefinition<typeof watchAssetSchema, Project> = 
             }
           }
         } catch {
-          // Keep existing assetUrl; will error below if still not http(s)
+          // Keep existing assetUrl
         }
       }
       if (!assetUrl || (!assetUrl.startsWith("http://") && !assetUrl.startsWith("https://"))) {
@@ -154,7 +150,6 @@ export const watchAssetTool: ToolDefinition<typeof watchAssetSchema, Project> = 
         };
       }
 
-      // Upload to Gemini Files API (only accepts http/https URLs)
       const response = await fetch("/api/gemini-files", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -179,13 +174,10 @@ export const watchAssetTool: ToolDefinition<typeof watchAssetSchema, Project> = 
         };
       }
 
-      // Return with _injectMedia + fileUri so the model receives the media in the tool result.
-      // Our local @ai-sdk/google sends file-url as fileData (video, image, or audio).
-      // prepareStep also injects as user message (fallback). downloadUrl is for Live API.
       const timeRange = input.startTime || input.endTime
         ? ` (${input.startTime || '0'}s - ${input.endTime || 'end'})`
         : '';
-      
+
       return {
         status: "success" as const,
         outputs: [
@@ -195,12 +187,12 @@ export const watchAssetTool: ToolDefinition<typeof watchAssetSchema, Project> = 
           },
         ],
         meta: {
-          _injectMedia: true, // Signal to inject media as user message
+          _injectMedia: true,
           assetId: asset.id,
           assetName: asset.name,
           assetType: asset.type,
           fileUri: data.fileUri,
-          downloadUrl: assetUrl, // For Live API which needs inline data
+          downloadUrl: assetUrl,
           mimeType: data.mimeType || asset.mimeType,
           startOffset: input.startTime ? `${input.startTime}s` : undefined,
           endOffset: input.endTime ? `${input.endTime}s` : undefined,

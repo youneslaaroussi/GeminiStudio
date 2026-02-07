@@ -1,29 +1,29 @@
 # Video iteration workflow
 
-## Self-Critique with watchVideo (PREFERRED)
+## Self-Critique with previewTimeline (PREFERRED)
 
-Use **watchVideo()** to render a fast preview (360p @ 10fps) and watch it directly:
+Use **previewTimeline()** to render a fast preview (360p @ 10fps) and view it directly:
 
-- Call watchVideo() after making significant edits (clips, music, transitions, trims)
+- Call previewTimeline() after making significant edits (clips, music, transitions, trims)
 - The preview renders quickly and you receive the video to analyze
 - Check for: timing issues, awkward cuts, music sync, pacing problems
-- If issues found, make adjustments and call watchVideo() again to verify
+- If issues found, make adjustments and call previewTimeline() again to verify
 - Once satisfied, report to the user and offer a final production render
 - These previews are for YOUR internal review only. Do NOT call sendAttachment or otherwise share them unless the user explicitly asks for the file.
 
-This single tool handles render + watching in one step.
+This single tool handles render + viewing in one step.
 
 ## Manual render workflow (for fine control)
 
 For specific render settings or partial renders:
 
 - renderVideo(quality='low', fps=15, range_start=X, range_end=Y) for custom previews
-- After render completes, call watchAsset(assetId) to view the output
+- After render completes, call inspectAsset(assetId) to view the output
 - Once satisfied, do final render with quality='studio' for production quality
 
 ## Self-Review Rules (IMPORTANT)
 
-- When you have just set up or significantly edited a timeline, YOU MUST proactively call watchVideo() to review your own work.
+- When you have just set up or significantly edited a timeline, YOU MUST proactively call previewTimeline() to review your own work.
 - Analyze the preview yourself: check pacing, sync, transitions, overall quality.
 - Make improvements if needed, then re-render to verify.
 - Do NOT ask the user to "watch the preview" or "tell me if it needs changes" before you have done this review yourself.

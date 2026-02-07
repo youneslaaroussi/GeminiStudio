@@ -469,7 +469,7 @@ Gemini Studio is built on top of incredible open-source projects and cloud servi
 
 ### AI & Agent
 
-- **[Vercel AI SDK](https://sdk.vercel.ai/)** — React hooks and streaming for the chat UI. We use `ai`, `@ai-sdk/react`, and `@ai-sdk/google` for the frontend agent experience. **Multimodal tool results:** The upstream SDK did not support sending video, image, or audio from *tool results* to Gemini (tool-returned files were serialized as JSON text, so the model never saw the media). We implemented **`file-url` handling** in the Google provider so that when a tool returns a file (e.g. our `watchVideo` / `watchAsset` tools), the model receives it as real `fileData` and can see/hear the content. This is a significant contribution: it enables the “agent watches its own work” loop and any agent that returns media from tools. We ship a patched copy under `ai-sdk/` (Apache 2.0, see [ai-sdk/LICENSE](ai-sdk/LICENSE)) and **plan to submit this as a PR** to [vercel/ai](https://github.com/vercel/ai).
+- **[Vercel AI SDK](https://sdk.vercel.ai/)** — React hooks and streaming for the chat UI. We use `ai`, `@ai-sdk/react`, and `@ai-sdk/google` for the frontend agent experience. **Multimodal tool results:** The upstream SDK did not support sending video, image, or audio from *tool results* to Gemini (tool-returned files were serialized as JSON text, so the model never saw the media). We implemented **`file-url` handling** in the Google provider so that when a tool returns a file (e.g. our `previewTimeline` / `inspectAsset` tools), the model receives it as real `fileData` and can see/hear the content. This is a significant contribution: it enables the “agent watches its own work” loop and any agent that returns media from tools. We ship a patched copy under `ai-sdk/` (Apache 2.0, see [ai-sdk/LICENSE](ai-sdk/LICENSE)) and **plan to submit this as a PR** to [vercel/ai](https://github.com/vercel/ai).
 - **[LangGraph](https://langchain-ai.github.io/langgraph/)** — Agent orchestration and tool execution. Powers our conversational agent. [GitHub](https://github.com/langchain-ai/langgraph)
 - **[Google Gemini 3 Pro](https://deepmind.google/technologies/gemini/)** — Reasoning, tool use, multimodal understanding (video, images, audio), and generative APIs (Veo, Imagen, Lyria, Chirp).
 
@@ -506,6 +506,14 @@ Gemini Studio is built on top of incredible open-source projects and cloud servi
 | **Site** | [youneslaaroussi.ca](https://youneslaaroussi.ca) |
 | **LinkedIn** | [linkedin.com/in/younes-laaroussi](https://linkedin.com/in/younes-laaroussi) |
 | 𝕏 | [@younesistaken](https://x.com/younesistaken) |
+
+---
+
+## Sound effects (voice chat)
+
+- Tone12_Msg_Notification_2 by ScottyD0ES — https://freesound.org/s/716448/ — License: Attribution NonCommercial 4.0  
+- Mobile Phone Notification Sound by TheArbuzikYT — https://freesound.org/s/840284/ — License: Creative Commons 0  
+- Message Notification 4 by AnthonyRox — https://freesound.org/s/740423/ — License: Creative Commons 0  
 
 ---
 

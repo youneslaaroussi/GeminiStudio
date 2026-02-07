@@ -1,4 +1,4 @@
-"""Tool to render a preview of the timeline and return it for the agent to watch.
+"""Tool to render a preview of the timeline and return it for the agent to view.
 
 This triggers a fast low-res render, waits for completion, and returns the video
 as multimodal content so the agent can analyze it with full conversation context.
@@ -214,12 +214,12 @@ def _poll_job_status(job_id: str, settings: Settings) -> dict[str, Any]:
 
 
 @tool
-def watchVideo(
+def previewTimeline(
     start_time: Optional[float] = None,
     end_time: Optional[float] = None,
     _agent_context: Optional[Dict[str, Any]] = None,
 ) -> dict[str, Any]:
-    """Render a preview of the current timeline and watch it.
+    """Render a preview of the current timeline and return it for viewing.
 
     Optionally pass start_time and end_time (in seconds) to render only a segment.
     This triggers a fast low-resolution render (360p, 10fps), waits for it to complete,
@@ -323,7 +323,7 @@ def watchVideo(
 
     thread_id = context.get("thread_id")
     metadata: Dict[str, Any] = {
-        "tags": ["gemini-agent", "watchVideo", "preview"],
+        "tags": ["gemini-agent", "previewTimeline", "preview"],
         "extra": {
             "requestedAt": datetime.now(timezone.utc).isoformat(),
             "projectName": project_name,
@@ -382,7 +382,7 @@ def watchVideo(
             "message": "Renderer queued job but didn't return an ID.",
         }
 
-    logger.info("[watchVideo] Preview render queued: job_id=%s", job_id)
+    logger.info("[previewTimeline] Preview render queued: job_id=%s", job_id)
 
     # Poll for completion
     poll_result = _poll_job_status(job_id, settings)
@@ -413,7 +413,7 @@ def watchVideo(
             "message": "Preview rendered but failed to generate download URL.",
         }
 
-    logger.info("[watchVideo] Downloading preview from GCS...")
+    logger.info("[previewTimeline] Downloading preview from GCS...")
 
     try:
         fetch_resp = httpx.get(download_url, timeout=300.0, follow_redirects=True)
@@ -431,7 +431,7 @@ def watchVideo(
             "message": "Preview video is empty.",
         }
 
-    logger.info("[watchVideo] Uploading preview to Gemini Files API (%d bytes)", len(video_bytes))
+    logger.info("[previewTimeline] Uploading preview to Gemini Files API (%d bytes)", len(video_bytes))
 
     # Upload to Gemini Files API
     try:
@@ -448,7 +448,7 @@ def watchVideo(
         }
 
     file_uri = uploaded.uri
-    logger.info("[watchVideo] Preview ready: %s", file_uri)
+    logger.info("[previewTimeline] Preview ready: %s", file_uri)
 
     range_note = ""
     if start_time is not None and end_time is not None and end_time > start_time:

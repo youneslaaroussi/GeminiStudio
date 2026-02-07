@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-04T03:47:52.178Z",
+  "generatedAt": "2026-02-07T14:15:18.489Z",
   "tools": {
     "captureAsset": {
       "name": "captureAsset",
@@ -491,7 +491,7 @@
     "timelineAddClip": {
       "name": "timelineAddClip",
       "label": "Add Timeline Clip",
-      "description": "Insert a new clip on the timeline. For media clips (video/audio/image), provide type and assetId only—do not pass src (proxy URL is derived from assetId). For text clips, provide type='text' and text content. Use template, subtitle, backgroundColor for text styling. Use enterTransition and exitTransition for fade/slide/zoom in/out (type, duration 0.1-5s).",
+      "description": "Insert a new clip on the timeline. For media clips (video/audio/image), provide type and assetId only—do not pass src (playback URL is resolved from assetId). For text clips, provide type='text' and text content. Use template, subtitle, backgroundColor for text styling. Use enterTransition and exitTransition for fade/slide/zoom in/out (type, duration 0.1-5s).",
       "runLocation": "client",
       "implementations": {
         "app": true,
@@ -577,7 +577,7 @@
           "label": "Position",
           "type": "json",
           "placeholder": "{\"x\":0,\"y\":0}",
-          "description": "Scene position as { x, y } in pixels."
+          "description": "Scene position as { x, y } in pixels. Center origin: (0,0) = center; x positive = right, negative = left; y positive = down (below center, bottom of frame), negative = up (above center, top of frame)."
         },
         {
           "name": "scale",
@@ -809,6 +809,11 @@
                   "fill"
                 ]
               },
+              "audioVolume": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
               "volume": {
                 "type": "number",
                 "minimum": 0,
@@ -936,7 +941,7 @@
     "timelineUpdateClip": {
       "name": "timelineUpdateClip",
       "label": "Update Timeline Clip",
-      "description": "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s).",
+      "description": "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s). Use animation (none|hover|pulse|float|glow|zoom-in|zoom-out) and animationIntensity (0-5x) for idle animations on video, text, and image clips. COLOR GRADING: contrast, saturation, temperature, tint, highlights, shadows use range -100 to 100 (NOT 0–1). Use 20–50 for visible effect—values like 0.1 or 0.2 are too small. exposure is -2 to 2.",
       "runLocation": "client",
       "implementations": {
         "app": true,
@@ -980,7 +985,8 @@
           "name": "position",
           "label": "Position",
           "type": "json",
-          "placeholder": "{\"x\":0,\"y\":0}"
+          "placeholder": "{\"x\":0,\"y\":0}",
+          "description": "Scene position in pixels. Center origin: (0,0) = center; x positive = right, negative = left; y positive = down (bottom of frame), negative = up (top of frame)."
         },
         {
           "name": "scale",
@@ -992,8 +998,8 @@
           "name": "videoSettings",
           "label": "Video Settings",
           "type": "json",
-          "placeholder": "{\"width\":1920,\"height\":1080,\"objectFit\":\"contain\",\"focus\":{\"x\":0.5,\"y\":0.5,\"zoom\":1},\"colorGrading\":{...},\"chromaKey\":{...}}",
-          "description": "Do not pass src—media URL is derived from clip's assetId. focus: center (x,y 0–1) and zoom (1 = full frame, 2 = 2×). colorGrading: exposure only is -2 to 2; contrast, saturation, temperature, tint, highlights, shadows are -100 to 100 (use e.g. 20 or -30 for visible change—values like 1.4 are too small). chromaKey: key color (hex), threshold and smoothness 0–1 for green screen."
+          "placeholder": "{\"width\":1920,\"height\":1080,\"objectFit\":\"contain\",\"focus\":{\"x\":0.5,\"y\":0.5,\"zoom\":1},\"colorGrading\":{\"temperature\":25,\"saturation\":30,\"contrast\":15},\"chromaKey\":{...},\"audioVolume\":1}",
+          "description": "Do not pass src—media URL is derived from clip's assetId. focus: center (x,y 0–1) and zoom (1 = full frame, 2 = 2×). colorGrading: contrast, saturation, temperature, tint, highlights, shadows MUST use -100 to 100 (NOT 0–1). Example for slightly warmer/more saturated: {\"temperature\":25,\"saturation\":30,\"contrast\":15}. Never use 0.1, 0.2, etc—use 15–50. exposure: -2 to 2 only. chromaKey: key color (hex), threshold and smoothness 0–1. audioVolume: 0–1."
         },
         {
           "name": "audioSettings",
@@ -1007,7 +1013,7 @@
           "label": "Image Settings",
           "type": "json",
           "placeholder": "{\"width\":1920,\"height\":1080}",
-          "description": "Do not pass src—media URL is derived from clip's assetId. colorGrading: exposure -2 to 2; contrast, saturation, temperature, tint, highlights, shadows -100 to 100 (use e.g. 20 or -30, not 1.4)."
+          "description": "Do not pass src—media URL is derived from clip's assetId. colorGrading: contrast, saturation, temperature, tint, highlights, shadows use -100 to 100 (NOT 0–1). Use 15–50 for visible effect. exposure: -2 to 2 only."
         },
         {
           "name": "textSettings",
@@ -1029,6 +1035,20 @@
           "type": "json",
           "placeholder": "{\"type\":\"fade\",\"duration\":0.5}",
           "description": "Out transition when clip ends. Same types as enter. Omit or type:none to clear."
+        },
+        {
+          "name": "animation",
+          "label": "Animation",
+          "type": "text",
+          "placeholder": "none | hover | pulse | float | glow | zoom-in | zoom-out",
+          "description": "Idle animation while clip is visible (video, text, image only). zoom-in/zoom-out: scale over clip duration; intensity controls amount. none to clear."
+        },
+        {
+          "name": "animationIntensity",
+          "label": "Animation Intensity",
+          "type": "number",
+          "placeholder": "1",
+          "description": "Animation strength 0–5x (1 = normal). Only applies when animation is set."
         }
       ],
       "inputSchema": {
@@ -1131,52 +1151,52 @@
                   },
                   "colorGrading": {
                     "type": "object",
-                    "description": "Exposure: -2 to 2. All others (contrast, saturation, temperature, tint, highlights, shadows): -100 to 100. Use 20-50 for visible effect—NEVER use 0.1, 0.2, or 0.15 (0-1 scale is wrong). Example: {\"temperature\":25,\"saturation\":30,\"contrast\":15}.",
                     "properties": {
                       "exposure": {
                         "type": "number",
                         "minimum": -2,
                         "maximum": 2,
-                        "description": "Range -2 to 2 (only field that uses this scale)."
+                        "description": "Range -2 to 2 only"
                       },
                       "contrast": {
                         "type": "number",
                         "minimum": -100,
                         "maximum": 100,
-                        "description": "Range -100 to 100. Use ~20–50 for visible change."
+                        "description": "Range -100 to 100. Use 15-50 for visible effect (not 0.1)."
                       },
                       "saturation": {
                         "type": "number",
                         "minimum": -100,
                         "maximum": 100,
-                        "description": "Range -100 to 100. Use ~20–50 for visible change."
+                        "description": "Range -100 to 100. Use 15-50 for visible effect (not 0.15)."
                       },
                       "temperature": {
                         "type": "number",
                         "minimum": -100,
                         "maximum": 100,
-                        "description": "Range -100 to 100 (cool to warm). Use ~20–50 for visible change."
+                        "description": "Range -100 to 100 (cool to warm). Use 15-50 for visible effect (not 0.2)."
                       },
                       "tint": {
                         "type": "number",
                         "minimum": -100,
                         "maximum": 100,
-                        "description": "Range -100 to 100 (green to magenta). Use ~20–50 for visible change."
+                        "description": "Range -100 to 100 (green to magenta). Use 15-50 for visible effect."
                       },
                       "highlights": {
                         "type": "number",
                         "minimum": -100,
                         "maximum": 100,
-                        "description": "Range -100 to 100. Use ~20–50 for visible change."
+                        "description": "Range -100 to 100. Use 15-50 for visible effect."
                       },
                       "shadows": {
                         "type": "number",
                         "minimum": -100,
                         "maximum": 100,
-                        "description": "Range -100 to 100. Use ~20–50 for visible change."
+                        "description": "Range -100 to 100. Use 15-50 for visible effect."
                       }
                     },
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "Exposure: -2 to 2. All others: -100 to 100. Use 20-50 for visible change—never 0.1 or 0.2."
                   },
                   "chromaKey": {
                     "type": "object",
@@ -1201,6 +1221,11 @@
                       "threshold"
                     ],
                     "additionalProperties": false
+                  },
+                  "audioVolume": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
                   }
                 },
                 "additionalProperties": false
@@ -1330,6 +1355,37 @@
                     "type": "null"
                   }
                 ]
+              },
+              "animation": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "not": {}
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "hover",
+                          "pulse",
+                          "float",
+                          "glow",
+                          "zoom-in",
+                          "zoom-out"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "animationIntensity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 5
               }
             },
             "required": [
@@ -1914,14 +1970,15 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
     },
-    "watchAsset": {
-      "name": "watchAsset",
-      "label": "Watch Asset",
-      "description": "Load an asset (video, image, or audio) so you can see/hear it directly. Use startTime/endTime (in seconds) to focus on a specific segment of video. Use this when you need to analyze media with conversation context, compare to discussed styles, answer follow-up questions, or when the user wants you to 'look at' or 'watch' something.",
+    "inspectAsset": {
+      "name": "inspectAsset",
+      "label": "Inspect Asset",
+      "description": "Load an asset (video, image, or audio) by ID so you can see/hear it directly. Use startTime/endTime (in seconds) to focus on a specific segment of video. Use this when you need to analyze media with conversation context, compare to discussed styles, answer follow-up questions, or when the user wants you to 'look at' or 'inspect' a specific asset.",
       "runLocation": "client",
       "implementations": {
         "app": true,
-        "langgraph": false
+        "langgraph": true,
+        "langgraphName": "inspectAsset"
       },
       "fields": [
         {
@@ -1929,7 +1986,7 @@
           "label": "Asset ID",
           "type": "text",
           "placeholder": "e.g. asset_abc123",
-          "description": "The ID of the asset to watch/view.",
+          "description": "The ID of the asset to inspect/view.",
           "required": true
         },
         {
@@ -1950,9 +2007,9 @@
         }
       ],
       "inputSchema": {
-        "$ref": "#/definitions/watchAssetInput",
+        "$ref": "#/definitions/inspectAssetInput",
         "definitions": {
-          "watchAssetInput": {
+          "inspectAssetInput": {
             "type": "object",
             "properties": {
               "assetId": {
@@ -1977,14 +2034,15 @@
         "$schema": "http://json-schema.org/draft-07/schema#"
       }
     },
-    "watchVideo": {
-      "name": "watchVideo",
-      "label": "Watch Video",
-      "description": "Render a preview of the current timeline and watch it. Optionally use startTime and endTime (seconds) to render only a segment. Triggers a fast low-resolution render (360p @ 10fps), waits for completion, then returns the video so you can see it directly. Use to review your edits. Takes 10-60 seconds.",
+    "previewTimeline": {
+      "name": "previewTimeline",
+      "label": "Preview Timeline",
+      "description": "Render a preview of the current timeline and return it for viewing. Optionally use startTime and endTime (seconds) to render only a segment. Triggers a fast low-resolution render (360p @ 10fps), waits for completion, then returns the video so you can see it directly. Use to review your edits. Takes 10-60 seconds.",
       "runLocation": "client",
       "implementations": {
         "app": true,
-        "langgraph": false
+        "langgraph": true,
+        "langgraphName": "previewTimeline"
       },
       "fields": [
         {
@@ -1992,7 +2050,7 @@
           "label": "Start Time (s)",
           "type": "number",
           "placeholder": "e.g. 5",
-          "description": "Optional start time in seconds to watch only part of the timeline.",
+          "description": "Optional start time in seconds to preview only part of the timeline.",
           "required": false
         },
         {
@@ -2005,20 +2063,20 @@
         }
       ],
       "inputSchema": {
-        "$ref": "#/definitions/watchVideoInput",
+        "$ref": "#/definitions/previewTimelineInput",
         "definitions": {
-          "watchVideoInput": {
+          "previewTimelineInput": {
             "type": "object",
             "properties": {
               "startTime": {
                 "type": "number",
                 "minimum": 0,
-                "description": "Start time in seconds to render only a segment (use with endTime)."
+                "description": "Start time in seconds to render only a segment (use with endTime)"
               },
               "endTime": {
                 "type": "number",
                 "minimum": 0,
-                "description": "End time in seconds to render only a segment (use with startTime)."
+                "description": "End time in seconds to render only a segment (use with startTime)"
               }
             },
             "additionalProperties": false
@@ -2030,7 +2088,7 @@
     "applyVideoEffectToClip": {
       "name": "applyVideoEffectToClip",
       "label": "Apply Video Effect to Clip",
-      "description": "Apply a video effect (e.g. segmentation) to a clip/asset. Before using: digest the clip (getAssetMetadata or watchAsset) to understand the video content and choose where to place tracking points (click coordinates and frames) for the segmentation effect.",
+      "description": "Apply a video effect (e.g. segmentation) to a clip/asset. Before using: digest the clip (getAssetMetadata or inspectAsset) to understand the video content and choose where to place tracking points (click coordinates and frames) for the segmentation effect.",
       "runLocation": "client",
       "implementations": {
         "app": true,

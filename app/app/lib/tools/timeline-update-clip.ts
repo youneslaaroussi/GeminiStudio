@@ -123,7 +123,7 @@ const clipUpdateSchema = z.object({
     .optional(),
   enterTransition: clipTransitionSchema.optional().nullable(),
   exitTransition: clipTransitionSchema.optional().nullable(),
-  animation: z.enum(["none", "hover", "pulse", "float", "glow"]).optional().nullable(),
+  animation: z.enum(["none", "hover", "pulse", "float", "glow", "zoom-in", "zoom-out"]).optional().nullable(),
   animationIntensity: z.number().min(0).max(5).optional(),
 });
 
@@ -168,7 +168,7 @@ function buildUpdates(
       if (input.animation === null || input.animation === "none" || !input.animation) {
         visualUpdates.animation = undefined;
       } else {
-        visualUpdates.animation = input.animation as "hover" | "pulse" | "float" | "glow";
+        visualUpdates.animation = input.animation as "hover" | "pulse" | "float" | "glow" | "zoom-in" | "zoom-out";
       }
     }
     if (input.animationIntensity !== undefined) {
@@ -241,7 +241,7 @@ export const timelineUpdateClipTool: ToolDefinition<
   name: "timelineUpdateClip",
   label: "Update Timeline Clip",
   description:
-    "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s). Use animation (none|hover|pulse|float|glow) and animationIntensity (0-5x) for idle animations on video, text, and image clips. COLOR GRADING: contrast, saturation, temperature, tint, highlights, shadows use range -100 to 100 (NOT 0–1). Use 20–50 for visible effect—values like 0.1 or 0.2 are too small. exposure is -2 to 2.",
+    "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s). Use animation (none|hover|pulse|float|glow|zoom-in|zoom-out) and animationIntensity (0-5x) for idle animations on video, text, and image clips. COLOR GRADING: contrast, saturation, temperature, tint, highlights, shadows use range -100 to 100 (NOT 0–1). Use 20–50 for visible effect—values like 0.1 or 0.2 are too small. exposure is -2 to 2.",
   runLocation: "client",
   inputSchema: clipUpdateSchema,
   fields: [
@@ -340,8 +340,8 @@ export const timelineUpdateClipTool: ToolDefinition<
       name: "animation",
       label: "Animation",
       type: "text",
-      placeholder: "none | hover | pulse | float | glow",
-      description: "Idle animation while clip is visible (video, text, image only). none to clear.",
+      placeholder: "none | hover | pulse | float | glow | zoom-in | zoom-out",
+      description: "Idle animation while clip is visible (video, text, image only). Use zoom-in for hooks/openers and key moments; zoom-out for reveals. hover/pulse/float/glow for subtle emphasis. animationIntensity 0-5. none to clear.",
     },
     {
       name: "animationIntensity",

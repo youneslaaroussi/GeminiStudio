@@ -25,6 +25,8 @@ const LANGGRAPH_TOOL_MAP: Record<string, string> = {
   setAssetNotes: "setAssetNotes",
   setSceneConfig: "setSceneConfig",
   applyChromaKeyToClip: "applyChromaKeyToClip",
+  previewTimeline: "previewTimeline",
+  inspectAsset: "inspectAsset",
 };
 
 /**

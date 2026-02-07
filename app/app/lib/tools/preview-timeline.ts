@@ -1,12 +1,12 @@
 /**
- * Watch Video Tool
+ * Preview Timeline Tool
  *
  * Renders a preview of the current timeline and returns it as multimodal content
  * so the agent can see/watch the video directly with full conversation context.
  *
  * This enables the "self-correcting director" workflow where the agent can:
  * 1. Make edits to the timeline
- * 2. Watch the result
+ * 2. Preview the result
  * 3. Critique its own work
  * 4. Make improvements
  */
@@ -19,7 +19,7 @@ import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_TIME_MS = 5 * 60 * 1000; // 5 minutes max
 
-const watchVideoSchema = z.object({
+const previewTimelineSchema = z.object({
   startTime: z
     .number()
     .min(0)
@@ -53,23 +53,23 @@ interface GeminiFilesResponse {
   error?: string;
 }
 
-export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = {
-  name: "watchVideo",
-  label: "Watch Video",
+export const previewTimelineTool: ToolDefinition<typeof previewTimelineSchema, Project> = {
+  name: "previewTimeline",
+  label: "Preview Timeline",
   description:
-    "Render a preview of the current timeline and watch it. " +
+    "Render a preview of the current timeline and return it for viewing. " +
     "Optionally use startTime and endTime (seconds) to render only a segment. " +
     "Triggers a fast low-resolution render (360p @ 10fps), waits for completion, " +
     "then returns the video so you can see it directly. Use to review your edits. Takes 10-60 seconds.",
   runLocation: "client",
-  inputSchema: watchVideoSchema,
+  inputSchema: previewTimelineSchema,
   fields: [
     {
       name: "startTime",
       label: "Start Time (s)",
       type: "number",
       placeholder: "e.g. 5",
-      description: "Optional start time in seconds to watch only part of the timeline.",
+      description: "Optional start time in seconds to preview only part of the timeline.",
       required: false,
     },
     {
@@ -82,19 +82,19 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
     },
   ],
   async run(input, context) {
-    const toolCallId = `watchVideo_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const toolCallId = `previewTimeline_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
     try {
       if (typeof window === "undefined") {
-        console.error(`[watchVideo:${toolCallId}] ERROR: Must run from client side`);
+        console.error(`[previewTimeline:${toolCallId}] ERROR: Must run from client side`);
         return {
           status: "error" as const,
-          error: "watchVideo must be run from the client side.",
+          error: "previewTimeline must be run from the client side.",
         };
       }
 
       if (!context.project) {
-        console.error(`[watchVideo:${toolCallId}] ERROR: No project available`);
+        console.error(`[previewTimeline:${toolCallId}] ERROR: No project available`);
         return {
           status: "error" as const,
           error: "No project available. Cannot render without a timeline.",
@@ -102,7 +102,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
       }
 
       if (!context.projectId) {
-        console.error(`[watchVideo:${toolCallId}] ERROR: No project ID available`);
+        console.error(`[previewTimeline:${toolCallId}] ERROR: No project ID available`);
         return {
           status: "error" as const,
           error: "No project ID available.",
@@ -140,7 +140,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
 
       if (!renderResponse.ok) {
         const errorData = await renderResponse.json().catch(() => ({}));
-        console.error(`[watchVideo:${toolCallId}] ERROR: Render API failed`, {
+        console.error(`[previewTimeline:${toolCallId}] ERROR: Render API failed`, {
           status: renderResponse.status,
           statusText: renderResponse.statusText,
           error: errorData.error,
@@ -165,7 +165,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
         });
 
         if (!statusResponse.ok) {
-          console.error(`[watchVideo:${toolCallId}] Failed to check render status`, statusResponse.status, statusResponse.statusText);
+          console.error(`[previewTimeline:${toolCallId}] Failed to check render status`, statusResponse.status, statusResponse.statusText);
           return {
             status: "error" as const,
             error: `Failed to check render status: ${statusResponse.statusText}`,
@@ -177,7 +177,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
         if (jobStatus.state === "completed") break;
 
         if (jobStatus.state === "failed") {
-          console.error(`[watchVideo:${toolCallId}] Render failed`, jobStatus.failedReason);
+          console.error(`[previewTimeline:${toolCallId}] Render failed`, jobStatus.failedReason);
           return {
             status: "error" as const,
             error: `Preview render failed: ${jobStatus.failedReason || "Unknown error"}`,
@@ -189,7 +189,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
       }
 
       if (!jobStatus || jobStatus.state !== "completed") {
-        console.error(`[watchVideo:${toolCallId}] Render timeout`);
+        console.error(`[previewTimeline:${toolCallId}] Render timeout`);
         return {
           status: "error" as const,
           error: "Preview render timed out after 5 minutes.",
@@ -197,7 +197,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
       }
 
       if (!jobStatus.downloadUrl) {
-        console.error(`[watchVideo:${toolCallId}] No download URL from render`);
+        console.error(`[previewTimeline:${toolCallId}] No download URL from render`);
         return {
           status: "error" as const,
           error: "Preview render completed but no download URL was provided.",
@@ -221,7 +221,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
       const geminiData = (await geminiResponse.json()) as GeminiFilesResponse;
 
       if (!geminiResponse.ok || !geminiData.fileUri) {
-        console.error(`[watchVideo:${toolCallId}] Gemini Files API failed`, geminiResponse.status, geminiData.error);
+        console.error(`[previewTimeline:${toolCallId}] Gemini Files API failed`, geminiResponse.status, geminiData.error);
         return {
           status: "error" as const,
           error: geminiData.error || "Failed to prepare video for viewing",
@@ -229,9 +229,6 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
       }
 
       // Step 4: Return with _injectMedia + fileUri for multimodal tool result
-      // Our local @ai-sdk/google (ai-sdk/packages/google) sends file-url tool results as fileData,
-      // so the model receives this video in the tool result. prepareStep also injects as user message (fallback).
-      // For Live API we also include downloadUrl.
       const renderTime = Math.round((Date.now() - startTime) / 1000);
       const rangeNote =
         range != null ? ` (segment ${range[0]}s–${range[1]}s)` : "";
@@ -247,7 +244,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
         meta: {
           _injectMedia: true,
           fileUri: geminiData.fileUri,
-          downloadUrl: jobStatus.downloadUrl, // For Live API which needs inline data
+          downloadUrl: jobStatus.downloadUrl,
           mimeType: geminiData.mimeType || "video/mp4",
           assetName: `Preview - ${projectName}`,
           jobId,
@@ -259,7 +256,7 @@ export const watchVideoTool: ToolDefinition<typeof watchVideoSchema, Project> = 
       return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
-      console.error(`[watchVideo:${toolCallId}] ERROR: Exception caught`, {
+      console.error(`[previewTimeline:${toolCallId}] ERROR: Exception caught`, {
         error: message,
         stack: error instanceof Error ? error.stack : undefined,
       });

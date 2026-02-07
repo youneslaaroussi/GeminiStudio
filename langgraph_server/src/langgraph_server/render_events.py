@@ -159,7 +159,7 @@ class RenderEventSubscriber:
             return
         if is_preview_job:
             logger.info(
-                "Skipping render event for preview job (watchVideo/internal). job_id=%s",
+                "Skipping render event for preview job (previewTimeline/internal). job_id=%s",
                 job_id,
             )
             return

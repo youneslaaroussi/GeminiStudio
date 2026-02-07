@@ -35,7 +35,7 @@ export const applyVideoEffectToClipTool: ToolDefinition<
   name: "applyVideoEffectToClip",
   label: "Apply Video Effect to Clip",
   description:
-    "Apply a video effect (e.g. segmentation) to a clip/asset. Before using: digest the clip (getAssetMetadata or watchAsset) to understand the video content and choose where to place tracking points (click coordinates and frames) for the segmentation effect.",
+    "Apply a video effect (e.g. segmentation) to a clip/asset. Before using: digest the clip (getAssetMetadata or inspectAsset) to understand the video content and choose where to place tracking points (click coordinates and frames) for the segmentation effect.",
   runLocation: "client",
   inputSchema: applyVideoEffectSchema,
   fields: [

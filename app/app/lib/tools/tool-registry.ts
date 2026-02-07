@@ -29,8 +29,8 @@ import {
   videoEffectsJobStatusTool,
 } from "./video-effects-run";
 import { veoGenerateTool, veoJobStatusTool } from "./veo-generate";
-import { watchAssetTool } from "./watch-asset";
-import { watchVideoTool } from "./watch-video";
+import { inspectAssetTool } from "./inspect-asset";
+import { previewTimelineTool } from "./preview-timeline";
 import { applyVideoEffectToClipTool } from "./apply-video-effect-to-clip";
 import { searchAssetsTool } from "./search-assets";
 import { setAssetNotesTool } from "./set-asset-notes";
@@ -80,8 +80,8 @@ toolRegistry.register(videoEffectsRunTool);
 toolRegistry.register(videoEffectsJobStatusTool);
 toolRegistry.register(veoGenerateTool);
 toolRegistry.register(veoJobStatusTool);
-toolRegistry.register(watchAssetTool);
-toolRegistry.register(watchVideoTool);
+toolRegistry.register(inspectAssetTool);
+toolRegistry.register(previewTimelineTool);
 toolRegistry.register(applyVideoEffectToClipTool);
 toolRegistry.register(searchAssetsTool);
 toolRegistry.register(setAssetNotesTool);

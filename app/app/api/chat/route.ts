@@ -122,7 +122,7 @@ function createToolboxTools(): ToolMap {
           const result = await waitForClientToolResult({
             toolCallId: options.toolCallId,
             toolName: definition.name,
-            timeoutMs: (definition.name === "watchVideo" || definition.name === "watchAsset") ? 300_000 : undefined,
+            timeoutMs: (definition.name === "previewTimeline" || definition.name === "inspectAsset") ? 300_000 : undefined,
           });
           if (result.status === "error") {
             logger.error({ ...context, error: result.error }, "Client tool execution failed");
@@ -441,7 +441,7 @@ function buildAssetMentionContext(metadata: ChatMessageMetadata | undefined): st
 
   const context = [
     "━━━ REFERENCED ASSETS ━━━",
-    "The user mentioned these assets. Use the assetId values below with watchAsset() or other tools:",
+    "The user mentioned these assets. Use the assetId values below with inspectAsset() or other tools:",
     "",
     ...lines,
     "━━━━━━━━━━━━━━━━━━━━━━━━━",

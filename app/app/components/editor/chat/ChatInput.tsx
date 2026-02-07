@@ -228,6 +228,10 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
       isEmpty: () => !editor || editor.isEmpty,
       getEditor: () => editor,
       submit: handleSubmit,
+      setText: (text: string) => {
+        if (!editor) return;
+        editor.chain().focus().clearContent().insertContent(text).run();
+      },
     }), [editor, handleSubmit]);
 
     // Drag and drop handlers for assets

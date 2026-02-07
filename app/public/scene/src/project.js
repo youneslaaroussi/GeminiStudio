@@ -11959,7 +11959,11 @@ class AnimatedCaptions extends Node {
       )
     );
   }
-  *animate() {
+  /**
+   * Run caption animation. If shouldContinue is provided and returns false
+   * (e.g. another clip took over), the animation exits early so the next caption can run.
+   */
+  *animate(shouldContinue) {
     var _a2;
     const width = this.SceneWidth();
     const height = this.SceneHeight();
@@ -11990,6 +11994,8 @@ class AnimatedCaptions extends Node {
     }
     const captionEntries = Array.from(captions.entries());
     for (let index = 0; index < captionEntries.length; index++) {
+      yield;
+      if (shouldContinue && !shouldContinue()) return;
       const [seconds, shortcut] = captionEntries[index];
       const prevEntry = captionEntries[index - 1];
       const nextEntry = captionEntries[index + 1];
@@ -12001,6 +12007,7 @@ class AnimatedCaptions extends Node {
           this.Blur(map(100, 0, easeInCubic(value)));
         });
       }
+      if (shouldContinue && !shouldContinue()) return;
       let prevSeconds = seconds;
       if (prevEntry && !shouldFadeIn) ;
       else if (prevEntry) {
@@ -12015,6 +12022,8 @@ class AnimatedCaptions extends Node {
         yield* waitFor(startSeconds - prevSeconds);
         prevSeconds = startSeconds;
         i++;
+        yield;
+        if (shouldContinue && !shouldContinue()) return;
       }
       const shouldFadeOut = !nextEntry || nextEntry[0] - seconds >= this.CaptionsDuration();
       if (shouldFadeOut) {
@@ -12023,6 +12032,7 @@ class AnimatedCaptions extends Node {
             this.CaptionsDuration() - prevSeconds + seconds - GO_DOWN - GO_UP
           );
         }
+        if (shouldContinue && !shouldContinue()) return;
         yield* tween(GO_DOWN, (value) => {
           this.Opacity(map(1, 0, easeOutCubic(value)));
           this.Blur(map(0, 100, easeOutCubic(value)));
@@ -12548,6 +12558,7 @@ const HOVER_CYCLE = 1.8;
 const PULSE_CYCLE = 2.2;
 const FLOAT_CYCLE = 2.5;
 const GLOW_CYCLE = 1.6;
+const ZOOM_INTENSITY_SCALE = 0.1;
 function normalizeIntensity(intensity) {
   if (intensity == null || !Number.isFinite(intensity)) return 1;
   return Math.max(0, Math.min(5, intensity));
@@ -12579,6 +12590,17 @@ function* glowCycle(node, cycleDuration, baseOpacity, intensity) {
   yield* node.opacity(low, half, easeInOutCubic);
   yield* node.opacity(baseOpacity, half, easeInOutCubic);
 }
+function* zoomOutOverDuration(node, duration, intensity) {
+  const base = node.scale();
+  const startScale = base.mul(1 + ZOOM_INTENSITY_SCALE * intensity);
+  node.scale(startScale);
+  yield* node.scale(base, duration, easeOutCubic);
+}
+function* zoomInOverDuration(node, duration, intensity) {
+  const base = node.scale();
+  const endScale = base.mul(1 + ZOOM_INTENSITY_SCALE * intensity);
+  yield* node.scale(endScale, duration, easeOutCubic);
+}
 function* applyClipAnimation(node, animation, duration, intensity) {
   if (!node || !animation || animation === "none" || duration <= 0) return;
   const i = normalizeIntensity(intensity);
@@ -12588,6 +12610,13 @@ function* applyClipAnimation(node, animation, duration, intensity) {
   }
   let elapsed = 0;
   const baseOpacity = node.opacity();
+  if (animation === "zoom-out") {
+    yield* zoomOutOverDuration(node, duration, i);
+    elapsed = duration;
+  } else if (animation === "zoom-in") {
+    yield* zoomInOverDuration(node, duration, i);
+    elapsed = duration;
+  }
   while (elapsed < duration) {
     const cycleDuration = animation === "hover" ? HOVER_CYCLE : animation === "pulse" ? PULSE_CYCLE : animation === "float" ? FLOAT_CYCLE : GLOW_CYCLE;
     const remaining = duration - elapsed;
@@ -13742,10 +13771,18 @@ const description = makeScene2D(function* (view) {
           if (trans) entry.exit = trans;
         }
       }
+      if (!entry.enter && clip.enterTransition && clip.enterTransition.type !== "none") {
+        entry.enter = clip.enterTransition;
+      }
+      if (!entry.exit && clip.exitTransition && clip.exitTransition.type !== "none") {
+        entry.exit = clip.exitTransition;
+      }
       clipTransitions.set(clip.id, entry);
     }
   }
-  const captionRefs = /* @__PURE__ */ new Map();
+  const sharedCaptionRef = createRef();
+  const currentCaptionData = createSignal([]);
+  const activeCaptionClipId = createSignal(null);
   const clipCaptionData = /* @__PURE__ */ new Map();
   const normalizeSegmentsForClip = (clip, segments) => {
     if (!(segments == null ? void 0 : segments.length)) return [];
@@ -13765,42 +13802,26 @@ const description = makeScene2D(function* (view) {
     if (!rawNormalized.length) return;
     const normalized = normalizeSegmentsForClip(clip, rawNormalized);
     if (!normalized.length) return;
-    const ref = createRef();
-    captionRefs.set(clip.id, ref);
     clipCaptionData.set(clip.id, normalized);
-    view.add(
-      /* @__PURE__ */ jsx(
-        AnimatedCaptions,
-        {
-          ref,
-          SceneHeight: height,
-          SceneWidth: width,
-          y: height / 2 - captionSettings.distanceFromBottom,
-          CaptionsSize: 1.1,
-          CaptionsDuration: 3,
-          ShowCaptions: false,
-          TranscriptionData: () => normalized,
-          CaptionsFontFamily: captionSettings.fontFamily,
-          CaptionsFontWeight: captionSettings.fontWeight,
-          CaptionsFontSize: () => scene.variables.get("captionSettings", defaultCaptionSettings)().fontSize ?? 18,
-          CaptionsStyle: () => scene.variables.get("captionSettings", defaultCaptionSettings)().style ?? "pill",
-          zIndex: 1e3
-        },
-        `captions-${clip.id}`
-      )
-    );
   };
   const createCaptionRunner = (clip) => {
-    const ref = captionRefs.get(clip.id);
     const data = clipCaptionData.get(clip.id);
-    if (!ref || !(data == null ? void 0 : data.length)) return void 0;
+    if (!(data == null ? void 0 : data.length)) return void 0;
+    const clipId = clip.id;
     return function* () {
-      const captionNode = ref();
-      if (!captionNode) return;
-      captionNode.TranscriptionData(data);
-      captionNode.ShowCaptions(true);
-      yield* captionNode.animate();
-      captionNode.ShowCaptions(false);
+      activeCaptionClipId(clipId);
+      currentCaptionData(data);
+      const captionNode = sharedCaptionRef();
+      if (captionNode) {
+        captionNode.ShowCaptions(true);
+        yield* captionNode.animate(() => activeCaptionClipId() === clipId);
+        if (activeCaptionClipId() === clipId) {
+          captionNode.ShowCaptions(false);
+        }
+      }
+      if (activeCaptionClipId() === clipId) {
+        activeCaptionClipId(null);
+      }
     };
   };
   view.add(/* @__PURE__ */ jsx(Rect, { width: "100%", height: "100%", fill: "#141417" }));
@@ -13810,6 +13831,29 @@ const description = makeScene2D(function* (view) {
     } else if (layer.type === "audio") {
       layer.clips.forEach(registerCaptionForClip);
     }
+  }
+  if (clipCaptionData.size > 0) {
+    view.add(
+      /* @__PURE__ */ jsx(
+        AnimatedCaptions,
+        {
+          ref: sharedCaptionRef,
+          SceneHeight: height,
+          SceneWidth: width,
+          y: height / 2 - captionSettings.distanceFromBottom,
+          CaptionsSize: 1.1,
+          CaptionsDuration: 3,
+          ShowCaptions: false,
+          TranscriptionData: () => currentCaptionData(),
+          CaptionsFontFamily: captionSettings.fontFamily,
+          CaptionsFontWeight: captionSettings.fontWeight,
+          CaptionsFontSize: () => scene.variables.get("captionSettings", defaultCaptionSettings)().fontSize ?? 18,
+          CaptionsStyle: () => scene.variables.get("captionSettings", defaultCaptionSettings)().style ?? "pill",
+          zIndex: 1e3
+        },
+        "scene-captions"
+      )
+    );
   }
   const videoEntries = [];
   const textEntries = [];
@@ -13891,6 +13935,16 @@ const description = makeScene2D(function* (view) {
       )
     );
   }
+  yield;
+  videoEntries.forEach(({ ref, maskRef }) => {
+    var _a2, _b;
+    (_a2 = ref()) == null ? void 0 : _a2.pause();
+    (_b = maskRef == null ? void 0 : maskRef()) == null ? void 0 : _b.pause();
+  });
+  audioEntries.forEach(({ ref }) => {
+    var _a2;
+    return (_a2 = ref()) == null ? void 0 : _a2.pause();
+  });
   yield* all(
     processVideoClips(),
     processAudioTracks(),
@@ -13899,12 +13953,14 @@ const description = makeScene2D(function* (view) {
   );
   videoEntries.forEach(({ ref, maskRef, containerRef }) => {
     const video = ref();
-    if (video) video.pause();
+    if (video) {
+      video.pause();
+      video.opacity(0);
+    }
     const mask = maskRef == null ? void 0 : maskRef();
     if (mask) mask.pause();
     const container = containerRef == null ? void 0 : containerRef();
     if (container) container.opacity(0);
-    else if (video) video.opacity(0);
   });
   audioEntries.forEach(({ ref }) => {
     var _a2;

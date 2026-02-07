@@ -139,13 +139,15 @@ export type VisualEffectType =
   | 'pixelate'
   | 'chromatic';
 
-/** Idle animation while a clip is visible (hover-style scale, pulse, float, glow) */
+/** Idle animation while a clip is visible (hover, pulse, float, glow, zoom-in, zoom-out) */
 export type ClipAnimationType =
   | 'none'
   | 'hover'
   | 'pulse'
   | 'float'
-  | 'glow';
+  | 'glow'
+  | 'zoom-in'
+  | 'zoom-out';
 
 /** Text template styles */
 export type TextTemplateType =

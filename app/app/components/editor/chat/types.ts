@@ -43,6 +43,8 @@ export interface ChatInputRef {
   getEditor: () => Editor | null;
   /** Programmatically trigger submit (used by external Send button) */
   submit: () => void;
+  /** Set input to plain text (e.g. from a recommended action chip) */
+  setText: (text: string) => void;
 }
 
 /**

@@ -17,6 +17,8 @@ const CLIP_ANIMATION_OPTIONS: { value: ClipAnimationType; label: string }[] = [
   { value: "pulse", label: "Pulse" },
   { value: "float", label: "Float" },
   { value: "glow", label: "Glow" },
+  { value: "zoom-in", label: "Zoom in" },
+  { value: "zoom-out", label: "Zoom out" },
 ];
 
 interface CommonClipSettingsProps {

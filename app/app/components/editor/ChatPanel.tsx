@@ -97,6 +97,7 @@ import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 import { getCreditsForAction } from "@/app/lib/credits-config";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/app/lib/server/firebase";
+import { motion, AnimatePresence } from "motion/react";
 
 type ToolPartState =
   | "input-streaming"
@@ -164,6 +165,7 @@ export function ChatPanel() {
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [isSpeakLoading, setIsSpeakLoading] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [recommendedActions, setRecommendedActions] = useState<string[]>([]);
   const cloudUnsubscribeRef = useRef<(() => void) | null>(null);
   const teleportAbortRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -204,6 +206,8 @@ export function ChatPanel() {
   const projectId = useProjectStore((state) => state.projectId);
   const updateProjectSettings = useProjectStore((state) => state.updateProjectSettings);
   const updateProjectInList = useProjectsListStore((state) => state.updateProject);
+  const assets = useAssetsStore((state) => state.assets);
+  const assetsMetadata = useAssetsStore((state) => state.metadata);
 
   const messagesRef = useRef<TimelineChatMessage[]>([]);
   const autoSaveChatStateRef = useRef<AutoSaveChatState>({
@@ -266,6 +270,27 @@ export function ChatPanel() {
             })
             .filter(Boolean)
             .join("\n\n");
+
+          // Update recommended actions when agent response is done (conversation text only, no tool results)
+          if (conversationContext.trim()) {
+            getAuthHeaders()
+              .then((headers) =>
+                fetch("/api/chat/recommended-actions", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", ...headers },
+                  body: JSON.stringify({
+                    type: "afterResponse",
+                    conversationText: conversationContext.trim(),
+                  }),
+                })
+              )
+              .then((res) => res.json())
+              .then((data) => {
+                if (Array.isArray(data?.actions)) setRecommendedActions(data.actions);
+              })
+              .catch(() => {});
+          }
+
           if (!conversationContext.trim() || !user?.uid || !projectId) return;
           const name = project?.name ?? "";
           const isDefaultName =
@@ -326,6 +351,41 @@ export function ChatPanel() {
   useEffect(() => {
     messagesRef.current = messages ?? [];
   }, [messages]);
+
+  // Recommended actions for empty chat: regenerate when assets change
+  const assetsContext = useMemo(() => {
+    if (!assets.length) return "";
+    return assets
+      .map((a) => {
+        const meta = assetsMetadata[a.id];
+        const parts = [a.name, a.type];
+        if (a.description) parts.push(a.description);
+        if (meta?.duration != null) parts.push(`${meta.duration.toFixed(1)}s`);
+        return parts.join(" • ");
+      })
+      .join("\n");
+  }, [assets, assetsMetadata]);
+
+  const hasNoMessages = !messages?.length;
+  useEffect(() => {
+    if (hasNoMessages && projectId) {
+      getAuthHeaders()
+        .then((headers) =>
+          fetch("/api/chat/recommended-actions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...headers },
+            body: JSON.stringify({ type: "empty", assetsContext }),
+          })
+        )
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data?.actions) && data.actions.length > 0) {
+            setRecommendedActions(data.actions);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [hasNoMessages, projectId, assetsContext]);
 
   autoSaveChatStateRef.current = {
     user: user ?? null,
@@ -513,6 +573,7 @@ export function ChatPanel() {
     }
     analytics.chatMessageSent();
     setPendingAttachments([]);
+    setRecommendedActions([]);
   }, [pendingAttachments, isCloudMode, mode, sendMessage, analytics]);
 
   const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -520,6 +581,11 @@ export function ChatPanel() {
     // Trigger submit via ChatInput ref
     chatInputRef.current?.submit();
   };
+
+  const handleRecommendedActionClick = useCallback((action: string) => {
+    chatInputRef.current?.setText(action);
+    chatInputRef.current?.focus();
+  }, []);
 
   const handleExportChat = () => {
     if (!messages || messages.length === 0) return;
@@ -1096,20 +1162,21 @@ export function ChatPanel() {
           </div>
         </div>
       )}
-      {/* Messages Area */}
-      <div ref={messagesScrollContainerRef} className="flex-1 overflow-y-auto">
-        {/* Task List (sticky at top when present) */}
-        {taskListSnapshot && (
-          <div className="sticky top-0 z-10 p-3 bg-gradient-to-b from-card via-card to-transparent pb-6">
-            <TaskListPanel
-              snapshot={taskListSnapshot}
-              open={isTaskPanelOpen}
-              onOpenChange={setIsTaskPanelOpen}
-            />
-          </div>
-        )}
+      {/* Messages Area + floating recommended actions */}
+      <div className="flex-1 min-h-0 flex flex-col relative">
+        <div ref={messagesScrollContainerRef} className="flex-1 overflow-y-auto">
+          {/* Task List (sticky at top when present) */}
+          {taskListSnapshot && (
+            <div className="sticky top-0 z-10 p-3 bg-gradient-to-b from-card via-card to-transparent pb-6">
+              <TaskListPanel
+                snapshot={taskListSnapshot}
+                open={isTaskPanelOpen}
+                onOpenChange={setIsTaskPanelOpen}
+              />
+            </div>
+          )}
 
-        <div className="px-3 pt-4 pb-3 space-y-3">
+          <div className="px-3 pt-4 pb-3 pb-28 space-y-3">
           {!hasMessages && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <div className="size-14 rounded-full bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 flex items-center justify-center mb-3">
@@ -1118,10 +1185,42 @@ export function ChatPanel() {
               <p className="text-sm font-medium text-foreground mb-1">
                 How can I help?
               </p>
-              <p className="text-xs text-muted-foreground max-w-[200px]">
+              <p className="text-xs text-muted-foreground max-w-[200px] mb-6">
                 Ask about your project, generate content, or let me help edit
                 your timeline.
               </p>
+              <AnimatePresence>
+                {recommendedActions.length > 0 && (
+                  <motion.div
+                    className="w-full max-w-md grid grid-cols-1 gap-3 px-2"
+                    initial="hidden"
+                    animate="visible"
+                    variants={{
+                      visible: {
+                        transition: { staggerChildren: 0.06, delayChildren: 0.08 },
+                      },
+                      hidden: {},
+                    }}
+                  >
+                    {recommendedActions.slice(0, 4).map((action) => (
+                      <motion.button
+                        key={action}
+                        type="button"
+                        onClick={() => handleRecommendedActionClick(action)}
+                        className="rounded-xl px-5 py-4 text-base font-medium text-foreground bg-muted/50 hover:bg-muted border border-border/50 hover:border-border text-left transition-colors shadow-sm hover:shadow"
+                        title={action}
+                        variants={{
+                          hidden: { opacity: 0, y: 10 },
+                          visible: { opacity: 1, y: 0 },
+                        }}
+                        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+                      >
+                        {action}
+                      </motion.button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
 
@@ -1250,6 +1349,54 @@ export function ChatPanel() {
 
           <div ref={messagesEndRef} />
         </div>
+        </div>
+
+        {/* Floating recommended actions at bottom of chat list (only when chat has messages) */}
+        <AnimatePresence>
+          {recommendedActions.length > 0 && hasMessages && (
+            <motion.div
+              key="recommended-actions-bar"
+              className="absolute bottom-0 left-0 right-0 pt-8 pb-1.5 px-2 bg-gradient-to-t from-background via-background/95 to-transparent pointer-events-none"
+              aria-hidden
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+            >
+              <div className="pointer-events-auto pb-4 overflow-x-auto overflow-y-hidden">
+                <motion.div
+                  className="flex items-center gap-1.5 justify-start flex-nowrap w-max min-w-full"
+                  variants={{
+                    visible: {
+                      transition: { staggerChildren: 0.03, delayChildren: 0.04 },
+                    },
+                    hidden: { transition: { staggerChildren: 0.02, staggerDirection: -1 } },
+                  }}
+                  initial="hidden"
+                  animate="visible"
+                  exit="hidden"
+                >
+                  {recommendedActions.map((action) => (
+                    <motion.button
+                      key={action}
+                      type="button"
+                      onClick={() => handleRecommendedActionClick(action)}
+                      className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium text-muted-foreground/90 hover:text-foreground bg-muted/40 hover:bg-muted/80 backdrop-blur-sm transition-colors text-left whitespace-nowrap max-w-[160px] truncate"
+                      title={action}
+                      variants={{
+                        hidden: { opacity: 0, y: 4, scale: 0.96 },
+                        visible: { opacity: 1, y: 0, scale: 1 },
+                      }}
+                      transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                    >
+                      {action}
+                    </motion.button>
+                  ))}
+                </motion.div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Error Banner */}

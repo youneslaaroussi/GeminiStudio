@@ -45,20 +45,20 @@ def _get_media_category(mime_type: str) -> str:
 
 
 @tool
-def watchAsset(
+def inspectAsset(
     asset_id: str,
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
     _agent_context: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
-    """Load an asset (video, image, or audio) so you can see/hear it directly.
+    """Load an asset (video, image, or audio) by ID so you can see/hear it directly.
 
     Use start_time/end_time (in seconds) to focus on a specific segment of video.
     Use this when you need to analyze media with conversation context, compare to discussed styles,
-    answer follow-up questions, or when the user wants you to "look at" or "watch" something.
+    answer follow-up questions, or when the user wants you to "look at" or "inspect" a specific asset.
 
     Args:
-        asset_id: The ID of the asset to watch/view.
+        asset_id: The ID of the asset to inspect/view.
         start_time: Optional start time in seconds (e.g. '2.5' or '10') for video segment.
         end_time: Optional end time in seconds (e.g. '5.0' or '15') for video segment.
     """
@@ -69,7 +69,7 @@ def watchAsset(
     if not user_id or not project_id:
         return {
             "status": "error",
-            "message": "Both user_id and project_id are required to watch an asset.",
+            "message": "Both user_id and project_id are required to inspect an asset.",
         }
 
     if not asset_id:
@@ -180,7 +180,7 @@ def watchAsset(
             "message": "Asset URL returned empty content.",
         }
 
-    logger.info("[watchAsset] Uploading asset to Gemini Files API (%d bytes)", len(file_bytes))
+    logger.info("[inspectAsset] Uploading asset to Gemini Files API (%d bytes)", len(file_bytes))
 
     try:
         uploaded = upload_file_sync(
@@ -196,7 +196,7 @@ def watchAsset(
         }
 
     file_uri = uploaded.uri
-    logger.info("[watchAsset] Asset ready: %s (%s)", asset_name, file_uri)
+    logger.info("[inspectAsset] Asset ready: %s (%s)", asset_name, file_uri)
 
     # Return text with _injectMedia flag - agent.py will inject media as HumanMessage
     time_range = f" ({start_time or '0'}s - {end_time or 'end'})" if start_time or end_time else ""

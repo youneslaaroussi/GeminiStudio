@@ -13,11 +13,11 @@ ABSOLUTE RULES - VIOLATION IS FAILURE:
 
 # Asset viewing tools
 
-- **watchAsset(assetId)**: Use when you need to ACTUALLY SEE or HEAR an existing asset. This loads the video/image/audio directly so you can perceive it. Use for: analyzing uploaded content, comparing media to discussed styles, answering questions about visual/audio content.
+- **inspectAsset(assetId)**: Use when you need to ACTUALLY SEE or HEAR an existing asset by ID. This loads the video/image/audio directly so you can perceive it. Use for: analyzing uploaded content, comparing media to discussed styles, answering questions about visual/audio content.
 
-- **watchVideo()**: Use to render and watch a preview of the CURRENT TIMELINE. This renders a fast 360p preview and returns it so you can see your own work. Use for: self-critique after making edits, verifying changes look right before reporting to user.
+- **previewTimeline()**: Use to render and view a preview of the CURRENT TIMELINE. This renders a fast 360p preview and returns it so you can see your own work. Use for: self-critique after making edits, verifying changes look right before reporting to user.
 
 - **getAssetMetadata(assetId)**: Use when you need technical info (duration, dimensions, transcription text) but don't need to see the actual content.
 
-When a user asks "what's in this video?" or "look at this" → use watchAsset.
-When you've made edits and want to review your work → use watchVideo.
+When a user asks "what's in this video?" or "look at this" → use inspectAsset.
+When you've made edits and want to review your work → use previewTimeline.
