@@ -11,6 +11,8 @@
 
 **The deterministic engine that gives AI agents the hands to edit video.**
 
+**Accessibility Pack + PDF-to-Video pipelines prove credible impact without touching medical advice.**
+
 *Built for the [Gemini 3 Hackathon](https://gemini3.devpost.com)*
 
 ![Next.js](https://img.shields.io/badge/Next.js-15-000000?logo=next.js&logoColor=white)
@@ -83,6 +85,83 @@ We built the deterministic engine that allows an agent to:
 This isn't a chatbot wrapper. The agent has **real agency**: it calls the renderer, manipulates the timeline, triggers Veo 3/Nano Banana Pro/Lyria/Chirp generation, and proactively notifies you when your video is ready. Gemini 3 Pro becomes the **reasoning layer** for the entire production stack.
 
 **The result:** Video creation transforms from a manual craft into a scalable API call.
+
+---
+
+## Impact Pipelines: Accessibility Pack + PDF-to-Video
+
+Judges don't want another chat wrapper—they want a deterministic feature with artifacts they can inspect. Gemini Studio now ships two opinionated flows that our agent executes end-to-end, showcasing the execution layer *and* real impact without drifting into medical or mental health advice (explicitly discouraged in the [Gemini 3 rules](https://gemini3.devpost.com/rules)).
+
+### Accessibility Pack (Captions + Audio Description)
+
+One button in the UI launches a pipeline that makes any clip accessible:
+
+1. **Generate & align captions** using the transcripts we already store with timestamps.
+2. **Author an audio description (AD) script** with Gemini 3 Vision describing only observable visuals—no opinions, no diagnoses.
+3. **Create AD narration** via Chirp TTS (or surface the script if speech quality dips).
+4. **Mix with ducking** so dialogue remains audible while the AD voice-over rides on top.
+5. **Render** final video with captions burned in and the AD track merged.
+6. **Quality checks + iteration:** we automatically guard CPS limits, prevent overlap/cut collisions, enforce contrast/safe margins for captions, and track AD density so it never talks over crucial dialogue.
+
+The agent logs every artifact—captions file, AD script, mix settings—and replays the loop until it passes the checks. This is social good native to our stack, not a bolted-on charity story.
+
+### Profile PDF → Personalized Video (Deterministic Onboarding)
+
+The second pipeline demonstrates impact for governments, schools, and enterprises that need training or alerts at scale:
+
+1. **Ingest a synthetic PDF profile** (role, location, preferences—no PII risk).
+2. **Extract structured fields** with Gemini 3 Pro, validated against templates.
+3. **Fill a storyboard** tuned for onboarding/public safety messaging.
+4. **Render the video** via Motion Canvas + our renderer.
+5. **Self-check readability & pacing** (reading level, duration per panel, caption styles) before delivering.
+
+We position it as scalable onboarding/public safety personalization—not "upload any private profile." It’s high-impact, non-medical, and repeatable.
+
+### Artifacts & Transparency Panel
+
+A dedicated **Artifacts** screen collects everything the pipeline produces: caption settings, AD script revisions, PDF extraction summaries, render job IDs, and final download links. Gemini Studio already version-controls timelines like Git; this screen makes the provenance visible so judges can click through instead of trusting a narrative.
+
+### Why This Narrative Wins the Hackathon
+
+- **Technical Execution (40%)** — 15+ tools orchestrated into deterministic pipelines the agent can re-run on demand. Not a prompt wrapper.
+- **Innovation/Wow (30%)** — The agent watches its edited outputs, critiques caption density, and iterates, proving autonomous quality control.
+- **Impact (20%)** — Accessibility-by-default plus scalable personalization is credible social good *and* real-world utility without medical claims.
+- **Presentation (10%)** — One hero “Accessibility Pack” clip plus a PDF→video demo makes the story clear within 3 minutes.
+
+This repositioning is straight from the Gemini 3 resources and avoids the policy landmines around diagnosis/mental health advice.
+
+---
+
+## Built for the Gemini 3 Hackathon (Action Era Compliance)
+
+Google DeepMind and Devpost are explicit: *if a single prompt can solve it, it's not an application.* Gemini Studio is a full orchestrator that runs in the Google AI Studio ecosystem, leverages Gemini 3's `thinking_level` controls for long-running autonomy, and exposes proof artifacts so judges can inspect the agent’s reasoning without logging in.
+
+### How We Avoid Disqualified Patterns
+
+| Hackathon Warning | What Gemini Studio Does |
+|-------------------|------------------------|
+| **Prompt-only wrappers** | 15+ deterministic tools (timeline, renderer, effects, semantic search) that the agent invokes; every step has stored artifacts. |
+| **Baseline RAG / simple Q&A** | Zero retrieval demos—everything is about spatial-temporal understanding of audio/video assets and deterministic timelines. |
+| **Simple vision analyzers** | Gemini 3 Vision drives caption timing, AD scripts, and PDF storyboard placement with cause-and-effect reasoning across full clips. |
+| **Generic chatbots (nutrition, job screening, etc.)** | The agent is focused on video production pipelines with measurable QC gates. |
+| **Medical/mental health advice** | Accessibility Pack only describes on-screen visuals; PDF→video uses synthetic training/public safety templates. No diagnoses, no therapy. |
+
+### Strategic Track Alignment
+
+| Track | What We Showcase |
+|-------|------------------|
+| **🧠 The Marathon Agent** | Accessibility Pack + PDF pipelines run for minutes, self-check outputs, and rely on LangGraph state + Gemini 3 `thinking_level` controls to resume long tool sequences without supervision. |
+| **☯️ Vibe Engineering** | Motion Canvas + the renderer give the agent deterministic control to iterate on vibe (“make it cinematic”) while caption/contrast guards verify every pass. |
+| **👨‍🏫 The Real-Time Teacher** | Live API voice chat lets users co-direct in real time while the agent manipulates the timeline and explains edits using the same stateful reasoning. |
+| **🎨 Creative Autopilot** | Combines Gemini 3 reasoning with Veo, Nano Banana Pro, Lyria, and Chirp to generate brand-consistent assets, captions, and narration that the renderer assembles deterministically. |
+
+### Designed for Judge Review
+
+- **Artifacts screen** surfaces every caption file, AD script, render hash, and PDF extraction so judges can validate the “Action Era” workflows without needing a login.
+- **Test instructions** ship with a guest project + Telegram bot so the judge can trigger both pipelines in under a minute if they choose to test.
+- **Public repo + demo** (as required) plus optional live credentials satisfy the Devpost submission checklist.
+
+In short: Gemini Studio is the execution layer that the hackathon brief is asking for—an autonomous system that plans, acts, verifies, and proves it did the work.
 
 ---
 

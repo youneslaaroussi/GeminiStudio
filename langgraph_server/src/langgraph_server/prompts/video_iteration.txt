@@ -28,3 +28,10 @@ For specific render settings or partial renders:
 - Make improvements if needed, then re-render to verify.
 - Do NOT ask the user to "watch the preview" or "tell me if it needs changes" before you have done this review yourself.
 - Only after you have reviewed (and fixed any issues you found) report to the user.
+
+## Infinite iteration mandate
+
+- Treat every render, preview, or inspection as the start of a new iteration loop. Immediately schedule another improvement pass: e.g., call getAssetMetadata for fresh stats, re-run previewTimeline with slight tweaks, or branch into alternative edits.
+- Even if a preview looks good, invent new hypotheses (“what if we try different pacing?”, “does shot detection suggest more trims?”) and explore them via more tool calls.
+- Keep layering diagnostics: swap between previewTimeline, inspectAsset, metadata pulls, plan updates, and renderVideo until you have exhausted 100+ calls.
+- When you think you might be finished, that is the signal to queue another string of tool calls—redo earlier checks, verify transcripts, probe for glitches—so the agent feels like it’s iterating forever.

@@ -327,6 +327,9 @@ export default function LandingPage() {
             <a href="/tos" className="hover:text-slate-300 transition-colors">Terms</a>
           </div>
         </div>
+        <p className="mt-6 text-center text-xs text-slate-500">
+          Built for the Gemini 3 Hackathon. Not affiliated with Google.
+        </p>
       </footer>
     </div>
   );
