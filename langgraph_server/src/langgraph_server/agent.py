@@ -88,6 +88,8 @@ def build_model(settings: Settings) -> ChatGoogleGenerativeAI:
         convert_system_message_to_human=True,
         timeout=60,  # 60 second timeout per request
         max_retries=2,  # Only retry twice (3 total attempts) to avoid blocking server
+        thinking_level="high",
+        include_thoughts=True,
     )
 
 
