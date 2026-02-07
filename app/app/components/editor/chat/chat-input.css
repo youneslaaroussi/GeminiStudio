@@ -114,6 +114,31 @@
   outline-offset: 1px;
 }
 
+/* Link styling in chat input – default and YouTube highlight */
+.chat-link {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chat-link:hover {
+  text-decoration-thickness: 2px;
+}
+
+.chat-link--youtube {
+  font-weight: 600;
+  color: hsl(0 84% 60%);
+  background: hsl(0 84% 60% / 0.12);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  text-decoration-color: hsl(0 84% 60% / 0.5);
+}
+
+.chat-link--youtube:hover {
+  background: hsl(0 84% 60% / 0.2);
+  text-decoration-color: hsl(0 84% 60% / 0.8);
+}
+
 /* Mention dropdown styling (applied via JS) */
 .mention-dropdown {
   position: fixed;

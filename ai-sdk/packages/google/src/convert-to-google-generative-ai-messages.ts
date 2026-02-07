@@ -16,6 +16,7 @@ import {
   GoogleGenerativeAIPrompt,
 } from './google-generative-ai-prompt';
 import { convertToBase64 } from '@ai-sdk/provider-utils';
+import { isSupportedFileUrl } from './google-supported-file-url';
 
 export function convertToGoogleGenerativeAIMessages(
   prompt: LanguageModelV3Prompt,
@@ -58,22 +59,39 @@ export function convertToGoogleGenerativeAIMessages(
               const mediaType =
                 part.mediaType === 'image/*' ? 'image/jpeg' : part.mediaType;
 
-              parts.push(
-                part.data instanceof URL
-                  ? {
+              // URL object: use fileUri
+              if (part.data instanceof URL) {
+                parts.push({
+                  fileData: {
+                    mimeType: mediaType,
+                    fileUri: part.data.toString(),
+                  },
+                });
+                break;
+              }
+              // String URL (e.g. from UI file part): use fileUri if supported (YouTube, etc.)
+              if (typeof part.data === 'string' && part.data.startsWith('http')) {
+                try {
+                  const url = new URL(part.data);
+                  if (isSupportedFileUrl(url)) {
+                    parts.push({
                       fileData: {
                         mimeType: mediaType,
-                        fileUri: part.data.toString(),
+                        fileUri: part.data,
                       },
-                    }
-                  : {
-                      inlineData: {
-                        mimeType: mediaType,
-                        data: convertToBase64(part.data),
-                      },
-                    },
-              );
-
+                    });
+                    break;
+                  }
+                } catch {
+                  // fall through to inlineData
+                }
+              }
+              parts.push({
+                inlineData: {
+                  mimeType: mediaType,
+                  data: convertToBase64(part.data),
+                },
+              });
               break;
             }
           }

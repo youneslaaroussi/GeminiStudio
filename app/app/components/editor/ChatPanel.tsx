@@ -43,6 +43,7 @@ import {
   Volume2,
   VolumeX,
   Copy,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
@@ -54,10 +55,12 @@ import type {
   TimelineChatMessage,
 } from "@/app/types/chat";
 import { ChatInput, type ChatInputRef } from "./chat";
+import { isYouTubeUrl } from "./chat/link-extension";
 import {
   MENTION_TOKEN_REGEX,
   getMentionAppearance,
 } from "./chat/mention-extension";
+import { SiYoutube } from "react-icons/si";
 import type { ToolResultOutput } from "@ai-sdk/provider-utils";
 import { MemoizedMarkdown } from "../MemoizedMarkdown";
 import {
@@ -65,6 +68,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
   TooltipContent,
@@ -166,6 +170,7 @@ export function ChatPanel() {
   const [isSpeakLoading, setIsSpeakLoading] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [recommendedActions, setRecommendedActions] = useState<string[]>([]);
+  const [recommendedActionsLoading, setRecommendedActionsLoading] = useState(false);
   const cloudUnsubscribeRef = useRef<(() => void) | null>(null);
   const teleportAbortRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -369,6 +374,7 @@ export function ChatPanel() {
   const hasNoMessages = !messages?.length;
   useEffect(() => {
     if (hasNoMessages && projectId) {
+      setRecommendedActionsLoading(true);
       getAuthHeaders()
         .then((headers) =>
           fetch("/api/chat/recommended-actions", {
@@ -383,7 +389,10 @@ export function ChatPanel() {
             setRecommendedActions(data.actions);
           }
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => setRecommendedActionsLoading(false));
+    } else {
+      setRecommendedActionsLoading(false);
     }
   }, [hasNoMessages, projectId, assetsContext]);
 
@@ -1189,8 +1198,18 @@ export function ChatPanel() {
                 Ask about your project, generate content, or let me help edit
                 your timeline.
               </p>
+              {recommendedActionsLoading && (
+                <div className="w-full max-w-md grid grid-cols-1 gap-3 px-2">
+                  {[1, 2, 3, 4].map((i) => (
+                    <Skeleton
+                      key={i}
+                      className="h-14 w-full rounded-xl"
+                    />
+                  ))}
+                </div>
+              )}
               <AnimatePresence>
-                {recommendedActions.length > 0 && (
+                {!recommendedActionsLoading && recommendedActions.length > 0 && (
                   <motion.div
                     className="w-full max-w-md grid grid-cols-1 gap-3 px-2"
                     initial="hidden"
@@ -1718,7 +1737,8 @@ type MentionDisplay = {
 
 type MessageToken =
   | { type: "text"; text: string }
-  | { type: "mention"; data: MentionDisplay };
+  | { type: "mention"; data: MentionDisplay }
+  | { type: "url"; url: string };
 
 type AssetLookupFn = (name: string) => {
   id: string;
@@ -1771,7 +1791,7 @@ function expandFallbackMentions(
   const expanded: MessageToken[] = [];
 
   for (const token of tokens) {
-    if (token.type === "mention") {
+    if (token.type === "mention" || token.type === "url") {
       expanded.push(token);
       continue;
     }
@@ -1897,7 +1917,43 @@ function buildMessageTokens(
     });
   }
 
-  return expandFallbackMentions(tokens, mentionLookup, findAssetByName);
+  return expandUrlTokens(
+    expandFallbackMentions(tokens, mentionLookup, findAssetByName)
+  );
+}
+
+/** Matches http(s) URLs in plain text for chip display (same as link-extension intent). */
+const URL_IN_TEXT_REGEX = /https?:\/\/[^\s<>"']+/g;
+
+function expandUrlTokens(tokens: MessageToken[]): MessageToken[] {
+  const result: MessageToken[] = [];
+  for (const token of tokens) {
+    if (token.type !== "text") {
+      result.push(token);
+      continue;
+    }
+    const segment = token.text;
+    if (!segment) {
+      result.push(token);
+      continue;
+    }
+    let lastIndex = 0;
+    const regex = new RegExp(URL_IN_TEXT_REGEX.source, "g");
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(segment)) !== null) {
+      const start = match.index;
+      const end = start + match[0].length;
+      if (start > lastIndex) {
+        result.push({ type: "text", text: segment.slice(lastIndex, start) });
+      }
+      result.push({ type: "url", url: match[0] });
+      lastIndex = end;
+    }
+    if (lastIndex < segment.length) {
+      result.push({ type: "text", text: segment.slice(lastIndex) });
+    }
+  }
+  return result;
 }
 
 function MessageTextContent({
@@ -1929,6 +1985,32 @@ function MessageTextContent({
           return token.text.length > 0 ? (
             <span key={`text-${keyCounter}`}>{token.text}</span>
           ) : null;
+        }
+
+        if (token.type === "url") {
+          keyCounter += 1;
+          const href = token.url;
+          const displayUrl = href.length > 48 ? `${href.slice(0, 45)}…` : href;
+          const isYoutube = isYouTubeUrl(href);
+          const UrlIcon = isYoutube ? SiYoutube : ExternalLink;
+          return (
+            <a
+              key={`url-${keyCounter}`}
+              href={href}
+              target="_blank"
+              rel="noreferrer noopener"
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium no-underline transition-colors",
+                isYoutube
+                  ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/40 hover:border-red-500/50"
+                  : "bg-primary/20 text-primary-foreground hover:bg-primary/30 border border-primary/40 hover:border-primary/50"
+              )}
+              title={href}
+            >
+              <UrlIcon className="size-3 shrink-0" aria-hidden />
+              <span className="truncate max-w-[200px]">{displayUrl}</span>
+            </a>
+          );
         }
 
         const { className, Icon } = getMentionAppearance(token.data.assetType);

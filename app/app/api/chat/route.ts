@@ -450,8 +450,28 @@ function buildAssetMentionContext(metadata: ChatMessageMetadata | undefined): st
   return context;
 }
 
+/** Match YouTube watch and short URLs (public/unlisted). One video per request per Gemini API. */
+const YOUTUBE_URL_REGEX =
+  /https:\/\/(?:www\.)?youtube\.com\/watch\?v=[\w-]+(?:&[\w=&.-]*)?|https:\/\/youtu\.be\/[\w-]+(?:\?[\w=&.-]*)?/i;
+
+function getFirstYouTubeUrlInMessage(message: TimelineChatMessage): string | null {
+  let text = "";
+  if (Array.isArray(message.parts) && message.parts.length > 0) {
+    text = message.parts
+      .filter((p): p is { type: "text"; text: string } => p.type === "text")
+      .map((p) => p.text)
+      .join("\n");
+  } else {
+    const content = (message as { content?: string }).content;
+    if (typeof content === "string") text = content;
+  }
+  const match = text.match(YOUTUBE_URL_REGEX);
+  return match ? match[0] : null;
+}
+
 /**
- * Inject attachment content parts and asset mention context into user messages
+ * Inject attachment content parts and asset mention context into user messages.
+ * Also detects YouTube URLs in prompt text and injects them as file parts (one per request).
  *
  * This converts ChatAttachment metadata into actual content parts
  * that the ai SDK can convert to Gemini API format, and adds context
@@ -460,15 +480,33 @@ function buildAssetMentionContext(metadata: ChatMessageMetadata | undefined): st
 function injectAttachmentParts(
   messages: TimelineChatMessage[]
 ): TimelineChatMessage[] {
-  return messages.map((message) => {
+  // Gemini allows one YouTube video URL per request: find the first user message that contains one
+  let youtubeUrl: string | null = null;
+  let youtubeMessageIndex = -1;
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i].role !== "user") continue;
+    const url = getFirstYouTubeUrlInMessage(messages[i]);
+    if (url) {
+      youtubeUrl = url;
+      youtubeMessageIndex = i;
+      break;
+    }
+  }
+
+  return messages.map((message, index) => {
     if (message.role !== "user") return message;
 
     const metadata = message.metadata as ChatMessageMetadata | undefined;
     const attachments = metadata?.attachments;
     const assetMentionContext = buildAssetMentionContext(metadata);
+    const isYoutubeMessage = youtubeUrl != null && index === youtubeMessageIndex;
 
-    // If no attachments and no asset mentions, return as-is
-    if ((!attachments || attachments.length === 0) && !assetMentionContext) {
+    // If no attachments, no asset mentions, and no YouTube to inject, return as-is
+    if (
+      (!attachments || attachments.length === 0) &&
+      !assetMentionContext &&
+      !isYoutubeMessage
+    ) {
       return message;
     }
 
@@ -494,6 +532,18 @@ function injectAttachmentParts(
       return null;
     }).filter((part): part is NonNullable<typeof part> => part !== null);
 
+    // YouTube link in prompt: inject as file part (one per request; Gemini supports one YouTube URL per request)
+    const youtubeParts =
+      isYoutubeMessage && youtubeUrl
+        ? [
+            {
+              type: "file" as const,
+              url: youtubeUrl,
+              mediaType: "video/mp4" as const,
+            },
+          ]
+        : [];
+
     // Get existing parts; fallback to message.content (string) so we never send empty contents to Gemini
     const existingParts = (() => {
       if (Array.isArray(message.parts) && message.parts.length > 0) {
@@ -511,8 +561,13 @@ function injectAttachmentParts(
       ? [{ type: "text" as const, text: assetMentionContext }]
       : [];
 
-    // Combine: attachments first, then context, then existing parts (per Gemini best practices)
-    const parts = [...attachmentParts, ...contextParts, ...existingParts];
+    // Combine: YouTube first (if any), then attachments, then context, then existing parts (per Gemini best practices)
+    const parts = [
+      ...youtubeParts,
+      ...attachmentParts,
+      ...contextParts,
+      ...existingParts,
+    ];
     // Gemini requires at least one part per user message; avoid empty contents
     const safeParts =
       parts.length > 0 ? parts : [{ type: "text" as const, text: " " }];

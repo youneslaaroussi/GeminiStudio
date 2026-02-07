@@ -14,6 +14,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import { createMentionSuggestion } from "./useMentionSuggestion";
 import { AssetMentionExtension } from "./mention-extension";
+import { ChatLinkExtension } from "./link-extension";
 
 import type { ChatInputProps, ChatInputRef, AssetMention } from "./types";
 import { ASSET_DRAG_DATA_MIME, type AssetDragPayload } from "@/app/types/assets";
@@ -107,6 +108,12 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(
         Placeholder.configure({
           placeholder,
           emptyEditorClass: "is-editor-empty",
+        }),
+        ChatLinkExtension.configure({
+          openOnClick: false,
+          autolink: true,
+          linkOnPaste: true,
+          HTMLAttributes: { rel: "noopener noreferrer nofollow", target: "_blank" },
         }),
         AssetMentionExtension.configure({
           HTMLAttributes: {
