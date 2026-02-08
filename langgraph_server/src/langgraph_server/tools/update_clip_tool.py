@@ -100,6 +100,7 @@ def updateClipInTimeline(
     color and threshold are required; smoothness is optional (0-1). Omit or set to null to remove chroma key.
     For video clips, use focus (JSON) to set focus/zoom: {"x": 0.5, "y": 0.5, "zoom": 1}. x,y = center (0–1), zoom = 1 for full frame, 2 for 2×. Pass null to clear.
     Use animation (hover|pulse|float|glow) for idle animations on video, text, image clips. Use animation_intensity 0-5 (1=normal, 5=5x). Pass "none" or omit to clear.
+    For component clips, text, fontSize, fill, opacity, and speed are applied to the component's inputs (e.g. Typewriter text input).
 
     Args:
         clip_id: The clip ID to update (e.g. "clip-abc12345")
@@ -371,6 +372,14 @@ def updateClipInTimeline(
 
         layer, clip = found
         clip_type = clip.get("type", "")
+
+        # For component clips, map text/fontSize/fill/opacity/speed into inputs (scene uses clip.inputs as component props)
+        if clip_type == "component":
+            component_input_keys = ("text", "fontSize", "fill", "opacity", "speed")
+            for key in component_input_keys:
+                if key in updates:
+                    clip.setdefault("inputs", {})
+                    clip["inputs"][key] = updates.pop(key)
 
         # Enforce source duration for video/audio
         if clip_type in ("video", "audio"):
