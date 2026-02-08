@@ -72,6 +72,9 @@ export interface LiveSessionState {
   error?: string;
   isListening: boolean;
   isSpeaking: boolean;
+  /** Set when the WebSocket closes (e.g. 1008 = server closed after tool use). */
+  closeCode?: number;
+  closeReason?: string;
 }
 
 export interface ToolCallRequest {

@@ -102,6 +102,76 @@ function applyPostBuildPatches(js: string): string {
  */
 const ALLOWED_FILE_PATH_REGEX = /^src\/components\/custom\/[a-zA-Z0-9_-]+\.tsx$/;
 
+/**
+ * Normalize component source so it compiles with Motion Canvas 3.x.
+ * - "signal" is not exported from @motion-canvas/core/lib/signals; it comes from @motion-canvas/2d.
+ * - "makeComponent" is not exported from @motion-canvas/core; we provide it in scene src/lib/makeComponent.
+ * - "random" is not exported from @motion-canvas/core; use useRandom() and store as instance field for class components.
+ */
+function normalizeComponentSource(content: string): string {
+  let out = content;
+
+  // 1) Fix: import { signal } from "@motion-canvas/core/lib/signals" (or with createSignal, etc.)
+  //    Use signal from @motion-canvas/2d; use createSignal (and any other names) from @motion-canvas/core.
+  const coreSignalsImport =
+    /import\s*\{([^}]*)\}\s*from\s*['"](@motion-canvas\/core\/lib\/signals)['"]\s*;?\s*\n?/g;
+  out = out.replace(coreSignalsImport, (_, namesStr) => {
+    const names = namesStr.split(',').map((n: string) => n.trim());
+    const signalKey = (n: string) => n.split(/\s+as\s+/)[0]?.trim() ?? n;
+    const signalNames = names.filter((n: string) => signalKey(n) === 'signal');
+    const rest = names.filter((n: string) => signalKey(n) !== 'signal');
+    const lines: string[] = [];
+    if (signalNames.length > 0) {
+      lines.push(`import { ${signalNames.join(', ')} } from '@motion-canvas/2d';`);
+    }
+    if (rest.length > 0) {
+      lines.push(`import { ${rest.join(', ')} } from '@motion-canvas/core';`);
+    }
+    return lines.length ? lines.join('\n') + '\n' : '';
+  });
+
+  // 2) Fix: import { makeComponent, random, ... } from "@motion-canvas/core"
+  //    makeComponent → from our polyfill; random → useRandom (not exported as "random").
+  const coreMainImport = /import\s*\{([^}]*)\}\s*from\s*['"]@motion-canvas\/core['"]\s*;?\s*\n?/g;
+  out = out.replace(coreMainImport, (fullMatch, namesStr) => {
+    const names = namesStr.split(',').map((n: string) => n.trim());
+    const nameKey = (n: string) => n.split(/\s+as\s+/)[0]?.trim() ?? n;
+    let outNames = names.filter((n: string) => nameKey(n) !== 'makeComponent');
+    const hadRandom = outNames.some((n: string) => nameKey(n) === 'random');
+    const hasUseRandom = outNames.some((n: string) => nameKey(n) === 'useRandom');
+    if (hadRandom && !hasUseRandom) {
+      outNames = outNames.filter((n: string) => nameKey(n) !== 'random');
+      outNames.push('useRandom');
+    }
+    const coreLine =
+      outNames.length > 0
+        ? `import { ${outNames.join(', ')} } from '@motion-canvas/core';\n`
+        : '';
+    const makeComponentLine = names.some((n: string) => nameKey(n) === 'makeComponent')
+      ? "import { makeComponent } from '../../lib/makeComponent';\n"
+      : '';
+    return coreLine + makeComponentLine;
+  });
+
+  // 3) Fix: usages of "random." (random was replaced with useRandom in import) — inject class field and use this._random.
+  if (/\brandom\./.test(out)) {
+    if (!out.includes('_random = useRandom()')) {
+      const classBraceMatch = out.match(
+        /(export\s+class\s+\w+\s+extends\s+(?:Layout|Node|Rect|Circle|Txt|Line|Path|Spline|[\w.]+)\s*\{)/
+      );
+      if (classBraceMatch) {
+        out = out.replace(
+          classBraceMatch[0],
+          classBraceMatch[0] + '\n  private readonly _random = useRandom();'
+        );
+      }
+    }
+    out = out.replace(/\brandom\./g, 'this._random.');
+  }
+
+  return out;
+}
+
 export interface CompileRequest {
   /** File overrides: path relative to scene root (e.g. "src/components/custom/Foo.tsx") mapped to file content. */
   files?: Record<string, string>;
@@ -207,7 +277,8 @@ export async function compileScene(
           mkdirSync(parentDir, { recursive: true });
         }
 
-        writeFileSync(targetPath, content, 'utf8');
+        const normalizedContent = normalizeComponentSource(content);
+        writeFileSync(targetPath, normalizedContent, 'utf8');
         logger.debug({ relativePath }, 'Applied file override');
       }
     }
@@ -222,25 +293,28 @@ export async function compileScene(
       );
 
       if (componentFiles.length > 0) {
-        const imports: string[] = [];
-        const registrations: string[] = [];
+        const lines: string[] = [
+          "import { registerComponent } from '../../lib/clips';",
+          '',
+        ];
 
         for (const file of componentFiles) {
           const name = basename(file, '.tsx');
-          imports.push(`import { ${name} } from './${name}';`);
-          registrations.push(
+          // Support both default export (e.g. export default makeComponent(...)) and named export (e.g. export class X)
+          lines.push(`import * as ${name}Module from './${name}';`);
+          lines.push(`const ${name} = ${name}Module.default ?? ${name}Module.${name};`);
+          lines.push('');
+        }
+
+        for (const file of componentFiles) {
+          const name = basename(file, '.tsx');
+          lines.push(
             `registerComponent('${name}', ${name} as unknown as new (props?: Record<string, unknown>) => import('@motion-canvas/2d').Node);`
           );
         }
+        lines.push('');
 
-        const barrelContent = [
-          "import { registerComponent } from '../../lib/clips';",
-          '',
-          ...imports,
-          '',
-          ...registrations,
-          '',
-        ].join('\n');
+        const barrelContent = lines.join('\n');
 
         writeFileSync(join(customDir, 'index.ts'), barrelContent, 'utf8');
         logger.info({ components: componentFiles.map((f) => basename(f, '.tsx')) }, 'Generated custom component barrel');

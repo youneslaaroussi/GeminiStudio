@@ -120,6 +120,28 @@ export function AssetList({
   const handleDownload = useCallback(async (asset: RemoteAsset) => {
     setDownloadingIds((prev) => new Set(prev).add(asset.id));
     try {
+      // Component assets: download code as .jsx
+      if (asset.type === "component" && asset.code != null) {
+        const baseName =
+          (asset.componentName || asset.name || "Component").replace(
+            /[^a-zA-Z0-9_-]/g,
+            "_"
+          ) || "Component";
+        const filename = baseName.endsWith(".jsx") ? baseName : `${baseName}.jsx`;
+        const blob = new Blob([asset.code], {
+          type: "text/javascript;charset=utf-8",
+        });
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(objectUrl);
+        return;
+      }
+
       const base = asset.url;
       const sep = base.includes("?") ? "&" : "?";
       const downloadUrl = `${base}${sep}download=1`;

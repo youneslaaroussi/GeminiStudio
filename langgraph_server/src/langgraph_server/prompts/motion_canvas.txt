@@ -80,19 +80,22 @@ When you create or edit Motion Canvas components (createComponent, editComponent
 - **Always** provide **complete** TSX for createComponent/editComponent: full file with imports from '@motion-canvas/2d' and '@motion-canvas/core', exported component class (and optionally props interface). No partial snippets or invalid syntax.
 - **Always** use valid TypeScript/JSX: correct decorators, types, and semicolons so the server-side compiler can compile the component.
 
+## Imports (use these to avoid compile errors)
+
+- **signal, initial, colorSignal**: import from **'@motion-canvas/2d'** (not from core).
+- **createSignal, createRef, tween, SignalValue, SimpleSignal, etc.**: import from **'@motion-canvas/core'**.
+- **Function components**: if you use a function that returns JSX (e.g. with createSignal for props), wrap it with **makeComponent** and import: `import { makeComponent } from '../../lib/makeComponent';` (do not import makeComponent from @motion-canvas/core — it is provided by the project).
+
 ## Example skeleton (createComponent)
 
 ```tsx
-import { Node, NodeProps, Rect, Circle, Layout } from '@motion-canvas/2d';
+import { Node, NodeProps, Rect, Circle, Layout, signal, initial, colorSignal } from '@motion-canvas/2d';
 import {
   SignalValue,
   SimpleSignal,
   ColorSignal,
   createRef,
   createSignal,
-  signal,
-  initial,
-  colorSignal,
 } from '@motion-canvas/core';
 
 export interface MyWidgetProps extends NodeProps {
@@ -197,6 +200,6 @@ When providing code to createComponent or editComponent, supply complete, valid 
 
 ## Random values
 
-- **Reproducible randomness**: use **useRandom()** from '@motion-canvas/core'. Returns an RNG for the current scene; values are the same on every playback. Example: `const random = useRandom(); const n = random.nextInt(0, 10);`
-- **Custom seed**: `useRandom(123)` for a fixed sequence. The default seed is stored in the scene meta file.
+- **Reproducible randomness**: use **useRandom()** from '@motion-canvas/core' (do **not** import `random` — it is not exported). In class components, call it in the constructor or a field: `private readonly _random = useRandom();` then use `this._random.nextInt(0, 10)`. In scene generators: `const random = useRandom(); const n = random.nextInt(0, 10);`
+  - **Custom seed**: `useRandom(123)` for a fixed sequence. The default seed is stored in the scene meta file.
 - **API**: see Random in Motion Canvas core (nextInt, nextFloat, etc.). Use for varied heights, positions, or visual variety while keeping the animation deterministic.

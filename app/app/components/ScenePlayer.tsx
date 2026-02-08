@@ -1137,7 +1137,6 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive max-w-md">
           <p className="font-medium">Failed to load scene</p>
           <p className="text-sm mt-1">{error}</p>
-          <p className="text-xs mt-2 opacity-80">Run: pnpm run build:scene</p>
         </div>
       </div>
     );

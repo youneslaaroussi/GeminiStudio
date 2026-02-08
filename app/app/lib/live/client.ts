@@ -87,7 +87,18 @@ export class LiveSession {
 
       this.ws.onclose = (event) => {
         console.log("WebSocket closed:", event.code, event.reason);
-        this.setState({ status: "disconnected", isListening: false, isSpeaking: false });
+        const is1008 = event.code === 1008;
+        const friendlyMessage = is1008
+          ? "Connection closed. Reconnect to continue."
+          : undefined;
+        this.setState({
+          status: "disconnected",
+          isListening: false,
+          isSpeaking: false,
+          closeCode: event.code,
+          closeReason: event.reason || undefined,
+          error: friendlyMessage,
+        });
         this.cleanup();
         // Reject if we haven't connected yet
         if (this.state.status === "connecting") {
@@ -156,7 +167,7 @@ export class LiveSession {
 
       // Handle setup complete
       if (message.setupComplete) {
-        this.setState({ status: "connected" });
+        this.setState({ status: "connected", error: undefined, closeCode: undefined, closeReason: undefined });
         onSetupComplete?.();
         return;
       }
