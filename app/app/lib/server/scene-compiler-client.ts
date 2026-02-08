@@ -33,6 +33,8 @@ function getAuthHeaders(body: string): Record<string, string> {
 export interface CompileSceneRequest {
   /** File overrides: path relative to scene root mapped to file content. */
   files?: Record<string, string>;
+  /** When false, skip tsc diagnostics (faster). Default true. */
+  includeDiagnostics?: boolean;
 }
 
 /** A single type/lint diagnostic from the compiler. */
