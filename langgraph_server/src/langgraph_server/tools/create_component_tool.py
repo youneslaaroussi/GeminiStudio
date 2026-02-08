@@ -141,6 +141,35 @@ def createComponent(
     return {"status": "success", "outputs": outputs}
 
 
+def get_component_files_for_project(
+    settings: object,
+    user_id: str,
+    project_id: str,
+) -> Dict[str, str]:
+    """Fetch project assets and return component file overrides for the scene compiler.
+
+    Returns a dict mapping path (e.g. src/components/custom/Foo.tsx) to TSX source.
+    Used by render and preview tools so compiled scenes include custom component layers.
+    """
+    files: Dict[str, str] = {}
+    if not getattr(settings, "asset_service_url", None):
+        return files
+    try:
+        list_endpoint = (
+            f"{settings.asset_service_url.rstrip('/')}/api/assets/{user_id}/{project_id}"  # type: ignore[union-attr]
+        )
+        list_headers = get_asset_service_headers("")
+        list_resp = httpx.get(list_endpoint, headers=list_headers, timeout=10.0)
+        if list_resp.status_code == 200:
+            all_assets = list_resp.json().get("assets", [])
+            for a in all_assets:
+                if a.get("type") == "component" and a.get("componentName") and a.get("code"):
+                    files[f"src/components/custom/{a['componentName']}.tsx"] = a["code"]
+    except Exception as exc:
+        logger.debug("Could not fetch assets for component files: %s", exc)
+    return files
+
+
 def _trial_compile(
     settings: object,
     user_id: str,
@@ -157,26 +186,11 @@ def _trial_compile(
     if not getattr(settings, "scene_compiler_url", None):
         return None
 
-    # Fetch all component assets from the asset service
-    files: Dict[str, str] = {}
-    try:
-        list_endpoint = (
-            f"{settings.asset_service_url.rstrip('/')}/api/assets/{user_id}/{project_id}"  # type: ignore[union-attr]
-        )
-        list_headers = get_asset_service_headers("")
-        list_resp = httpx.get(list_endpoint, headers=list_headers, timeout=10.0)
-        if list_resp.status_code == 200:
-            all_assets = list_resp.json().get("assets", [])
-            for a in all_assets:
-                if a.get("type") == "component" and a.get("componentName") and a.get("code"):
-                    files[f"src/components/custom/{a['componentName']}.tsx"] = a["code"]
-    except Exception as exc:
-        logger.debug("Could not fetch assets for trial compile: %s", exc)
-
+    files = get_component_files_for_project(settings, user_id, project_id)
     # Override with the just-saved component
     files[f"src/components/custom/{component_name}.tsx"] = code
 
-    compile_body = json.dumps({"files": files})
+    compile_body = json.dumps({"files": files, "includeDiagnostics": True})
     try:
         compile_headers = get_scene_compiler_headers(compile_body)
         compile_resp = httpx.post(

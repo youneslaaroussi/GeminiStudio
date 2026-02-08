@@ -3,7 +3,7 @@ import type { Project, TimelineClip } from "@/app/types/timeline";
 import type { ProjectTranscription } from "@/app/types/transcription";
 import { initAdmin } from "@/app/lib/server/firebase-admin";
 import { getAuth } from "firebase-admin/auth";
-import { getPipelineStateFromService, isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
+import { getPipelineStateFromService, isAssetServiceEnabled, listAssetsFromService } from "@/app/lib/server/asset-service-client";
 import { createV4SignedUrl } from "@/app/lib/server/gcs-signed-url";
 import { deductCredits } from "@/app/lib/server/credits";
 import { getCreditsForAction } from "@/app/lib/credits-config";
@@ -353,6 +353,15 @@ export async function POST(request: NextRequest) {
     // Transform project to use signed GCS URLs
     const transformedProject = await transformProjectForRenderer(project, userId, projectId);
 
+    // Build custom component file overrides for scene compiler (same as app ScenePlayer / compile-scene)
+    const assets = await listAssetsFromService(userId, projectId);
+    const componentFiles: Record<string, string> = {};
+    for (const asset of assets) {
+      if (asset.type === "component" && asset.componentName && asset.code) {
+        componentFiles[`src/components/custom/${asset.componentName}.tsx`] = asset.code;
+      }
+    }
+
     // Generate output path and signed upload URL
     const timestamp = Date.now();
     const extension = output.format === "gif" ? "gif" : output.format === "webm" ? "webm" : "mp4";
@@ -395,6 +404,8 @@ export async function POST(request: NextRequest) {
         includeAudio: true,
         uploadUrl,
       },
+      // Custom component source for scene compiler so renders include component layers
+      ...(Object.keys(componentFiles).length > 0 && { componentFiles }),
       // Add options with resolutionScale for preview renders
       ...(previewSettings && {
         options: {

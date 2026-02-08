@@ -24,15 +24,52 @@ export interface AddAssetToTimelineParams {
   sourceDuration?: number;
   layerId?: string;
   addClip: (clip: TimelineClip, layerId?: string) => void;
-  // Component-specific fields
+  // Component-specific fields (resolved from asset fetch if missing)
   componentName?: string;
   inputDefs?: ComponentInputDef[];
 }
 
 /**
+ * Resolve component name and inputDefs for a component asset.
+ * Uses provided params; if missing, fetches full asset from API (e.g. when adding from Assets tab).
+ */
+async function resolveComponentAssetParams(
+  assetId: string,
+  projectId: string,
+  provided: { componentName?: string; inputDefs?: ComponentInputDef[]; name?: string; width?: number; height?: number }
+): Promise<{ componentName: string; inputDefs: ComponentInputDef[]; name: string; width?: number; height?: number } | null> {
+  const { componentName, inputDefs, name, width, height } = provided;
+  // Use provided data when we have componentName (inputDefs can be empty or omitted)
+  if (componentName) {
+    return {
+      componentName,
+      inputDefs: inputDefs ?? [],
+      name: name || "Component",
+      width,
+      height,
+    };
+  }
+  const res = await fetch(
+    `/api/assets/${assetId}?projectId=${encodeURIComponent(projectId)}`,
+    { credentials: "include" }
+  );
+  if (!res.ok) return null;
+  const data = (await res.json()) as { asset?: { componentName?: string; inputDefs?: ComponentInputDef[]; name?: string; width?: number; height?: number } };
+  const asset = data?.asset;
+  if (!asset) return null;
+  return {
+    componentName: asset.componentName ?? "MyComponent",
+    inputDefs: asset.inputDefs ?? [],
+    name: asset.name ?? name ?? "Component",
+    width: asset.width ?? width,
+    height: asset.height ?? height,
+  };
+}
+
+/**
  * Single code path for adding an asset to the timeline.
- * Fetches a signed playback URL; only adds the clip if we get one.
- * Used by both the Add button in the assets panel and by drag-and-drop.
+ * Used by the Add button in the assets panel, the Components panel (drag), and timeline drop.
+ * For components, resolves componentName/inputDefs from params or by fetching the asset when missing.
  */
 export async function addAssetToTimeline(
   params: AddAssetToTimelineParams
@@ -57,20 +94,28 @@ export async function addAssetToTimeline(
     return false;
   }
 
-  // Component assets don't have playback URLs -- handle them directly
+  // Component assets: single path — resolve componentName/inputDefs (fetch if missing), then add clip
   if (type === "component") {
-    const clipName = name || "Component";
+    const resolved = await resolveComponentAssetParams(assetId, projectId, {
+      componentName,
+      inputDefs,
+      name,
+      width,
+      height,
+    });
+    if (!resolved) return false;
+    const clipName = resolved.name;
     const resolvedDuration = duration || DEFAULT_ASSET_DURATIONS.component;
     const defaultInputs: Record<string, string | number | boolean> = {};
-    for (const def of inputDefs ?? []) {
+    for (const def of resolved.inputDefs) {
       defaultInputs[def.name] = def.default;
     }
     addClip(
-      createComponentClip(assetId, componentName ?? "MyComponent", clipName, start, resolvedDuration, {
-        inputDefs,
+      createComponentClip(assetId, resolved.componentName, clipName, start, resolvedDuration, {
+        inputDefs: resolved.inputDefs,
         inputs: defaultInputs,
-        width,
-        height,
+        width: resolved.width,
+        height: resolved.height,
       }),
       layerId
     );

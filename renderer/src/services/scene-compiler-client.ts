@@ -12,6 +12,8 @@ import type { RendererConfig } from '../config.js';
 export interface CompileSceneRequest {
   /** File overrides: path relative to scene root mapped to file content. */
   files?: Record<string, string>;
+  /** When false, skip tsc (faster). Renderer does not need diagnostics. */
+  includeDiagnostics?: boolean;
 }
 
 export interface CompileSceneResponse {

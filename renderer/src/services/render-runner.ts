@@ -340,6 +340,7 @@ export class RenderRunner {
     logger.info({ jobId: job.id, componentFiles: Object.keys(data.componentFiles ?? {}) }, 'Compiling scene');
     const compileResult = await compileScene(config, {
       files: data.componentFiles,
+      includeDiagnostics: false,
     });
     const compiledProjectJs = compileResult.js;
     logger.info({ jobId: job.id, compiledSize: Buffer.byteLength(compiledProjectJs) }, 'Scene compiled successfully');

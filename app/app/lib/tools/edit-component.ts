@@ -193,7 +193,7 @@ export const editComponentTool: ToolDefinition<
           const compileRes = await fetch("/api/compile-scene", {
             method: "POST",
             headers: { ...authHeaders2, "Content-Type": "application/json" },
-            body: JSON.stringify({ files }),
+            body: JSON.stringify({ files, includeDiagnostics: true }),
           });
 
           const compileData = (await compileRes.json().catch(() => ({}))) as {

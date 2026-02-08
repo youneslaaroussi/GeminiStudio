@@ -47,16 +47,29 @@ function parseTscDiagnostics(stderr: string): CompileDiagnostic[] {
   return diagnostics;
 }
 
+/** Cached Motion Canvas plugin factory (resolved once per process). */
+let cachedMotionCanvasPlugin: ((opts?: Record<string, unknown>) => PluginOption[]) | null = null;
+
 /**
- * Dynamically import the Motion Canvas Vite plugin.
+ * Load the Motion Canvas Vite plugin (cached after first use).
  * Handles both default and named export styles.
  */
 async function loadMotionCanvasPlugin(): Promise<(opts?: Record<string, unknown>) => PluginOption[]> {
+  if (cachedMotionCanvasPlugin) return cachedMotionCanvasPlugin;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mcp: any = await import('@motion-canvas/vite-plugin');
-  if (typeof mcp === 'function') return mcp;
-  if (typeof mcp.default === 'function') return mcp.default;
-  if (typeof mcp.default?.default === 'function') return mcp.default.default;
+  if (typeof mcp === 'function') {
+    cachedMotionCanvasPlugin = mcp;
+    return mcp;
+  }
+  if (typeof mcp.default === 'function') {
+    cachedMotionCanvasPlugin = mcp.default;
+    return mcp.default;
+  }
+  if (typeof mcp.default?.default === 'function') {
+    cachedMotionCanvasPlugin = mcp.default.default;
+    return mcp.default.default;
+  }
   throw new Error('Could not resolve Motion Canvas Vite plugin export');
 }
 
@@ -92,6 +105,8 @@ const ALLOWED_FILE_PATH_REGEX = /^src\/components\/custom\/[a-zA-Z0-9_-]+\.tsx$/
 export interface CompileRequest {
   /** File overrides: path relative to scene root (e.g. "src/components/custom/Foo.tsx") mapped to file content. */
   files?: Record<string, string>;
+  /** When false, skip tsc --noEmit (faster; no diagnostics returned). Default true for backward compatibility. */
+  includeDiagnostics?: boolean;
 }
 
 export interface CompileResult {
@@ -256,6 +271,12 @@ export async function compileScene(
         },
       },
     };
+    if (config.viteCacheDir) {
+      if (!existsSync(config.viteCacheDir)) {
+        mkdirSync(config.viteCacheDir, { recursive: true });
+      }
+      viteConfig.cacheDir = config.viteCacheDir;
+    }
 
     await build(viteConfig);
 
@@ -275,20 +296,23 @@ export async function compileScene(
     // Apply post-build patches
     js = applyPostBuildPatches(js);
 
-    // 5b. Run tsc --noEmit to collect type/lint diagnostics (build can succeed while types have errors)
+    // 5b. Run tsc --noEmit to collect type/lint diagnostics when requested (build can succeed while types have errors)
     let diagnostics: CompileDiagnostic[] | undefined;
-    const tsconfigPath = join(tmpDir, 'tsconfig.json');
-    if (existsSync(tsconfigPath)) {
-      const tscResult = spawnSync('npx', ['tsc', '--noEmit'], {
-        cwd: tmpDir,
-        encoding: 'utf8',
-        maxBuffer: 1024 * 1024,
-      });
-      const tscOutput = (tscResult.stderr ?? '') + (tscResult.stdout ?? '');
-      if (tscOutput) {
-        diagnostics = parseTscDiagnostics(tscOutput);
-        if (diagnostics.length > 0) {
-          logger.info({ count: diagnostics.length, files: [...new Set(diagnostics.map((d) => d.file))] }, 'Type-check reported diagnostics');
+    const includeDiagnostics = request.includeDiagnostics !== false;
+    if (includeDiagnostics) {
+      const tsconfigPath = join(tmpDir, 'tsconfig.json');
+      if (existsSync(tsconfigPath)) {
+        const tscResult = spawnSync('npx', ['tsc', '--noEmit'], {
+          cwd: tmpDir,
+          encoding: 'utf8',
+          maxBuffer: 1024 * 1024,
+        });
+        const tscOutput = (tscResult.stderr ?? '') + (tscResult.stdout ?? '');
+        if (tscOutput) {
+          diagnostics = parseTscDiagnostics(tscOutput);
+          if (diagnostics.length > 0) {
+            logger.info({ count: diagnostics.length, files: [...new Set(diagnostics.map((d) => d.file))] }, 'Type-check reported diagnostics');
+          }
         }
       }
     }

@@ -26,6 +26,7 @@ from ..config import Settings, get_settings
 from ..credits import deduct_credits, get_credits_for_action, InsufficientCreditsError
 from ..firebase import fetch_user_projects
 from ..gemini_files import upload_file_sync
+from .create_component_tool import get_component_files_for_project
 
 logger = logging.getLogger(__name__)
 
@@ -283,6 +284,11 @@ def previewTimeline(
     project_payload.setdefault("background", project_payload.get("background", "#000000"))
     project_payload.setdefault("fps", PREVIEW_FPS)
 
+    # Include custom component source so the scene compiler compiles component layers
+    component_files = get_component_files_for_project(
+        settings, user_id, project_id or target_project.get("id") or ""
+    )
+
     # Get resolution and apply scale
     resolution = project_data.get("resolution") or {}
     full_width = int(resolution.get("width") or 1280)
@@ -346,6 +352,8 @@ def previewTimeline(
             "resolutionScale": PREVIEW_RESOLUTION_SCALE,
         },
     }
+    if component_files:
+        job_payload["componentFiles"] = component_files
 
     endpoint = settings.renderer_base_url.rstrip("/") + "/renders"
 

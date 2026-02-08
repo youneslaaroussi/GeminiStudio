@@ -19,6 +19,7 @@ from langchain_core.tools import tool, InjectedToolArg
 from ..config import Settings, get_settings
 from ..credits import deduct_credits, get_credits_for_action, InsufficientCreditsError
 from ..firebase import fetch_user_projects
+from .create_component_tool import get_component_files_for_project
 
 logger = logging.getLogger(__name__)
 
@@ -297,6 +298,11 @@ def renderVideo(
   project_payload.setdefault("background", project_payload.get("background", "#000000"))
   project_payload.setdefault("fps", project_payload.get("fps", output_fps))
 
+  # Include custom component source so the scene compiler compiles component layers
+  component_files = get_component_files_for_project(
+    settings, effective_user_id, effective_project_id or ""
+  )
+
   # Generate signed upload URL for GCS
   effective_project_id = effective_project_id or target_project.get("id") or "unknown"
   gcs_object_name = f"renders/{effective_user_id}/{effective_project_id}/{request_id}.{output_format}"
@@ -359,6 +365,8 @@ def renderVideo(
     "output": output_payload,
     "metadata": metadata,
   }
+  if component_files:
+    job_payload["componentFiles"] = component_files
 
   endpoint = settings.renderer_base_url.rstrip("/") + "/renders"
 

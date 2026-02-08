@@ -9,6 +9,7 @@ import type { CompilerConfig } from './config.js';
 /** Zod schema for the compile request body. */
 const compileRequestSchema = z.object({
   files: z.record(z.string(), z.string()).optional(),
+  includeDiagnostics: z.boolean().optional(),
 });
 
 export const createServer = (config: CompilerConfig): Express => {
@@ -33,7 +34,7 @@ export const createServer = (config: CompilerConfig): Express => {
         return;
       }
 
-      const { files } = parse.data;
+      const { files, includeDiagnostics } = parse.data;
 
       // Check total input size of file overrides
       if (files) {
@@ -55,7 +56,7 @@ export const createServer = (config: CompilerConfig): Express => {
 
       try {
         const result = await Promise.race([
-          compileScene(config, { files }),
+          compileScene(config, { files, includeDiagnostics }),
           new Promise<never>((_, reject) => {
             controller.signal.addEventListener('abort', () =>
               reject(new Error(`Build timed out after ${config.buildTimeoutMs}ms`)),

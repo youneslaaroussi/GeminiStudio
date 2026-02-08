@@ -39,7 +39,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { files } = body as { files?: Record<string, string> };
+    const { files, includeDiagnostics } = body as {
+      files?: Record<string, string>;
+      includeDiagnostics?: boolean;
+    };
 
     // Validate files if provided
     if (files !== undefined) {
@@ -66,8 +69,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 3. Compile via the scene-compiler service
-    const result = await compileScene({ files });
+    // 3. Compile via the scene-compiler service (include diagnostics when requested, e.g. by agent tools)
+    const result = await compileScene({
+      files,
+      includeDiagnostics: includeDiagnostics !== false,
+    });
 
     // 4. Return compiled JS
     return NextResponse.json(result);

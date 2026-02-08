@@ -150,7 +150,7 @@ export const createComponentTool: ToolDefinition<
         const compileRes = await fetch("/api/compile-scene", {
           method: "POST",
           headers: { ...authHeaders, "Content-Type": "application/json" },
-          body: JSON.stringify({ files }),
+          body: JSON.stringify({ files, includeDiagnostics: true }),
         });
 
         const compileData = await compileRes.json().catch(() => ({})) as { error?: string; diagnostics?: Array<{ file: string; line: number; column: number; message: string; code?: string; severity: string }> };

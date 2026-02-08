@@ -1,3 +1,5 @@
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { config as loadEnv } from 'dotenv';
 
 loadEnv();
@@ -11,6 +13,8 @@ export interface CompilerConfig {
   maxOutputBytes: number;
   /** Absolute path to the base scene source directory (scene/src/) */
   baseSceneDir: string;
+  /** Persistent Vite cache dir for faster repeated compiles. null = disabled (e.g. VITE_CACHE_DISABLED=true). */
+  viteCacheDir: string | null;
 }
 
 export const loadConfig = (): CompilerConfig => {
@@ -22,7 +26,14 @@ export const loadConfig = (): CompilerConfig => {
     BUILD_TIMEOUT_MS,
     MAX_OUTPUT_BYTES,
     BASE_SCENE_DIR,
+    VITE_CACHE_DIR,
+    VITE_CACHE_DISABLED,
   } = process.env;
+
+  const viteCacheDir =
+    VITE_CACHE_DISABLED === 'true' || VITE_CACHE_DISABLED === '1'
+      ? null
+      : (VITE_CACHE_DIR ?? join(tmpdir(), 'scene-compiler-vite-cache'));
 
   return {
     port: Number(PORT ?? 4001),
@@ -33,5 +44,6 @@ export const loadConfig = (): CompilerConfig => {
     maxOutputBytes: Number(MAX_OUTPUT_BYTES ?? 2097152), // 2MB
     // In dev: point to ../scene/src; in Docker: /app/base-scene
     baseSceneDir: BASE_SCENE_DIR ?? new URL('../../scene', import.meta.url).pathname,
+    viteCacheDir,
   };
 };
