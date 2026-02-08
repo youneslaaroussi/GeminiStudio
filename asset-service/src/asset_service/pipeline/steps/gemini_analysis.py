@@ -11,6 +11,13 @@ import httpx
 from ..registry import register_step
 from ..types import AssetType, PipelineContext, PipelineResult, StepStatus
 from ..store import get_pipeline_state
+from ...api_key_provider import (
+    get_current_key,
+    init_api_key_provider,
+    is_quota_exhausted,
+    keys_count,
+    rotate_next_key,
+)
 from ...config import get_settings
 from ...gemini import (
     upload_file_from_gcs,
@@ -360,12 +367,13 @@ async def _call_gemini_api(
 async def gemini_analysis_step(context: PipelineContext) -> PipelineResult:
     """Analyze asset using Gemini for comprehensive description."""
     settings = get_settings()
+    init_api_key_provider(settings)
 
-    if not settings.gemini_api_key:
-        logger.warning("GEMINI_API_KEY not configured, skipping Gemini analysis")
+    if not get_current_key():
+        logger.warning("GEMINI_API_KEY / GEMINI_API_KEYS not configured, skipping Gemini analysis")
         return PipelineResult(
             status=StepStatus.FAILED,
-            error="GEMINI_API_KEY is not configured",
+            error="GEMINI_API_KEY / GEMINI_API_KEYS is not configured",
         )
 
     # Get GCS URI from upload step
@@ -385,17 +393,38 @@ async def gemini_analysis_step(context: PipelineContext) -> PipelineResult:
     # Build analysis prompt
     prompt = _build_analysis_prompt(category, context.asset.name)
 
-    # Call Gemini API
+    # Call Gemini API with key rotation on 429
     logger.info(f"Starting Gemini analysis for asset {context.asset.id} ({category}, mime: {resolved_mime_type})")
-
-    result = await _call_gemini_api(
-        gcs_uri=gcs_uri,
-        mime_type=resolved_mime_type,
-        prompt=prompt,
-        api_key=settings.gemini_api_key,
-        asset_name=context.asset.name,
-        model_id=settings.gemini_model_id,
-    )
+    n_keys = max(1, keys_count())
+    last_exc: Exception | None = None
+    for _ in range(n_keys):
+        api_key = get_current_key()
+        if not api_key:
+            return PipelineResult(
+                status=StepStatus.FAILED,
+                error="GEMINI_API_KEY / GEMINI_API_KEYS is not configured",
+            )
+        try:
+            result = await _call_gemini_api(
+                gcs_uri=gcs_uri,
+                mime_type=resolved_mime_type,
+                prompt=prompt,
+                api_key=api_key,
+                asset_name=context.asset.name,
+                model_id=settings.gemini_model_id,
+            )
+            break
+        except Exception as e:
+            last_exc = e
+            if is_quota_exhausted(e) and keys_count() > 1:
+                logger.warning("Gemini analysis 429, rotating to next API key: %s", e)
+                rotate_next_key()
+                continue
+            raise
+    else:
+        if last_exc:
+            raise last_exc
+        return PipelineResult(status=StepStatus.FAILED, error="Gemini analysis failed")
 
     if not result.get("analysis"):
         return PipelineResult(

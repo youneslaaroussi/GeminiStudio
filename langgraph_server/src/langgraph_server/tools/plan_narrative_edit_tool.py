@@ -11,6 +11,12 @@ from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
+from ..api_key_provider import (
+    get_current_key,
+    is_quota_exhausted,
+    keys_count,
+    rotate_next_key,
+)
 from ..config import get_settings
 from ..hmac_auth import get_asset_service_headers
 
@@ -181,21 +187,41 @@ Rules:
 - Prefer coherent segments (e.g. use shot boundaries, complete phrases from transcript).
 """
 
-    try:
-        model = ChatGoogleGenerativeAI(
-            model=settings.gemini_model,
-            api_key=settings.google_api_key,
-            convert_system_message_to_human=True,
-            timeout=90,
-            max_retries=1,
-        )
-        structured_llm = model.with_structured_output(EditPlan)
-        plan = structured_llm.invoke(prompt)
-    except Exception as e:
-        logger.exception("createEditPlan LLM failed: %s", e)
+    n_keys = max(1, keys_count())
+    last_exc: Exception | None = None
+    for _ in range(n_keys):
+        api_key = get_current_key()
+        if not api_key:
+            return {
+                "status": "error",
+                "message": "Gemini API key not configured.",
+            }
+        try:
+            model = ChatGoogleGenerativeAI(
+                model=settings.gemini_model,
+                api_key=api_key,
+                convert_system_message_to_human=True,
+                timeout=90,
+                max_retries=1,
+            )
+            structured_llm = model.with_structured_output(EditPlan)
+            plan = structured_llm.invoke(prompt)
+            break
+        except Exception as e:
+            last_exc = e
+            if is_quota_exhausted(e) and keys_count() > 1:
+                logger.warning("createEditPlan 429, rotating key: %s", e)
+                rotate_next_key()
+                continue
+            logger.exception("createEditPlan LLM failed: %s", e)
+            return {
+                "status": "error",
+                "message": f"Failed to generate plan: {e}",
+            }
+    else:
         return {
             "status": "error",
-            "message": f"Failed to generate plan: {e}",
+            "message": f"Failed to generate plan: {last_exc}",
         }
 
     # Serialize for the agent (Pydantic model -> dict)

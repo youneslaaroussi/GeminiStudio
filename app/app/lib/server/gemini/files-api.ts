@@ -3,12 +3,14 @@
  *
  * Utilities for uploading and managing files with Google's Gemini Files API.
  * Files uploaded via this API can be used in generateContent requests and
- * persist for 48 hours.
+ * persist for 48 hours. Uses GOOGLE_GENERATIVE_AI_API_KEYS (comma-separated)
+ * with rotation on 429.
  *
  * @see https://ai.google.dev/gemini-api/docs/files
  */
 
-const API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+import { getCurrentGeminiKey, runWithGeminiKeyRotation } from "@/app/lib/server/gemini-api-keys";
+
 const BASE_URL = "https://generativelanguage.googleapis.com";
 
 /**
@@ -87,74 +89,82 @@ export async function uploadFile(
   data: Buffer,
   options: UploadFileOptions
 ): Promise<GeminiFile> {
-  if (!API_KEY) {
+  if (!getCurrentGeminiKey()) {
     throw new GeminiFilesApiError(
       "GOOGLE_GENERATIVE_AI_API_KEY is not configured",
       500
     );
   }
 
-  const numBytes = data.byteLength;
+  return runWithGeminiKeyRotation(async (apiKey) => {
+    const numBytes = data.byteLength;
 
-  // Step 1: Start resumable upload and get upload URL
-  const startResponse = await fetch(
-    `${BASE_URL}/upload/v1beta/files?key=${API_KEY}`,
-    {
+    // Step 1: Start resumable upload and get upload URL
+    const startResponse = await fetch(
+      `${BASE_URL}/upload/v1beta/files?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: {
+          "X-Goog-Upload-Protocol": "resumable",
+          "X-Goog-Upload-Command": "start",
+          "X-Goog-Upload-Header-Content-Length": String(numBytes),
+          "X-Goog-Upload-Header-Content-Type": options.mimeType,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          file: {
+            display_name: options.displayName,
+          },
+        }),
+      }
+    );
+
+    if (!startResponse.ok) {
+      const errorText = await startResponse.text();
+      if (startResponse.status === 429) {
+        throw new Error(`Gemini API 429 RESOURCE_EXHAUSTED: ${errorText}`);
+      }
+      throw new GeminiFilesApiError(
+        `Failed to start upload: ${startResponse.status}`,
+        startResponse.status,
+        errorText
+      );
+    }
+
+    const uploadUrl = startResponse.headers.get("X-Goog-Upload-URL");
+    if (!uploadUrl) {
+      throw new GeminiFilesApiError(
+        "No upload URL returned from Files API",
+        500
+      );
+    }
+
+    // Step 2: Upload the file data
+    const uploadResponse = await fetch(uploadUrl, {
       method: "POST",
       headers: {
-        "X-Goog-Upload-Protocol": "resumable",
-        "X-Goog-Upload-Command": "start",
-        "X-Goog-Upload-Header-Content-Length": String(numBytes),
-        "X-Goog-Upload-Header-Content-Type": options.mimeType,
-        "Content-Type": "application/json",
+        "Content-Length": String(numBytes),
+        "X-Goog-Upload-Offset": "0",
+        "X-Goog-Upload-Command": "upload, finalize",
       },
-      body: JSON.stringify({
-        file: {
-          display_name: options.displayName,
-        },
-      }),
+      body: new Uint8Array(data),
+    });
+
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      if (uploadResponse.status === 429) {
+        throw new Error(`Gemini API 429 RESOURCE_EXHAUSTED: ${errorText}`);
+      }
+      throw new GeminiFilesApiError(
+        `Failed to upload file: ${uploadResponse.status}`,
+        uploadResponse.status,
+        errorText
+      );
     }
-  );
 
-  if (!startResponse.ok) {
-    const errorText = await startResponse.text();
-    throw new GeminiFilesApiError(
-      `Failed to start upload: ${startResponse.status}`,
-      startResponse.status,
-      errorText
-    );
-  }
-
-  const uploadUrl = startResponse.headers.get("X-Goog-Upload-URL");
-  if (!uploadUrl) {
-    throw new GeminiFilesApiError(
-      "No upload URL returned from Files API",
-      500
-    );
-  }
-
-  // Step 2: Upload the file data
-  const uploadResponse = await fetch(uploadUrl, {
-    method: "POST",
-    headers: {
-      "Content-Length": String(numBytes),
-      "X-Goog-Upload-Offset": "0",
-      "X-Goog-Upload-Command": "upload, finalize",
-    },
-    body: new Uint8Array(data),
+    const result = (await uploadResponse.json()) as { file: GeminiFile };
+    return result.file;
   });
-
-  if (!uploadResponse.ok) {
-    const errorText = await uploadResponse.text();
-    throw new GeminiFilesApiError(
-      `Failed to upload file: ${uploadResponse.status}`,
-      uploadResponse.status,
-      errorText
-    );
-  }
-
-  const result = (await uploadResponse.json()) as { file: GeminiFile };
-  return result.file;
 }
 
 /**
@@ -205,27 +215,32 @@ export async function uploadFileFromUrl(
  * @returns The file metadata
  */
 export async function getFile(name: string): Promise<GeminiFile> {
-  if (!API_KEY) {
+  if (!getCurrentGeminiKey()) {
     throw new GeminiFilesApiError(
       "GOOGLE_GENERATIVE_AI_API_KEY is not configured",
       500
     );
   }
 
-  const response = await fetch(
-    `${BASE_URL}/v1beta/${name}?key=${API_KEY}`
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new GeminiFilesApiError(
-      `Failed to get file: ${response.status}`,
-      response.status,
-      errorText
+  return runWithGeminiKeyRotation(async (apiKey) => {
+    const response = await fetch(
+      `${BASE_URL}/v1beta/${name}?key=${apiKey}`
     );
-  }
 
-  return response.json() as Promise<GeminiFile>;
+    if (!response.ok) {
+      const errorText = await response.text();
+      if (response.status === 429) {
+        throw new Error(`Gemini API 429 RESOURCE_EXHAUSTED: ${errorText}`);
+      }
+      throw new GeminiFilesApiError(
+        `Failed to get file: ${response.status}`,
+        response.status,
+        errorText
+      );
+    }
+
+    return response.json() as Promise<GeminiFile>;
+  });
 }
 
 /**
@@ -280,26 +295,31 @@ export async function waitForFileActive(
  * @param name - The file name (e.g., "files/abc123")
  */
 export async function deleteFile(name: string): Promise<void> {
-  if (!API_KEY) {
+  if (!getCurrentGeminiKey()) {
     throw new GeminiFilesApiError(
       "GOOGLE_GENERATIVE_AI_API_KEY is not configured",
       500
     );
   }
 
-  const response = await fetch(
-    `${BASE_URL}/v1beta/${name}?key=${API_KEY}`,
-    { method: "DELETE" }
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new GeminiFilesApiError(
-      `Failed to delete file: ${response.status}`,
-      response.status,
-      errorText
+  return runWithGeminiKeyRotation(async (apiKey) => {
+    const response = await fetch(
+      `${BASE_URL}/v1beta/${name}?key=${apiKey}`,
+      { method: "DELETE" }
     );
-  }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      if (response.status === 429) {
+        throw new Error(`Gemini API 429 RESOURCE_EXHAUSTED: ${errorText}`);
+      }
+      throw new GeminiFilesApiError(
+        `Failed to delete file: ${response.status}`,
+        response.status,
+        errorText
+      );
+    }
+  });
 }
 
 /**
@@ -313,36 +333,41 @@ export async function listFiles(
   pageSize = 100,
   pageToken?: string
 ): Promise<{ files: GeminiFile[]; nextPageToken?: string }> {
-  if (!API_KEY) {
+  if (!getCurrentGeminiKey()) {
     throw new GeminiFilesApiError(
       "GOOGLE_GENERATIVE_AI_API_KEY is not configured",
       500
     );
   }
 
-  const params = new URLSearchParams({
-    key: API_KEY,
-    pageSize: String(pageSize),
+  return runWithGeminiKeyRotation(async (apiKey) => {
+    const params = new URLSearchParams({
+      key: apiKey,
+      pageSize: String(pageSize),
+    });
+    if (pageToken) {
+      params.set("pageToken", pageToken);
+    }
+
+    const response = await fetch(`${BASE_URL}/v1beta/files?${params}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      if (response.status === 429) {
+        throw new Error(`Gemini API 429 RESOURCE_EXHAUSTED: ${errorText}`);
+      }
+      throw new GeminiFilesApiError(
+        `Failed to list files: ${response.status}`,
+        response.status,
+        errorText
+      );
+    }
+
+    return response.json() as Promise<{
+      files: GeminiFile[];
+      nextPageToken?: string;
+    }>;
   });
-  if (pageToken) {
-    params.set("pageToken", pageToken);
-  }
-
-  const response = await fetch(`${BASE_URL}/v1beta/files?${params}`);
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new GeminiFilesApiError(
-      `Failed to list files: ${response.status}`,
-      response.status,
-      errorText
-    );
-  }
-
-  return response.json() as Promise<{
-    files: GeminiFile[];
-    nextPageToken?: string;
-  }>;
 }
 
 /**

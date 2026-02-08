@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from ..api_key_provider import init_api_key_provider
 from ..config import get_settings
 from ..tasks import start_worker, stop_worker, close_task_queue
 from ..tasks.worker import signal_shutdown
@@ -123,6 +124,7 @@ async def lifespan(app: FastAPI):
     from ..pipeline import steps  # noqa: F401
 
     logger.info("Asset service starting...")
+    init_api_key_provider(get_settings())
 
     # Start background worker
     try:

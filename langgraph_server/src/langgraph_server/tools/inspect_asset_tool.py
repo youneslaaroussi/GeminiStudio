@@ -87,10 +87,12 @@ def inspectAsset(
             "message": "Asset service URL not configured.",
         }
 
-    if not settings.google_api_key:
+    from ..api_key_provider import get_current_key
+
+    if not get_current_key():
         return {
             "status": "error",
-            "message": "GOOGLE_API_KEY not configured.",
+            "message": "GOOGLE_API_KEY / GEMINI_API_KEYS not configured.",
         }
 
     # Fetch asset from asset-service

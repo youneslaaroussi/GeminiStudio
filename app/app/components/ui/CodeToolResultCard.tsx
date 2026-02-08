@@ -18,10 +18,13 @@ import {
   Plus,
   Pencil,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+const COMPONENT_LANGUAGES = ["js", "ts", "jsx", "tsx"];
 
 export interface CodeToolResultCardProps {
   /** Programming language for syntax highlighting */
@@ -38,6 +41,8 @@ export interface CodeToolResultCardProps {
   defaultExpanded?: boolean;
   /** Callback when "Open in Editor" is clicked */
   onOpenInEditor?: () => void;
+  /** When set, header click opens Components tab and selects this component (used for js/ts/jsx/tsx blocks) */
+  onOpenInComponents?: (filename?: string, language?: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -375,6 +380,7 @@ export const CodeToolResultCard: FC<CodeToolResultCardProps> = ({
   summary,
   defaultExpanded = false,
   onOpenInEditor,
+  onOpenInComponents,
 }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const isEdit = oldCode !== undefined && oldCode !== code;
@@ -383,34 +389,61 @@ export const CodeToolResultCard: FC<CodeToolResultCardProps> = ({
   const statusColor = isEdit
     ? "text-blue-400 bg-blue-500/15"
     : "text-emerald-400 bg-emerald-500/15";
+  const isComponentBlock =
+    onOpenInComponents && COMPONENT_LANGUAGES.includes(language.toLowerCase());
+
+  const handleHeaderMainClick = (e: React.MouseEvent) => {
+    if (isComponentBlock) {
+      e.stopPropagation();
+      onOpenInComponents?.(filename, language);
+    }
+  };
 
   return (
     <div className="my-2 rounded-lg border border-zinc-700/60 bg-zinc-900/80 overflow-hidden shadow-sm">
       {/* Header */}
       <button
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => !isComponentBlock && setExpanded(!expanded)}
         className="w-full flex items-center gap-2 px-3 py-2 hover:bg-zinc-800/50 transition-colors text-left"
       >
-        <FileCode2 className="size-3.5 text-zinc-400 shrink-0" />
-        {filename && (
-          <span className="text-[11px] font-medium text-zinc-200 truncate">
-            {filename}
-          </span>
-        )}
-        <span className="text-[10px] text-zinc-500 uppercase tracking-wide">
-          {language}
-        </span>
         <span
-          className={`ml-auto flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusColor}`}
+          className={cn(
+            "flex items-center gap-2 min-w-0 flex-1",
+            isComponentBlock && "cursor-pointer"
+          )}
+          onClick={isComponentBlock ? handleHeaderMainClick : undefined}
         >
-          <StatusIcon className="size-2.5" />
-          {statusLabel}
+          <FileCode2 className="size-3.5 text-zinc-400 shrink-0" />
+          {filename && (
+            <span className="text-[11px] font-medium text-zinc-200 truncate">
+              {filename}
+            </span>
+          )}
+          <span className="text-[10px] text-zinc-500 uppercase tracking-wide">
+            {language}
+          </span>
+          <span
+            className={`ml-auto flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusColor}`}
+          >
+            <StatusIcon className="size-2.5" />
+            {statusLabel}
+          </span>
         </span>
-        {expanded ? (
-          <ChevronDown className="size-3.5 text-zinc-500 shrink-0" />
-        ) : (
-          <ChevronRight className="size-3.5 text-zinc-500 shrink-0" />
-        )}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded((prev) => !prev);
+          }}
+          className="shrink-0 p-0.5 rounded hover:bg-zinc-700/50"
+          aria-label={expanded ? "Collapse" : "Expand"}
+        >
+          {expanded ? (
+            <ChevronDown className="size-3.5 text-zinc-500" />
+          ) : (
+            <ChevronRight className="size-3.5 text-zinc-500" />
+          )}
+        </button>
       </button>
 
       {/* Summary */}

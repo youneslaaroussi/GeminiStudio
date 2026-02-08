@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from langchain_core.tools import tool, InjectedToolArg
 
+from ..api_key_provider import get_current_key
 from ..config import get_settings
 from ..credits import deduct_credits, get_credits_for_action, InsufficientCreditsError
 
@@ -21,11 +22,14 @@ _DURATION_CHOICES = {4, 6, 8}
 
 
 def _get_veo_client():
-    """Get Google GenAI client for Veo."""
+    """Get Google GenAI client for Veo (uses current key for rotation)."""
     from google import genai
-    
-    settings = get_settings()
-    return genai.Client(api_key=settings.google_api_key)
+
+    api_key = get_current_key()
+    if not api_key:
+        settings = get_settings()
+        api_key = settings.google_api_key or ""
+    return genai.Client(api_key=api_key)
 
 
 @tool

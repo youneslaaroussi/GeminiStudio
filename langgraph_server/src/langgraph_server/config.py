@@ -13,7 +13,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     google_project_id: str = Field(..., alias="GOOGLE_PROJECT_ID")
-    google_api_key: str = Field(..., alias="GOOGLE_API_KEY")
+    # Single key (backward compat). Ignored when GEMINI_API_KEYS is set.
+    google_api_key: str | None = Field(default=None, alias="GOOGLE_API_KEY")
+    # Comma-separated list of Gemini API keys; rotated on 429 quota errors.
+    gemini_api_keys: str | None = Field(default=None, alias="GEMINI_API_KEYS")
     gemini_model: str = Field(default="gemini-3-pro-preview", alias="GEMINI_MODEL")
     # Smaller model for generating short status messages (Thinking…, Calling X…). Default gemini-2.5-flash; set empty to use static messages.
     gemini_status_model: str | None = Field(default="gemini-2.5-flash", alias="GEMINI_STATUS_MODEL")

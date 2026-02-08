@@ -112,6 +112,9 @@ jobs:
           no_output_timeout: 10m
           command: |
             BUCKET="${GCS_BUCKET:-${PROJECT_ID}-storage}"
+            # Multi-key rotation (preferred): comma-separated list; on 429 we rotate to next key
+            SECRET_GEMINI_API_KEYS=$(gcloud secrets versions access latest --secret=gemini-api-keys --project=$PROJECT_ID 2>/dev/null || true)
+            # Single key fallback (when gemini-api-keys secret is not set)
             SECRET_GEMINI_API_KEY=$(gcloud secrets versions access latest --secret=gemini-api-key --project=$PROJECT_ID 2>/dev/null || true)
             SECRET_STRIPE_SECRET_KEY=$(gcloud secrets versions access latest --secret=stripe-secret-key --project=$PROJECT_ID 2>/dev/null || true)
             SECRET_STRIPE_WEBHOOK=$(gcloud secrets versions access latest --secret=stripe-webhook-secret --project=$PROJECT_ID 2>/dev/null || true)
@@ -142,7 +145,13 @@ jobs:
               printf "ASSET_GCS_BUCKET=%s\n" "$BUCKET"
               printf "CHECKPOINT_GCS_BUCKET=%s\n" "$BUCKET"
               printf "SPEECH_GCS_BUCKET=%s\n" "$BUCKET"
-              printf "GEMINI_API_KEY=%s\n" "$SECRET_GEMINI_API_KEY"
+              if [ -n "$SECRET_GEMINI_API_KEYS" ]; then
+                printf "GEMINI_API_KEYS=%s\n" "$SECRET_GEMINI_API_KEYS"
+                FIRST_GEMINI_KEY=$(echo "$SECRET_GEMINI_API_KEYS" | cut -d',' -f1)
+                printf "GEMINI_API_KEY=%s\n" "$FIRST_GEMINI_KEY"
+              else
+                printf "GEMINI_API_KEY=%s\n" "$SECRET_GEMINI_API_KEY"
+              fi
               printf "STRIPE_SECRET_KEY=%s\n" "$SECRET_STRIPE_SECRET_KEY"
               printf "STRIPE_CREDITS_WEBHOOK_SECRET=%s\n" "$SECRET_STRIPE_WEBHOOK"
               printf "STRIPE_PRICE_STARTER=%s\n" "$SECRET_STRIPE_STARTER"

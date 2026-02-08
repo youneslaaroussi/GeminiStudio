@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api import router
+from .api_key_provider import init_api_key_provider
 from .config import get_settings
 from .pipeline_events import PipelineEventSubscriber
 from .render_events import RenderEventSubscriber
@@ -56,6 +57,7 @@ app = create_app()
 @app.on_event("startup")
 async def startup_event():
     logger.info("LangGraph Server starting up")
+    init_api_key_provider(settings)
     await render_event_subscriber.start()
     await veo_event_poller.start()
     await pipeline_event_subscriber.start()

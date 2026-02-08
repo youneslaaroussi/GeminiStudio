@@ -3,12 +3,11 @@ import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { verifyAuth } from "@/app/lib/server/auth";
+import { getCurrentGeminiKey, runWithGeminiKeyRotation } from "@/app/lib/server/gemini-api-keys";
 import { DEFAULT_DIGEST_MODEL } from "@/app/lib/model-ids";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 
 type EmptyBody = { type: "empty"; assetsContext: string };
 type AfterResponseBody = { type: "afterResponse"; conversationText: string };
@@ -46,25 +45,28 @@ function normalizeActions(raw: string[]): string[] {
 }
 
 async function generateSuggestions(prompt: string): Promise<string[]> {
-  if (!API_KEY) return [];
-  const ai = new GoogleGenAI({ apiKey: API_KEY });
-  const response = await ai.models.generateContent({
-    model: DEFAULT_DIGEST_MODEL,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseJsonSchema: zodToJsonSchema(suggestionsSchema),
-    },
+  const key = getCurrentGeminiKey();
+  if (!key) return [];
+  return runWithGeminiKeyRotation(async (apiKey) => {
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: DEFAULT_DIGEST_MODEL,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseJsonSchema: zodToJsonSchema(suggestionsSchema),
+      },
+    });
+    const text = response.text?.trim();
+    if (!text) return [];
+    try {
+      const parsed = JSON.parse(text);
+      const result = suggestionsSchema.parse(parsed);
+      return normalizeActions(result.suggestions);
+    } catch {
+      return [];
+    }
   });
-  const text = response.text?.trim();
-  if (!text) return [];
-  try {
-    const parsed = JSON.parse(text);
-    const result = suggestionsSchema.parse(parsed);
-    return normalizeActions(result.suggestions);
-  } catch {
-    return [];
-  }
 }
 
 export async function POST(request: NextRequest) {
@@ -73,7 +75,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!API_KEY) {
+  if (!getCurrentGeminiKey()) {
     return NextResponse.json(
       { error: "GOOGLE_GENERATIVE_AI_API_KEY not configured" },
       { status: 500 }

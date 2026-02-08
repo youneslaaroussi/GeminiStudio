@@ -17,6 +17,12 @@ from google.cloud import storage
 from google.oauth2 import service_account
 from langchain_core.tools import tool
 
+from ..api_key_provider import (
+    get_current_key,
+    is_quota_exhausted,
+    keys_count,
+    rotate_next_key,
+)
 from ..config import Settings, get_settings
 from ..credits import deduct_credits, get_credits_for_action, InsufficientCreditsError
 from ..hmac_auth import get_asset_service_upload_headers
@@ -336,30 +342,49 @@ def generateSpeech(
 
     request_id = uuid4().hex
 
-    try:
-        client = genai.Client(api_key=settings.google_api_key)
-        
-        # Generate speech using TTS model
-        response = client.models.generate_content(
-            model=settings.tts_model,
-            contents=text.strip(),
-            config=types.GenerateContentConfig(
-                response_modalities=["AUDIO"],
-                speech_config=types.SpeechConfig(
-                    voice_config=types.VoiceConfig(
-                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                            voice_name=voice,
+    n_keys = max(1, keys_count())
+    last_exc: Exception | None = None
+    for _ in range(n_keys):
+        api_key = get_current_key()
+        if not api_key:
+            return {
+                "status": "error",
+                "message": "Gemini API key not configured.",
+                "reason": "api_error",
+            }
+        try:
+            client = genai.Client(api_key=api_key)
+            response = client.models.generate_content(
+                model=settings.tts_model,
+                contents=text.strip(),
+                config=types.GenerateContentConfig(
+                    response_modalities=["AUDIO"],
+                    speech_config=types.SpeechConfig(
+                        voice_config=types.VoiceConfig(
+                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                voice_name=voice,
+                            )
                         )
-                    )
+                    ),
                 ),
-            ),
-        )
-
-    except Exception as exc:
-        logger.exception("[TTS] API request failed")
+            )
+            break
+        except Exception as exc:
+            last_exc = exc
+            if is_quota_exhausted(exc) and keys_count() > 1:
+                logger.warning("[TTS] 429 quota exceeded, rotating key: %s", exc)
+                rotate_next_key()
+                continue
+            logger.exception("[TTS] API request failed")
+            return {
+                "status": "error",
+                "message": f"Failed to generate speech: {exc}",
+                "reason": "api_error",
+            }
+    else:
         return {
             "status": "error",
-            "message": f"Failed to generate speech: {exc}",
+            "message": f"Failed to generate speech: {last_exc}",
             "reason": "api_error",
         }
 

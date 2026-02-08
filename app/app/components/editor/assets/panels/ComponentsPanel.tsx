@@ -45,6 +45,7 @@ import { ASSET_DRAG_DATA_MIME } from "@/app/types/assets";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 import { MOTION_CANVAS_TYPES } from "@/app/lib/monaco-types-data";
 import { useProjectStore } from "@/app/lib/store/project-store";
+import { useAssetHighlightStore } from "@/app/lib/store/asset-highlight-store";
 import {
   COMPONENT_TEMPLATES,
   CATEGORY_LABELS,
@@ -155,6 +156,29 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
     () => componentAssets.find((a) => a.id === selectedId) ?? null,
     [componentAssets, selectedId]
   );
+
+  // When a component highlight is requested (e.g. from chat code block header click), select that component
+  const highlightRequest = useAssetHighlightStore((s) => s.request);
+  useEffect(() => {
+    if (!highlightRequest || highlightRequest.target.type !== "component") return;
+    const { id, name } = highlightRequest.target;
+    const list = componentAssetsRef.current;
+    if (id) {
+      const byId = list.find((a) => a.id === id);
+      if (byId) setSelectedId(byId.id);
+      return;
+    }
+    if (name) {
+      const normalized = name.replace(/\.[^.]+$/, "").trim();
+      const byName = list.find(
+        (a) =>
+          a.name === normalized ||
+          a.name === name ||
+          (a.componentName && (a.componentName === normalized || a.componentName === name))
+      );
+      if (byName) setSelectedId(byName.id);
+    }
+  }, [highlightRequest]);
 
   // Track previously loaded asset ID so we only reset editing state when
   // the user selects a *different* asset, not when the same asset is

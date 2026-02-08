@@ -51,6 +51,8 @@ services:
       - VIDEO_EFFECTS_SERVICE_URL=http://video-effects-service:8082
       - RENDERER_API_URL=http://renderer:4000
       - GOOGLE_GENERATIVE_AI_API_KEY=${GEMINI_API_KEY}
+      # Comma-separated list for 429 rotation (optional; falls back to GEMINI_API_KEY)
+      - GOOGLE_GENERATIVE_AI_API_KEYS=${GEMINI_API_KEYS:-}
       - AI_TITLE_GOOGLE_MODEL=${AI_TITLE_GOOGLE_MODEL:-gemini-2.0-flash}
       - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
       - ASSET_GCS_BUCKET=${ASSET_GCS_BUCKET}
@@ -122,6 +124,8 @@ services:
       - SPEECH_LANGUAGE_CODES=${SPEECH_LANGUAGE_CODES:-en-US}
       - SPEECH_GCS_BUCKET=${SPEECH_GCS_BUCKET:-${ASSET_GCS_BUCKET}}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      # Comma-separated list for 429 rotation (optional; falls back to GEMINI_API_KEY)
+      - GEMINI_API_KEYS=${GEMINI_API_KEYS:-}
       - GEMINI_MODEL_ID=${GEMINI_MODEL_ID:-gemini-3-pro-preview}
       - REDIS_URL=redis://redis:6379/0
       - PIPELINE_EVENT_TOPIC=${PIPELINE_EVENT_TOPIC:-gemini-pipeline-events}
@@ -197,6 +201,8 @@ services:
       - FIREBASE_DATABASE_URL=${FIREBASE_DATABASE_URL}
       - GOOGLE_API_KEY=${GEMINI_API_KEY}
       - GOOGLE_GENERATIVE_AI_API_KEY=${GEMINI_API_KEY}
+      # Comma-separated list for 429 rotation (optional; falls back to GEMINI_API_KEY)
+      - GEMINI_API_KEYS=${GEMINI_API_KEYS:-}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3-pro-preview}
       - GEMINI_STATUS_MODEL=${GEMINI_STATUS_MODEL:-gemini-2.5-flash}
       - GEMINI_TITLE_MODEL=${GEMINI_TITLE_MODEL:-gemini-2.0-flash}

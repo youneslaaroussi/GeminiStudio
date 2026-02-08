@@ -87,7 +87,7 @@ import { useProjectStore } from "@/app/lib/store/project-store";
 import { useProjectsListStore } from "@/app/lib/store/projects-list-store";
 import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { useVideoEffectsStore } from "@/app/lib/store/video-effects-store";
-import { requestAssetHighlight } from "@/app/lib/store/asset-highlight-store";
+import { requestAssetHighlight, requestComponentHighlight } from "@/app/lib/store/asset-highlight-store";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import { useAnalytics } from "@/app/lib/hooks/useAnalytics";
 import {
@@ -2447,6 +2447,10 @@ function ToolCallCard({
                 oldCode={codeEntry.oldCode}
                 summary={codeEntry.summary}
                 defaultExpanded
+                onOpenInComponents={(filename) => {
+                  const name = filename?.replace(/\.[^.]+$/, "").trim();
+                  if (name) requestComponentHighlight({ name });
+                }}
               />
             );
           })}
@@ -2602,6 +2606,10 @@ function renderToolOutputEntry(entry: Record<string, unknown>, key: number) {
           oldCode={codeEntry.oldCode}
           summary={codeEntry.summary}
           defaultExpanded
+          onOpenInComponents={(filename) => {
+            const name = filename?.replace(/\.[^.]+$/, "").trim();
+            if (name) requestComponentHighlight({ name });
+          }}
         />
       );
     }
@@ -2627,6 +2635,10 @@ function renderToolOutputEntry(entry: Record<string, unknown>, key: number) {
               oldCode={codeData.oldCode}
               summary={codeData.summary}
               defaultExpanded
+              onOpenInComponents={(filename) => {
+                const name = filename?.replace(/\.[^.]+$/, "").trim();
+                if (name) requestComponentHighlight({ name });
+              }}
             />
           );
         } catch {
@@ -2692,6 +2704,10 @@ function renderContentEntry(entry: ContentEntry, key: number) {
               code={codeData.code}
               oldCode={codeData.oldCode}
               summary={codeData.summary}
+              onOpenInComponents={(filename) => {
+                const name = filename?.replace(/\.[^.]+$/, "").trim();
+                if (name) requestComponentHighlight({ name });
+              }}
             />
           );
         } catch {

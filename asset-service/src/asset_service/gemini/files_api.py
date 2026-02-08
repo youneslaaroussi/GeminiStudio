@@ -17,6 +17,7 @@ from typing import Literal
 
 import httpx
 
+from ..api_key_provider import get_current_key
 from ..config import get_settings
 from ..storage.gcs import create_signed_url, download_from_gcs
 
@@ -90,14 +91,17 @@ class GeminiFile:
 
 
 def _get_api_key() -> str:
-    """Get the Gemini API key from settings."""
-    settings = get_settings()
-    if not settings.gemini_api_key:
+    """Get the current Gemini API key (supports rotation via GEMINI_API_KEYS)."""
+    key = get_current_key()
+    if not key:
+        settings = get_settings()
+        key = settings.gemini_api_key
+    if not key:
         raise GeminiFilesApiError(
-            "GEMINI_API_KEY is not configured",
+            "GEMINI_API_KEY / GEMINI_API_KEYS is not configured",
             500,
         )
-    return settings.gemini_api_key
+    return key
 
 
 async def upload_file(

@@ -10,6 +10,7 @@ from typing import NamedTuple
 
 from google import genai
 
+from .api_key_provider import get_current_key
 from .config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
@@ -23,9 +24,12 @@ class UploadedFile(NamedTuple):
 
 
 def _get_client(settings: Settings | None = None) -> genai.Client:
-    """Get a Gemini API client."""
-    resolved = settings or get_settings()
-    return genai.Client(api_key=resolved.google_api_key)
+    """Get a Gemini API client using the current key (supports rotation)."""
+    api_key = get_current_key()
+    if not api_key:
+        resolved = settings or get_settings()
+        api_key = resolved.google_api_key or ""
+    return genai.Client(api_key=api_key)
 
 
 def upload_file_sync(

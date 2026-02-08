@@ -12,6 +12,13 @@ from langchain_core.messages import ToolMessage
 from langchain_core.tools import StructuredTool
 from langgraph.graph import END, START, MessagesState, StateGraph
 
+from .api_key_provider import (
+    get_current_key,
+    init_api_key_provider,
+    is_quota_exhausted,
+    keys_count,
+    rotate_next_key,
+)
 from .checkpoint import create_checkpointer
 from .config import Settings, get_settings
 from .prompts import get_system_prompt
@@ -79,12 +86,11 @@ def _build_media_message(result: dict[str, Any], source_tool: str | None = None)
     return HumanMessage(content=content)
 
 
-def build_model(settings: Settings) -> ChatGoogleGenerativeAI:
-    """Instantiate the Gemini chat model."""
-
+def build_model(settings: Settings, api_key: str) -> ChatGoogleGenerativeAI:
+    """Instantiate the Gemini chat model with the given API key."""
     return ChatGoogleGenerativeAI(
         model=settings.gemini_model,
-        api_key=settings.google_api_key,
+        api_key=api_key,
         convert_system_message_to_human=True,
         timeout=60,  # 60 second timeout per request
         max_retries=2,  # Only retry twice (3 total attempts) to avoid blocking server
@@ -95,17 +101,35 @@ def build_model(settings: Settings) -> ChatGoogleGenerativeAI:
 
 def create_graph(settings: Settings | None = None):
     resolved_settings = settings or get_settings()
-    model = build_model(resolved_settings)
+    init_api_key_provider(resolved_settings)
     tools = get_registered_tools()
     tools_by_name = get_tools_by_name()
-    model_with_tools = model.bind_tools(tools)
     system_prompt_text = get_system_prompt(override=resolved_settings.system_prompt)
     system_message = SystemMessage(content=system_prompt_text)
+    n_keys = max(1, keys_count())
 
     async def call_model(state: MessagesState, config: RunnableConfig):
         messages = [system_message] + list(state["messages"])
-        response = await model_with_tools.ainvoke(messages, config=config)
-        return {"messages": [response]}
+        last_exc: BaseException | None = None
+        for attempt in range(n_keys):
+            api_key = get_current_key()
+            if not api_key:
+                raise RuntimeError("No Gemini API key configured (GOOGLE_API_KEY or GEMINI_API_KEYS)")
+            model = build_model(resolved_settings, api_key)
+            model_with_tools = model.bind_tools(tools)
+            try:
+                response = await model_with_tools.ainvoke(messages, config=config)
+                return {"messages": [response]}
+            except Exception as e:
+                last_exc = e
+                if is_quota_exhausted(e) and keys_count() > 1:
+                    logger.warning("[AGENT] Quota exhausted (429), rotating to next API key: %s", e)
+                    rotate_next_key()
+                    continue
+                raise
+        if last_exc is not None:
+            raise last_exc
+        return {"messages": []}
 
     def call_tool(state: MessagesState, config: RunnableConfig):
         tool_outputs: list[ToolMessage | HumanMessage] = []

@@ -289,8 +289,11 @@ class VeoEventPoller:
 
         from google import genai
         from google.genai import types
-        
-        client = genai.Client(api_key=self._settings.google_api_key)
+
+        from .api_key_provider import get_current_key
+
+        api_key = get_current_key() or self._settings.google_api_key
+        client = genai.Client(api_key=api_key or "")
 
         for operation_name, op_data in operations_to_check:
             try:
@@ -372,7 +375,10 @@ class VeoEventPoller:
             video = generated_video.video
 
             # Download the video
-            client = genai.Client(api_key=self._settings.google_api_key)
+            from .api_key_provider import get_current_key
+
+            api_key = get_current_key() or self._settings.google_api_key
+            client = genai.Client(api_key=api_key or "")
             client.files.download(file=video)
 
             video_bytes = video.video_bytes

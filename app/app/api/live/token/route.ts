@@ -4,6 +4,7 @@ import { initAdmin } from "@/app/lib/server/firebase-admin";
 import { getAuth } from "firebase-admin/auth";
 import { deductCredits } from "@/app/lib/server/credits";
 import { getCreditsForAction } from "@/app/lib/credits-config";
+import { getCurrentGeminiKey, runWithGeminiKeyRotation } from "@/app/lib/server/gemini-api-keys";
 import { LIVE_MODEL } from "@/app/lib/model-ids";
 
 export const runtime = "nodejs";
@@ -28,8 +29,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  if (!apiKey) {
+  if (!getCurrentGeminiKey()) {
     return NextResponse.json(
       { error: "GOOGLE_GENERATIVE_AI_API_KEY is not configured" },
       { status: 500 }
@@ -46,24 +46,26 @@ export async function POST(req: Request) {
   }
 
   try {
-    // Client must be configured with v1alpha for ephemeral tokens
-    const client = new GoogleGenAI({ 
-      apiKey,
-      httpOptions: { apiVersion: "v1alpha" },
+    const token = await runWithGeminiKeyRotation(async (apiKey) => {
+      // Client must be configured with v1alpha for ephemeral tokens
+      const client = new GoogleGenAI({
+        apiKey,
+        httpOptions: { apiVersion: "v1alpha" },
+      });
+
+      // Create ephemeral token with 30 minute expiry
+      const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      const newSessionExpireTime = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+
+      return client.authTokens.create({
+        config: {
+          uses: 1,
+          expireTime,
+          newSessionExpireTime,
+        },
+      });
     });
 
-    // Create ephemeral token with 30 minute expiry
-    const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-    const newSessionExpireTime = new Date(Date.now() + 2 * 60 * 1000).toISOString();
-
-    const token = await client.authTokens.create({
-      config: {
-        uses: 1,
-        expireTime,
-        newSessionExpireTime,
-      },
-    });
-    
     console.log("Created ephemeral token:", token.name?.substring(0, 20) + "...");
 
     return NextResponse.json({

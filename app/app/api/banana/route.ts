@@ -4,11 +4,11 @@ import { getAuth } from "firebase-admin/auth";
 import { uploadToAssetService, isAssetServiceEnabled } from "@/app/lib/server/asset-service-client";
 import { deductCredits } from "@/app/lib/server/credits";
 import { getCreditsForAction } from "@/app/lib/credits-config";
+import { fetchWithGeminiKeyRotation, getCurrentGeminiKey } from "@/app/lib/server/gemini-api-keys";
 import { DEFAULT_BANANA_MODEL } from "@/app/lib/model-ids";
 
 export const runtime = "nodejs";
 
-const API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 const BANANA_MODEL = process.env.BANANA_MODEL_ID || DEFAULT_BANANA_MODEL;
 
 interface BananaSourceImage {
@@ -46,7 +46,7 @@ function getImageExtension(mimeType: string) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!API_KEY) {
+  if (!getCurrentGeminiKey()) {
     return NextResponse.json(
       { error: "GOOGLE_GENERATIVE_AI_API_KEY is not configured" },
       { status: 500 }
@@ -104,30 +104,28 @@ export async function POST(request: NextRequest) {
       parts.push({ inlineData: { data: normalizedSource.data!, mimeType: normalizedSource.mimeType } });
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${BANANA_MODEL}:generateContent?key=${API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts,
-            },
-          ],
-          generationConfig: {
-            responseModalities: ["TEXT", "IMAGE"],
-            imageConfig: {
-              aspectRatio,
-              imageSize,
-            },
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${BANANA_MODEL}:generateContent`;
+    const response = await fetchWithGeminiKeyRotation(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts,
           },
-        }),
-      }
-    );
+        ],
+        generationConfig: {
+          responseModalities: ["TEXT", "IMAGE"],
+          imageConfig: {
+            aspectRatio,
+            imageSize,
+          },
+        },
+      }),
+    });
 
     if (!response.ok) {
       const text = await response.text();

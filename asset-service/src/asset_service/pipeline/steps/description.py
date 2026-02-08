@@ -10,6 +10,12 @@ import httpx
 from ..registry import register_step
 from ..types import AssetType, PipelineContext, PipelineResult, StepStatus
 from ..store import get_pipeline_state, update_pipeline_step
+from ...api_key_provider import (
+    get_current_key,
+    is_quota_exhausted,
+    keys_count,
+    rotate_next_key,
+)
 from ...config import get_settings
 from ...storage.firestore import update_asset
 
@@ -91,10 +97,10 @@ async def description_step(context: PipelineContext) -> PipelineResult:
     """Generate a short description from Gemini analysis."""
     settings = get_settings()
 
-    if not settings.gemini_api_key:
+    if not get_current_key():
         return PipelineResult(
             status=StepStatus.FAILED,
-            error="GEMINI_API_KEY is not configured",
+            error="GEMINI_API_KEY / GEMINI_API_KEYS is not configured",
         )
 
     # Get the Gemini analysis from the pipeline state
@@ -125,20 +131,40 @@ async def description_step(context: PipelineContext) -> PipelineResult:
             error="No analysis available from Gemini step",
         )
 
-    # Generate short description
+    # Generate short description with key rotation on 429
     logger.info(f"Generating description for asset {context.asset.id}")
-
-    try:
-        description = await _generate_description(
-            analysis=analysis,
-            api_key=settings.gemini_api_key,
-            model_id="gemini-2.0-flash",  # Use faster model for this simple task
-        )
-    except Exception as e:
-        logger.exception(f"Failed to generate description: {e}")
+    n_keys = max(1, keys_count())
+    last_exc: Exception | None = None
+    for _ in range(n_keys):
+        api_key = get_current_key()
+        if not api_key:
+            return PipelineResult(
+                status=StepStatus.FAILED,
+                error="GEMINI_API_KEY / GEMINI_API_KEYS is not configured",
+            )
+        try:
+            description = await _generate_description(
+                analysis=analysis,
+                api_key=api_key,
+                model_id="gemini-2.0-flash",  # Use faster model for this simple task
+            )
+            break
+        except Exception as e:
+            last_exc = e
+            if is_quota_exhausted(e) and keys_count() > 1:
+                logger.warning("Description step 429, rotating to next API key: %s", e)
+                rotate_next_key()
+                continue
+            logger.exception(f"Failed to generate description: {e}")
+            return PipelineResult(
+                status=StepStatus.FAILED,
+                error=f"Failed to generate description: {e}",
+            )
+    else:
+        logger.exception("Failed to generate description after key rotation: %s", last_exc)
         return PipelineResult(
             status=StepStatus.FAILED,
-            error=f"Failed to generate description: {e}",
+            error=f"Failed to generate description: {last_exc}",
         )
 
     if not description:

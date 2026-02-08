@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/app/lib/server/auth";
+import { fetchWithGeminiKeyRotation, getCurrentGeminiKey } from "@/app/lib/server/gemini-api-keys";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 const TITLE_MODEL =
   process.env.AI_TITLE_GOOGLE_MODEL ?? process.env.GEMINI_TITLE_MODEL ?? "gemini-2.0-flash";
 
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!API_KEY) {
+  if (!getCurrentGeminiKey()) {
     return NextResponse.json(
       { error: "GOOGLE_GENERATIVE_AI_API_KEY not configured" },
       { status: 500 }
@@ -69,14 +69,12 @@ export async function POST(request: NextRequest) {
     },
   };
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${TITLE_MODEL}:generateContent?key=${API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody),
-    }
-  );
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${TITLE_MODEL}:generateContent`;
+  const response = await fetchWithGeminiKeyRotation(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(requestBody),
+  });
 
   if (!response.ok) {
     const errorText = await response.text();

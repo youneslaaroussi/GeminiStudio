@@ -10,12 +10,14 @@ import { create } from "zustand";
 
 const DEFAULT_DURATION_MS = 2000;
 
-export type HighlightTarget = { type: "asset"; id: string };
+export type HighlightTarget =
+  | { type: "asset"; id: string }
+  | { type: "component"; id?: string; name?: string };
 
 interface HighlightState {
   /** Current highlight request; cleared automatically after duration */
   request: { target: HighlightTarget; timestamp: number } | null;
-  /** Request a highlight. Subscribers (layout, AssetList) react accordingly. */
+  /** Request a highlight. Subscribers (layout, AssetList, ComponentsPanel) react accordingly. */
   requestHighlight: (
     target: HighlightTarget,
     options?: { durationMs?: number }
@@ -45,5 +47,16 @@ export function requestAssetHighlight(
   useAssetHighlightStore.getState().requestHighlight(
     { type: "asset", id: assetId },
     options
+  );
+}
+
+/** Request highlight for a component (switches to components tab and selects the component by id or name) */
+export function requestComponentHighlight(
+  options: { id?: string; name?: string },
+  highlightOptions?: { durationMs?: number }
+) {
+  useAssetHighlightStore.getState().requestHighlight(
+    { type: "component", id: options.id, name: options.name },
+    highlightOptions
   );
 }

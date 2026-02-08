@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_PROMPT_MODEL } from "@/app/lib/model-ids";
 import { verifyAuth } from "@/app/lib/server/auth";
+import { fetchWithGeminiKeyRotation, getCurrentGeminiKey } from "@/app/lib/server/gemini-api-keys";
 
-const API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 const MODEL_ID = process.env.PROMPT_MODEL_ID || DEFAULT_PROMPT_MODEL;
 
 export const runtime = "nodejs";
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!API_KEY) {
+  if (!getCurrentGeminiKey()) {
     return NextResponse.json({ error: "GOOGLE_GENERATIVE_AI_API_KEY is not configured" }, { status: 500 });
   }
 
@@ -71,23 +71,21 @@ export async function POST(request: NextRequest) {
     const systemPrompt = buildSystemPrompt(body);
     const userContent = `Idea: ${body.idea.trim()}${body.tone ? `\nTone or reference: ${body.tone}` : ""}`;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_ID}:generateContent?key=${API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: `${systemPrompt}\n${userContent}` }],
-            },
-          ],
-        }),
-      }
-    );
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_ID}:generateContent`;
+    const response = await fetchWithGeminiKeyRotation(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: `${systemPrompt}\n${userContent}` }],
+          },
+        ],
+      }),
+    });
 
     if (!response.ok) {
       const text = await response.text();

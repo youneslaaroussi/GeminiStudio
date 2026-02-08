@@ -133,11 +133,14 @@ export function EditorLayout() {
     setAssetTabRef.current = setTab;
   }, []);
 
-  // Switch to assets tab when an asset highlight is requested (e.g. from chat mention click)
+  // Switch to assets/components tab when a highlight is requested (e.g. from chat mention or code block click)
   const highlightRequest = useAssetHighlightStore((s) => s.request);
   useEffect(() => {
-    if (highlightRequest?.target.type === "asset") {
+    if (!highlightRequest) return;
+    if (highlightRequest.target.type === "asset") {
       setAssetTabRef.current?.("assets");
+    } else if (highlightRequest.target.type === "component") {
+      setAssetTabRef.current?.("components");
     }
   }, [highlightRequest]);
 

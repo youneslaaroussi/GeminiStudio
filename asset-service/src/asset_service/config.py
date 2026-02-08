@@ -25,6 +25,8 @@ class Settings(BaseSettings):
 
     # Gemini AI
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
+    # Comma-separated list of Gemini API keys; rotated on 429 quota errors.
+    gemini_api_keys: str | None = Field(default=None, alias="GEMINI_API_KEYS")
     gemini_model_id: str = Field(default="gemini-3-pro-preview", alias="GEMINI_MODEL_ID")
 
     # Speech-to-Text
