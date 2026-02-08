@@ -285,7 +285,16 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
       setProject(proj);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      const bodyAlreadyLoaded =
+        /body\s+(stream\s+)?(already\s+)?(read|loaded|locked)/i.test(msg) ||
+        /json\s+body\s+already\s+loaded/i.test(msg);
+      if (bodyAlreadyLoaded) {
+        setError(null);
+        setTimeout(() => void compileAndLoad(componentFiles, codeHash), 100);
+        return;
+      }
+      setError(msg);
     } finally {
       isCompilingRef.current = false;
       setIsCompiling(false);
@@ -669,6 +678,10 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   // Ref to store latest selection handler for touch events
   const handleSelectionAtPointRef = useRef<(clientX: number, clientY: number) => void>(() => {});
 
+  // Defer hit-test to next frame so reading scene nodes (getNode/cacheBBox) doesn't
+  // run in the same turn as the click and trigger Motion Canvas to reset components.
+  const pendingClickRef = useRef<{ clientX: number; clientY: number } | null>(null);
+
   // Handle selection at screen coordinates
   const handleSelectionAtPoint = useCallback(
     (clientX: number, clientY: number) => {
@@ -805,13 +818,18 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
     handleSelectionAtPointRef.current = handleSelectionAtPoint;
   }, [handleSelectionAtPoint]);
 
-  // Handle click to select clips
+  // Handle click to select clips — defer hit-test to next frame so scene node
+  // reads (getNode/cacheBBox) don't run in the same turn as the click and reset components.
   const handleSceneClick = useCallback(
     (e: React.MouseEvent) => {
-      // Don't handle if shift is held (that's for panning)
       if (e.shiftKey) return;
       e.stopPropagation();
-      handleSelectionAtPoint(e.clientX, e.clientY);
+      pendingClickRef.current = { clientX: e.clientX, clientY: e.clientY };
+      requestAnimationFrame(() => {
+        const pending = pendingClickRef.current;
+        pendingClickRef.current = null;
+        if (pending) handleSelectionAtPoint(pending.clientX, pending.clientY);
+      });
     },
     [handleSelectionAtPoint]
   );

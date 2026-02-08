@@ -40,12 +40,12 @@ export function createComponentElements({ clips, view }: CreateComponentElements
         Object.entries(inputs).filter(([, v]) => v !== undefined && v !== null)
       ) as Record<string, string | number | boolean>;
 
-      // Key includes inputs fingerprint so when user changes label/inputs we don't reuse a
-      // stale node — forces a fresh instance with the new values (fixes disappearing/static content).
-      const inputsKey = JSON.stringify(definedInputs);
+      // Stable key by clip id only (no inputs fingerprint). When the key included inputsKey,
+      // position-only updates (e.g. drag) could produce a different key and cause duplicate nodes
+      // or reconciliation issues that made inner elements (e.g. label) disappear.
       const props: Record<string, unknown> = {
         ...definedInputs,
-        key: `component-clip-${clip.id}-${inputsKey}`,
+        key: `component-clip-${clip.id}`,
         x: clip.position.x,
         y: clip.position.y,
         scale: clip.scale,
@@ -60,7 +60,7 @@ export function createComponentElements({ clips, view }: CreateComponentElements
       const effectShaders = getEffectShaderConfig(clip.effect);
       if (effectShaders) {
         const wrapper = (
-          <Node key={`component-effect-${clip.id}-${inputsKey}`} cache shaders={effectShaders}>
+          <Node key={`component-effect-${clip.id}`} cache shaders={effectShaders}>
             {instance}
           </Node>
         );

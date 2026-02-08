@@ -31771,10 +31771,9 @@ function createComponentElements({ clips, view }) {
       const definedInputs = Object.fromEntries(
         Object.entries(inputs).filter(([, v]) => v !== void 0 && v !== null)
       );
-      const inputsKey = JSON.stringify(definedInputs);
       const props = {
         ...definedInputs,
-        key: `component-clip-${clip2.id}-${inputsKey}`,
+        key: `component-clip-${clip2.id}`,
         x: clip2.position.x,
         y: clip2.position.y,
         scale: clip2.scale,
@@ -31784,7 +31783,7 @@ function createComponentElements({ clips, view }) {
       ref(instance);
       const effectShaders = getEffectShaderConfig(clip2.effect);
       if (effectShaders) {
-        const wrapper2 = /* @__PURE__ */ jsx$1(Node, { cache: true, shaders: effectShaders, children: instance }, `component-effect-${clip2.id}-${inputsKey}`);
+        const wrapper2 = /* @__PURE__ */ jsx$1(Node, { cache: true, shaders: effectShaders, children: instance }, `component-effect-${clip2.id}`);
         view.add(wrapper2);
       } else {
         view.add(instance);

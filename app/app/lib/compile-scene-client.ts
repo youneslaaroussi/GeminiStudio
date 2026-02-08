@@ -38,7 +38,7 @@ function drainPending(): void {
   inFlight = runOne(params.body, params.authHeaders);
   inFlight
     .then((res) => {
-      w.forEach((waiter) => waiter.resolve(res));
+      w.forEach((waiter, i) => waiter.resolve(i === 0 ? res : res.clone()));
     })
     .catch((err) => {
       w.forEach((waiter) => waiter.reject(err));

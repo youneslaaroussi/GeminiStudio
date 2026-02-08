@@ -70,6 +70,7 @@ function getNodeKey(clipId: string, type: string, template?: string): string | n
   }
   if (type === 'video') return `video-clip-${clipId}`;
   if (type === 'image') return `image-clip-${clipId}`;
+  // Stable key by clip id only (matches scene); no inputsKey to avoid duplicate nodes / disappearing content on drag
   if (type === 'component') return `component-clip-${clipId}`;
   return null;
 }
@@ -226,9 +227,15 @@ export function SelectionOverlay({
       }
     };
 
-    void updateRect();
+    // Defer reading from the scene (getNode/cacheBBox) so we don't run in the same
+    // turn as the click that set selection — synchronous node reads can trigger
+    // Motion Canvas recalculation and reset custom components to their start.
+    const raf = requestAnimationFrame(() => updateRect());
     const sub = player.onRender.subscribe(updateRect);
-    return () => sub();
+    return () => {
+      cancelAnimationFrame(raf);
+      sub();
+    };
   }, [player, selectedClipId, selectedClip, transform, containerSize, renderScale]);
 
   const handleMouseDown = useCallback(
