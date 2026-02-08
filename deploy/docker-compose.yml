@@ -70,6 +70,8 @@ services:
       # Shared secrets
       - RENDERER_SHARED_SECRET=${RENDERER_SHARED_SECRET:-}
       - ASSET_SERVICE_SHARED_SECRET=${ASSET_SERVICE_SHARED_SECRET:-}
+      - SCENE_COMPILER_URL=http://scene-compiler:4001
+      - SCENE_COMPILER_SHARED_SECRET=${SCENE_COMPILER_SHARED_SECRET:-}
       # Magic link configuration for demo access
       - MAGIC_LINK_SECRET=${MAGIC_LINK_SECRET:-}
       - DEMO_USER_ID=${DEMO_USER_ID:-}
@@ -257,11 +259,16 @@ services:
       # Asset service integration for agent iteration
       - ASSET_SERVICE_URL=http://asset-service:8081
       - ASSET_SERVICE_SHARED_SECRET=${ASSET_SERVICE_SHARED_SECRET:-}
+      # Scene compiler - compiles Motion Canvas scenes on demand per render
+      - SCENE_COMPILER_URL=http://scene-compiler:4001
+      - SCENE_COMPILER_SHARED_SECRET=${SCENE_COMPILER_SHARED_SECRET:-}
     volumes:
       - ./secrets:/app/secrets:ro
       - renderer-tmp:/tmp/gemini-renderer
     depends_on:
       redis:
+        condition: service_healthy
+      scene-compiler:
         condition: service_healthy
     # Renderer takes longer to start due to Puppeteer/Chrome
     healthcheck:
@@ -270,6 +277,27 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
+    networks:
+      - gemini-network
+
+  # Scene Compiler - compiles Motion Canvas scenes on demand
+  scene-compiler:
+    build:
+      context: ..
+      dockerfile: scene-compiler/Dockerfile
+    restart: unless-stopped
+    # No public ports - only accessible via internal network
+    environment:
+      - PORT=4001
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - SCENE_COMPILER_SHARED_SECRET=${SCENE_COMPILER_SHARED_SECRET:-}
+      - BASE_SCENE_DIR=/app/scene-compiler/base-scene
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4001/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     networks:
       - gemini-network
 

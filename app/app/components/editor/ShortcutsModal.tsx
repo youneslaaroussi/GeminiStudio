@@ -69,8 +69,9 @@ const SHORTCUTS: { section: string; items: { action: string; keys: string }[] }[
       { action: "Image", keys: "4" },
       { action: "Music", keys: "5" },
       { action: "Speech", keys: "6" },
-      { action: "Jobs", keys: "7" },
-      { action: "Branches", keys: "8" },
+      { action: "Components", keys: "7" },
+      { action: "Jobs", keys: "8" },
+      { action: "Branches", keys: "9" },
     ],
   },
 ];

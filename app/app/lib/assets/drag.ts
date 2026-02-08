@@ -31,6 +31,7 @@ export function readDraggedAsset(event: React.DragEvent | DragEvent): AssetDragP
 
 export function assetMatchesLayer(assetType: AssetType, layerType: ClipType) {
   if (assetType === "other") return layerType === "video";
+  if (assetType === "component") return layerType === "component";
   return assetType === layerType;
 }
 

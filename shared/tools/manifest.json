@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-07T14:15:18.489Z",
+  "generatedAt": "2026-02-08T00:10:22.849Z",
   "tools": {
     "captureAsset": {
       "name": "captureAsset",
@@ -491,7 +491,7 @@
     "timelineAddClip": {
       "name": "timelineAddClip",
       "label": "Add Timeline Clip",
-      "description": "Insert a new clip on the timeline. For media clips (video/audio/image), provide type and assetId only—do not pass src (playback URL is resolved from assetId). For text clips, provide type='text' and text content. Use template, subtitle, backgroundColor for text styling. Use enterTransition and exitTransition for fade/slide/zoom in/out (type, duration 0.1-5s).",
+      "description": "Insert a new clip on the timeline. For media clips (video/audio/image), provide type and assetId only—do not pass src (playback URL is resolved from assetId). For text clips, provide type='text' and text content. For component clips, provide type='component' and assetId—componentName and inputDefs are resolved from the asset automatically. Optionally pass componentInputs to override default input values. Use template, subtitle, backgroundColor for text styling. Use enterTransition and exitTransition for fade/slide/zoom in/out (type, duration 0.1-5s).",
       "runLocation": "client",
       "implementations": {
         "app": true,
@@ -761,7 +761,8 @@
                   "video",
                   "audio",
                   "image",
-                  "text"
+                  "text",
+                  "component"
                 ]
               },
               "width": {
@@ -881,6 +882,17 @@
               },
               "exitTransition": {
                 "$ref": "#/definitions/timelineAddClipInput/properties/enterTransition"
+              },
+              "componentInputs": {
+                "type": "object",
+                "additionalProperties": {
+                  "oneOf": [
+                    { "type": "string" },
+                    { "type": "number" },
+                    { "type": "boolean" }
+                  ]
+                },
+                "description": "For component clips: override default input values (keyed by input name)."
               }
             },
             "additionalProperties": false
@@ -1041,7 +1053,7 @@
           "label": "Animation",
           "type": "text",
           "placeholder": "none | hover | pulse | float | glow | zoom-in | zoom-out",
-          "description": "Idle animation while clip is visible (video, text, image only). zoom-in/zoom-out: scale over clip duration; intensity controls amount. none to clear."
+          "description": "Idle animation while clip is visible (video, text, image only). Use zoom-in for hooks/openers and key moments; zoom-out for reveals. hover/pulse/float/glow for subtle emphasis. animationIntensity 0-5. none to clear."
         },
         {
           "name": "animationIntensity",
@@ -2558,6 +2570,236 @@
                 "default": 5
               }
             },
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "createComponent": {
+      "name": "createComponent",
+      "label": "Create Component",
+      "description": "Create a new Motion Canvas custom component asset with TSX source code. The component will be compiled and available for use on the timeline.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": true,
+        "langgraphName": "createComponent"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "label": "Name",
+          "type": "text",
+          "placeholder": "e.g. ProgressRing",
+          "required": true
+        },
+        {
+          "name": "componentName",
+          "label": "Component Class Name",
+          "type": "text",
+          "placeholder": "e.g. ProgressRing",
+          "required": true
+        },
+        {
+          "name": "code",
+          "label": "Code",
+          "type": "textarea",
+          "placeholder": "Motion Canvas TSX source code",
+          "required": true
+        },
+        {
+          "name": "description",
+          "label": "Description",
+          "type": "text",
+          "placeholder": "Short description of the component"
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/createComponentInput",
+        "definitions": {
+          "createComponentInput": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Display name for the component asset"
+              },
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Motion Canvas TSX source code"
+              },
+              "componentName": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exported class name (e.g. ProgressRing)"
+              },
+              "inputDefs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "string",
+                        "number",
+                        "boolean",
+                        "color"
+                      ]
+                    },
+                    "default": {
+                      "type": [
+                        "string",
+                        "number",
+                        "boolean"
+                      ]
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "type",
+                    "default"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Input definitions for dynamic props"
+              },
+              "description": {
+                "type": "string",
+                "description": "Short description of what the component does"
+              }
+            },
+            "required": [
+              "name",
+              "code",
+              "componentName"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    },
+    "editComponent": {
+      "name": "editComponent",
+      "label": "Edit Component",
+      "description": "Edit an existing Motion Canvas custom component. Can update code, name, componentName, inputDefs, or description. When updating code, provide the complete new source.",
+      "runLocation": "client",
+      "implementations": {
+        "app": true,
+        "langgraph": true,
+        "langgraphName": "editComponent"
+      },
+      "fields": [
+        {
+          "name": "assetId",
+          "label": "Asset ID",
+          "type": "text",
+          "placeholder": "UUID of the component asset",
+          "required": true
+        },
+        {
+          "name": "code",
+          "label": "Code",
+          "type": "textarea",
+          "placeholder": "Updated Motion Canvas TSX source code"
+        },
+        {
+          "name": "name",
+          "label": "Name",
+          "type": "text",
+          "placeholder": "Updated display name"
+        },
+        {
+          "name": "componentName",
+          "label": "Component Class Name",
+          "type": "text",
+          "placeholder": "Updated class name"
+        },
+        {
+          "name": "description",
+          "label": "Description",
+          "type": "text",
+          "placeholder": "Updated description"
+        }
+      ],
+      "inputSchema": {
+        "$ref": "#/definitions/editComponentInput",
+        "definitions": {
+          "editComponentInput": {
+            "type": "object",
+            "properties": {
+              "assetId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "ID of the component asset to edit"
+              },
+              "code": {
+                "type": "string",
+                "description": "Updated Motion Canvas TSX source code"
+              },
+              "name": {
+                "type": "string",
+                "description": "Updated display name"
+              },
+              "componentName": {
+                "type": "string",
+                "description": "Updated exported class name"
+              },
+              "inputDefs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "string",
+                        "number",
+                        "boolean",
+                        "color"
+                      ]
+                    },
+                    "default": {
+                      "type": [
+                        "string",
+                        "number",
+                        "boolean"
+                      ]
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "type",
+                    "default"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Updated input definitions"
+              },
+              "description": {
+                "type": "string",
+                "description": "Updated description"
+              }
+            },
+            "required": [
+              "assetId"
+            ],
             "additionalProperties": false
           }
         },

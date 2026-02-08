@@ -17,6 +17,7 @@ PROMPT_SECTION_ORDER = (
     "base",
     "render_and_defaults",
     "timeline_layers",
+    "motion_canvas",
     "video_iteration",
     "video_effects",
     "narrative",

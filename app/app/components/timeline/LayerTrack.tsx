@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useRef, useState } from "react";
-import { Video, Music, Type, Image as ImageIcon, Trash2, GripVertical, Eye, EyeOff } from "lucide-react";
+import { Video, Music, Type, Image as ImageIcon, Code2, Trash2, GripVertical, Eye, EyeOff } from "lucide-react";
 import type { ResolvedLayer } from "@/app/types/timeline";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { Clip } from "./Clip";
@@ -34,11 +34,12 @@ interface LayerTrackProps {
   dropPosition: "above" | "below" | null;
 }
 
-const typeIcon: Record<ResolvedLayer["type"], React.JSX.Element> = {
+const typeIcon: Record<string, React.JSX.Element> = {
   video: <Video className="size-3.5 text-blue-400" />,
   audio: <Music className="size-3.5 text-green-400" />,
   text: <Type className="size-3.5 text-purple-400" />,
   image: <ImageIcon className="size-3.5 text-orange-400" />,
+  component: <Code2 className="size-3.5 text-indigo-400" />,
 };
 
 /** Fixed left column: layer label only (for two-column timeline layout) */
@@ -257,7 +258,7 @@ export function LayerTrackBody({ layer, trackWidth }: LayerTrackBodyProps) {
       const x = event.clientX - rect.left;
       const start = Math.max(0, x / zoom);
       const duration =
-        asset.type === "image" ? 5 : (asset.duration ?? 10);
+        asset.type === "image" || asset.type === "component" ? 5 : (asset.duration ?? 10);
       const layerId = assetMatchesLayer(asset.type, layer.type) ? layer.id : undefined;
       await addAssetToTimeline({
         assetId: asset.id,
@@ -271,6 +272,8 @@ export function LayerTrackBody({ layer, trackWidth }: LayerTrackBodyProps) {
         sourceDuration: asset.duration,
         layerId,
         addClip,
+        componentName: asset.componentName,
+        inputDefs: asset.inputDefs,
       });
     },
     [addClip, layer.id, layer.type, projectId, zoom]
@@ -424,7 +427,7 @@ export function LayerTrack({ layer, layerIndex, width, labelWidth, onDragStart, 
       const x = event.clientX - rect.left;
       const start = Math.max(0, x / zoom);
       const duration =
-        asset.type === "image" ? 5 : (asset.duration ?? 10);
+        asset.type === "image" || asset.type === "component" ? 5 : (asset.duration ?? 10);
       const layerId = assetMatchesLayer(asset.type, layer.type) ? layer.id : undefined;
       await addAssetToTimeline({
         assetId: asset.id,
@@ -438,6 +441,8 @@ export function LayerTrack({ layer, layerIndex, width, labelWidth, onDragStart, 
         sourceDuration: asset.duration,
         layerId,
         addClip,
+        componentName: asset.componentName,
+        inputDefs: asset.inputDefs,
       });
     },
     [addClip, layer.id, layer.type, projectId, zoom]

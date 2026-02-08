@@ -44,9 +44,9 @@ class AssetResponse(BaseModel):
 
     id: str
     name: str
-    fileName: str
-    mimeType: str
-    size: int
+    fileName: str = ""
+    mimeType: str = ""
+    size: int = 0
     type: str
     uploadedAt: str
     updatedAt: str | None = None
@@ -59,6 +59,10 @@ class AssetResponse(BaseModel):
     sortOrder: int | None = None
     description: str | None = None  # AI-generated short description
     notes: str | None = None  # User notes (what the asset is for)
+    # Component asset fields
+    code: str | None = None
+    componentName: str | None = None
+    inputDefs: list[dict[str, Any]] | None = None
 
 
 class ReorderBody(BaseModel):
@@ -474,6 +478,47 @@ async def reorder_assets(
     # Return list in new order (no signed URLs - use playback-url on demand)
     assets = await asyncio.to_thread(list_assets, user_id, project_id, settings)
     return [AssetResponse(**asset) for asset in assets]
+
+
+class CreateComponentBody(BaseModel):
+    """Body for creating a component asset (no file upload)."""
+
+    name: str
+    code: str
+    componentName: str
+    inputDefs: list[dict[str, Any]] = []
+
+
+@router.post("/{user_id}/{project_id}/component", response_model=AssetResponse)
+async def create_component_asset(
+    user_id: str,
+    project_id: str,
+    body: CreateComponentBody,
+):
+    """Create a component asset (code-only, no file upload)."""
+    settings = get_settings()
+    now = datetime.utcnow().isoformat() + "Z"
+    asset_id = str(uuid.uuid4())
+
+    asset_data: dict[str, Any] = {
+        "id": asset_id,
+        "name": body.name,
+        "fileName": "",
+        "mimeType": "text/typescript",
+        "size": len(body.code.encode("utf-8")),
+        "type": "component",
+        "uploadedAt": now,
+        "updatedAt": now,
+        "source": "web",
+        "code": body.code,
+        "componentName": body.componentName,
+        "inputDefs": [d.model_dump() if hasattr(d, "model_dump") else d for d in body.inputDefs],
+    }
+
+    await asyncio.to_thread(save_asset, user_id, project_id, asset_data, settings)
+    logger.info(f"Created component asset {asset_id} ({body.componentName}) for user {user_id} project {project_id}")
+
+    return AssetResponse(**asset_data)
 
 
 @router.get("/{user_id}/{project_id}/{asset_id}", response_model=AssetResponse)

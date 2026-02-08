@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import type { RemoteAsset } from "@/app/types/assets";
+import type { RemoteAsset, ComponentInputDef } from "@/app/types/assets";
 import {
   isAssetServiceEnabled,
   uploadToAssetService,
@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
 function toRemoteAsset(asset: AssetServiceAsset, projectId: string): RemoteAsset {
   const url = asset.signedUrl ?? "";
 
-  return {
+  const result: RemoteAsset = {
     id: asset.id,
     name: asset.name,
     url,
@@ -43,6 +43,13 @@ function toRemoteAsset(asset: AssetServiceAsset, projectId: string): RemoteAsset
     transcodeStatus: asset.transcodeStatus as RemoteAsset["transcodeStatus"],
     transcodeError: asset.transcodeError,
   };
+
+  // Component asset fields
+  if (asset.code !== undefined) result.code = asset.code;
+  if (asset.componentName !== undefined) result.componentName = asset.componentName;
+  if (asset.inputDefs !== undefined) result.inputDefs = asset.inputDefs as ComponentInputDef[];
+
+  return result;
 }
 
 export async function GET(request: NextRequest) {

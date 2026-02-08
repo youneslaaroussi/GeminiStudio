@@ -10,10 +10,18 @@ import { Player } from '@motion-canvas/core';
 import { useProjectStore } from '@/app/lib/store/project-store';
 import { clsx } from 'clsx';
 
+interface SceneBBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 interface SceneNode {
   localToWorld: () => DOMMatrix;
   width?: () => number;
   height?: () => number;
+  cacheBBox?: () => SceneBBox;
 }
 
 interface SceneGraph {
@@ -62,6 +70,7 @@ function getNodeKey(clipId: string, type: string, template?: string): string | n
   }
   if (type === 'video') return `video-clip-${clipId}`;
   if (type === 'image') return `image-clip-${clipId}`;
+  if (type === 'component') return `component-clip-${clipId}`;
   return null;
 }
 
@@ -114,7 +123,7 @@ export function SelectionOverlay({
       const clip = layer.clips.find((c) => c.id === selectedClipId);
       if (
         clip &&
-        (clip.type === 'text' || clip.type === 'video' || clip.type === 'image')
+        (clip.type === 'text' || clip.type === 'video' || clip.type === 'image' || clip.type === 'component')
       ) {
         return clip;
       }
@@ -151,19 +160,34 @@ export function SelectionOverlay({
         }
 
         const localToWorld = node.localToWorld();
-        const nodeWidth =
+        let nodeWidth =
           typeof node.width === 'function' ? node.width() ?? 0 : 0;
-        const nodeHeight =
+        let nodeHeight =
           typeof node.height === 'function' ? node.height() ?? 0 : 0;
 
-        const halfW = nodeWidth / 2;
-        const halfH = nodeHeight / 2;
+        // For nodes without explicit size (e.g. component clips), use cacheBBox
+        // which computes bounds from children.
+        let boxOffsetX = -nodeWidth / 2;
+        let boxOffsetY = -nodeHeight / 2;
+        if (nodeWidth === 0 && nodeHeight === 0 && typeof node.cacheBBox === 'function') {
+          try {
+            const bbox = node.cacheBBox();
+            if (bbox && bbox.width > 0 && bbox.height > 0) {
+              boxOffsetX = bbox.x;
+              boxOffsetY = bbox.y;
+              nodeWidth = bbox.width;
+              nodeHeight = bbox.height;
+            }
+          } catch {
+            // cacheBBox failed, keep zeros
+          }
+        }
 
         const corners = [
-          new DOMPoint(-halfW, -halfH),
-          new DOMPoint(halfW, -halfH),
-          new DOMPoint(halfW, halfH),
-          new DOMPoint(-halfW, halfH),
+          new DOMPoint(boxOffsetX, boxOffsetY),
+          new DOMPoint(boxOffsetX + nodeWidth, boxOffsetY),
+          new DOMPoint(boxOffsetX + nodeWidth, boxOffsetY + nodeHeight),
+          new DOMPoint(boxOffsetX, boxOffsetY + nodeHeight),
         ].map((p) => p.matrixTransform(localToWorld));
 
         const minX = Math.min(...corners.map((p) => p.x));

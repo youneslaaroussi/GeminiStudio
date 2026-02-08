@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Mic, Square, ChevronDown, RefreshCw, Volume2, Loader2, Wrench } from "lucide-react";
+import { Mic, Square, ChevronDown, RefreshCw, Volume2, Loader2, Wrench, FileCode2, Pencil, Plus } from "lucide-react";
 import { Howl } from "howler";
 import ReactMarkdown from "react-markdown";
 import { useLiveSession } from "@/app/hooks/useLiveSession";
@@ -40,6 +40,11 @@ export function VoiceChat({ onToolCall, className = "" }: VoiceChatProps) {
   const [showVoiceSelector, setShowVoiceSelector] = useState(false);
   const [isToolRunningLong, setIsToolRunningLong] = useState(false);
   const [isToolExecuting, setIsToolExecuting] = useState(false);
+  const [lastCodeResult, setLastCodeResult] = useState<{
+    filename: string;
+    isEdit: boolean;
+  } | null>(null);
+  const lastCodeResultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toolWorkingSoundRef = useRef<Howl | null>(null);
   const toolDoneSoundRef = useRef<Howl | null>(null);
   const disconnectSoundRef = useRef<Howl | null>(null);
@@ -166,13 +171,38 @@ export function VoiceChat({ onToolCall, className = "" }: VoiceChatProps) {
       }, LONG_TOOL_THRESHOLD_MS);
 
       try {
+        let result: Record<string, unknown>;
         if (onToolCall) {
-          return await onToolCall(toolCall);
+          result = await onToolCall(toolCall);
+        } else {
+          result = await executeToolByName(toolCall.name, toolCall.args, {
+            project,
+            projectId: projectId ?? undefined,
+          });
         }
-        return await executeToolByName(toolCall.name, toolCall.args, {
-          project,
-          projectId: projectId ?? undefined,
-        });
+
+        // Show compact code toast for component tools
+        if (
+          toolCall.name === "createComponent" ||
+          toolCall.name === "editComponent"
+        ) {
+          const filename =
+            (toolCall.args.componentName as string) ??
+            (toolCall.args.name as string) ??
+            "Component";
+          setLastCodeResult({
+            filename: `${filename}.tsx`,
+            isEdit: toolCall.name === "editComponent",
+          });
+          if (lastCodeResultTimerRef.current)
+            clearTimeout(lastCodeResultTimerRef.current);
+          lastCodeResultTimerRef.current = setTimeout(
+            () => setLastCodeResult(null),
+            5000
+          );
+        }
+
+        return result;
       } finally {
         clearTimeout(timeoutId);
         toolWorkingSoundRef.current?.stop();
@@ -380,6 +410,30 @@ export function VoiceChat({ onToolCall, className = "" }: VoiceChatProps) {
             </p>
           )}
         </div>
+
+        {/* Compact code result toast */}
+        {lastCodeResult && (
+          <div className="mt-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800/80 border border-zinc-700/50 mx-auto max-w-xs animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <FileCode2 className="size-3.5 text-zinc-400 shrink-0" />
+            <span className="text-[11px] text-zinc-300 truncate font-medium">
+              {lastCodeResult.filename}
+            </span>
+            <span
+              className={`flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${
+                lastCodeResult.isEdit
+                  ? "text-blue-400 bg-blue-500/15"
+                  : "text-emerald-400 bg-emerald-500/15"
+              }`}
+            >
+              {lastCodeResult.isEdit ? (
+                <Pencil className="size-2.5" />
+              ) : (
+                <Plus className="size-2.5" />
+              )}
+              {lastCodeResult.isEdit ? "Edited" : "Created"}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Disconnect button (when connected) */}

@@ -27,6 +27,23 @@ export function formatAssetSummary(
   asset: RemoteAsset,
   metadata?: AssetMetadata | null
 ) {
+  if (asset.type === "component") {
+    const parts = [
+      asset.name,
+      "COMPONENT",
+    ];
+    if (asset.componentName) {
+      parts.push(`class: ${asset.componentName}`);
+    }
+    if (asset.inputDefs && asset.inputDefs.length > 0) {
+      parts.push(`${asset.inputDefs.length} input${asset.inputDefs.length > 1 ? "s" : ""}`);
+    }
+    if (asset.description) {
+      parts.push(asset.description);
+    }
+    return parts.join(" • ");
+  }
+
   const mb = asset.size / 1024 / 1024;
   const parts = [
     asset.name,
@@ -43,6 +60,9 @@ export function formatAssetSummary(
     metadata.height > 0
   ) {
     parts.push(`${metadata.width}x${metadata.height}`);
+  }
+  if (asset.description) {
+    parts.push(asset.description);
   }
   return parts.join(" • ");
 }

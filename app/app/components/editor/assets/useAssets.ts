@@ -148,6 +148,16 @@ export function useAssets() {
     setAssets((prev) => [...newAssets, ...prev]);
   }, []);
 
+  /** Optimistically update fields on a single asset in local state. */
+  const updateAssetFields = useCallback(
+    (assetId: string, fields: Partial<RemoteAsset>) => {
+      setAssets((prev) =>
+        prev.map((a) => (a.id === assetId ? { ...a, ...fields } : a))
+      );
+    },
+    []
+  );
+
   const renameAsset = useCallback(
     async (assetId: string, name: string): Promise<boolean> => {
       if (!projectId) {
@@ -569,6 +579,7 @@ export function useAssets() {
     projectId,
     fetchAssets,
     addAssets,
+    updateAssetFields,
     renameAsset,
     updateAssetNotes,
     reorderAssets,

@@ -134,7 +134,7 @@ export function TimelinePanel({
         acc[layer.type] += 1;
         return acc;
       },
-      { video: 0, audio: 0, text: 0, image: 0 }
+      { video: 0, audio: 0, text: 0, image: 0, component: 0 }
     );
   }, [layers]);
 
@@ -178,6 +178,8 @@ export function TimelinePanel({
           height: asset.height,
           sourceDuration: asset.duration,
           addClip,
+          componentName: asset.componentName,
+          inputDefs: asset.inputDefs,
         });
         return;
       }
@@ -233,6 +235,8 @@ export function TimelinePanel({
           height: asset.height,
           sourceDuration: asset.duration,
           addClip,
+          componentName: asset.componentName,
+          inputDefs: asset.inputDefs,
         });
         return;
       }

@@ -112,6 +112,8 @@ export const renderJobSchema = z.object({
       resolutionScale: z.number().min(0.1).max(1).optional(),
     })
     .optional(),
+  /** Custom component file overrides to pass to the scene compiler. */
+  componentFiles: z.record(z.string(), z.string()).optional(),
   metadata: z
     .object({
       agent: z

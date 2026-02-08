@@ -29,6 +29,14 @@ export type ToolOutput =
       fileUri: string;
       mimeType: string;
       displayName?: string;
+    }
+  | {
+      type: "code";
+      language: string;
+      filename?: string;
+      code: string;
+      oldCode?: string;
+      summary?: string;
     };
 
 export interface ToolExecutionSuccess {

@@ -9,10 +9,10 @@ export default makeProject({
     layers: [] as Array<{
       id: string;
       name: string;
-      type: 'video' | 'audio' | 'text' | 'image';
+      type: 'video' | 'audio' | 'text' | 'image' | 'component';
       clips: Array<{
         id: string;
-        type: 'video' | 'audio' | 'text' | 'image';
+        type: 'video' | 'audio' | 'text' | 'image' | 'component';
         name: string;
         start: number;
         duration: number;
@@ -35,6 +35,8 @@ export default makeProject({
         maskSrc?: string;
         maskMode?: 'include' | 'exclude';
         chromaKey?: { color: string; threshold: number; smoothness?: number };
+        componentName?: string;
+        inputs?: Record<string, string | number | boolean>;
         colorGrading?: {
           exposure: number;
           contrast: number;

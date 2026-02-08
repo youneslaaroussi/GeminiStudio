@@ -5,11 +5,13 @@ import {
   createAudioClip,
   createTextClip,
   createImageClip,
+  createComponentClip,
   type Project,
   type TimelineClip,
   type Focus,
   type ClipTransition,
 } from "@/app/types/timeline";
+import type { ComponentInputDef } from "@/app/types/assets";
 import type { ToolDefinition, ToolOutput } from "./types";
 
 const vectorSchema = z.object({
@@ -56,7 +58,7 @@ const baseClipSchema = z.object({
 
 const addClipSchema = baseClipSchema.extend({
   // Type is optional for media clips - can be inferred from assetId
-  type: z.enum(["video", "audio", "image", "text"]).optional(),
+  type: z.enum(["video", "audio", "image", "text", "component"]).optional(),
   // Do not accept src from LLM - playback URL is resolved from assetId only
   // Media properties (video/image)
   width: z.number().positive().optional(),
@@ -86,6 +88,8 @@ const addClipSchema = baseClipSchema.extend({
   backgroundColor: z.string().optional(),
   enterTransition: clipTransitionSchema.optional(),
   exitTransition: clipTransitionSchema.optional(),
+  // Component properties (for component clips)
+  componentInputs: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 
 type AddClipInput = z.infer<typeof addClipSchema>;
@@ -112,7 +116,7 @@ export const timelineAddClipTool: ToolDefinition<
   name: "timelineAddClip",
   label: "Add Timeline Clip",
   description:
-    "Insert a new clip on the timeline. For media clips (video/audio/image), provide type and assetId only—do not pass src (playback URL is resolved from assetId). For text clips, provide type='text' and text content. Use template, subtitle, backgroundColor for text styling. Use enterTransition and exitTransition for fade/slide/zoom in/out (type, duration 0.1-5s).",
+    "Insert a new clip on the timeline. For media clips (video/audio/image), provide type and assetId only—do not pass src (playback URL is resolved from assetId). For text clips, provide type='text' and text content. For component clips, provide type='component' and assetId—componentName and inputDefs are resolved from the asset automatically. Optionally pass componentInputs to override default input values. Use template, subtitle, backgroundColor for text styling. Use enterTransition and exitTransition for fade/slide/zoom in/out (type, duration 0.1-5s).",
   runLocation: "client",
   inputSchema: addClipSchema,
   fields: [
@@ -132,8 +136,9 @@ export const timelineAddClipTool: ToolDefinition<
         { value: "audio", label: "Audio" },
         { value: "image", label: "Image" },
         { value: "text", label: "Text" },
+        { value: "component", label: "Component" },
       ],
-      description: "Required for media clips. Optional if assetId is provided (will be inferred from asset).",
+      description: "Required for media clips. Optional if assetId is provided (will be inferred from asset). Use 'component' for custom component assets.",
     },
     {
       name: "layerId",
@@ -285,6 +290,13 @@ export const timelineAddClipTool: ToolDefinition<
       placeholder: '{"type":"fade","duration":0.5}',
       description: "Out transition when clip ends. Same types as enter.",
     },
+    {
+      name: "componentInputs",
+      label: "Component Inputs",
+      type: "json",
+      placeholder: '{"myProp": "value"}',
+      description: "For component clips: override default input values (keyed by input name).",
+    },
   ],
   async run(input) {
     if (typeof window === "undefined") {
@@ -304,6 +316,9 @@ export const timelineAddClipTool: ToolDefinition<
     let resolvedWidth = input.width;
     let resolvedHeight = input.height;
     let resolvedSourceDuration = input.sourceDuration;
+    // Component-specific resolved fields
+    let resolvedComponentName: string | undefined;
+    let resolvedInputDefs: ComponentInputDef[] | undefined;
 
     if (input.assetId) {
       const { useAssetsStore } = await import("@/app/lib/store/assets-store");
@@ -313,24 +328,31 @@ export const timelineAddClipTool: ToolDefinition<
       if (asset) {
         if (!resolvedType) {
           const assetType = asset.type?.toLowerCase();
-          if (assetType === "video" || assetType === "audio" || assetType === "image") {
+          if (assetType === "video" || assetType === "audio" || assetType === "image" || assetType === "component") {
             resolvedType = assetType;
           }
         }
-        // Use signed URL for direct playback (from store or playback-url)
-        resolvedSrc = asset.url || undefined;
-        if (typeof window !== "undefined" && projectId && !resolvedSrc) {
-          try {
-            const res = await fetch(
-              `/api/assets/${input.assetId}/playback-url?projectId=${encodeURIComponent(projectId)}`,
-              { credentials: "include" }
-            );
-            if (res.ok) {
-              const data = await res.json();
-              if (data?.url) resolvedSrc = data.url;
+
+        // Component clips don't need playback URLs
+        if (resolvedType === "component" || asset.type === "component") {
+          resolvedComponentName = asset.componentName;
+          resolvedInputDefs = asset.inputDefs as ComponentInputDef[] | undefined;
+        } else {
+          // Use signed URL for direct playback (from store or playback-url)
+          resolvedSrc = asset.url || undefined;
+          if (typeof window !== "undefined" && projectId && !resolvedSrc) {
+            try {
+              const res = await fetch(
+                `/api/assets/${input.assetId}/playback-url?projectId=${encodeURIComponent(projectId)}`,
+                { credentials: "include" }
+              );
+              if (res.ok) {
+                const data = await res.json();
+                if (data?.url) resolvedSrc = data.url;
+              }
+            } catch {
+              // Leave resolvedSrc undefined on error
             }
-          } catch {
-            // Leave resolvedSrc undefined on error
           }
         }
 
@@ -342,24 +364,26 @@ export const timelineAddClipTool: ToolDefinition<
         }
       } else if (projectId && typeof window !== "undefined") {
         // Asset not in store yet (e.g. just generated)—fetch signed playback URL
-        try {
-          const res = await fetch(
-            `/api/assets/${input.assetId}/playback-url?projectId=${encodeURIComponent(projectId)}`,
-            { credentials: "include" }
-          );
-          if (res.ok) {
-            const data = await res.json();
-            if (data?.url) resolvedSrc = data.url;
+        if (resolvedType !== "component") {
+          try {
+            const res = await fetch(
+              `/api/assets/${input.assetId}/playback-url?projectId=${encodeURIComponent(projectId)}`,
+              { credentials: "include" }
+            );
+            if (res.ok) {
+              const data = await res.json();
+              if (data?.url) resolvedSrc = data.url;
+            }
+          } catch {
+            // Leave resolvedSrc undefined
           }
-        } catch {
-          // Leave resolvedSrc undefined
         }
       }
     }
 
-    // Default duration for images if still not set
+    // Default duration if still not set
     if (!resolvedDuration) {
-      resolvedDuration = resolvedType === "image" ? 5 : 10;
+      resolvedDuration = resolvedType === "image" || resolvedType === "component" ? 5 : 10;
     }
 
     // Validate we have the required fields
@@ -370,10 +394,17 @@ export const timelineAddClipTool: ToolDefinition<
       };
     }
 
-    if (resolvedType !== "text" && !resolvedSrc) {
+    if (resolvedType !== "text" && resolvedType !== "component" && !resolvedSrc) {
       return {
         status: "error",
         error: "For media clips provide type and assetId (signed URL is resolved from assetId). Do not pass src.",
+      };
+    }
+
+    if (resolvedType === "component" && !input.assetId) {
+      return {
+        status: "error",
+        error: "Component clips require an assetId referencing a component asset.",
       };
     }
 
@@ -432,6 +463,30 @@ export const timelineAddClipTool: ToolDefinition<
           start,
           resolvedDuration,
           {
+            width: resolvedWidth,
+            height: resolvedHeight,
+          }
+        );
+        applyCommonOverrides(clip, { ...input, type: resolvedType, start, duration: resolvedDuration });
+        break;
+      }
+      case "component": {
+        const compName = resolvedComponentName || "MyComponent";
+        const defaultInputs: Record<string, string | number | boolean> = {};
+        for (const def of resolvedInputDefs ?? []) {
+          defaultInputs[def.name] = def.default;
+        }
+        // Merge user-provided overrides on top of defaults
+        const mergedInputs = { ...defaultInputs, ...input.componentInputs };
+        clip = createComponentClip(
+          input.assetId!,
+          compName,
+          baseName || compName,
+          start,
+          resolvedDuration,
+          {
+            inputDefs: resolvedInputDefs,
+            inputs: mergedInputs,
             width: resolvedWidth,
             height: resolvedHeight,
           }

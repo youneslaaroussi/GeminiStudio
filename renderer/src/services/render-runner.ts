@@ -16,6 +16,7 @@ import { FFmpegBridge } from '../infra/ffmpeg/bridge.js';
 import { mergeTimelineAudio } from '../audio/merge-audio.js';
 import type { Project, Layer } from '../types/index.js';
 import { loadConfig } from '../config.js';
+import { compileScene } from './scene-compiler-client.js';
 
 const config = loadConfig();
 
@@ -335,6 +336,14 @@ export class RenderRunner {
 
     await ensureHeadlessBundle();
 
+    // Compile scene via the scene-compiler service (dynamic, like the app does)
+    logger.info({ jobId: job.id, componentFiles: Object.keys(data.componentFiles ?? {}) }, 'Compiling scene');
+    const compileResult = await compileScene(config, {
+      files: data.componentFiles,
+    });
+    const compiledProjectJs = compileResult.js;
+    logger.info({ jobId: job.id, compiledSize: Buffer.byteLength(compiledProjectJs) }, 'Scene compiled successfully');
+
     const tempDir = await createTempDir('gemini-render');
     const bridges: FFmpegBridge[] = [];
     let cluster: Cluster<SegmentDefinition> | null = null;
@@ -380,6 +389,12 @@ export class RenderRunner {
 
       httpApp.get('/health', (_req, res) => {
         res.json({ status: 'ok' });
+      });
+
+      // Serve the dynamically compiled project.js (must be registered before static middleware)
+      httpApp.get('/headless/project.js', (_req, res) => {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        res.send(compiledProjectJs);
       });
 
       // Serve static files (including index.html) from headless dist

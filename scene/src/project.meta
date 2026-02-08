@@ -2,8 +2,14 @@
   "version": 0,
   "shared": {
     "background": null,
-    "range": [0, null],
-    "size": { "x": 1080, "y": 720 },
+    "range": [
+      0,
+      null
+    ],
+    "size": {
+      "x": 1080,
+      "y": 720
+    },
     "audioOffset": 0
   },
   "preview": {

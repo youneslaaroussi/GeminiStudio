@@ -27,7 +27,7 @@ export function usePlaybackResolvedLayers(
     const ids = new Set<string>();
     for (const layer of layers) {
       for (const clip of layer.clips) {
-        if (clip.type !== "text" && "assetId" in clip && clip.assetId) {
+        if (clip.type !== "text" && clip.type !== "component" && "assetId" in clip && clip.assetId) {
           ids.add(clip.assetId);
         }
         if (clip.type === "video" && "maskAssetId" in clip && clip.maskAssetId) {
@@ -78,7 +78,7 @@ export function usePlaybackResolvedLayers(
     return layers.map((layer) => ({
       ...layer,
       clips: layer.clips.map((clip): ResolvedTimelineClip => {
-        if (clip.type === "text") return clip;
+        if (clip.type === "text" || clip.type === "component") return clip;
         const assetId = "assetId" in clip ? clip.assetId : undefined;
         const src = assetId ? urlCache.get(assetId) ?? "" : "";
         if (clip.type === "video") {

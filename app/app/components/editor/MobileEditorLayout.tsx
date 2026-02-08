@@ -59,9 +59,9 @@ export function MobileEditorLayout() {
   const [avatarImgError, setAvatarImgError] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const previewRef = useRef<PreviewPanelHandle | null>(null);
-  const setAssetTabRef = useRef<((tab: "assets" | "templates" | "video" | "image" | "music" | "tts" | "jobs" | "branches") => void) | null>(null);
+  const setAssetTabRef = useRef<((tab: "assets" | "templates" | "video" | "image" | "music" | "tts" | "components" | "jobs" | "branches") => void) | null>(null);
 
-  const handleAssetTabReady = useCallback((setTab: (tab: "assets" | "templates" | "video" | "image" | "music" | "tts" | "jobs" | "branches") => void) => {
+  const handleAssetTabReady = useCallback((setTab: (tab: "assets" | "templates" | "video" | "image" | "music" | "tts" | "components" | "jobs" | "branches") => void) => {
     setAssetTabRef.current = setTab;
   }, []);
 

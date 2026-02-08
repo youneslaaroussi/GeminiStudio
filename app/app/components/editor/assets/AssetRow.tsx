@@ -17,6 +17,7 @@ import {
   Check,
   StickyNote,
   AlertCircle,
+  Code2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
@@ -50,6 +51,8 @@ function AssetIcon({ type }: { type: RemoteAsset["type"] }) {
     return <FileAudio className="size-4 text-emerald-500" />;
   if (type === "image")
     return <FileImage className="size-4 text-amber-500" />;
+  if (type === "component")
+    return <Code2 className="size-4 text-violet-500" />;
   return <FileIcon className="size-4 text-muted-foreground" />;
 }
 
@@ -75,6 +78,15 @@ const AssetThumbnail = memo(function AssetThumbnail({
   // Only use url for image if it's already on GCP (signed URL); don't load before upload is ready
   const imageLoadableUrl =
     displayThumbnail || (url && url.startsWith("http") ? url : null);
+
+  // Components have no media thumbnail; show icon only (no loading state)
+  if (type === "component") {
+    return (
+      <div className="flex items-center justify-center size-full">
+        <AssetIcon type={type} />
+      </div>
+    );
+  }
 
   if (type === "image") {
     if (imageLoadableUrl && !showFallback) {
@@ -236,9 +248,9 @@ export const AssetRow = memo(function AssetRow({
     return !step || step.status === "succeeded" || step.status === "failed";
   };
   const requiredStepsDone = REQUIRED_STEP_IDS.every(stepDone);
-  /** Locked when pipeline not initialized yet (e.g. first ~seconds after upload) or when upload + metadata not done */
+  /** Locked when pipeline not initialized yet (e.g. first ~seconds after upload) or when upload + metadata not done. Components have no pipeline. */
   const isPipelineLocked =
-    totalSteps === 0 || !requiredStepsDone;
+    asset.type !== "component" && (totalSteps === 0 || !requiredStepsDone);
 
   const isLocked = isTranscoding || isPipelineLocked;
   const isProcessing = isDeleting || isDownloading || isTranscoding || isPipelineLocked;
@@ -250,6 +262,8 @@ export const AssetRow = memo(function AssetRow({
         : completedCount / totalSteps
       : 0;
   const showPipelineProgress = activeStep != null || allIdle;
+  /** Don't show pipeline progress bar for components (they have no pipeline) */
+  const showPipelineBar = asset.type !== "component" && showPipelineProgress;
 
   useEffect(() => {
     if (isEditing) {
@@ -409,7 +423,7 @@ export const AssetRow = memo(function AssetRow({
                 </>
               )}
             </div>
-            {showPipelineProgress && (
+            {showPipelineBar && (
               <div
                 className="mt-1.5 flex flex-col gap-1 min-w-0"
                 title={activeStep ? `${activeStep.label} · ${activeStep.status}` : "Pipeline idle"}

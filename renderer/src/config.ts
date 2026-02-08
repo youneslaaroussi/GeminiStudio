@@ -15,6 +15,8 @@ export interface RendererConfig {
   taskTimeoutMs: number;
   assetServiceUrl?: string;
   assetServiceSharedSecret?: string;
+  sceneCompilerUrl: string;
+  sceneCompilerSharedSecret?: string;
   maxFps: number;
   maxResolution: number; // Max dimension of longest side (preserves aspect ratio)
   maxDuration: number; // Max duration in seconds
@@ -35,6 +37,8 @@ export const loadConfig = (): RendererConfig => {
     RENDERER_TASK_TIMEOUT_MS,
     ASSET_SERVICE_URL,
     ASSET_SERVICE_SHARED_SECRET,
+    SCENE_COMPILER_URL,
+    SCENE_COMPILER_SHARED_SECRET,
     RENDERER_MAX_FPS,
     RENDERER_MAX_RESOLUTION,
     RENDERER_MAX_DURATION,
@@ -54,6 +58,8 @@ export const loadConfig = (): RendererConfig => {
     taskTimeoutMs: Number(RENDERER_TASK_TIMEOUT_MS ?? 600000), // 10 minutes default
     assetServiceUrl: ASSET_SERVICE_URL,
     assetServiceSharedSecret: ASSET_SERVICE_SHARED_SECRET,
+    sceneCompilerUrl: SCENE_COMPILER_URL ?? 'http://localhost:4001',
+    sceneCompilerSharedSecret: SCENE_COMPILER_SHARED_SECRET || undefined,
     maxFps: Number(RENDERER_MAX_FPS ?? 30),
     maxResolution: Number(RENDERER_MAX_RESOLUTION ?? 1280), // 720p default (1280x720)
     maxDuration: Number(RENDERER_MAX_DURATION ?? 30), // 30 seconds default

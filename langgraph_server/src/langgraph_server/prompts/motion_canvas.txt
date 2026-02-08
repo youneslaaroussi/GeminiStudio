@@ -1,0 +1,114 @@
+# Motion Canvas (custom components) — comprehensive reference
+
+When you create or edit Motion Canvas components (createComponent, editComponent), the code must be valid Motion Canvas TSX. The runtime is @motion-canvas/2d and @motion-canvas/core. This section is the authoritative reference; follow it to produce correct, compilable components.
+
+## Component structure (required pattern)
+
+- A **custom component** is a class extending Node (or Layout, Rect, Circle, etc. if you need that base). It must have:
+  1. A **props interface** extending NodeProps (or LayoutProps, ShapeProps, etc.) with optional props typed as `propName?: SignalValue<Type>`. For colors use PossibleColor (or similar) inside SignalValue<>.
+  2. For **every** prop that the component accepts, the class must have a **matching declared property**: use decorators `@initial(defaultValue)` (recommended) then `@signal()` for normal types or `@colorSignal()` for colors, then `public declare readonly propName: SimpleSignal<Type, this>` or `ColorSignal<this>`. Properties must be public, declare, and readonly. Example: `@initial(0) @signal() public declare readonly progress: SimpleSignal<number, this>;` and `@initial('#fff') @colorSignal() public declare readonly fillColor: ColorSignal<this>;`.
+  3. **Constructor**: call `super({ ...props });` then build the visual subtree with `this.add(<Rect>...</Rect>)` (or Layout, Circle, etc.). Use createRef() and ref={} for any child you need to animate or read later. You may read this.propName() in the constructor to set initial layout.
+  4. **Animation**: expose generator methods (e.g. `public *animate(duration: number) { yield* this.bar().scale.x(1, duration); }`) and call them from the scene with `yield* comp().animate(1);`.
+
+- **input_defs** (for createComponent): When the component will be used on the timeline, each user-adjustable prop can be exposed as an input. Pass input_defs as a list of dicts: each dict has "name" (string, matches a prop name or your internal name), "type" ("string" | "number" | "boolean" | "color"), "default" (value matching that type), and optionally "label" (string). The component's @signal props should align with these so the timeline can drive them.
+
+## Signals (core abstraction)
+
+- **Signals** represent values that can change over time. createSignal(initial) for custom state. Every node property (position, fill, scale, rotation, opacity, etc.) is a signal.
+- **Invocation**: signal() = read; signal(value) = set; signal(value, duration) = tween (use with yield* in a generator). Use a **function** for derived values: createSignal(() => other()) so it updates when dependencies change (lazy, cached).
+- **Compound signals**: node.position.x() and node.position.y() for per-axis access; same for scale. Use for animating one axis: yield* node().position.x(100, 1).
+- **DEFAULT**: signal(DEFAULT) resets to initial value; e.g. node.lineHeight(DEFAULT).
+- **Colors**: Use @colorSignal() and ColorSignal<this> in components; pass hex strings or Color; interpolate with Color.lerp(a, b, t).
+
+## Scene hierarchy and refs
+
+- JSX creates **real Node instances** (no React, no virtual DOM). Build tree with view.add(<Node />) or node.add(<Child />). First child = back, last child = front.
+- **References**: createRef<Type>() then ref={ref} on the node; ref() returns the instance. makeRef(object, key) assigns the created node to object[key] (e.g. makeRef(items, i) for arrays). createRefArray<Type>() appends each ref to the array. createRefMap() for named refs (labels.a(), labels.b()). ref is a callback that receives the node after creation.
+- **Hierarchy helpers**: node.add(), node.insert(), node.remove(), node.removeChildren(), node.reparent(newParent); node.moveUp(), moveDown(), moveToTop(), moveToBottom(), moveTo(index), moveAbove(other), moveBelow(other). Query: node.findAll(predicate), findFirst, findLast, findAncestor; use is(Txt) for type predicates.
+
+## Positioning and transform
+
+- **Coordinate system**: origin (0,0) is **center** of frame. X: negative = left, positive = right. Y: **positive = down**, negative = up (y increases downward). position, scale, rotation are in **parent local space**. Use absolutePosition(), absoluteScale(), absoluteRotation() for world space; setting them converts to local. Matrices: localToWorld(), worldToLocal(), localToParent(), parentToWorld(), worldToParent() for point transforms.
+
+## Tweening and animation
+
+- **Property tween**: yield* node().position([100, 0], 2) or .to([200, 0], 2). Third arg = timing (e.g. easeInOutCubic), fourth = custom interpolation (e.g. Vector2.arcLerp).
+- **Manual tween**: yield* tween(2, value => { ... }); value 0..1; use map(from, to, value) or easeInOutCubic(value, from, to).
+- **Interpolation**: Color.lerp(a, b, t), Vector2.lerp, Vector2.arcLerp. spring(PlopSpring, from, to, settleTolerance?, callback) for spring physics; presets PlopSpring, SmoothSpring.
+- **Save/restore**: node.save(); later yield* node.restore(duration) to tween back. State is stacked. all(...tweens) runs in parallel.
+
+## Primitives (use inside components)
+
+- **Rect**: fill, stroke, lineWidth, size ([w,h] or width/height), radius, position, scale, rotation, opacity; layout props if inside Layout.
+- **Circle**: fill, stroke, lineWidth, size (diameter), position, etc.
+- **Layout**: set layout prop; gap, padding, alignItems, justifyContent, direction; children laid out automatically.
+- **Txt**: text, fontSize, fill, fontFamily, fontWeight, lineHeight, wrap.
+- **Latex**: **tex** (string or array for animatable parts), **fill** (required — otherwise nothing shows), fontSize. For animatable parts use tex={['a^2','+','b^2']} or tex="{{a}} + {{b}}". In JS strings escape backslash: tex={'{{\\\\frac{1}{2}}}'} or tex="{{\\frac{1}{2}}}". Space between parts: use ['\\\\Delta','{y}'] not ['\\\\Delta','y'] (else \\Deltay).
+- **Line**: points, lineWidth, stroke, startArrow, endArrow, arrowSize, start, end (0–1), startOffset, endOffset.
+- **Spline**: points (array of [x,y]) or **Knot** children with position, startHandle, endHandle (relative to knot); lineWidth, stroke, fill, smoothness (0–1), closed. start/end (0–1) for draw animation. getPointAtPercentage(t) → { position, tangent }.
+- **Path**: data (SVG path d string), lineWidth, stroke, fill; tween data for morph; getPointAtPercentage(t).
+- **QuadBezier / CubicBezier**: p0, p1 [, p2, p3 for cubic], lineWidth, stroke, startArrow, endArrow, arrowSize, start, end (0–1). Points are compound signals (e.g. bezier().p0.x(200, 1)). Animate drawing by tweening end 0→1.
+
+## Latex pitfalls
+
+- **Always set fill** or the node shows nothing.
+- Backslash: in JS expression use double backslash for LaTeX (\\\\frac); in JSX string attribute one is enough (\\frac).
+- Missing space: parts are concatenated with no separator; use '{y}' so "\\Delta y" parses correctly.
+
+## Path and Spline details
+
+- **Path**: data = full SVG d string; tween data for morph; start/end and getPointAtPercentage like Line/Spline.
+- **Spline**: points= gives auto handles (cardinal). Knot children: startHandle, endHandle relative to knot; one handle = other mirrored; both = broken knot (corner). smoothness, closed.
+
+## Do not / Always
+
+- **Do not** use a normal function for the scene; use function* and yield* for tweens.
+- **Do not** assume React (no useState, useEffect; JSX is one-shot node creation).
+- **Do not** add a prop to the interface without the matching @initial/@signal (or @colorSignal) and declare readonly on the class — Motion Canvas requires both.
+- **Do not** omit fill on Latex.
+- **Do not** assume (0,0) is top-left or that positive y is up; origin is center, y down.
+- **Always** provide **complete** TSX for createComponent/editComponent: full file with imports from '@motion-canvas/2d' and '@motion-canvas/core', exported component class (and optionally props interface). No partial snippets or invalid syntax.
+- **Always** use valid TypeScript/JSX: correct decorators, types, and semicolons so the server-side compiler can compile the component.
+
+## Example skeleton (createComponent)
+
+```tsx
+import { Node, NodeProps, Rect, Circle, Layout } from '@motion-canvas/2d';
+import {
+  SignalValue,
+  SimpleSignal,
+  ColorSignal,
+  createRef,
+  createSignal,
+  signal,
+  initial,
+  colorSignal,
+} from '@motion-canvas/core';
+
+export interface MyWidgetProps extends NodeProps {
+  value?: SignalValue<number>;
+  color?: SignalValue<string>;
+}
+
+export class MyWidget extends Node {
+  @initial(0) @signal() public declare readonly value: SimpleSignal<number, this>;
+  @initial('#68ABDF') @colorSignal() public declare readonly color: ColorSignal<this>;
+  private readonly bar = createRef<Rect>();
+
+  public constructor(props?: MyWidgetProps) {
+    super({ ...props });
+    this.add(
+      <Layout layout gap={10}>
+        <Rect ref={this.bar} width={() => this.value() * 2} height={20} fill={this.color} />
+        <Circle size={24} fill={this.color} />
+      </Layout>
+    );
+  }
+
+  public *grow(duration: number) {
+    yield* this.value(1, duration);
+  }
+}
+```
+
+When providing code to createComponent or editComponent, supply complete, valid TSX that compiles. Match input_defs to the component's signal props (name, type, default, label) so the timeline can control them.

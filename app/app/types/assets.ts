@@ -1,4 +1,4 @@
-export type AssetType = "video" | "audio" | "image" | "other";
+export type AssetType = "video" | "audio" | "image" | "component" | "other";
 
 export type TranscodeStatus = "pending" | "processing" | "completed" | "error";
 
@@ -22,6 +22,22 @@ export interface RemoteAsset {
   // Transcode status (set when transcoding is triggered)
   transcodeStatus?: TranscodeStatus;
   transcodeError?: string; // Error message if transcodeStatus is "error"
+  // Component asset fields (only present when type === "component")
+  code?: string; // Motion Canvas TSX source code
+  componentName?: string; // Exported class name
+  inputDefs?: ComponentInputDef[]; // Input definitions
+}
+
+/** Input definition for a custom component */
+export interface ComponentInputDef {
+  /** Input name (used as prop key) */
+  name: string;
+  /** Type of the input */
+  type: 'string' | 'number' | 'boolean' | 'color';
+  /** Default value */
+  default: string | number | boolean;
+  /** Optional label for UI */
+  label?: string;
 }
 
 export interface AssetDragPayload {
@@ -32,6 +48,9 @@ export interface AssetDragPayload {
   duration?: number;
   width?: number;
   height?: number;
+  // Component asset fields (for drag-to-timeline)
+  componentName?: string;
+  inputDefs?: ComponentInputDef[];
 }
 
 export const ASSET_DRAG_DATA_MIME = "application/x-gemini-asset";
@@ -40,6 +59,7 @@ export const DEFAULT_ASSET_DURATIONS: Record<AssetType, number> = {
   video: 10,
   audio: 15,
   image: 5,
+  component: 5,
   other: 5,
 };
 

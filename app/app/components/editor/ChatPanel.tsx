@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
+import { CodeToolResultCard } from "@/app/components/ui/CodeToolResultCard";
 import type {
   AssetMention,
   ChatAttachment,
@@ -2447,10 +2448,35 @@ type ContentEntry = Extract<
 
 function renderContentEntry(entry: ContentEntry, key: number) {
   switch (entry.type) {
-    case "text":
+    case "text": {
+      // Detect code tool output marker
+      if (entry.text.startsWith("<!--code:")) {
+        try {
+          const jsonStr = entry.text.slice("<!--code:".length, entry.text.indexOf("-->"));
+          const codeData = JSON.parse(jsonStr) as {
+            language: string;
+            filename?: string;
+            code: string;
+            oldCode?: string;
+            summary?: string;
+          };
+          return (
+            <CodeToolResultCard
+              language={codeData.language}
+              filename={codeData.filename}
+              code={codeData.code}
+              oldCode={codeData.oldCode}
+              summary={codeData.summary}
+            />
+          );
+        } catch {
+          // Fall through to markdown
+        }
+      }
       return (
         <MemoizedMarkdown id={`tool-output-text-${key}`} content={entry.text} />
       );
+    }
     case "image-data": {
       const src = `data:${entry.mediaType};base64,${entry.data}`;
       return (

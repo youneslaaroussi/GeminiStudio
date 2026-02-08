@@ -88,11 +88,28 @@ def listProjectAssets(
             duration = a.get("duration")
             size_bytes = a.get("size", 0)
             size_mb = round(size_bytes / (1024 * 1024), 2) if size_bytes else 0
+            description = a.get("description", "")
 
-            if duration:
+            if asset_type == "component":
+                comp_name = a.get("componentName", "")
+                input_defs = a.get("inputDefs", [])
+                input_count = len(input_defs) if isinstance(input_defs, list) else 0
+                parts = [name, "COMPONENT"]
+                if comp_name:
+                    parts.append(f"class: {comp_name}")
+                if input_count > 0:
+                    parts.append(f"{input_count} input{'s' if input_count > 1 else ''}")
+                if description:
+                    parts.append(description)
+                desc = " • ".join(parts)
+            elif duration:
                 desc = f"{name} ({asset_type}, {duration:.1f}s, {size_mb}MB)"
+                if description:
+                    desc += f" — {description}"
             else:
                 desc = f"{name} ({asset_type}, {size_mb}MB)"
+                if description:
+                    desc += f" — {description}"
             items.append({"type": "text", "text": desc})
 
         title = f"{len(assets)} asset{'s' if len(assets) != 1 else ''} in library"
@@ -101,8 +118,9 @@ def listProjectAssets(
         title = "0 assets"
 
     # Simplify asset data for agent context
-    simplified = [
-        {
+    simplified = []
+    for a in assets:
+        entry: dict = {
             "id": a.get("id"),
             "name": a.get("name"),
             "type": a.get("type"),
@@ -112,9 +130,16 @@ def listProjectAssets(
             "height": a.get("height"),
             "signedUrl": a.get("signedUrl"),
             "notes": a.get("notes"),
+            "description": a.get("description"),
         }
-        for a in assets
-    ]
+        # Include component-specific fields
+        if a.get("type") == "component":
+            entry["componentName"] = a.get("componentName")
+            input_defs = a.get("inputDefs", [])
+            entry["inputDefCount"] = len(input_defs) if isinstance(input_defs, list) else 0
+            raw_code = a.get("code", "")
+            entry["codePreview"] = (raw_code[:200] + "...") if len(raw_code) > 200 else raw_code
+        simplified.append(entry)
 
     return {
         "status": "success",

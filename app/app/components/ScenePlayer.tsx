@@ -8,24 +8,34 @@ import type { ProjectTranscription } from '@/app/types/transcription';
 import { useDrag } from '@/app/hooks/use-drag';
 import { SelectionOverlay } from './SelectionOverlay';
 import { useProjectStore } from '@/app/lib/store/project-store';
+import { useAssetsStore } from '@/app/lib/store/assets-store';
 import { PreviewSkeleton } from '@/app/components/editor/PreviewSkeleton';
 import { motion, AnimatePresence } from 'motion/react';
+import { getAuthHeaders } from '@/app/lib/hooks/useAuthFetch';
+import { computeCodeHash, getCachedScene, setCachedScene } from '@/app/lib/cache/scene-cache';
 
 export interface ScenePlayerHandle {
   recenter: () => void;
+}
+
+interface SceneBBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 interface SceneNode {
   worldToLocal: () => DOMMatrix;
   width?: () => number;
   height?: () => number;
+  cacheBBox?: () => SceneBBox;
 }
 
 interface SceneGraph {
   getNode?: (key: string) => SceneNode | null;
 }
 
-const SCENE_URL = '/scene/src/project.js';
 const PREVIEW_FPS = 30;
 const ZOOM_SPEED = 0.1;
 
@@ -87,6 +97,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   const [player, setPlayer] = useState<Player | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isCompiling, setIsCompiling] = useState(false);
   const [hasRenderedFirstFrame, setHasRenderedFirstFrame] = useState(false);
   const [showSlowLoadHint, setShowSlowLoadHint] = useState(false);
   const animationFrameRef = useRef<number | null>(null);
@@ -176,50 +187,151 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
     },
   }), []);
 
-  // Load project from built scene via <script type="module">
-  useEffect(() => {
-    let cancelled = false;
-    let blobUrl: string | null = null;
-    let script: HTMLScriptElement | null = null;
+  // --- Smart compilation with component awareness ---
+  const projectId = useProjectStore((s) => s.projectId);
+  const allAssets = useAssetsStore((s) => s.assets);
 
-    (async () => {
-      try {
-        const res = await fetch(SCENE_URL);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const raw = await res.text();
-        const blob = new Blob([raw], { type: 'text/javascript' });
-        blobUrl = URL.createObjectURL(blob);
-
-        const win = typeof window !== 'undefined' ? (window as unknown as { __SCENE_PROJECT__?: Project }) : null;
-        if (win) delete win.__SCENE_PROJECT__;
-
-        await new Promise<void>((resolve, reject) => {
-          script = document.createElement('script');
-          script.type = 'module';
-          script.src = blobUrl!;
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error('Scene script failed to load'));
-          document.head.appendChild(script);
-        });
-
-        if (cancelled) return;
-
-        const m: Project | undefined = win?.__SCENE_PROJECT__;
-        if (!m || typeof m !== 'object') throw new Error('Invalid project export');
-
-        setProject(m);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        (script as HTMLScriptElement | null)?.remove();
-        if (blobUrl) URL.revokeObjectURL(blobUrl);
+  // Build the component file overrides map from component assets
+  const componentFiles = useMemo(() => {
+    const files: Record<string, string> = {};
+    for (const asset of allAssets) {
+      if (asset.type === 'component' && asset.code && asset.componentName) {
+        files[`src/components/custom/${asset.componentName}.tsx`] = asset.code;
       }
-    })();
+    }
+    return files;
+  }, [allAssets]);
 
-    return () => {
-      cancelled = true;
-    };
+  const codeHash = useMemo(() => computeCodeHash(componentFiles), [componentFiles]);
+
+  // Track whether we need to recompile
+  const compiledCodeHashRef = useRef<string | null>(null);
+  const pendingRecompileRef = useRef<boolean>(false);
+  const isCompilingRef = useRef<boolean>(false);
+
+  // Load a JS string as a module and return the Project
+  const loadCompiledJs = useCallback(async (js: string): Promise<Project> => {
+    const blob = new Blob([js], { type: 'text/javascript' });
+    const blobUrl = URL.createObjectURL(blob);
+    const scriptHolder: { el: HTMLScriptElement | null } = { el: null };
+    try {
+      const win = typeof window !== 'undefined' ? (window as unknown as { __SCENE_PROJECT__?: Project }) : null;
+      if (win) delete win.__SCENE_PROJECT__;
+
+      await new Promise<void>((resolve, reject) => {
+        const el = document.createElement('script');
+        el.type = 'module';
+        el.src = blobUrl;
+        el.onload = () => resolve();
+        el.onerror = () => reject(new Error('Scene script failed to load'));
+        scriptHolder.el = el;
+        document.head.appendChild(el);
+      });
+
+      const m: Project | undefined = win?.__SCENE_PROJECT__;
+      if (!m || typeof m !== 'object') throw new Error('Invalid project export');
+      return m;
+    } finally {
+      scriptHolder.el?.remove();
+      URL.revokeObjectURL(blobUrl);
+    }
   }, []);
+
+  // Compile and load scene
+  const compileAndLoad = useCallback(async (files: Record<string, string>, hash: string) => {
+    if (isCompilingRef.current) {
+      pendingRecompileRef.current = true;
+      return;
+    }
+    isCompilingRef.current = true;
+    setIsCompiling(true);
+    try {
+      // Try IndexedDB cache first
+      if (projectId) {
+        const cached = await getCachedScene(projectId, hash);
+        if (cached) {
+          console.log('[ScenePlayer] Using cached scene for hash', hash);
+          const proj = await loadCompiledJs(cached.js);
+          compiledCodeHashRef.current = hash;
+          setProject(proj);
+          setError(null);
+          // Still recompile in background to ensure cache stays fresh
+          // (but don't block the UI)
+          isCompilingRef.current = false;
+          setIsCompiling(false);
+          return;
+        }
+      }
+
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/compile-scene', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ files: Object.keys(files).length > 0 ? files : undefined }),
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Compile failed (${res.status}): ${errText}`);
+      }
+      const { js } = await res.json();
+
+      // Cache the result
+      if (projectId) {
+        void setCachedScene(projectId, hash, js);
+      }
+
+      const proj = await loadCompiledJs(js);
+      compiledCodeHashRef.current = hash;
+      setProject(proj);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      isCompilingRef.current = false;
+      setIsCompiling(false);
+      // If a recompile was queued while we were compiling, do it now
+      if (pendingRecompileRef.current) {
+        pendingRecompileRef.current = false;
+        // Use a timeout to avoid synchronous recursion
+        setTimeout(() => {
+          void compileAndLoad(componentFiles, codeHash);
+        }, 100);
+      }
+    }
+  }, [projectId, loadCompiledJs, componentFiles, codeHash]);
+
+  // Initial compile on mount
+  useEffect(() => {
+    void compileAndLoad(componentFiles, codeHash);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Recompile when component code changes (but defer during playback)
+  const prevCodeHashRef = useRef(codeHash);
+  useEffect(() => {
+    if (prevCodeHashRef.current === codeHash) return;
+    prevCodeHashRef.current = codeHash;
+
+    if (isPlaying) {
+      // Defer recompile until playback stops
+      pendingRecompileRef.current = true;
+      return;
+    }
+
+    void compileAndLoad(componentFiles, codeHash);
+  }, [codeHash, isPlaying, compileAndLoad, componentFiles]);
+
+  // When playback stops, check for pending recompile
+  const prevIsPlayingForCompileRef = useRef(isPlaying);
+  useEffect(() => {
+    const wasPlaying = prevIsPlayingForCompileRef.current;
+    prevIsPlayingForCompileRef.current = isPlaying;
+
+    if (wasPlaying && !isPlaying && pendingRecompileRef.current) {
+      pendingRecompileRef.current = false;
+      void compileAndLoad(componentFiles, codeHash);
+    }
+  }, [isPlaying, compileAndLoad, componentFiles, codeHash]);
 
   // Monitor container size
   useEffect(() => {
@@ -630,6 +742,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
             }
           }
           else if (clip.type === 'image') nodeKey = `image-clip-${clip.id}`;
+          else if (clip.type === 'component') nodeKey = `component-clip-${clip.id}`;
 
           if (!nodeKey) continue;
 
@@ -642,18 +755,32 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
             const localPoint = new DOMPoint(renderX, renderY).matrixTransform(worldToLocal);
 
             // Get node dimensions
-            const nodeWidth = typeof node.width === 'function' ? node.width() ?? 0 : 0;
-            const nodeHeight = typeof node.height === 'function' ? node.height() ?? 0 : 0;
+            let nodeWidth = typeof node.width === 'function' ? node.width() ?? 0 : 0;
+            let nodeHeight = typeof node.height === 'function' ? node.height() ?? 0 : 0;
 
-            // Check if click is within node bounds (centered at origin in local space)
-            const halfW = nodeWidth / 2;
-            const halfH = nodeHeight / 2;
+            // For nodes without explicit size (e.g. component clips), use cacheBBox
+            let boxOffsetX = -nodeWidth / 2;
+            let boxOffsetY = -nodeHeight / 2;
+            if (nodeWidth === 0 && nodeHeight === 0 && typeof node.cacheBBox === 'function') {
+              try {
+                const bbox = node.cacheBBox();
+                if (bbox && bbox.width > 0 && bbox.height > 0) {
+                  boxOffsetX = bbox.x;
+                  boxOffsetY = bbox.y;
+                  nodeWidth = bbox.width;
+                  nodeHeight = bbox.height;
+                }
+              } catch {
+                // cacheBBox failed, skip
+              }
+            }
 
+            // Check if click is within node bounds
             if (
-              localPoint.x >= -halfW &&
-              localPoint.x <= halfW &&
-              localPoint.y >= -halfH &&
-              localPoint.y <= halfH
+              localPoint.x >= boxOffsetX &&
+              localPoint.x <= boxOffsetX + nodeWidth &&
+              localPoint.y >= boxOffsetY &&
+              localPoint.y <= boxOffsetY + nodeHeight
             ) {
               foundClipId = clip.id;
             }
@@ -1017,7 +1144,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   }
 
   return (
-    <div className="flex h-full flex-col min-w-0 min-h-0">
+    <div className="relative flex h-full flex-col min-w-0 min-h-0">
       <div
         className="relative flex flex-1 min-h-0 min-w-0 overflow-auto bg-black"
         style={{ contain: "layout paint" }}
@@ -1057,6 +1184,20 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
         </div>
       </div>
       <AnimatePresence>
+        {isCompiling && (
+          <motion.div
+            className="absolute inset-0 flex items-start justify-center pt-4 pointer-events-none z-10"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="flex items-center gap-2 rounded-full bg-black/70 backdrop-blur-sm border border-white/10 px-4 py-2 shadow-lg">
+              <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <span className="text-xs font-medium text-white/90">Compiling scene...</span>
+            </div>
+          </motion.div>
+        )}
         {!project && !error && (
           <motion.div
             className="absolute inset-0 pointer-events-none"

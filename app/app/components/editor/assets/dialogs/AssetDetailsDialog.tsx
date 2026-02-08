@@ -169,8 +169,15 @@ export function AssetDetailsDialog({
             </section>
           )}
 
-          {/* Pipeline Steps */}
-          {(pipelineSteps.length > 0 || pipelineLoading) && (
+          {/* Pipeline Steps (media assets only; custom components have no pipeline) */}
+          {asset.type === "component" ? (
+            <section className="space-y-3">
+              <h4 className="text-sm font-semibold">Pipeline</h4>
+              <p className="text-sm text-muted-foreground rounded-lg border border-border p-3">
+                Custom components don't run a pipeline. Edit code in the <strong>Components</strong> tab.
+              </p>
+            </section>
+          ) : (pipelineSteps.length > 0 || pipelineLoading) ? (
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <h4 className="text-sm font-semibold">Pipeline</h4>
@@ -226,7 +233,7 @@ export function AssetDetailsDialog({
                 )}
               </div>
             </section>
-          )}
+          ) : null}
 
           {/* Transcription */}
           {transcription && (

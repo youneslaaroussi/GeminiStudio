@@ -38,6 +38,8 @@ from .subscribe_transcode_tool import subscribeToAssetTranscode
 from .time_tool import get_current_time_utc
 from .weather_tool import lookup_weather_snapshot
 from .send_attachment_tool import sendAttachment
+from .create_component_tool import createComponent
+from .edit_component_tool import editComponent
 
 
 def get_registered_tools() -> Sequence[BaseTool]:
@@ -76,6 +78,8 @@ def get_registered_tools() -> Sequence[BaseTool]:
         subscribeToAssetTranscode,
         lookup_weather_snapshot,
         sendAttachment,
+        createComponent,
+        editComponent,
     )
 
 

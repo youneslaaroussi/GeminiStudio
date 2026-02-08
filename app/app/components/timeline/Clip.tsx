@@ -384,6 +384,8 @@ export function Clip({ clip, layerId }: ClipProps) {
             ? "bg-green-500/80 border-green-400"
             : clip.type === "text"
             ? "bg-purple-500/80 border-purple-400"
+            : clip.type === "component"
+            ? "bg-indigo-500/80 border-indigo-400"
             : "bg-orange-500/80 border-orange-400",
           isSelected && "ring-2 ring-white ring-offset-1 ring-offset-background",
           (isDragging || isResizing) && "opacity-80",

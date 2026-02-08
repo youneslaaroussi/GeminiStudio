@@ -1,6 +1,7 @@
 packages:
   - app
   - scene
+  - scene-compiler
   - renderer
   - billing-service
   - packages/*

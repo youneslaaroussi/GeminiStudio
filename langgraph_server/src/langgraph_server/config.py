@@ -71,6 +71,12 @@ class Settings(BaseSettings):
         default="http://localhost:8082", alias="VIDEO_EFFECTS_SERVICE_URL"
     )
 
+    # Scene compiler (validates component TSX code)
+    scene_compiler_url: str | None = Field(
+        default="http://localhost:4001", alias="SCENE_COMPILER_URL"
+    )
+    scene_compiler_shared_secret: str = Field(default="", alias="SCENE_COMPILER_SHARED_SECRET")
+
     # Renderer integration
     renderer_base_url: str = Field(default="http://localhost:4000", alias="RENDERER_BASE_URL")
     renderer_shared_secret: str = Field(default="", alias="RENDERER_SHARED_SECRET")

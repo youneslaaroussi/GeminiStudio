@@ -16,12 +16,13 @@ interface ShortcutConfig {
 export function useShortcuts(shortcuts: ShortcutConfig[]) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is typing in an input, textarea, or contenteditable element
+      // Ignore if user is typing in an input, textarea, contenteditable, or code editor (Monaco)
       const target = e.target as HTMLElement;
       const isInput =
         target.tagName === 'INPUT' ||
         target.tagName === 'TEXTAREA' ||
-        target.isContentEditable;
+        target.isContentEditable ||
+        target.closest?.('.monaco-editor');
 
       if (isInput) return;
 

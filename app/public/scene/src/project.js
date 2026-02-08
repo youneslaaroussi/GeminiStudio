@@ -6862,39 +6862,45 @@ class Vector2MetaField extends MetaField {
 }
 let meta$2;
 meta$2 ?? (meta$2 = new MetaFile("project", false));
-meta$2.loadData(
-  {
-    "version": 0,
-    "shared": {
-      "background": null,
-      "range": [0, null],
-      "size": { "x": 1080, "y": 720 },
-      "audioOffset": 0
+meta$2.loadData({
+  "version": 0,
+  "shared": {
+    "background": null,
+    "range": [
+      0,
+      null
+    ],
+    "size": {
+      "x": 1080,
+      "y": 720
     },
-    "preview": {
-      "fps": 30,
-      "resolutionScale": 1
-    },
-    "rendering": {
-      "fps": 30,
-      "resolutionScale": 2,
-      "colorSpace": "srgb",
-      "exporter": {
-        "name": "@motion-canvas/core/image-sequence",
-        "options": {
-          "fileType": "image/png",
-          "quality": 100,
-          "groupByScene": false
-        }
+    "audioOffset": 0
+  },
+  "preview": {
+    "fps": 30,
+    "resolutionScale": 1
+  },
+  "rendering": {
+    "fps": 30,
+    "resolutionScale": 2,
+    "colorSpace": "srgb",
+    "exporter": {
+      "name": "@motion-canvas/core/image-sequence",
+      "options": {
+        "fileType": "image/png",
+        "quality": 100,
+        "groupByScene": false
       }
     }
   }
-);
+});
 const metaFile$1 = meta$2;
 let meta$1;
 meta$1 ?? (meta$1 = new MetaFile("nle_timeline", false));
 meta$1.loadData({
-  "version": 0
+  "version": 0,
+  "timeEvents": [],
+  "seed": 1816904380
 });
 const metaFile = meta$1;
 function isClassComponent(fn) {
@@ -7181,7 +7187,7 @@ function vector2Signal(prefix) {
     wrapper(Vector2)(target, key);
   };
 }
-var __decorate$d = function(decorators, target, key, desc) {
+var __decorate$f = function(decorators, target, key, desc) {
   var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
   if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
   else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
@@ -7210,36 +7216,36 @@ class Gradient {
     return gradient;
   }
 }
-__decorate$d([
+__decorate$f([
   initial("linear"),
   signal()
 ], Gradient.prototype, "type", void 0);
-__decorate$d([
+__decorate$f([
   vector2Signal("from")
 ], Gradient.prototype, "from", void 0);
-__decorate$d([
+__decorate$f([
   vector2Signal("to")
 ], Gradient.prototype, "to", void 0);
-__decorate$d([
+__decorate$f([
   initial(0),
   signal()
 ], Gradient.prototype, "angle", void 0);
-__decorate$d([
+__decorate$f([
   initial(0),
   signal()
 ], Gradient.prototype, "fromRadius", void 0);
-__decorate$d([
+__decorate$f([
   initial(0),
   signal()
 ], Gradient.prototype, "toRadius", void 0);
-__decorate$d([
+__decorate$f([
   initial([]),
   signal()
 ], Gradient.prototype, "stops", void 0);
-__decorate$d([
+__decorate$f([
   computed()
 ], Gradient.prototype, "canvasGradient", null);
-var __decorate$c = function(decorators, target, key, desc) {
+var __decorate$e = function(decorators, target, key, desc) {
   var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
   if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
   else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
@@ -7253,14 +7259,14 @@ class Pattern {
     return context.createPattern(this.image(), this.repetition());
   }
 }
-__decorate$c([
+__decorate$e([
   signal()
 ], Pattern.prototype, "image", void 0);
-__decorate$c([
+__decorate$e([
   initial(null),
   signal()
 ], Pattern.prototype, "repetition", void 0);
-__decorate$c([
+__decorate$e([
   computed()
 ], Pattern.prototype, "canvasPattern", null);
 function canvasStyleParser(style) {
@@ -7508,7 +7514,7 @@ function parseShader(value) {
 function useScene2D() {
   return useScene();
 }
-var __decorate$b = function(decorators, target, key, desc) {
+var __decorate$d = function(decorators, target, key, desc) {
   var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
   if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
   else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
@@ -8651,156 +8657,156 @@ let Node = Node_1 = class Node2 {
     return result;
   }
 };
-__decorate$b([
+__decorate$d([
   vector2Signal()
 ], Node.prototype, "position", void 0);
-__decorate$b([
+__decorate$d([
   wrapper(Vector2),
   cloneable(false),
   signal()
 ], Node.prototype, "absolutePosition", void 0);
-__decorate$b([
+__decorate$d([
   initial(0),
   signal()
 ], Node.prototype, "rotation", void 0);
-__decorate$b([
+__decorate$d([
   cloneable(false),
   signal()
 ], Node.prototype, "absoluteRotation", void 0);
-__decorate$b([
+__decorate$d([
   initial(Vector2.one),
   vector2Signal("scale")
 ], Node.prototype, "scale", void 0);
-__decorate$b([
+__decorate$d([
   initial(Vector2.zero),
   vector2Signal("skew")
 ], Node.prototype, "skew", void 0);
-__decorate$b([
+__decorate$d([
   wrapper(Vector2),
   cloneable(false),
   signal()
 ], Node.prototype, "absoluteScale", void 0);
-__decorate$b([
+__decorate$d([
   initial(0),
   signal()
 ], Node.prototype, "zIndex", void 0);
-__decorate$b([
+__decorate$d([
   initial(false),
   signal()
 ], Node.prototype, "cache", void 0);
-__decorate$b([
+__decorate$d([
   spacingSignal("cachePadding")
 ], Node.prototype, "cachePadding", void 0);
-__decorate$b([
+__decorate$d([
   initial(false),
   signal()
 ], Node.prototype, "composite", void 0);
-__decorate$b([
+__decorate$d([
   initial("source-over"),
   signal()
 ], Node.prototype, "compositeOperation", void 0);
-__decorate$b([
+__decorate$d([
   threadable()
 ], Node.prototype, "tweenCompositeOperation", null);
-__decorate$b([
+__decorate$d([
   initial(1),
   parser((value) => clamp(0, 1, value)),
   signal()
 ], Node.prototype, "opacity", void 0);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "absoluteOpacity", null);
-__decorate$b([
+__decorate$d([
   filtersSignal()
 ], Node.prototype, "filters", void 0);
-__decorate$b([
+__decorate$d([
   initial("#0000"),
   colorSignal()
 ], Node.prototype, "shadowColor", void 0);
-__decorate$b([
+__decorate$d([
   initial(0),
   signal()
 ], Node.prototype, "shadowBlur", void 0);
-__decorate$b([
+__decorate$d([
   vector2Signal("shadowOffset")
 ], Node.prototype, "shadowOffset", void 0);
-__decorate$b([
+__decorate$d([
   initial([]),
   parser(parseShader),
   signal()
 ], Node.prototype, "shaders", void 0);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "hasFilters", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "hasShadow", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "filterString", null);
-__decorate$b([
+__decorate$d([
   inspectable(false),
   cloneable(false),
   signal()
 ], Node.prototype, "spawner", void 0);
-__decorate$b([
+__decorate$d([
   inspectable(false),
   cloneable(false),
   signal()
 ], Node.prototype, "children", void 0);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "spawnedChildren", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "sortedChildren", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "localToWorld", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "worldToLocal", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "worldToParent", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "parentToWorld", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "localToParent", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "compositeToWorld", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "compositeRoot", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "compositeToLocal", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "cacheCanvas", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "cachedCanvas", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "cacheBBox", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "fullCacheBBox", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "worldSpaceCacheBBox", null);
-__decorate$b([
+__decorate$d([
   computed()
 ], Node.prototype, "parentWorldSpaceCacheBBox", null);
-Node = Node_1 = __decorate$b([
+Node = Node_1 = __decorate$d([
   nodeName("Node")
 ], Node);
 Node.prototype.isClass = true;
-var __decorate$a = function(decorators, target, key, desc) {
+var __decorate$c = function(decorators, target, key, desc) {
   var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
   if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
   else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
@@ -9255,210 +9261,210 @@ let Layout = Layout_1 = class Layout2 extends Node {
     return null;
   }
 };
-__decorate$a([
+__decorate$c([
   initial(null),
   interpolation(boolLerp),
   signal()
 ], Layout.prototype, "layout", void 0);
-__decorate$a([
+__decorate$c([
   initial(null),
   signal()
 ], Layout.prototype, "maxWidth", void 0);
-__decorate$a([
+__decorate$c([
   initial(null),
   signal()
 ], Layout.prototype, "maxHeight", void 0);
-__decorate$a([
+__decorate$c([
   initial(null),
   signal()
 ], Layout.prototype, "minWidth", void 0);
-__decorate$a([
+__decorate$c([
   initial(null),
   signal()
 ], Layout.prototype, "minHeight", void 0);
-__decorate$a([
+__decorate$c([
   initial(null),
   signal()
 ], Layout.prototype, "ratio", void 0);
-__decorate$a([
+__decorate$c([
   spacingSignal("margin")
 ], Layout.prototype, "margin", void 0);
-__decorate$a([
+__decorate$c([
   spacingSignal("padding")
 ], Layout.prototype, "padding", void 0);
-__decorate$a([
+__decorate$c([
   initial("row"),
   signal()
 ], Layout.prototype, "direction", void 0);
-__decorate$a([
+__decorate$c([
   initial(null),
   signal()
 ], Layout.prototype, "basis", void 0);
-__decorate$a([
+__decorate$c([
   initial(0),
   signal()
 ], Layout.prototype, "grow", void 0);
-__decorate$a([
+__decorate$c([
   initial(1),
   signal()
 ], Layout.prototype, "shrink", void 0);
-__decorate$a([
+__decorate$c([
   initial("nowrap"),
   signal()
 ], Layout.prototype, "wrap", void 0);
-__decorate$a([
+__decorate$c([
   initial("start"),
   signal()
 ], Layout.prototype, "justifyContent", void 0);
-__decorate$a([
+__decorate$c([
   initial("normal"),
   signal()
 ], Layout.prototype, "alignContent", void 0);
-__decorate$a([
+__decorate$c([
   initial("stretch"),
   signal()
 ], Layout.prototype, "alignItems", void 0);
-__decorate$a([
+__decorate$c([
   initial("auto"),
   signal()
 ], Layout.prototype, "alignSelf", void 0);
-__decorate$a([
+__decorate$c([
   initial(0),
   vector2Signal({ x: "columnGap", y: "rowGap" })
 ], Layout.prototype, "gap", void 0);
-__decorate$a([
+__decorate$c([
   defaultStyle("font-family"),
   signal()
 ], Layout.prototype, "fontFamily", void 0);
-__decorate$a([
+__decorate$c([
   defaultStyle("font-size", parseFloat),
   signal()
 ], Layout.prototype, "fontSize", void 0);
-__decorate$a([
+__decorate$c([
   defaultStyle("font-style"),
   signal()
 ], Layout.prototype, "fontStyle", void 0);
-__decorate$a([
+__decorate$c([
   defaultStyle("font-weight", parseInt),
   signal()
 ], Layout.prototype, "fontWeight", void 0);
-__decorate$a([
+__decorate$c([
   defaultStyle("line-height", parseFloat),
   signal()
 ], Layout.prototype, "lineHeight", void 0);
-__decorate$a([
+__decorate$c([
   defaultStyle("letter-spacing", (i) => i === "normal" ? 0 : parseFloat(i)),
   signal()
 ], Layout.prototype, "letterSpacing", void 0);
-__decorate$a([
+__decorate$c([
   defaultStyle("white-space", (i) => i === "pre" ? "pre" : i === "normal"),
   signal()
 ], Layout.prototype, "textWrap", void 0);
-__decorate$a([
+__decorate$c([
   initial("inherit"),
   signal()
 ], Layout.prototype, "textDirection", void 0);
-__decorate$a([
+__decorate$c([
   defaultStyle("text-align"),
   signal()
 ], Layout.prototype, "textAlign", void 0);
-__decorate$a([
+__decorate$c([
   initial({ x: null, y: null }),
   vector2Signal({ x: "width", y: "height" })
 ], Layout.prototype, "size", void 0);
-__decorate$a([
+__decorate$c([
   threadable()
 ], Layout.prototype, "tweenWidth", null);
-__decorate$a([
+__decorate$c([
   threadable()
 ], Layout.prototype, "tweenHeight", null);
-__decorate$a([
+__decorate$c([
   computed()
 ], Layout.prototype, "desiredSize", null);
-__decorate$a([
+__decorate$c([
   threadable()
 ], Layout.prototype, "tweenSize", null);
-__decorate$a([
+__decorate$c([
   vector2Signal("offset")
 ], Layout.prototype, "offset", void 0);
-__decorate$a([
+__decorate$c([
   originSignal(Origin.Middle)
 ], Layout.prototype, "middle", void 0);
-__decorate$a([
+__decorate$c([
   originSignal(Origin.Top)
 ], Layout.prototype, "top", void 0);
-__decorate$a([
+__decorate$c([
   originSignal(Origin.Bottom)
 ], Layout.prototype, "bottom", void 0);
-__decorate$a([
+__decorate$c([
   originSignal(Origin.Left)
 ], Layout.prototype, "left", void 0);
-__decorate$a([
+__decorate$c([
   originSignal(Origin.Right)
 ], Layout.prototype, "right", void 0);
-__decorate$a([
+__decorate$c([
   originSignal(Origin.TopLeft)
 ], Layout.prototype, "topLeft", void 0);
-__decorate$a([
+__decorate$c([
   originSignal(Origin.TopRight)
 ], Layout.prototype, "topRight", void 0);
-__decorate$a([
+__decorate$c([
   originSignal(Origin.BottomLeft)
 ], Layout.prototype, "bottomLeft", void 0);
-__decorate$a([
+__decorate$c([
   originSignal(Origin.BottomRight)
 ], Layout.prototype, "bottomRight", void 0);
-__decorate$a([
+__decorate$c([
   initial(false),
   signal()
 ], Layout.prototype, "clip", void 0);
-__decorate$a([
+__decorate$c([
   initial(0),
   signal()
 ], Layout.prototype, "sizeLockCounter", void 0);
-__decorate$a([
+__decorate$c([
   computed()
 ], Layout.prototype, "parentTransform", null);
-__decorate$a([
+__decorate$c([
   computed()
 ], Layout.prototype, "anchorPosition", null);
-__decorate$a([
+__decorate$c([
   computed()
 ], Layout.prototype, "layoutEnabled", null);
-__decorate$a([
+__decorate$c([
   computed()
 ], Layout.prototype, "isLayoutRoot", null);
-__decorate$a([
+__decorate$c([
   computed()
 ], Layout.prototype, "scalingRotationMatrix", null);
-__decorate$a([
+__decorate$c([
   computed()
 ], Layout.prototype, "computedPosition", null);
-__decorate$a([
+__decorate$c([
   computed()
 ], Layout.prototype, "computedSize", null);
-__decorate$a([
+__decorate$c([
   computed()
 ], Layout.prototype, "requestLayoutUpdate", null);
-__decorate$a([
+__decorate$c([
   computed()
 ], Layout.prototype, "appendedToView", null);
-__decorate$a([
+__decorate$c([
   computed()
 ], Layout.prototype, "updateLayout", null);
-__decorate$a([
+__decorate$c([
   computed()
 ], Layout.prototype, "layoutChildren", null);
-__decorate$a([
+__decorate$c([
   computed()
 ], Layout.prototype, "requestFontUpdate", null);
-__decorate$a([
+__decorate$c([
   computed()
 ], Layout.prototype, "applyFlex", null);
-__decorate$a([
+__decorate$c([
   computed()
 ], Layout.prototype, "applyFont", null);
-Layout = Layout_1 = __decorate$a([
+Layout = Layout_1 = __decorate$c([
   nodeName("Layout")
 ], Layout);
 function originSignal(origin) {
@@ -9482,7 +9488,7 @@ addInitializer(Layout.prototype, (instance) => {
   instance.element.style.boxSizing = "border-box";
   instance.styles = getComputedStyle(instance.element);
 });
-var __decorate$9 = function(decorators, target, key, desc) {
+var __decorate$b = function(decorators, target, key, desc) {
   var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
   if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
   else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
@@ -9560,53 +9566,53 @@ let Shape = class Shape2 extends Layout {
     this.rippleStrength(0);
   }
 };
-__decorate$9([
+__decorate$b([
   canvasStyleSignal()
 ], Shape.prototype, "fill", void 0);
-__decorate$9([
+__decorate$b([
   canvasStyleSignal()
 ], Shape.prototype, "stroke", void 0);
-__decorate$9([
+__decorate$b([
   initial(false),
   signal()
 ], Shape.prototype, "strokeFirst", void 0);
-__decorate$9([
+__decorate$b([
   initial(0),
   signal()
 ], Shape.prototype, "lineWidth", void 0);
-__decorate$9([
+__decorate$b([
   initial("miter"),
   signal()
 ], Shape.prototype, "lineJoin", void 0);
-__decorate$9([
+__decorate$b([
   initial("butt"),
   signal()
 ], Shape.prototype, "lineCap", void 0);
-__decorate$9([
+__decorate$b([
   initial([]),
   signal()
 ], Shape.prototype, "lineDash", void 0);
-__decorate$9([
+__decorate$b([
   initial(0),
   signal()
 ], Shape.prototype, "lineDashOffset", void 0);
-__decorate$9([
+__decorate$b([
   initial(true),
   signal()
 ], Shape.prototype, "antialiased", void 0);
-__decorate$9([
+__decorate$b([
   computed()
 ], Shape.prototype, "rippleSize", null);
-__decorate$9([
+__decorate$b([
   computed()
 ], Shape.prototype, "getPath", null);
-__decorate$9([
+__decorate$b([
   threadable()
 ], Shape.prototype, "ripple", null);
-Shape = __decorate$9([
+Shape = __decorate$b([
   nodeName("Shape")
 ], Shape);
-var __decorate$8 = function(decorators, target, key, desc) {
+var __decorate$a = function(decorators, target, key, desc) {
   var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
   if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
   else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
@@ -9824,45 +9830,45 @@ let Curve = class Curve2 extends Shape {
     context.closePath();
   }
 };
-__decorate$8([
+__decorate$a([
   initial(false),
   signal()
 ], Curve.prototype, "closed", void 0);
-__decorate$8([
+__decorate$a([
   initial(0),
   signal()
 ], Curve.prototype, "start", void 0);
-__decorate$8([
+__decorate$a([
   initial(0),
   signal()
 ], Curve.prototype, "startOffset", void 0);
-__decorate$8([
+__decorate$a([
   initial(false),
   signal()
 ], Curve.prototype, "startArrow", void 0);
-__decorate$8([
+__decorate$a([
   initial(1),
   signal()
 ], Curve.prototype, "end", void 0);
-__decorate$8([
+__decorate$a([
   initial(0),
   signal()
 ], Curve.prototype, "endOffset", void 0);
-__decorate$8([
+__decorate$a([
   initial(false),
   signal()
 ], Curve.prototype, "endArrow", void 0);
-__decorate$8([
+__decorate$a([
   initial(24),
   signal()
 ], Curve.prototype, "arrowSize", void 0);
-__decorate$8([
+__decorate$a([
   computed()
 ], Curve.prototype, "arcLength", null);
-__decorate$8([
+__decorate$a([
   computed()
 ], Curve.prototype, "curveDrawingInfo", null);
-Curve = __decorate$8([
+Curve = __decorate$a([
   nodeName("Curve")
 ], Curve);
 class Segment {
@@ -10327,7 +10333,7 @@ class PolynomialSegment extends Segment {
     ];
   }
 }
-var __decorate$7 = function(decorators, target, key, desc) {
+var __decorate$9 = function(decorators, target, key, desc) {
   var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
   if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
   else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
@@ -10371,7 +10377,7 @@ class CubicBezierSegment extends PolynomialSegment {
     return CubicBezierSegment.el.getTotalLength();
   }
 }
-__decorate$7([
+__decorate$9([
   lazy(() => document.createElementNS("http://www.w3.org/2000/svg", "path"))
 ], CubicBezierSegment, "el", void 0);
 class LineSegment extends Segment {
@@ -10428,32 +10434,32 @@ function getRectProfile(rect, radius, smoothCorners, cornerSharpness) {
   const bottomLeft = adjustRectRadius(radius.left, radius.bottom, radius.top, rect);
   let from = new Vector2(rect.left + topLeft, rect.top);
   let to = new Vector2(rect.right - topRight, rect.top);
-  addSegment(profile, new LineSegment(from, to));
+  addSegment$1(profile, new LineSegment(from, to));
   from = new Vector2(rect.right, rect.top + topRight);
   to = new Vector2(rect.right, rect.bottom - bottomRight);
   if (topRight > 0) {
     addCornerSegment(profile, from.addX(-topRight), topRight, Vector2.down, Vector2.right, smoothCorners, cornerSharpness);
   }
-  addSegment(profile, new LineSegment(from, to));
+  addSegment$1(profile, new LineSegment(from, to));
   from = new Vector2(rect.right - bottomRight, rect.bottom);
   to = new Vector2(rect.left + bottomLeft, rect.bottom);
   if (bottomRight > 0) {
     addCornerSegment(profile, from.addY(-bottomRight), bottomRight, Vector2.right, Vector2.up, smoothCorners, cornerSharpness);
   }
-  addSegment(profile, new LineSegment(from, to));
+  addSegment$1(profile, new LineSegment(from, to));
   from = new Vector2(rect.left, rect.bottom - bottomLeft);
   to = new Vector2(rect.left, rect.top + topLeft);
   if (bottomLeft > 0) {
     addCornerSegment(profile, from.addX(bottomLeft), bottomLeft, Vector2.up, Vector2.left, smoothCorners, cornerSharpness);
   }
-  addSegment(profile, new LineSegment(from, to));
+  addSegment$1(profile, new LineSegment(from, to));
   from = new Vector2(rect.left + topLeft, rect.top);
   if (topLeft > 0) {
     addCornerSegment(profile, from.addY(topLeft), topLeft, Vector2.left, Vector2.down, smoothCorners, cornerSharpness);
   }
   return profile;
 }
-function addSegment(profile, segment) {
+function addSegment$1(profile, segment) {
   profile.segments.push(segment);
   profile.arcLength += segment.arcLength;
 }
@@ -10461,12 +10467,12 @@ function addCornerSegment(profile, center, radius, fromNormal, toNormal, smooth,
   const from = center.add(fromNormal.scale(radius));
   const to = center.add(toNormal.scale(radius));
   if (smooth) {
-    addSegment(profile, new CubicBezierSegment(from, from.add(toNormal.scale(sharpness * radius)), to.add(fromNormal.scale(sharpness * radius)), to));
+    addSegment$1(profile, new CubicBezierSegment(from, from.add(toNormal.scale(sharpness * radius)), to.add(fromNormal.scale(sharpness * radius)), to));
   } else {
-    addSegment(profile, new CircleSegment(center, radius, fromNormal, toNormal, false));
+    addSegment$1(profile, new CircleSegment(center, radius, fromNormal, toNormal, false));
   }
 }
-var __decorate$6 = function(decorators, target, key, desc) {
+var __decorate$8 = function(decorators, target, key, desc) {
   var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
   if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
   else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
@@ -10517,24 +10523,24 @@ let Rect = class Rect2 extends Curve {
     return path;
   }
 };
-__decorate$6([
+__decorate$8([
   spacingSignal("radius")
 ], Rect.prototype, "radius", void 0);
-__decorate$6([
+__decorate$8([
   initial(false),
   signal()
 ], Rect.prototype, "smoothCorners", void 0);
-__decorate$6([
+__decorate$8([
   initial(0.6),
   signal()
 ], Rect.prototype, "cornerSharpness", void 0);
-__decorate$6([
+__decorate$8([
   computed()
 ], Rect.prototype, "profile", null);
-Rect = __decorate$6([
+Rect = __decorate$8([
   nodeName("Rect")
 ], Rect);
-var __decorate$5 = function(decorators, target, key, desc) {
+var __decorate$7 = function(decorators, target, key, desc) {
   var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
   if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
   else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
@@ -10693,32 +10699,32 @@ class Camera extends Node {
     });
   }
 }
-__decorate$5([
+__decorate$7([
   signal()
 ], Camera.prototype, "scene", void 0);
-__decorate$5([
+__decorate$7([
   cloneable(false),
   signal()
 ], Camera.prototype, "zoom", void 0);
-__decorate$5([
+__decorate$7([
   threadable()
 ], Camera.prototype, "reset", null);
-__decorate$5([
+__decorate$7([
   threadable()
 ], Camera.prototype, "centerOn", null);
-__decorate$5([
+__decorate$7([
   threadable()
 ], Camera.prototype, "followCurve", null);
-__decorate$5([
+__decorate$7([
   threadable()
 ], Camera.prototype, "followCurveReverse", null);
-__decorate$5([
+__decorate$7([
   threadable()
 ], Camera.prototype, "followCurveWithRotation", null);
-__decorate$5([
+__decorate$7([
   threadable()
 ], Camera.prototype, "followCurveWithRotationReverse", null);
-var __decorate$4 = function(decorators, target, key, desc) {
+var __decorate$6 = function(decorators, target, key, desc) {
   var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
   if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
   else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
@@ -10767,18 +10773,18 @@ let View2D = View2D_1 = class View2D2 extends Rect {
     return this;
   }
 };
-__decorate$4([
+__decorate$6([
   initial(PlaybackState.Paused),
   signal()
 ], View2D.prototype, "playbackState", void 0);
-__decorate$4([
+__decorate$6([
   initial(0),
   signal()
 ], View2D.prototype, "globalTime", void 0);
-__decorate$4([
+__decorate$6([
   signal()
 ], View2D.prototype, "assetHash", void 0);
-__decorate$4([
+__decorate$6([
   lazy(() => {
     const frameID = "motion-canvas-2d-frame";
     let frame = document.querySelector(`#${frameID}`);
@@ -10796,9 +10802,201 @@ __decorate$4([
     return frame.shadowRoot ?? frame.attachShadow({ mode: "open" });
   })
 ], View2D, "shadowRoot", void 0);
-View2D = View2D_1 = __decorate$4([
+View2D = View2D_1 = __decorate$6([
   nodeName("View2D")
 ], View2D);
+var __decorate$5 = function(decorators, target, key, desc) {
+  var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+  if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+  else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+  return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+class ArcSegment extends Segment {
+  constructor(startPoint, radius, xAxisRotationDegree, largeArcFlag, sweepFlag, endPoint) {
+    super();
+    this.startPoint = startPoint;
+    this.radius = radius;
+    this.xAxisRotationDegree = xAxisRotationDegree;
+    this.largeArcFlag = largeArcFlag;
+    this.sweepFlag = sweepFlag;
+    this.endPoint = endPoint;
+    this.xAxisRotation = this.xAxisRotationDegree * DEG2RAD;
+    this.radius = new Vector2(Math.abs(radius.x), Math.abs(radius.y));
+    const pAccent = startPoint.sub(endPoint).div(2).transform(Matrix2D.fromRotation(-xAxisRotationDegree).domMatrix);
+    const L = pAccent.x * pAccent.x / (radius.x * radius.x) + pAccent.y * pAccent.y / (radius.y * radius.y);
+    if (L > 1) {
+      const Lsqrt = Math.sqrt(L);
+      radius.x = Lsqrt * radius.x;
+      radius.y = Lsqrt * radius.y;
+    }
+    const cAccent = new Vector2(radius.ctg * pAccent.y, radius.perpendicular.ctg * pAccent.x).scale(Math.sqrt(1 / (pAccent.x * pAccent.x / (radius.x * radius.x) + pAccent.y * pAccent.y / (radius.y * radius.y)) - 1) * (largeArcFlag === sweepFlag ? -1 : 1));
+    this.xAxisRotationMatrix = Matrix2D.fromRotation(xAxisRotationDegree).domMatrix;
+    this.center = cAccent.transform(this.xAxisRotationMatrix).add(startPoint.add(endPoint).div(2));
+    const q = pAccent.sub(cAccent).div(radius);
+    const s = pAccent.scale(-1).sub(cAccent).div(radius);
+    this.startAngle = q.radians;
+    this.deltaAngle = Vector2.angleBetween(q, s) % (Math.PI * 2);
+    if (this.sweepFlag === 0 && this.deltaAngle > 0) {
+      this.deltaAngle -= Math.PI * 2;
+    }
+    if (this.sweepFlag === 1 && this.deltaAngle < 0) {
+      this.deltaAngle += Math.PI * 2;
+    }
+    ArcSegment.el.setAttribute("d", `M ${this.startPoint.x} ${this.startPoint.y} A ${this.radius.x} ${this.radius.y} ${this.xAxisRotationDegree} ${this.largeArcFlag} ${this.sweepFlag} ${this.endPoint.x} ${this.endPoint.y}`);
+    this.length = ArcSegment.el.getTotalLength();
+    const bbox = new BBox(ArcSegment.el.getBBox());
+    this.points = [bbox.topLeft, bbox.bottomRight];
+  }
+  getAnglePosition(angle) {
+    return this.radius.mul(Vector2.fromRadians(angle)).transform(this.xAxisRotationMatrix).add(this.center);
+  }
+  getAngleDerivative(angle) {
+    return new Vector2(-this.radius.x * Math.sin(angle), this.radius.y * Math.cos(angle)).transform(this.xAxisRotationMatrix);
+  }
+  draw(context, start, end, move) {
+    const startAngle = this.startAngle + this.deltaAngle * start;
+    const endAngle = this.startAngle + this.deltaAngle * end;
+    const startPos = this.getPoint(start);
+    const endPos = this.getPoint(end);
+    if (move)
+      context.moveTo(startPos.position.x, startPos.position.y);
+    context.ellipse(this.center.x, this.center.y, this.radius.x, this.radius.y, this.xAxisRotation, startAngle, endAngle, this.sweepFlag === 0);
+    return [startPos, endPos];
+  }
+  getPoint(distance) {
+    const angle = this.startAngle + distance * this.deltaAngle;
+    const tangent = this.getAngleDerivative(angle).normalized;
+    return {
+      position: distance === 0 ? this.startPoint : distance === 1 ? this.endPoint : this.getAnglePosition(angle),
+      tangent,
+      normal: tangent.perpendicular
+    };
+  }
+  get arcLength() {
+    return this.length;
+  }
+}
+__decorate$5([
+  lazy(() => {
+    const root = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    root.appendChild(el);
+    View2D.shadowRoot.appendChild(root);
+    return el;
+  })
+], ArcSegment, "el", void 0);
+function getCircleProfile(size, startAngle, endAngle, closed, counterclockwise = false) {
+  const profile = {
+    arcLength: 0,
+    minSin: 1,
+    segments: []
+  };
+  if (endAngle < startAngle) {
+    const loops = Math.floor((startAngle - endAngle) / (Math.PI * 2)) + 1;
+    endAngle += Math.PI * 2 * loops;
+  } else if (endAngle > startAngle + Math.PI * 2) {
+    const loops = Math.floor((endAngle - startAngle) / (Math.PI * 2));
+    endAngle -= Math.PI * 2 * loops;
+  }
+  const middleAngle = (startAngle + endAngle) / 2;
+  const from = size.mul(Vector2.fromRadians(startAngle));
+  const to = size.mul(Vector2.fromRadians(endAngle));
+  const middle = size.mul(Vector2.fromRadians(middleAngle)).scale(counterclockwise ? -1 : 1);
+  if (closed) {
+    addSegment(profile, new LineSegment(Vector2.zero, from));
+  }
+  addArcSegment(profile, size, from, middle, startAngle, middleAngle, counterclockwise);
+  addArcSegment(profile, size, middle, to, middleAngle, endAngle, counterclockwise);
+  if (closed) {
+    addSegment(profile, new LineSegment(to, Vector2.zero));
+  }
+  return profile;
+}
+function addSegment(profile, segment) {
+  profile.segments.push(segment);
+  profile.arcLength += segment.arcLength;
+}
+function addArcSegment(profile, size, from, to, fromAngle, toAngle, counterclockwise) {
+  const small = Math.abs(fromAngle - toAngle) <= 180 ? 1 : 0;
+  const flip = fromAngle > toAngle ? 0 : 1;
+  const counter = counterclockwise ? 0 : 1;
+  addSegment(profile, new ArcSegment(from, size, 0, 0, small ^ counter ^ flip, to));
+}
+var __decorate$4 = function(decorators, target, key, desc) {
+  var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+  if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+  else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+  return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+let Circle = class Circle2 extends Curve {
+  constructor(props) {
+    super(props);
+  }
+  profile() {
+    return getCircleProfile(this.size().scale(0.5), this.startAngle() * DEG2RAD, this.endAngle() * DEG2RAD, this.closed(), this.counterclockwise());
+  }
+  desiredSize() {
+    return {
+      x: this.width.context.getter(),
+      y: this.height.context.getter()
+    };
+  }
+  offsetComputedLayout(box) {
+    return box;
+  }
+  childrenBBox() {
+    return BBox.fromSizeCentered(this.computedSize());
+  }
+  getPath() {
+    if (this.requiresProfile()) {
+      return this.curveDrawingInfo().path;
+    }
+    return this.createPath();
+  }
+  getRipplePath() {
+    return this.createPath(this.rippleSize());
+  }
+  getCacheBBox() {
+    return super.getCacheBBox().expand(this.rippleSize());
+  }
+  createPath(expand = 0) {
+    const path = new Path2D();
+    const start = this.startAngle() * DEG2RAD;
+    let end = this.endAngle() * DEG2RAD;
+    const size = this.size().scale(0.5).add(expand);
+    const closed = this.closed();
+    if (end > start + Math.PI * 2) {
+      const loops = Math.floor((end - start) / (Math.PI * 2));
+      end -= Math.PI * 2 * loops;
+    }
+    if (closed) {
+      path.moveTo(0, 0);
+    }
+    path.ellipse(0, 0, size.x, size.y, 0, start, end, this.counterclockwise());
+    if (closed) {
+      path.closePath();
+    }
+    return path;
+  }
+};
+__decorate$4([
+  initial(0),
+  signal()
+], Circle.prototype, "startAngle", void 0);
+__decorate$4([
+  initial(360),
+  signal()
+], Circle.prototype, "endAngle", void 0);
+__decorate$4([
+  initial(false),
+  signal()
+], Circle.prototype, "counterclockwise", void 0);
+__decorate$4([
+  computed()
+], Circle.prototype, "profile", null);
+Circle = __decorate$4([
+  nodeName("Circle")
+], Circle);
 var __decorate$3 = function(decorators, target, key, desc) {
   var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
   if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
@@ -11735,13 +11933,13 @@ void main() {
 
 
 //# sourceURL=src/shaders/gaussianBlur.glsl`;
-var __defProp2 = Object.defineProperty;
-var __decorateClass = (decorators, target, key, kind) => {
+var __defProp$1 = Object.defineProperty;
+var __decorateClass$1 = (decorators, target, key, kind) => {
   var result = void 0;
   for (var i = decorators.length - 1, decorator; i >= 0; i--)
     if (decorator = decorators[i])
       result = decorator(target, key, result) || result;
-  if (result) __defProp2(target, key, result);
+  if (result) __defProp$1(target, key, result);
   return result;
 };
 const CAPTION_STYLE_CONFIG = {
@@ -12041,43 +12239,43 @@ class AnimatedCaptions extends Node {
     }
   }
 }
-__decorateClass([
+__decorateClass$1([
   initial(false),
   signal()
 ], AnimatedCaptions.prototype, "ShowCaptions");
-__decorateClass([
+__decorateClass$1([
   initial(1.5),
   signal()
 ], AnimatedCaptions.prototype, "CaptionsDuration");
-__decorateClass([
+__decorateClass$1([
   initial(1),
   signal()
 ], AnimatedCaptions.prototype, "CaptionsSize");
-__decorateClass([
+__decorateClass$1([
   initial([]),
   signal()
 ], AnimatedCaptions.prototype, "TranscriptionData");
-__decorateClass([
+__decorateClass$1([
   initial(0),
   signal()
 ], AnimatedCaptions.prototype, "SceneHeight");
-__decorateClass([
+__decorateClass$1([
   initial(0),
   signal()
 ], AnimatedCaptions.prototype, "SceneWidth");
-__decorateClass([
+__decorateClass$1([
   initial("Inter Variable"),
   signal()
 ], AnimatedCaptions.prototype, "CaptionsFontFamily");
-__decorateClass([
+__decorateClass$1([
   initial(400),
   signal()
 ], AnimatedCaptions.prototype, "CaptionsFontWeight");
-__decorateClass([
+__decorateClass$1([
   initial(18),
   signal()
 ], AnimatedCaptions.prototype, "CaptionsFontSize");
-__decorateClass([
+__decorateClass$1([
   initial("pill"),
   signal()
 ], AnimatedCaptions.prototype, "CaptionsStyle");
@@ -13722,6 +13920,163 @@ function* playAudio({ entry, captionRunner }) {
     yield* playback();
   }
 }
+const componentRegistry = /* @__PURE__ */ new Map();
+function registerComponent(name, cls) {
+  componentRegistry.set(name, cls);
+}
+function createComponentElements({ clips, view }) {
+  const entries = [];
+  for (const clip of clips) {
+    const ComponentClass = componentRegistry.get(clip.componentName);
+    if (!ComponentClass) {
+      console.warn(`[component] Unknown component "${clip.componentName}" for clip ${clip.id}, skipping`);
+      continue;
+    }
+    try {
+      const ref = createRef();
+      const props = {
+        ...clip.inputs,
+        key: `component-clip-${clip.id}`,
+        x: clip.position.x,
+        y: clip.position.y,
+        scale: clip.scale,
+        opacity: 0
+      };
+      const instance = new ComponentClass(props);
+      ref(instance);
+      view.add(instance);
+      entries.push({ clip, ref });
+    } catch (err) {
+      console.error(`[component] Failed to create "${clip.componentName}" for clip ${clip.id}:`, err);
+    }
+  }
+  return entries;
+}
+function* playComponent({ entry, sceneWidth, sceneHeight }) {
+  const { clip, ref } = entry;
+  const timing = getTransitionAdjustedTiming(
+    clip.start,
+    clip.duration,
+    clip.speed ?? 1,
+    clip.enterTransition,
+    clip.exitTransition
+  );
+  if (timing.startAt > 0) {
+    yield* waitFor(timing.startAt);
+  }
+  const node = ref();
+  if (!node) return;
+  yield* applyEnterTransition(node, clip.enterTransition, 1, sceneWidth, sceneHeight);
+  if (timing.mainDuration > 0) {
+    if (clip.animation && clip.animation !== "none") {
+      yield* all(
+        waitFor(timing.mainDuration),
+        applyClipAnimation(node, clip.animation, timing.mainDuration, clip.animationIntensity)
+      );
+    } else {
+      yield* waitFor(timing.mainDuration);
+    }
+  }
+  yield* applyExitTransition(node, clip.exitTransition, sceneWidth, sceneHeight);
+}
+var __defProp2 = Object.defineProperty;
+var __decorateClass = (decorators, target, key, kind) => {
+  var result = void 0;
+  for (var i = decorators.length - 1, decorator; i >= 0; i--)
+    if (decorator = decorators[i])
+      result = decorator(target, key, result) || result;
+  if (result) __defProp2(target, key, result);
+  return result;
+};
+class ProgressRing extends Node {
+  constructor(props) {
+    super({ ...props });
+    __publicField(this, "currentProgress", createSignal(0));
+    __publicField(this, "percentRef", createRef());
+    __publicField(this, "labelRef", createRef());
+    this.currentProgress(this.progress());
+    const size = this.ringSize();
+    const strokeWidth = size * 0.12;
+    this.add([
+      // Background ring
+      /* @__PURE__ */ jsx(
+        Circle,
+        {
+          width: size,
+          height: size,
+          stroke: "#333333",
+          lineWidth: strokeWidth
+        }
+      ),
+      // Progress ring
+      /* @__PURE__ */ jsx(
+        Circle,
+        {
+          width: size,
+          height: size,
+          stroke: () => this.ringColor(),
+          lineWidth: strokeWidth,
+          startAngle: -90,
+          endAngle: () => -90 + this.currentProgress() / 100 * 360,
+          lineCap: "round"
+        }
+      ),
+      // Percentage text
+      /* @__PURE__ */ jsx(
+        Txt,
+        {
+          ref: this.percentRef,
+          text: () => `${Math.round(this.currentProgress())}%`,
+          fill: "#ffffff",
+          fontSize: size * 0.28,
+          fontFamily: "Inter Variable",
+          fontWeight: 700,
+          y: -size * 0.05
+        }
+      ),
+      // Label text
+      /* @__PURE__ */ jsx(
+        Txt,
+        {
+          ref: this.labelRef,
+          text: () => this.label(),
+          fill: "#aaaaaa",
+          fontSize: size * 0.13,
+          fontFamily: "Inter Variable",
+          fontWeight: 400,
+          y: size * 0.18
+        }
+      )
+    ]);
+  }
+  /**
+   * Animate the progress ring from 0 to the target value.
+   */
+  *animateIn(duration = 1.5) {
+    const target = this.progress();
+    this.currentProgress(0);
+    yield* tween(duration, (value) => {
+      this.currentProgress(easeInOutCubic(value) * target);
+    });
+  }
+}
+__decorateClass([
+  initial(75),
+  signal()
+], ProgressRing.prototype, "progress");
+__decorateClass([
+  initial("#68ABDF"),
+  colorSignal()
+], ProgressRing.prototype, "ringColor");
+__decorateClass([
+  initial("Progress"),
+  signal()
+], ProgressRing.prototype, "label");
+__decorateClass([
+  initial(200),
+  signal()
+], ProgressRing.prototype, "ringSize");
+registerComponent("ProgressRing", ProgressRing);
 const description = makeScene2D(function* (view) {
   const scene = useScene();
   const { width, height } = scene.getSize();
@@ -13859,6 +14214,7 @@ const description = makeScene2D(function* (view) {
   const textEntries = [];
   const imageEntries = [];
   const audioEntries = [];
+  const componentEntries = [];
   for (let i = layers.length - 1; i >= 0; i--) {
     const layer = layers[i];
     switch (layer.type) {
@@ -13900,6 +14256,14 @@ const description = makeScene2D(function* (view) {
         audioEntries.push(...entries);
         break;
       }
+      case "component": {
+        const entries = createComponentElements({
+          clips: layer.clips,
+          view
+        });
+        componentEntries.push(...entries);
+        break;
+      }
     }
   }
   function* processVideoClips() {
@@ -13935,6 +14299,14 @@ const description = makeScene2D(function* (view) {
       )
     );
   }
+  function* processComponentClips() {
+    if (componentEntries.length === 0) return;
+    yield* all(
+      ...componentEntries.map(
+        (entry) => playComponent({ entry, sceneWidth: width, sceneHeight: height })
+      )
+    );
+  }
   yield;
   videoEntries.forEach(({ ref, maskRef }) => {
     var _a2, _b;
@@ -13949,7 +14321,8 @@ const description = makeScene2D(function* (view) {
     processVideoClips(),
     processAudioTracks(),
     processTextClips(),
-    processImageClips()
+    processImageClips(),
+    processComponentClips()
   );
   videoEntries.forEach(({ ref, maskRef, containerRef }) => {
     const video = ref();

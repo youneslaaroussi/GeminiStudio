@@ -112,6 +112,29 @@ function appendContentFromToolOutput(content: ContentEntry[], output: ToolOutput
       });
       break;
     }
+    case "code": {
+      // Encode as a text entry with a special marker prefix that the ChatPanel can
+      // detect and render as a rich CodeToolResultCard component.
+      const codePayload = JSON.stringify({
+        language: output.language,
+        filename: output.filename,
+        code: output.code,
+        oldCode: output.oldCode,
+        summary: output.summary,
+      });
+      content.push({
+        type: "text",
+        text: `<!--code:${codePayload}-->`,
+      });
+      // Also push a plain text summary for the model to read
+      if (output.summary) {
+        content.push({
+          type: "text",
+          text: output.summary,
+        });
+      }
+      break;
+    }
     case "file": {
       // Return file as multimodal content for the model to process
       // Per AI SDK docs: Gemini Files API URLs (https://generativelanguage.googleapis.com/v1beta/files/...)

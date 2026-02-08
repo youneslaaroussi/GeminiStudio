@@ -2,7 +2,6 @@ import { Renderer, RendererResult, Vector2, type Project as MotionCanvasProject 
 import { initSocket, getSocket } from './socket.js';
 import { FFmpegExporterClient } from './ffmpeg-exporter-client.js';
 import type { Project, ProjectTranscription } from '@gemini-studio/types';
-import projectFactory from '../../../scene/dist/src/project.js';
 
 interface HeadlessJobPayload {
   token: string;
@@ -42,6 +41,7 @@ declare global {
     nodeHandleRenderProgress?: (frame: number, total: number) => void;
     nodeHandleRenderEnd?: (status: string) => void;
     nodeHandleRenderError?: (message: string) => void;
+    __SCENE_PROJECT__?: MotionCanvasProject;
   }
 }
 
@@ -51,6 +51,61 @@ const fetchJobPayload = async (token: string): Promise<HeadlessJobPayload> => {
     throw new Error(`Failed to fetch job payload: HTTP ${res.status}`);
   }
   return await res.json();
+};
+
+/**
+ * Dynamically load the compiled project.js served by the RenderRunner.
+ *
+ * The scene-compiler service injects `globalThis.__SCENE_PROJECT__ = project;`
+ * into the compiled output. We load it as a <script type="module"> and read
+ * the global once the script has executed.
+ */
+const loadCompiledProject = async (): Promise<MotionCanvasProject> => {
+  // Fetch the compiled JS from the server
+  const res = await fetch('/headless/project.js');
+  if (!res.ok) {
+    throw new Error(`Failed to fetch compiled project.js: HTTP ${res.status}`);
+  }
+  const js = await res.text();
+
+  // Load via blob URL + script tag (same approach as ScenePlayer in the app)
+  const blob = new Blob([js], { type: 'text/javascript' });
+  const blobUrl = URL.createObjectURL(blob);
+
+  // Clear any previous project
+  delete window.__SCENE_PROJECT__;
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const el = document.createElement('script');
+      el.type = 'module';
+      el.src = blobUrl;
+      el.onload = () => resolve();
+      el.onerror = () => reject(new Error('Compiled project script failed to load'));
+      document.head.appendChild(el);
+    });
+
+    // Module scripts execute asynchronously after load event.
+    // Poll briefly for __SCENE_PROJECT__ to be set.
+    const maxWait = 10_000; // 10 seconds
+    const interval = 50;
+    let elapsed = 0;
+    while (!window.__SCENE_PROJECT__ && elapsed < maxWait) {
+      await new Promise((r) => setTimeout(r, interval));
+      elapsed += interval;
+    }
+
+    const project = window.__SCENE_PROJECT__;
+    if (!project || typeof project !== 'object') {
+      throw new Error(
+        'Compiled project did not set globalThis.__SCENE_PROJECT__ within timeout',
+      );
+    }
+
+    return project;
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
 };
 
 const attachRendererHooks = (renderer: Renderer, totalFrames: number) => {
@@ -110,14 +165,17 @@ const run = async () => {
     output: payload.output.filePath,
   });
 
+  // Load the dynamically compiled project from the server
+  console.debug('[headless] Loading compiled project...');
+  const project = await loadCompiledProject();
+  console.debug('[headless] Project loaded successfully');
+
   const socket = initSocket(token);
 
   await new Promise<void>((resolve, reject) => {
     socket.on('connect', () => resolve());
     socket.on('connect_error', (err) => reject(err));
   });
-
-  const project = projectFactory as MotionCanvasProject;
 
   // Inject variables used by the Motion Canvas scene.
   project.variables = {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { Video, Music, Type, Image as ImageIcon, MousePointer2 } from "lucide-react";
+import { Video, Music, Type, Image as ImageIcon, Code2, MousePointer2 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import type {
   TimelineClip,
@@ -10,6 +10,7 @@ import type {
   ResolvedAudioClip,
   ResolvedImageClip,
   TextClip,
+  ComponentClip,
 } from "@/app/types/timeline";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -21,12 +22,14 @@ import { VideoClipSettings } from "./clips/VideoClipSettings";
 import { AudioClipSettings } from "./clips/AudioClipSettings";
 import { TextClipSettings } from "./clips/TextClipSettings";
 import { ImageClipSettings } from "./clips/ImageClipSettings";
+import { ComponentClipSettings } from "./clips/ComponentClipSettings";
 
-const CLIP_ICONS = {
+const CLIP_ICONS: Record<string, React.ReactNode> = {
   video: <Video className="size-4 text-blue-500" />,
   audio: <Music className="size-4 text-emerald-500" />,
   text: <Type className="size-4 text-purple-500" />,
   image: <ImageIcon className="size-4 text-amber-500" />,
+  component: <Code2 className="size-4 text-indigo-500" />,
 };
 
 interface SettingsPanelProps {
@@ -127,6 +130,12 @@ export function SettingsPanel({ resolvedLayers }: SettingsPanelProps = {}) {
                 {selectedClip.type === "image" && (
                   <ImageClipSettings
                     clip={selectedClip as ResolvedImageClip}
+                    onUpdate={handleUpdate}
+                  />
+                )}
+                {selectedClip.type === "component" && (
+                  <ComponentClipSettings
+                    clip={selectedClip as ComponentClip}
                     onUpdate={handleUpdate}
                   />
                 )}

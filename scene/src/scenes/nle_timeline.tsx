@@ -6,10 +6,12 @@ import {
   createTextElements,
   createImageElements,
   createAudioElements,
+  createComponentElements,
   playVideo,
   playText,
   playImage,
   playAudio,
+  playComponent,
 } from '../lib/clips';
 import { normalizeRawSegments, makeTransitionKey } from '../lib/helpers';
 import type {
@@ -18,6 +20,7 @@ import type {
   AudioClip,
   TextClip,
   ImageClip,
+  ComponentClip,
   ClipTransition,
   SceneTranscription,
   CaptionSettings,
@@ -26,7 +29,14 @@ import type {
   TextEntry,
   ImageEntry,
   AudioEntry,
+  ComponentEntry,
 } from '../lib/types';
+
+// --- Register custom components ---
+// The scene-compiler generates src/components/custom/index.ts which imports
+// and registers all custom components. During development, we import it here.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import '../components/custom';
 
 export default makeScene2D(function* (view) {
   const scene = useScene();
@@ -190,6 +200,7 @@ export default makeScene2D(function* (view) {
   const textEntries: TextEntry[] = [];
   const imageEntries: ImageEntry[] = [];
   const audioEntries: AudioEntry[] = [];
+  const componentEntries: ComponentEntry[] = [];
 
   // UNIFIED LAYER LOOP - respects z-order
   // Layers at index 0 render ON TOP, so iterate in reverse (bottom layers first)
@@ -235,6 +246,14 @@ export default makeScene2D(function* (view) {
         audioEntries.push(...entries);
         break;
       }
+      case 'component': {
+        const entries = createComponentElements({
+          clips: layer.clips as ComponentClip[],
+          view,
+        });
+        componentEntries.push(...entries);
+        break;
+      }
     }
   }
 
@@ -276,6 +295,15 @@ export default makeScene2D(function* (view) {
     );
   }
 
+  function* processComponentClips() {
+    if (componentEntries.length === 0) return;
+    yield* all(
+      ...componentEntries.map((entry) =>
+        playComponent({ entry, sceneWidth: width, sceneHeight: height })
+      )
+    );
+  }
+
   // Pause all video/audio at scene start so that after a project reset or seek-to-zero
   // no media keeps playing (the generator may be aborted before "Final cleanup" runs).
   // Yield once so refs are populated after view.add().
@@ -291,7 +319,8 @@ export default makeScene2D(function* (view) {
     processVideoClips(),
     processAudioTracks(),
     processTextClips(),
-    processImageClips()
+    processImageClips(),
+    processComponentClips(),
   );
 
   // Final cleanup (runs when playback completes normally; start-of-scene pause handles reset)

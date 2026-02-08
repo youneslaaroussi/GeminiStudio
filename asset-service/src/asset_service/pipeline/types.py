@@ -14,6 +14,7 @@ class AssetType(str, Enum):
     VIDEO = "video"
     AUDIO = "audio"
     IMAGE = "image"
+    COMPONENT = "component"
     OTHER = "other"
 
 

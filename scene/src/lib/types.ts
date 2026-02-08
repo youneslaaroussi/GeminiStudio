@@ -186,7 +186,36 @@ export interface ClipTransition {
   duration: number;
 }
 
-export type TimelineClip = VideoClip | AudioClip | TextClip | ImageClip;
+/** Custom Motion Canvas component clip */
+export interface ComponentClip {
+  id: string;
+  type: 'component';
+  name: string;
+  start: number;
+  duration: number;
+  offset: number;
+  speed: number;
+  /** Component class name exported from the code */
+  componentName: string;
+  /** Current input values (keyed by input name) */
+  inputs: Record<string, string | number | boolean>;
+  width?: number;
+  height?: number;
+  position: Transform;
+  scale: Transform;
+  effect?: VisualEffectType;
+  enterTransition?: ClipTransition;
+  exitTransition?: ClipTransition;
+  animation?: ClipAnimationType;
+  animationIntensity?: number;
+}
+
+export interface ComponentEntry {
+  clip: ComponentClip;
+  ref: Reference<Node>;
+}
+
+export type TimelineClip = VideoClip | AudioClip | TextClip | ImageClip | ComponentClip;
 
 export interface Layer {
   id: string;

@@ -111,7 +111,7 @@ export function EditorLayout() {
   const loadRef = useRef<(() => void) | null>(null);
   const exportRef = useRef<(() => void) | null>(null);
   const refreshRef = useRef<(() => void) | null>(null);
-  const setAssetTabRef = useRef<((tab: "assets" | "templates" | "video" | "image" | "music" | "tts" | "jobs" | "branches") => void) | null>(null);
+  const setAssetTabRef = useRef<((tab: "assets" | "templates" | "video" | "image" | "music" | "tts" | "components" | "jobs" | "branches") => void) | null>(null);
 
   const handleRecenterReady = useCallback((recenter: () => void) => {
     recenterRef.current = recenter;
@@ -129,7 +129,7 @@ export function EditorLayout() {
     refreshRef.current = refresh;
   }, []);
 
-  const handleAssetTabReady = useCallback((setTab: (tab: "assets" | "templates" | "video" | "image" | "music" | "tts" | "jobs" | "branches") => void) => {
+  const handleAssetTabReady = useCallback((setTab: (tab: "assets" | "templates" | "video" | "image" | "music" | "tts" | "components" | "jobs" | "branches") => void) => {
     setAssetTabRef.current = setTab;
   }, []);
 
@@ -447,7 +447,7 @@ export function EditorLayout() {
       handler: () => setCommandMenuOpen((prev) => !prev),
       preventDefault: true,
     },
-    // Asset panel tabs: 1–8 (no modifiers; Cmd+1 etc. left to browser)
+    // Asset panel tabs: 1–9 (no modifiers; Cmd+1 etc. left to browser)
     {
       key: '1',
       handler: (e) => {
@@ -506,13 +506,22 @@ export function EditorLayout() {
       key: '7',
       handler: (e) => {
         if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-          setAssetTabRef.current?.('jobs');
+          setAssetTabRef.current?.('components');
           e.preventDefault();
         }
       },
     },
     {
       key: '8',
+      handler: (e) => {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          setAssetTabRef.current?.('jobs');
+          e.preventDefault();
+        }
+      },
+    },
+    {
+      key: '9',
       handler: (e) => {
         if (!e.ctrlKey && !e.metaKey && !e.altKey) {
           setAssetTabRef.current?.('branches');

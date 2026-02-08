@@ -65,6 +65,10 @@ export interface AssetServiceAsset {
   // Transcode status fields
   transcodeStatus?: "pending" | "processing" | "completed" | "error";
   transcodeError?: string;
+  // Component asset fields
+  code?: string;
+  componentName?: string;
+  inputDefs?: Array<{ name: string; type: string; default: string | number | boolean; label?: string }>;
 }
 
 export interface UploadResponse {
@@ -194,13 +198,39 @@ export async function getAssetFromService(
 }
 
 /**
- * Update an asset (e.g. name, sortOrder).
+ * Create a component asset (no file upload -- code-only).
+ */
+export async function createComponentAssetOnService(
+  userId: string,
+  projectId: string,
+  data: { name: string; code: string; componentName: string; inputDefs?: Array<{ name: string; type: string; default: string | number | boolean; label?: string }> }
+): Promise<AssetServiceAsset> {
+  const body = JSON.stringify(data);
+  const response = await fetch(
+    `${ASSET_SERVICE_URL}/api/assets/${userId}/${projectId}/component`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders(body) },
+      body,
+    }
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Asset service component creation failed: ${response.status} - ${text}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Update an asset (e.g. name, sortOrder, component fields).
  */
 export async function updateAssetFromService(
   userId: string,
   projectId: string,
   assetId: string,
-  updates: { name?: string; sortOrder?: number; notes?: string }
+  updates: Record<string, unknown>
 ): Promise<AssetServiceAsset> {
   const body = JSON.stringify(updates);
   const response = await fetch(

@@ -5,7 +5,7 @@
 # Frontend (Next.js)
 app: cd app && pnpm dev
 
-# Renderer Service (Node.js) - build headless bundle first so renders work
+# Renderer Service (Node.js) - build headless bundle first, scene is compiled on demand via scene-compiler
 renderer: cd renderer && pnpm run build:headless && pnpm dev
 
 # Billing Service (NestJS)
@@ -16,6 +16,9 @@ assets: cd asset-service && uv run python -m asset_service
 
 # Video Effects Service (Python/FastAPI)
 effects: cd video-effects-service && uv run python -m video_effects_service
+
+# Scene Compiler Service (Node.js) - compiles Motion Canvas scenes on demand
+scene-compiler: cd scene-compiler && pnpm dev
 
 # LangGraph Server (Python/FastAPI) - PYTHONPATH=src so uvicorn finds the package
 langgraph: cd langgraph_server && uv run env PYTHONPATH=src uvicorn langgraph_server.main:app --reload --port 8000

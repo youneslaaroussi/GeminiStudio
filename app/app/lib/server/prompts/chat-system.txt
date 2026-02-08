@@ -82,6 +82,99 @@ You have **clip animations** available on video, text, and image clips. Use them
 
 **When to use**: Add **zoom-in** on the first few seconds of a video or on a key beat to hook attention; use **zoom-out** when transitioning to a wider context or end of a section. Use **animation** and **animationIntensity** (0–5) in timelineUpdateClip when updating clips. Prefer these over static clips when the goal is engagement or pacing.
 
+## Motion Canvas (scene and component code) — comprehensive reference
+
+When helping with scene code or custom components, the project uses **Motion Canvas** (@motion-canvas/2d, @motion-canvas/core). This section is the authoritative reference; follow it to avoid common bugs.
+
+### Scene entry and animation flow
+
+- Scenes are **generator functions**: `makeScene2D(function* (view) { ... })`. The function* and yield* are required for animation; do not use a normal function.
+- Add nodes to the scene with `view.add(<Node />)` or `view.add(<>...</>)` for fragments. The scene **view** is the root node.
+- Animation is driven by **yielding**: `yield* circle().scale(2, 1)` runs a tween and pauses the generator until it finishes. Use `yield* waitFor(seconds)` to hold for a fixed time, and `yield* all(...tweens)` to run several tweens in parallel.
+- Time flows only when you yield. If you never yield, nothing animates.
+
+### Scene hierarchy (no React)
+
+- Motion Canvas uses **JSX but not React**. There is no virtual DOM or reconciliation. Each JSX element creates a **real Node instance** at that moment. Storing a node in a variable and then adding it is valid: `const circle = <Circle />; view.add(circle);`.
+- Build the tree with `parent.add(<Child />)` or by passing children in JSX: `<Layout><Rect /><Txt>Hi</Txt></Layout>`. Order of children determines draw order: **first child = back (bottom), last child = front (top)**.
+- Modify hierarchy at any time: `node.add()`, `node.insert(children, index)`, `node.remove()`, `node.removeChildren()`, `node.reparent(newParent)`. Use `node.moveUp()`, `node.moveDown()`, `node.moveToTop()`, `node.moveToBottom()`, `node.moveTo(index)`, `node.moveAbove(other)`, `node.moveBelow(other)` to reorder siblings.
+- **Querying**: `node.findAll(predicate)` returns all descendants matching the predicate; `findFirst`, `findLast`, `findAncestor` also exist. Use the `is()` helper for type: `view.findAll(is(Txt))` returns all Txt descendants. Predicate can be `(n) => n.scale.x() > 1` etc.
+
+### References (refs)
+
+- To animate or read a node later, you need a **reference**. Preferred: `const ref = createRef<Circle>(); view.add(<Circle ref={ref} />);` then call `ref()` to get the instance (ref is callable, like a signal). Use `ref().position([0, 0], 1)` etc.
+- **Array of refs**: `const items: Rect[] = []; view.add(<> {range(5).map(i => <Rect key={i} ref={makeRef(items, i)} />)} </>);` — makeRef(object, key) assigns the created node to object[key]. Or use `createRefArray<Rect>()` and pass it to ref: each new node is pushed to the array.
+- **Multiple refs from one component**: use an object and makeRef: `const refs = { rect: null as Rect, txt: null as Txt }; ... <Rect ref={makeRef(refs, 'rect')} /><Txt ref={makeRef(refs, 'txt')}>...</Txt>`. Then refs.rect, refs.txt.
+- **createRefMap()**: `const labels = createRefMap<Txt>();` then `<Txt ref={labels.a}>A</Txt>` etc.; access with `labels.a()`, `labels.b()`. Use `labels.mapRefs(fn)` to map over all.
+- ref is a callback: it receives the node instance after the node is created. createRef() and makeRef() are helpers that store that instance for you.
+
+### Signals (core abstraction)
+
+- **Signals** represent values that can change over time and drive reactive updates. Create with `createSignal(initialValue)`. Every **node property** (position, fill, scale, rotation, opacity, text, etc.) is also a signal.
+- **Invocation**: `signal()` with **no args** = read current value. `signal(newValue)` with **one arg** = set value. `signal(targetValue, duration)` with **two args** = create a tween (returns a generator); use `yield* node().fill('#e13238', 2)` to run it.
+- **Derived values**: pass a **function** to createSignal: `createSignal(() => radius() * radius() * Math.PI)`. The function is called only when the signal's value is read; dependencies (e.g. radius()) are tracked. Result is **lazy** and **cached** until a dependency changes. Use this for computed state.
+- **Compound signals**: position is a Vector2 signal; you can use `node.position()` for the full vector, or `node.position.x()` and `node.position.y()` for per-component signals. Same idea for scale. Use these for animating x/y independently: `yield* node().position.x(100, 1);`.
+- **DEFAULT**: `signal(DEFAULT)` resets the signal to its initial/default value. Useful for node props: `node.lineHeight(DEFAULT)` restores inherited line height. Can tween: `yield* node().opacity(DEFAULT, 1)`.
+- Do not confuse signals with React state: there is no setState; you call the signal with a new value or a function (for derived).
+
+### Positioning and transform
+
+- **Coordinate system**: origin (0,0) is the **center** of the frame. X: negative = left, positive = right. Y: **positive = down**, negative = up (y increases downward). Same as the timeline.
+- **Transform**: each node has position, scale, rotation (degrees) in **parent's local space**. Children are transformed by the parent's transform.
+- **World space**: use `node.absolutePosition()`, `node.absoluteScale()`, `node.absoluteRotation()` to get/set in world space. Setting absolutePosition(vector) converts the vector to local space and sets position. Useful to match two nodes in different parents: `circleB().absolutePosition(circleA().absolutePosition());`.
+- **Matrices**: for advanced use, nodes expose `localToWorld()`, `worldToLocal()`, `localToParent()`, `parentToWorld()`, `worldToParent()` to transform points between spaces.
+
+### Tweening and animation
+
+- **Property tween (preferred)**: `yield* node().position([100, 0], 2)` tweens from current value to [100, 0] over 2 seconds. Chain with `.to()`: `yield* node().position([100, 0], 1).to([200, 100], 1)`. Third argument = timing function (default easeInOutCubic): `node().fill('#f00', 1, easeOutQuad)`. Fourth argument = custom interpolation (e.g. Vector2.arcLerp for curved path).
+- **Manual tween**: `yield* tween(2, value => { ... })`. value goes from 0 to 1. Use `map(from, to, value)` for linear interpolation or `easeInOutCubic(value, from, to)` so the timing function is applied. Example: `yield* tween(2, value => { node().position.x(map(-300, 300, easeInOutCubic(value))); });`.
+- **Interpolation**: `Color.lerp(colorA, colorB, t)` for colors; `Vector2.lerp(a, b, t)` for linear; `Vector2.arcLerp(a, b, t)` for curved motion. Many types have a static `lerp` method.
+- **Spring**: `yield* spring(PlopSpring, from, to, settleTolerance?, value => node().position.x(value))`. Presets: PlopSpring, SmoothSpring. Optional settleTolerance (e.g. 1 for position in pixels) so the generator finishes when the spring settles.
+- **Save/restore**: `node.save()` stores current state (transform, etc.); `node.restore(duration)` tweens back to that state. Restore can take a timing function as second arg. State is stacked: multiple save() then restore() pops the last saved state.
+- **Concurrency**: `yield* all(tween1, tween2, ...)` runs all in parallel and completes when the longest completes. Use for simultaneous animations.
+
+### Custom components (classes)
+
+- A **custom component** is a class extending Node (or Layout, Rect, Circle, etc. if you want that base behavior). It has a **props interface** and **signal-decorated properties**.
+- **Props interface**: define an interface extending NodeProps (or LayoutProps, etc.) with optional props as `propName?: SignalValue<Type>`. For colors use a color-resolvable type (e.g. PossibleColor) and wrap in SignalValue<>.
+- **Class properties**: for every prop in the interface that Motion Canvas must support, the class must have a **matching property** with: `@initial(defaultValue)` (optional but recommended), then `@signal()` for normal types or `@colorSignal()` for colors, then `public declare readonly propName: SimpleSignal<Type, this>` or `ColorSignal<this>`. Example: `@initial(false) @signal() public declare readonly enabled: SimpleSignal<boolean, this>;` and `@initial('#fff') @colorSignal() public declare readonly accent: ColorSignal<this>;`.
+- **Constructor**: `super({ ...props });` then build the subtree with `this.add(<Rect>...</Rect>)`. Use createRef() and ref={} for any child you need to animate or read. You can read this.someProp() in the constructor or in methods.
+- **Animation methods**: define generator methods: `public *toggle(duration: number) { yield* this.indicator().position.x(50, duration); this.isOn = !this.isOn; }`. Call them from the scene with `yield* myComponent().toggle(1);`.
+- **Private state**: you can use normal class properties (e.g. private isOn: boolean) for non-reactive state. For reactive state that affects the tree, use signals and pass functions to node props (e.g. fill={() => this.isOn ? this.accent() : this.offColor}).
+
+### Built-in 2D components (primitives)
+
+- **Rect**: fill, stroke, lineWidth, size (width/height or [w,h]), radius, position, scale, rotation, opacity. Layout-related: width, height, padding, etc. if used inside Layout.
+- **Circle**: fill, stroke, lineWidth, size (diameter or [d,d]), position, etc.
+- **Layout**: set `layout` prop to enable; then gap, padding, alignItems, justifyContent, direction, etc. Children are laid out automatically.
+- **Txt**: text (string or signal), fontSize, fill, fontFamily, fontWeight, lineHeight, etc. Use wrap for word wrap.
+- **Latex**: **tex** (string or array of strings for animatable parts), **fill** (required — if missing nothing is shown), fontSize. For animating parts use tex={['a^2', '+', 'b^2']} or tex="{{a^2}} + {{b^2}}". Backslash in JS strings must be escaped: `tex={'{{\\\\frac{1}{2}}}'}` or in attribute string `tex="{{\\frac{1}{2}}}"`. If two tex parts need a space between them, include it in a part or use braces: `['\\\\Delta', '{y}']` not `['\\\\Delta', 'y']` (otherwise parsed as \\Deltay).
+- **Line**: points (array of Vector2 or [x,y]), lineWidth, stroke, startArrow, endArrow, arrowSize, start, end (0–1 for visible segment), startOffset, endOffset.
+- **Spline**: points (array of [x,y]) for simple case, or children as **Knot** nodes. lineWidth, stroke, fill, smoothness (0–1), closed. **Knot** has position, startHandle, endHandle (relative to knot position); both handles = broken knot for sharp corners. start/end (0–1) for drawing animation. getPointAtPercentage(t) returns { position, tangent }.
+- **Path**: **data** = SVG path string (d attribute). lineWidth, stroke, fill. Can tween data for morphing. getPointAtPercentage(t) for motion along path.
+- **QuadBezier / CubicBezier**: p0, p1 (and p2, p3 for cubic) as [x,y] or Vector2; lineWidth, stroke; startArrow, endArrow, arrowSize; start, end (0–1). Points are compound signals (e.g. bezier().p0.x(200, 1)). To animate drawing, tween end from 0 to 1.
+
+### Latex — pitfalls
+
+- **Always set fill**; otherwise the node renders nothing.
+- Escaping: in JavaScript template literals or string expressions you need double backslash for LaTeX backslash: `tex={'{{\\\\frac{1}{2}}}'}`. In a JSX string attribute like tex="{{\\frac{1}{2}}}" one backslash is enough.
+- Missing spaces: tex parts are concatenated with no separator. Use `['\\\\Delta', '{y}']` so it parses as \\Delta y, not \\Deltay.
+
+### Path and Spline — details
+
+- **Path**: data is full SVG path d string. Tweening data between two path strings gives a morph effect. start/end (0–1) and getPointAtPercentage work like Line/Spline.
+- **Spline with points=**: simple; handles are auto-calculated (cardinal spline). With **Knot** children you control startHandle and endHandle (relative to knot). Mirrored handles: if you set only startHandle, endHandle is set to flipped startHandle. Broken knot: set both for a corner. smoothness affects curve. closed=true to close the loop.
+
+### Common pitfalls (avoid these)
+
+- Using a normal function instead of function* for the scene, or forgetting yield* for tweens (animation won't run).
+- Assuming React (no useState, no useEffect; JSX is one-shot creation of nodes).
+- Adding a prop to the component's props interface but forgetting the matching @initial/@signal and declare readonly on the class — Motion Canvas requires both.
+- Forgetting fill on Latex (invisible output).
+- Using (0,0) as top-left or bottom-left; it is always center. Using positive y for "up"; positive y is down.
+- Using 0–1 for color grading in timeline clips; there it's -100 to 100 (see Color Grading section). In Motion Canvas, colors are hex/rgb/Color.
+- Emitting partial or invalid TSX for components (e.g. missing imports or exports); always provide complete, runnable code.
+
 ## Tool Usage Guidelines
 
 - In Ask Mode: Do not call any tools, just answer clearly

@@ -22,6 +22,7 @@ import {
   ArrowDownAZ,
   ArrowUpAZ,
   Type,
+  Code2,
 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { addAssetToTimeline } from "@/app/lib/assets/add-asset-to-timeline";
@@ -66,9 +67,10 @@ import {
   JobsPanel,
   BranchesPanel,
   TemplatesPanel,
+  ComponentsPanel,
 } from "./panels";
 
-type TabId = "assets" | "templates" | "video" | "image" | "music" | "tts" | "jobs" | "branches";
+type TabId = "assets" | "templates" | "video" | "image" | "music" | "tts" | "jobs" | "branches" | "components";
 
 interface TabConfig {
   id: TabId;
@@ -84,8 +86,9 @@ const TABS: TabConfig[] = [
   { id: "image", icon: ImageIcon, label: "Image", shortcut: "4" },
   { id: "music", icon: Music, label: "Music", shortcut: "5" },
   { id: "tts", icon: Volume2, label: "Speech", shortcut: "6" },
-  { id: "jobs", icon: ListTodo, label: "Jobs", shortcut: "7" },
-  { id: "branches", icon: GitBranch, label: "Branches", shortcut: "8" },
+  { id: "components", icon: Code2, label: "Components", shortcut: "7" },
+  { id: "jobs", icon: ListTodo, label: "Jobs", shortcut: "8" },
+  { id: "branches", icon: GitBranch, label: "Branches", shortcut: "9" },
 ];
 
 interface AssetsPanelProps {
@@ -117,6 +120,7 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
     isSearching,
     searchAssets,
     clearSearch,
+    updateAssetFields,
   } = useAssets();
 
   // Search input state (debounced)
@@ -277,7 +281,7 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
   // Active tab (declared before fetchVeoJobsForProject / useEffect that depend on it)
   const [activeTab, setActiveTab] = useState<TabId>("assets");
 
-  // Expose setActiveTab to parent for keyboard shortcuts (1–8)
+  // Expose setActiveTab to parent for keyboard shortcuts (1–9)
   useEffect(() => {
     onSetAssetTabReady?.(setActiveTab);
     return () => {
@@ -454,6 +458,8 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
         height: asset.height ?? assetMetadata?.height,
         sourceDuration: duration,
         addClip,
+        componentName: asset.componentName,
+        inputDefs: asset.inputDefs,
       });
       if (!ok) {
         toast.error("Could not add to timeline", {
@@ -755,6 +761,21 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
                 void fetchVeoJobsForProject();
               }}
               isLoading={isLoading}
+            />
+          </div>
+
+          {/* Components Panel */}
+          <div
+            className={cn(
+              "absolute inset-0",
+              activeTab !== "components" && "invisible pointer-events-none"
+            )}
+          >
+            <ComponentsPanel
+              projectId={projectId}
+              assets={assets}
+              onAssetsChanged={() => void fetchAssets()}
+              onAssetUpdated={updateAssetFields}
             />
           </div>
 

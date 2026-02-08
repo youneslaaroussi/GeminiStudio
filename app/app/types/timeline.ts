@@ -1,9 +1,10 @@
 import type { AssistantChatSession } from "./chat";
+import type { ComponentInputDef } from "./assets";
 import type { ProjectTranscription } from "./transcription";
 
 // Timeline clip types for NLE editor
 
-export type ClipType = 'video' | 'audio' | 'text' | 'image';
+export type ClipType = 'video' | 'audio' | 'text' | 'image' | 'component';
 
 export type TransitionType =
   | 'none'
@@ -249,13 +250,35 @@ export interface ImageClip extends BaseClip {
   animationIntensity?: number;
 }
 
-export type TimelineClip = VideoClip | AudioClip | TextClip | ImageClip;
+export interface ComponentClip extends BaseClip {
+  type: 'component';
+  /** Reference to the component asset in asset-service */
+  assetId: string;
+  /** Component class name exported from the code */
+  componentName: string;
+  /** Input definitions: what props the component accepts (copied from asset at creation) */
+  inputDefs: ComponentInputDef[];
+  /** Current input values (keyed by input name) */
+  inputs: Record<string, string | number | boolean>;
+  /** Width in pixels */
+  width?: number;
+  /** Height in pixels */
+  height?: number;
+  /** Optional visual effect */
+  effect?: VisualEffectType;
+  /** Idle animation */
+  animation?: ClipAnimationType;
+  /** Animation intensity */
+  animationIntensity?: number;
+}
+
+export type TimelineClip = VideoClip | AudioClip | TextClip | ImageClip | ComponentClip;
 
 /** Clips with playback URLs resolved (for preview/render only; never persisted). */
 export type ResolvedVideoClip = VideoClip & { src: string; maskSrc?: string };
 export type ResolvedAudioClip = AudioClip & { src: string };
 export type ResolvedImageClip = ImageClip & { src: string };
-export type ResolvedTimelineClip = ResolvedVideoClip | ResolvedAudioClip | TextClip | ResolvedImageClip;
+export type ResolvedTimelineClip = ResolvedVideoClip | ResolvedAudioClip | TextClip | ResolvedImageClip | ComponentClip;
 
 export interface Layer {
   id: string;
@@ -527,6 +550,39 @@ export function createImageClip(
     type: 'image',
     name,
     assetId,
+    start,
+    duration,
+    offset: 0,
+    speed: 1,
+    position: { x: 0, y: 0 },
+    scale: { x: 1, y: 1 },
+    width: options?.width,
+    height: options?.height,
+  };
+}
+
+// Helper to create a new component clip
+export function createComponentClip(
+  assetId: string,
+  componentName: string,
+  name: string,
+  start: number,
+  duration: number,
+  options?: {
+    inputDefs?: ComponentInputDef[];
+    inputs?: Record<string, string | number | boolean>;
+    width?: number;
+    height?: number;
+  }
+): ComponentClip {
+  return {
+    id: crypto.randomUUID(),
+    type: 'component',
+    name,
+    assetId,
+    componentName,
+    inputDefs: options?.inputDefs ?? [],
+    inputs: options?.inputs ?? {},
     start,
     duration,
     offset: 0,

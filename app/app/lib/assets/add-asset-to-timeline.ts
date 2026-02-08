@@ -1,12 +1,13 @@
 "use client";
 
-import type { AssetType } from "@/app/types/assets";
+import type { AssetType, ComponentInputDef } from "@/app/types/assets";
 import { DEFAULT_ASSET_DURATIONS } from "@/app/types/assets";
 import type { TimelineClip } from "@/app/types/timeline";
 import {
   createAudioClip,
   createImageClip,
   createVideoClip,
+  createComponentClip,
 } from "@/app/types/timeline";
 
 const IMAGE_CLIP_DEFAULT_DURATION = 5;
@@ -23,6 +24,9 @@ export interface AddAssetToTimelineParams {
   sourceDuration?: number;
   layerId?: string;
   addClip: (clip: TimelineClip, layerId?: string) => void;
+  // Component-specific fields
+  componentName?: string;
+  inputDefs?: ComponentInputDef[];
 }
 
 /**
@@ -45,10 +49,32 @@ export async function addAssetToTimeline(
     sourceDuration,
     layerId,
     addClip,
+    componentName,
+    inputDefs,
   } = params;
 
   if (!projectId) {
     return false;
+  }
+
+  // Component assets don't have playback URLs -- handle them directly
+  if (type === "component") {
+    const clipName = name || "Component";
+    const resolvedDuration = duration || DEFAULT_ASSET_DURATIONS.component;
+    const defaultInputs: Record<string, string | number | boolean> = {};
+    for (const def of inputDefs ?? []) {
+      defaultInputs[def.name] = def.default;
+    }
+    addClip(
+      createComponentClip(assetId, componentName ?? "MyComponent", clipName, start, resolvedDuration, {
+        inputDefs,
+        inputs: defaultInputs,
+        width,
+        height,
+      }),
+      layerId
+    );
+    return true;
   }
 
   // Verify playback URL exists before adding (we never store URL; resolve at preview/render)

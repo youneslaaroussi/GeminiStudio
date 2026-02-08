@@ -7,9 +7,12 @@ import { useProjectStore, setOnFirebaseSync } from "@/app/lib/store/project-stor
 import type { ResolvedLayer, CaptionSettings, TextClipSettings } from "@/app/types/timeline";
 import type { ProjectTranscription } from "@/app/types/transcription";
 import { Button } from "@/components/ui/button";
-import { Crosshair, Maximize2, Minimize2, Play, Pause, RotateCw } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Check, Copy, Crosshair, Code2, Maximize2, Minimize2, Play, Pause, RotateCw } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { usePreloadTimelineMedia } from "@/app/hooks/use-preload-timeline-media";
+import { cn } from "@/lib/utils";
+import Editor from "@monaco-editor/react";
 
 /**
  * Small pie chart indicator for asset preloading progress.
@@ -129,6 +132,8 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   textClipSettings,
   sceneConfig,
 }, ref) {
+  const [previewTab, setPreviewTab] = useState<"preview" | "code">("preview");
+  const [sceneCodeCopied, setSceneCodeCopied] = useState(false);
   const [showUpdateIndicator, setShowUpdateIndicator] = useState(false);
   const [hasPendingUpdate, setHasPendingUpdate] = useState(false);
   const [showFirebaseIndicator, setShowFirebaseIndicator] = useState(false);
@@ -277,12 +282,12 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   const totalClips = layers.reduce((acc, layer) => acc + layer.clips.length, 0);
   const counts = useMemo(
     () =>
-      layers.reduce<Record<"video" | "audio" | "text" | "image", number>>(
+      layers.reduce<Record<string, number>>(
         (acc, layer) => {
-          acc[layer.type] += layer.clips.length;
+          acc[layer.type] = (acc[layer.type] ?? 0) + layer.clips.length;
           return acc;
         },
-        { video: 0, audio: 0, text: 0, image: 0 }
+        { video: 0, audio: 0, text: 0, image: 0, component: 0 }
       ),
     [layers]
   );
@@ -290,20 +295,58 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   // Preload timeline media assets
   const preloadProgress = usePreloadTimelineMedia(layers);
 
+  // Scene variables passed to Motion Canvas – what judges see as "the code"
+  const sceneCodeJson = useMemo(() => {
+    const vars = {
+      layers,
+      duration,
+      transcriptions,
+      transitions: transitions ?? {},
+      captionSettings,
+      textClipSettings,
+      sceneConfig,
+    };
+    try {
+      return JSON.stringify(vars, null, 2);
+    } catch {
+      return "/* Unable to serialize scene variables */";
+    }
+  }, [layers, duration, transcriptions, transitions, captionSettings, textClipSettings, sceneConfig]);
+
+  const handleCopySceneCode = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(sceneCodeJson);
+      setSceneCodeCopied(true);
+      setTimeout(() => setSceneCodeCopied(false), 2000);
+    } catch {
+      /* ignore */
+    }
+  }, [sceneCodeJson]);
+
   return (
     <div ref={fullscreenRef} className="h-full flex flex-col min-w-0 bg-background">
       <div className="flex items-center justify-between border-b border-border px-3 py-2 shrink-0">
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">Preview</h2>
-          <p className="text-xs text-muted-foreground">
-            {totalClips} clip{totalClips !== 1 ? "s" : ""} on timeline
-            <span className="ml-1">
-              ({counts.video} video, {counts.audio} audio, {counts.text} text, {counts.image} image)
-            </span>
-          </p>
-        </div>
-        {/* Controls and indicator dots */}
-        <div className="flex items-center gap-2">
+        <Tabs value={previewTab} onValueChange={(v) => setPreviewTab(v as "preview" | "code")} className="flex-1 min-w-0">
+          <div className="flex items-center gap-3">
+            <TabsList variant="line" className="h-auto p-0 bg-transparent shrink-0">
+              <TabsTrigger value="preview" className="text-sm data-[state=active]:font-semibold">
+                Preview
+              </TabsTrigger>
+              <TabsTrigger value="code" className="text-sm data-[state=active]:font-semibold">
+                <Code2 className="size-3.5 mr-1.5" />
+                Scene Code
+              </TabsTrigger>
+            </TabsList>
+            <p className="text-xs text-muted-foreground shrink-0">
+              {totalClips} clip{totalClips !== 1 ? "s" : ""} on timeline
+              <span className="ml-1">
+                ({counts.video} video, {counts.audio} audio, {counts.text} text, {counts.image} image)
+              </span>
+            </p>
+          </div>
+        </Tabs>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Controls and indicator dots */}
           <TooltipProvider delayDuration={300}>
             {/* Refresh button */}
             <Tooltip>
@@ -400,89 +443,153 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
         </div>
       </div>
       <div className="flex-1 overflow-hidden relative">
-        <ScenePlayer
-          key={playerKey}
-          ref={scenePlayerRef}
-          onPlayerChange={onPlayerChange}
-          onCanvasReady={onCanvasReady}
-          onVariablesUpdated={handleVariablesUpdated}
-          onUpdateQueued={handleUpdateQueued}
-          isPlaying={isPlaying}
-          layers={layers}
-          duration={duration}
-          currentTime={currentTime}
-          onTimeUpdate={onTimeUpdate}
-          transcriptions={transcriptions}
-          transitions={transitions}
-          captionSettings={captionSettings}
-          textClipSettings={textClipSettings}
-          sceneConfig={sceneConfig}
-          onReloadPreview={handleRefresh}
-        />
-        <div className="pointer-events-none absolute inset-x-0 bottom-3 z-[5] flex justify-center">
-          <button
-            type="button"
-            onClick={handleRefresh}
-            className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-3 py-1 text-[11px] text-muted-foreground shadow-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          >
-            <RotateCw className="size-3.5" />
-            Preview stuck? Reload preview
-          </button>
-        </div>
-        {/* Fullscreen overlay controls */}
-        {isFullscreen && (
-          <div
-            className={`absolute bottom-0 left-0 right-0 z-10 flex flex-col bg-black/70 backdrop-blur-sm transition-opacity duration-300 ${
-              fullscreenControlsVisible ? "opacity-100" : "opacity-0"
-            }`}
-          >
-            {/* Progress bar */}
-            <div
-              ref={progressBarRef}
-              role="progressbar"
-              aria-valuenow={duration > 0 ? (currentTime / duration) * 100 : 0}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              className="h-1 w-full cursor-pointer bg-white/20 hover:bg-white/30 transition-colors"
-              onClick={handleProgressBarClick}
+        {/* Preview tab – always mounted, visibility toggled */}
+        <div
+          className={cn(
+            "absolute inset-0 flex flex-col",
+            previewTab === "preview" ? "visible" : "invisible pointer-events-none"
+          )}
+        >
+          <ScenePlayer
+            key={playerKey}
+            ref={scenePlayerRef}
+            onPlayerChange={onPlayerChange}
+            onCanvasReady={onCanvasReady}
+            onVariablesUpdated={handleVariablesUpdated}
+            onUpdateQueued={handleUpdateQueued}
+            isPlaying={isPlaying}
+            layers={layers}
+            duration={duration}
+            currentTime={currentTime}
+            onTimeUpdate={onTimeUpdate}
+            transcriptions={transcriptions}
+            transitions={transitions}
+            captionSettings={captionSettings}
+            textClipSettings={textClipSettings}
+            sceneConfig={sceneConfig}
+            onReloadPreview={handleRefresh}
+          />
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-[5] flex justify-center">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-3 py-1 text-[11px] text-muted-foreground shadow-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
-              <div
-                className="h-full bg-white/90 transition-[width] duration-75"
-                style={{ width: duration > 0 ? `${(currentTime / duration) * 100}%` : "0%" }}
-              />
-            </div>
-            <div className="flex items-center justify-between gap-4 px-4 py-2">
-              <div className="flex items-center gap-3">
-                {onTogglePlay && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-9 text-white hover:bg-white/20"
-                    onClick={onTogglePlay}
-                  >
-                    {isPlaying ? (
-                      <Pause className="size-5" />
-                    ) : (
-                      <Play className="size-5" />
-                    )}
-                  </Button>
-                )}
-                <span className="text-sm text-white/90 tabular-nums">
-                  {formatTime(currentTime)} / {formatTime(duration)}
-                </span>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-9 text-white hover:bg-white/20"
-                onClick={exitFullscreen}
-                title="Exit fullscreen (Esc)"
-              >
-                <Minimize2 className="size-5" />
-              </Button>
-            </div>
+              <RotateCw className="size-3.5" />
+              Preview stuck? Reload preview
+            </button>
           </div>
-        )}
+          {/* Fullscreen overlay controls */}
+          {isFullscreen && (
+            <div
+              className={`absolute bottom-0 left-0 right-0 z-10 flex flex-col bg-black/70 backdrop-blur-sm transition-opacity duration-300 ${
+                fullscreenControlsVisible ? "opacity-100" : "opacity-0"
+              }`}
+            >
+              {/* Progress bar */}
+              <div
+                ref={progressBarRef}
+                role="progressbar"
+                aria-valuenow={duration > 0 ? (currentTime / duration) * 100 : 0}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                className="h-1 w-full cursor-pointer bg-white/20 hover:bg-white/30 transition-colors"
+                onClick={handleProgressBarClick}
+              >
+                <div
+                  className="h-full bg-white/90 transition-[width] duration-75"
+                  style={{ width: duration > 0 ? `${(currentTime / duration) * 100}%` : "0%" }}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-4 px-4 py-2">
+                <div className="flex items-center gap-3">
+                  {onTogglePlay && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-9 text-white hover:bg-white/20"
+                      onClick={onTogglePlay}
+                    >
+                      {isPlaying ? (
+                        <Pause className="size-5" />
+                      ) : (
+                        <Play className="size-5" />
+                      )}
+                    </Button>
+                  )}
+                  <span className="text-sm text-white/90 tabular-nums">
+                    {formatTime(currentTime)} / {formatTime(duration)}
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-9 text-white hover:bg-white/20"
+                  onClick={exitFullscreen}
+                  title="Exit fullscreen (Esc)"
+                >
+                  <Minimize2 className="size-5" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+        {/* Scene Code tab – always mounted, visibility toggled */}
+        <div
+          className={cn(
+            "absolute inset-0 flex flex-col bg-muted/30",
+            previewTab === "code" ? "visible" : "invisible pointer-events-none"
+          )}
+        >
+          <div className="shrink-0 flex items-center justify-between border-b border-border px-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              Variables passed to Motion Canvas – this is the code driving the preview
+            </p>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={handleCopySceneCode}
+                  >
+                    {sceneCodeCopied ? (
+                      <Check className="size-3.5 text-emerald-500" />
+                    ) : (
+                      <Copy className="size-3.5" />
+                    )}
+                    {sceneCodeCopied ? "Copied" : "Copy"}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p>Copy scene variables to clipboard</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <Editor
+              value={sceneCodeJson}
+              language="json"
+              options={{
+                readOnly: true,
+                domReadOnly: true,
+                automaticLayout: true,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                lineNumbers: "on",
+                folding: true,
+                wordWrap: "on",
+                fontSize: 12,
+                padding: { top: 12, bottom: 12 },
+              }}
+              theme="vs-dark"
+              loading={null}
+              className="min-h-full"
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

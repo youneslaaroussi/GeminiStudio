@@ -121,14 +121,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  // Only allow updating name, sortOrder, notes
-  const updates: { name?: string; sortOrder?: number; notes?: string } = {};
+  // Allowed update fields
+  const updates: Record<string, unknown> = {};
   if (typeof body.name === "string") updates.name = body.name;
   if (typeof body.sortOrder === "number") updates.sortOrder = body.sortOrder;
   if (typeof body.notes === "string" || body.notes === null) updates.notes = body.notes ?? undefined;
+  if (typeof body.description === "string" || body.description === null) updates.description = body.description ?? undefined;
+  // Component asset fields
+  if (typeof body.code === "string") updates.code = body.code;
+  if (typeof body.componentName === "string") updates.componentName = body.componentName;
+  if (Array.isArray(body.inputDefs)) updates.inputDefs = body.inputDefs;
 
   if (Object.keys(updates).length === 0) {
-    return NextResponse.json({ error: "No valid updates (allowed: name, sortOrder, notes)" }, { status: 400 });
+    return NextResponse.json({ error: "No valid updates" }, { status: 400 });
   }
 
   try {

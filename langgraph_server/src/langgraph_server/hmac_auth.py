@@ -71,3 +71,17 @@ def get_renderer_headers(body: str) -> Dict[str, str]:
         headers["X-Timestamp"] = str(timestamp)
     
     return headers
+
+
+def get_scene_compiler_headers(body: str) -> Dict[str, str]:
+    """Get headers for authenticated scene compiler requests."""
+    settings = get_settings()
+    headers: Dict[str, str] = {"Content-Type": "application/json"}
+
+    if settings.scene_compiler_shared_secret:
+        timestamp = int(time.time() * 1000)
+        signature = sign_request(body, timestamp, settings.scene_compiler_shared_secret)
+        headers["X-Signature"] = signature
+        headers["X-Timestamp"] = str(timestamp)
+
+    return headers
