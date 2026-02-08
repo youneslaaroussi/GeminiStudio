@@ -122,6 +122,7 @@ export const renderJobSchema = z.object({
           projectId: z.string().optional(),
           userId: z.string().optional(),
           requestId: z.string().optional(),
+          branchId: z.string().optional(),
         })
         .optional(),
       tags: z.array(z.string()).optional(),
