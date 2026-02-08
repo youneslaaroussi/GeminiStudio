@@ -385,6 +385,60 @@ def previewTimeline(
 
     endpoint = settings.renderer_base_url.rstrip("/") + "/renders"
 
+    # --- Detailed render payload logging (previewTimeline) ---
+    layers = job_payload.get("variables", {}).get("layers") or job_payload.get("project", {}).get("layers", [])
+    comp_files = job_payload.get("componentFiles") or {}
+    logger.info(
+        "[RENDER] previewTimeline calling renderer: endpoint=%s, timelineDuration=%.2fs, layers=%d, componentFiles=%d",
+        endpoint,
+        job_payload.get("timelineDuration", 0),
+        len(layers),
+        len(comp_files),
+    )
+    for li, layer in enumerate(layers):
+        clips = layer.get("clips", [])
+        logger.info(
+            "[RENDER] previewTimeline layer[%d] id=%s name=%s clips=%d",
+            li,
+            layer.get("id"),
+            layer.get("name"),
+            len(clips),
+        )
+        for ci, clip in enumerate(clips):
+            logger.info(
+                "[RENDER] previewTimeline   clip[%d] type=%s assetId=%s start=%.2f duration=%.2f speed=%s componentName=%s",
+                ci,
+                clip.get("type"),
+                clip.get("assetId"),
+                clip.get("start"),
+                clip.get("duration"),
+                clip.get("speed"),
+                clip.get("componentName"),
+            )
+    if comp_files:
+        for name, content in comp_files.items():
+            logger.info(
+                "[RENDER] previewTimeline componentFiles key=%s length=%d",
+                name,
+                len(content) if isinstance(content, str) else len(str(content)),
+            )
+
+    def _redact_for_log(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            return {k: _redact_for_log(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_redact_for_log(x) for x in obj]
+        if isinstance(obj, str) and (
+            obj.startswith("http://") or obj.startswith("https://") or "?" in obj
+        ):
+            return f"<url len={len(obj)}>"
+        return obj
+
+    logger.info(
+        "[RENDER] previewTimeline payload (URLs redacted): %s",
+        json.dumps(_redact_for_log(job_payload), indent=2, default=str),
+    )
+
     # Sign the request
     body = json.dumps(job_payload)
     request_headers: Dict[str, str] = {"Content-Type": "application/json"}
