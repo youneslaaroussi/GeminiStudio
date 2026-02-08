@@ -51,6 +51,7 @@
 - [Gemini 3 Pro: The Reasoning Layer](#gemini-3-pro-the-reasoning-layer)
 - [Architecture](#components)
 - [How the Execution Layer Works](#how-the-execution-layer-works)
+- [Programmatic Motion Graphics: The Agent Writes Components, Not Templates](#programmatic-motion-graphics-the-agent-writes-components-not-templates)
 - [Motion Canvas: The Perfect Rendering Layer for LLMs](#motion-canvas-the-perfect-rendering-layer-for-llms)
 - [Autonomous Video Production: The Agent Can Watch Its Own Work](#autonomous-video-production-the-agent-can-watch-its-own-work)
 - [Tech Stack](#tech-stack)
@@ -117,7 +118,7 @@ Plugins trigger exports through UI dialogs. Our renderer is headless and API-dri
 Traditional editors have one timeline state. We built branching into the architecture—the agent edits on a branch, you review and merge. This requires ground-up state management that plugins can't provide.
 
 **4. Agent-Native Tools**
-Our 18+ tools aren't wrappers around UI actions—they're first-class operations designed for programmatic control. `add_clip()`, `apply_transition()`, `search_assets()` are deterministic functions the agent calls directly, not UI simulations.
+Our 30+ tools aren't wrappers around UI actions—they're first-class operations designed for programmatic control. `add_clip()`, `apply_transition()`, `search_assets()`, `createComponent()` are deterministic functions the agent calls directly, not UI simulations.
 
 **5. Autonomous Iteration**
 The agent can watch its own renders, critique them, and adjust—a capability that requires tight integration between rendering, analysis, and timeline manipulation. Plugins can't close this loop.
@@ -129,10 +130,10 @@ The agent can watch its own renders, critique them, and adjust—a capability th
 ## Why This Changes Everything
 
 ### Vibe Editing
-Describe the *feeling* you want. "Make it punchy." "Slow it down for drama." "Add energy to this section." The agent understands vibes and translates them into concrete editing decisions—cuts, zooms, pacing, transitions.
+We had vibe coding. Now we have **vibe editing**. Describe the *feeling* you want. "Make it punchy." "Slow it down for drama." "Add energy to this section." "Give me a typewriter intro with a glitch on every 5th character." The agent understands vibes and translates them into concrete editing decisions—cuts, zooms, pacing, transitions—and even writes custom motion graphics from scratch when nothing in a template library would do.
 
 ### The Cursor for Video Editing
-Just like Cursor revolutionized coding by letting AI agents write alongside you, Gemini Studio lets AI agents *edit alongside you*. Same project. Same timeline. Human and agent, co-directing in real-time.
+Just like Cursor revolutionized coding by letting AI agents write alongside you, Gemini Studio lets AI agents *edit alongside you*. Same project. Same timeline. Human and agent, co-directing in real-time. And just like Cursor, the agent doesn't just autocomplete—it writes entire components, previews them, and iterates.
 
 ### Git-Style Branching for Video
 Your timeline is version-controlled. The cloud agent edits on a branch. You review the changes. Merge what you like, discard what you don't. Split timelines, experiment freely, sync seamlessly.
@@ -140,12 +141,13 @@ Your timeline is version-controlled. The cloud agent edits on a branch. You revi
 | Feature | What It Enables |
 |---------|-----------------|
 | **Semantic assets & clips** | No manual renaming—the system organizes and indexes by content. Search your library in plain language; refer to assets and clips by what they *are*. The agent resolves "the drone shot," "that B-roll," etc. by meaning, not filename. |
-| **Vibe Editing** | Intent-based editing ("make it cinematic") |
+| **Vibe Editing** | Intent-based editing ("make it cinematic," "add energy here") |
+| **Programmatic motion graphics** | Agent writes freeform Motion Canvas components—no template ceiling. Typewriter text, animated charts, branded overlays, anything describable |
 | **Real-time Sync** | Agent edits appear live in your timeline |
 | **Branching** | Non-destructive experimentation |
 | **Merge/Split** | Combine agent work with your own edits |
 
-This isn't automation. This is **collaboration between human directors and AI agents.**
+This isn't automation. This is **collaboration between human directors and AI agents.** Gemini Studio is the code-to-video layer—where vibe editing meets programmatic rendering.
 
 ---
 
@@ -195,6 +197,7 @@ This is the full loop: **ingest → perceive → reason → generate → render.
 | **asset-service**  | FastAPI, GCS, Firestore      | 8081           | [asset-service/README.md](asset-service/README.md) |
 | **renderer**       | Express, BullMQ, Puppeteer, FFmpeg | 4000    | [renderer/README.md](renderer/README.md) |
 | **scene**          | Motion Canvas, Vite          | (build only)   | — |
+| **scene-compiler** | Vite, Motion Canvas plugin   | 4001           | — |
 | **video-effects-service** | FastAPI, Replicate | —        | [video-effects-service/README.md](video-effects-service/README.md) |
 | **billing-service** | NestJS, Firebase             | —              | [billing-service/README.md](billing-service/README.md) |
 
@@ -206,7 +209,7 @@ This is the full loop: **ingest → perceive → reason → generate → render.
 
 **1. Agent Receives Intent** — User speaks naturally (web or Telegram). The Gemini 3 Pro agent parses the request and plans the execution.
 
-**2. Tools Execute Autonomously** — The agent invokes 15+ tools: timeline manipulation, asset search, Veo generation, image creation, TTS. Each tool is a deterministic operation the agent controls.
+**2. Tools Execute Autonomously** — The agent invokes 30+ tools: timeline manipulation, asset search, Veo generation, image creation, TTS, and custom component creation. Each tool is a deterministic operation the agent controls.
 
 **3. Renderer Produces Output** — Motion Canvas renders the final video headlessly—pixel-perfect, production-ready. Pub/Sub events notify the agent on completion.
 
@@ -253,6 +256,82 @@ Motion Canvas isn't a prototype—it's battle-tested for production-quality anim
 
 ---
 
+## Programmatic Motion Graphics: The Agent Writes Components, Not Templates
+
+**We had vibe coding. Now we have vibe editing. Gemini Studio is the code-to-video layer.**
+
+Most "AI video tools" give you a fixed library of templates and effects. Gemini Studio does something fundamentally different: **the agent writes real Motion Canvas components from scratch**—freeform TypeScript code with signals, generators, tweens, and the full animation runtime. There is no template ceiling. If you can describe it, the agent can build it.
+
+### How It Works
+
+When you say *"make me a typewriter animation"* or *"add a progress ring that fills to 75%"*, the agent doesn't select from a menu. It writes a complete Motion Canvas component:
+
+```typescript
+export class TypewriterText extends Node {
+  @initial('Hello World') @signal()
+  public declare readonly fullText: SimpleSignal<string, this>;
+
+  @initial(0.05) @signal()
+  public declare readonly charDelay: SimpleSignal<number, this>;
+
+  private readonly progress = createSignal(0);
+
+  public constructor(props?: TypewriterTextProps) {
+    super({ ...props });
+    this.add(
+      <Txt
+        text={() => this.fullText().slice(0, Math.floor(
+          this.progress() * this.fullText().length
+        ))}
+        fill={'#ffffff'}
+        fontSize={48}
+        fontFamily={'JetBrains Mono'}
+      />
+    );
+  }
+
+  public *reveal(duration?: number) {
+    yield* this.progress(1, duration ?? this.fullText().length * this.charDelay());
+  }
+}
+```
+
+This component is compiled on the fly, hot-loaded into the live preview, and rendered to final video—all without the user touching code. The agent can also iterate: watch the result, adjust timing, change easing, add effects, and recompile.
+
+### The Pipeline
+
+```
+Agent writes TSX → Scene Compiler builds it → Preview renders live → Renderer exports final video
+```
+
+| Stage | What Happens |
+|-------|-------------|
+| **Create** | Agent calls `createComponent` with full TSX code, input definitions, and a class name |
+| **Compile** | Scene Compiler service (Vite + Motion Canvas plugin) compiles the component into the scene bundle. A barrel file is auto-generated—no manual registration needed |
+| **Preview** | `ScenePlayer` detects the new component asset, recompiles, and renders it live in the browser at 30fps. Changes appear in real time |
+| **Control** | Input definitions (`inputDefs`) surface as controls in the timeline inspector. Users tweak values (text, color, speed, size) without code |
+| **Render** | The renderer compiles with the same component files and exports production-quality video via headless Puppeteer + FFmpeg |
+
+### Inputs vs. Animation
+
+Component inputs (`inputDefs`) are **static values** set on the timeline—text content, colors, sizes, speeds. They don't animate. For temporal behavior (typewriter reveals, counters, progress bars, pulsing effects), the agent uses **generator methods and signals** inside the component. Inputs control *what* and *how fast*; generators and signals create the *motion*.
+
+This is a deliberate design: it gives users simple controls while the agent handles the complexity of animation code.
+
+### What This Enables
+
+| Capability | Example |
+|-----------|---------|
+| **Freeform motion graphics** | Progress rings, stat counters, animated charts, lower thirds—anything describable |
+| **Branded overlays** | Custom components with your colors, fonts, and layout |
+| **Data-driven visuals** | Components that take numbers/text as inputs and animate them |
+| **Iterative refinement** | Agent previews its own component, adjusts timing/easing, recompiles |
+| **Zero-template ceiling** | No fixed library. The agent writes new components for every request |
+
+**This is what separates Gemini Studio from every other AI video tool.** Others wrap a fixed API. We have a real runtime underneath that the AI programs against. The agent doesn't pick from a menu—it writes code, compiles it, previews it, and ships it.
+
+---
+
 ## Autonomous Video Production: The Agent Can Watch Its Own Work
 
 **This is the moat.** Gemini Studio is the first platform where an AI agent can autonomously iterate on video edits without human intervention.
@@ -271,8 +350,9 @@ Motion Canvas isn't a prototype—it's battle-tested for production-quality anim
 
 The agent has:
 - **Eyes** (Gemini multimodal can analyze video content)
-- **Hands** (18 tools for timeline manipulation)
-- **Judgment** (can evaluate pacing, cuts, transitions)
+- **Hands** (30+ tools for timeline manipulation, component creation, and media generation)
+- **Creativity** (writes custom motion graphics from scratch—no template ceiling)
+- **Judgment** (can evaluate pacing, cuts, transitions, and component design)
 - **Memory** (maintains context across iterations)
 
 This is the difference between a tool that produces output and an agent that produces *quality* output.
@@ -429,6 +509,7 @@ GeminiStudio/
 ├── app/                    # Next.js app (editor, chat, assets UI)
 ├── ai-sdk/                 # Patched Vercel AI SDK (file-url in tool results for Gemini); see Credits
 ├── scene/                  # Motion Canvas project (Vite)
+├── scene-compiler/         # On-demand scene compilation service (Vite, Express)
 ├── renderer/               # Render service (Express, BullMQ, headless bundle)
 ├── langgraph_server/       # LangGraph agent (FastAPI, Gemini 3, tools)
 ├── asset-service/          # Asset upload & pipeline (Gemini analysis, GCS, Firestore)
@@ -448,8 +529,9 @@ GeminiStudio/
 | Agent & tools | `langgraph_server/agent.py`, `langgraph_server/tools/` |
 | AI SDK fork   | `ai-sdk/` (patched `@ai-sdk/google` for multimodal tool results; app uses `file:../ai-sdk/packages/google`) |
 | Tool manifest | `shared/tools/manifest.json` |
+| Scene compiler | `scene-compiler/` (on-demand Vite compilation with custom component injection) |
 | Renderer      | `renderer/` |
-| Scene         | `scene/` |
+| Scene         | `scene/` (Motion Canvas project, component registry, clip playback) |
 | App           | `app/app/` |
 
 Each service has its own README for setup and deployment.
