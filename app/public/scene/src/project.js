@@ -31842,55 +31842,39 @@ class ProgressRing extends Node {
   constructor(props) {
     super({ ...props });
     __publicField(this, "currentProgress", createSignal(0));
-    __publicField(this, "percentRef", createRef());
-    __publicField(this, "labelRef", createRef());
     this.currentProgress(this.progress());
     const size = this.ringSize();
-    const strokeWidth = size * 0.12;
+    const sw = size * 0.12;
     this.add([
-      // Background ring
-      /* @__PURE__ */ jsx$1(
-        Circle,
-        {
-          width: size,
-          height: size,
-          stroke: "#333333",
-          lineWidth: strokeWidth
-        }
-      ),
-      // Progress ring
+      /* @__PURE__ */ jsx$1(Circle, { width: size, height: size, stroke: "#333", lineWidth: sw }),
       /* @__PURE__ */ jsx$1(
         Circle,
         {
           width: size,
           height: size,
           stroke: () => this.ringColor(),
-          lineWidth: strokeWidth,
+          lineWidth: sw,
           startAngle: -90,
           endAngle: () => -90 + this.currentProgress() / 100 * 360,
           lineCap: "round"
         }
       ),
-      // Percentage text
       /* @__PURE__ */ jsx$1(
         Txt,
         {
-          ref: this.percentRef,
           text: () => `${Math.round(this.currentProgress())}%`,
-          fill: "#ffffff",
+          fill: "#fff",
           fontSize: size * 0.28,
           fontFamily: "Inter Variable",
           fontWeight: 700,
           y: -size * 0.05
         }
       ),
-      // Label text
       /* @__PURE__ */ jsx$1(
         Txt,
         {
-          ref: this.labelRef,
           text: () => this.label(),
-          fill: "#aaaaaa",
+          fill: "#aaa",
           fontSize: size * 0.13,
           fontFamily: "Inter Variable",
           fontWeight: 400,
@@ -31899,15 +31883,14 @@ class ProgressRing extends Node {
       )
     ]);
   }
-  /**
-   * Animate the progress ring from 0 to the target value.
-   */
   *animateIn(duration = 1.5) {
     const target = this.progress();
     this.currentProgress(0);
-    yield* tween(duration, (value) => {
-      this.currentProgress(easeInOutCubic(value) * target);
-    });
+    yield* tween(duration, (v) => this.currentProgress(easeInOutCubic(v) * target));
+  }
+  /** Timeline entry point — calls animateIn. */
+  *animate(duration) {
+    yield* this.animateIn(duration ?? 1.5);
   }
 }
 __decorateClass([
