@@ -134,6 +134,8 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
 }, ref) {
   const [previewTab, setPreviewTab] = useState<"preview" | "code">("preview");
   const [sceneCodeCopied, setSceneCodeCopied] = useState(false);
+  const [copyFrameSuccess, setCopyFrameSuccess] = useState(false);
+  const copyFrameSuccessTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [showUpdateIndicator, setShowUpdateIndicator] = useState(false);
   const [hasPendingUpdate, setHasPendingUpdate] = useState(false);
   const [showFirebaseIndicator, setShowFirebaseIndicator] = useState(false);
@@ -169,6 +171,12 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
         await navigator.clipboard.write([
           new ClipboardItem({ "image/png": blob }),
         ]);
+        if (copyFrameSuccessTimeoutRef.current) clearTimeout(copyFrameSuccessTimeoutRef.current);
+        setCopyFrameSuccess(true);
+        copyFrameSuccessTimeoutRef.current = setTimeout(() => {
+          setCopyFrameSuccess(false);
+          copyFrameSuccessTimeoutRef.current = null;
+        }, 2000);
       }
     } catch {
       /* clipboard not available or denied */
@@ -316,6 +324,12 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     };
   }, [handleFirebaseSync]);
 
+  useEffect(() => {
+    return () => {
+      if (copyFrameSuccessTimeoutRef.current) clearTimeout(copyFrameSuccessTimeoutRef.current);
+    };
+  }, []);
+
   const totalClips = layers.reduce((acc, layer) => acc + layer.clips.length, 0);
   const counts = useMemo(
     () =>
@@ -427,11 +441,15 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
                   onClick={handleCopyFrame}
                   disabled={!hasPreviewCanvas}
                 >
-                  <Copy className="size-4" />
+                  {copyFrameSuccess ? (
+                    <Check className="size-4 text-emerald-500" />
+                  ) : (
+                    <Copy className="size-4" />
+                  )}
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">
-                <p>Copy current frame to clipboard</p>
+                <p>{copyFrameSuccess ? "Copied to clipboard" : "Copy current frame to clipboard"}</p>
               </TooltipContent>
             </Tooltip>
             {/* Export frame as PNG */}
