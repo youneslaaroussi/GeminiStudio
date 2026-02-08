@@ -306,8 +306,8 @@ export default makeScene2D(function* (view) {
 
   // Pause all video/audio at scene start so that after a project reset or seek-to-zero
   // no media keeps playing (the generator may be aborted before "Final cleanup" runs).
-  // Yield once so refs are populated after view.add().
-  yield;
+  // Note: refs are already populated by createXElements / JSX construction above,
+  // so no yield is needed before accessing them.
   videoEntries.forEach(({ ref, maskRef }) => {
     ref()?.pause();
     maskRef?.()?.pause();

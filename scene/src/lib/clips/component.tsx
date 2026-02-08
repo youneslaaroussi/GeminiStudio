@@ -1,6 +1,7 @@
 import { Node } from '@motion-canvas/2d';
 import { createRef, waitFor, all, spawn, type ThreadGenerator } from '@motion-canvas/core';
 import type { ComponentClip, ComponentEntry } from '../types';
+import { getEffectShaderConfig } from '../effectShaders';
 import { applyEnterTransition, applyExitTransition, getTransitionAdjustedTiming } from './transitions';
 import { applyClipAnimation } from './animations';
 
@@ -50,7 +51,17 @@ export function createComponentElements({ clips, view }: CreateComponentElements
       // Manually bind the ref (JSX would do this, but we're constructing directly)
       ref(instance);
 
-      view.add(instance);
+      const effectShaders = getEffectShaderConfig(clip.effect);
+      if (effectShaders) {
+        const wrapper = (
+          <Node key={`component-effect-${clip.id}`} cache shaders={effectShaders}>
+            {instance}
+          </Node>
+        );
+        view.add(wrapper);
+      } else {
+        view.add(instance);
+      }
 
       entries.push({ clip, ref });
     } catch (err) {

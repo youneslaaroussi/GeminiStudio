@@ -2650,7 +2650,8 @@
                         "string",
                         "number",
                         "boolean",
-                        "color"
+                        "color",
+                        "enum"
                       ]
                     },
                     "default": {
@@ -2662,6 +2663,11 @@
                     },
                     "label": {
                       "type": "string"
+                    },
+                    "options": {
+                      "type": "array",
+                      "items": { "type": "string" },
+                      "description": "For type 'enum': list of allowed options the user can choose from"
                     }
                   },
                   "required": [
@@ -2769,7 +2775,8 @@
                         "string",
                         "number",
                         "boolean",
-                        "color"
+                        "color",
+                        "enum"
                       ]
                     },
                     "default": {
@@ -2781,6 +2788,11 @@
                     },
                     "label": {
                       "type": "string"
+                    },
+                    "options": {
+                      "type": "array",
+                      "items": { "type": "string" },
+                      "description": "For type 'enum': list of allowed options the user can choose from"
                     }
                   },
                   "required": [

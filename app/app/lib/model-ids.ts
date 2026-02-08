@@ -9,6 +9,13 @@ export const LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
 /** Digest/analysis (env: DIGEST_MODEL_ID) */
 export const DEFAULT_DIGEST_MODEL = "gemini-3-pro-preview";
 
+/** Recommended follow-up actions in chat (env: RECOMMENDED_ACTIONS_MODEL_ID). Uses Gemini 2 Flash. */
+export const DEFAULT_RECOMMENDED_ACTIONS_MODEL = "gemini-2.0-flash";
+
+export function getRecommendedActionsModelId(): string {
+  return process.env.RECOMMENDED_ACTIONS_MODEL_ID ?? DEFAULT_RECOMMENDED_ACTIONS_MODEL;
+}
+
 /** Banana image generation (env: BANANA_MODEL_ID) */
 export const DEFAULT_BANANA_MODEL = "gemini-3-pro-image-preview";
 

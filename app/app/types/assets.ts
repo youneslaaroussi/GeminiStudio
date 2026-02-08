@@ -33,11 +33,13 @@ export interface ComponentInputDef {
   /** Input name (used as prop key) */
   name: string;
   /** Type of the input */
-  type: 'string' | 'number' | 'boolean' | 'color';
-  /** Default value */
+  type: 'string' | 'number' | 'boolean' | 'color' | 'enum';
+  /** Default value (for enum, must be one of options) */
   default: string | number | boolean;
   /** Optional label for UI */
   label?: string;
+  /** For type "enum": list of allowed options the user can choose from */
+  options?: string[];
 }
 
 export interface AssetDragPayload {

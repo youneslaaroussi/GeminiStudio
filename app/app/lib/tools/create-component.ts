@@ -9,9 +9,10 @@ import type { RemoteAsset } from "@/app/types/assets";
 
 const inputDefSchema = z.object({
   name: z.string(),
-  type: z.enum(["string", "number", "boolean", "color"]),
+  type: z.enum(["string", "number", "boolean", "color", "enum"]),
   default: z.union([z.string(), z.number(), z.boolean()]),
   label: z.string().optional(),
+  options: z.array(z.string()).optional().describe("For type 'enum': list of allowed options the user can choose from"),
 });
 
 const createComponentSchema = z.object({

@@ -63,6 +63,7 @@ services:
       - VEO_PROJECT_ID=${GOOGLE_PROJECT_ID}
       - VEO_LOCATION=${VEO_LOCATION:-us-central1}
       - VEO_MODEL_ID=${VEO_MODEL_ID:-veo-3.0-generate-001}
+      - RECOMMENDED_ACTIONS_MODEL_ID=${RECOMMENDED_ACTIONS_MODEL_ID:-gemini-2.0-flash}
       # Speech configuration
       - SPEECH_PROJECT_ID=${GOOGLE_PROJECT_ID}
       - SPEECH_LOCATION=${SPEECH_LOCATION:-us}

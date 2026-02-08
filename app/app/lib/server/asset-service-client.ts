@@ -68,7 +68,7 @@ export interface AssetServiceAsset {
   // Component asset fields
   code?: string;
   componentName?: string;
-  inputDefs?: Array<{ name: string; type: string; default: string | number | boolean; label?: string }>;
+  inputDefs?: Array<{ name: string; type: string; default: string | number | boolean; label?: string; options?: string[] }>;
 }
 
 export interface UploadResponse {
@@ -203,7 +203,7 @@ export async function getAssetFromService(
 export async function createComponentAssetOnService(
   userId: string,
   projectId: string,
-  data: { name: string; code: string; componentName: string; inputDefs?: Array<{ name: string; type: string; default: string | number | boolean; label?: string }> }
+  data: { name: string; code: string; componentName: string; inputDefs?: Array<{ name: string; type: string; default: string | number | boolean; label?: string; options?: string[] }> }
 ): Promise<AssetServiceAsset> {
   const body = JSON.stringify(data);
   const response = await fetch(

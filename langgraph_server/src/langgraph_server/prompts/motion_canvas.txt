@@ -10,7 +10,7 @@ When you create or edit Motion Canvas components (createComponent, editComponent
   3. **Constructor**: call `super({ ...props });` then build the visual subtree with `this.add(<Rect>...</Rect>)` (or Layout, Circle, etc.). Use createRef() and ref={} for any child you need to animate or read later. You may read this.propName() in the constructor to set initial layout.
   4. **Timeline animation (required for components used on the timeline)**: The timeline calls **only** the method **animate(duration?: number)**. You **must** implement `public *animate(duration?: number): ThreadGenerator`. Use any internal names you like (e.g. *reveal(), *fall(), *run()) and have animate delegate: e.g. `public *animate(duration?: number) { yield* this.reveal(duration ?? 1); }` or `public *animate(duration?: number) { yield* this.fall(duration ?? 5); }`. If the component has no animation, implement `public *animate() {}` or `public *animate(_duration?: number) { yield* waitFor(0); }`.
 
-- **input_defs** (for createComponent): When the component will be used on the timeline, each user-adjustable prop can be exposed as an input. Pass input_defs as a list of dicts: each dict has "name" (string, matches a prop name or your internal name), "type" ("string" | "number" | "boolean" | "color"), "default" (value matching that type), and optionally "label" (string). The component's @signal props should align with these so the timeline can drive them.
+- **input_defs** (for createComponent): When the component will be used on the timeline, each user-adjustable prop can be exposed as an input. Pass input_defs as a list of dicts: each dict has "name" (string), "type" ("string" | "number" | "boolean" | "color" | "enum"), "default" (value matching that type), and optionally "label" (string). For type "enum", also pass "options" (list of strings) so the user can choose from them in the inspector; default must be one of the options. The component's @signal props should align with these so the timeline can drive them.
 
 ## Signals (core abstraction)
 
@@ -171,7 +171,7 @@ export class MyWidget extends Node {
 
 **input_defs** (input variables) are **static values** set on the timeline. They are NOT animatable — they do not change over the course of the clip's playback. You cannot tween or keyframe an input variable. When a user drags a component onto the timeline, inputs are set once (e.g. in the inspector panel) and remain constant.
 
-**Input types are primitives only**: input_defs support "string", "number", "boolean", and "color". You **cannot** pass arrays or objects as inputs. If the component needs structured data (e.g. chart data points), encode it as a **delimited string** (e.g. `"Apple:394, Google:307, Microsoft:211"`) and **parse it in the constructor** with `.split(',').map(...)`. Never call `.map()` directly on a string input — always split first.
+**Input types are primitives only**: input_defs support "string", "number", "boolean", "color", and "enum". For "enum", provide an "options" array of strings (e.g. `["Small", "Medium", "Large"]`) so the user can choose from them; "default" must be one of the options. You **cannot** pass arrays or objects as inputs for other types. If the component needs structured data (e.g. chart data points), encode it as a **delimited string** (e.g. `"Apple:394, Google:307, Microsoft:211"`) and **parse it in the constructor** with `.split(',').map(...)`. Never call `.map()` directly on a string input — always split first.
 
 **Timeline entry point**: The timeline calls **only** `animate(duration?)`. You must implement `public *animate(duration?: number)`; it can delegate to any internal method (e.g. `yield* this.fill(duration);`). Do not rely on other names (reveal, fall, run, fill, etc.) — only `animate` is invoked.
 
@@ -230,7 +230,7 @@ export class ProgressBar extends Node {
 }
 ```
 
-When providing code to createComponent or editComponent, supply complete, valid TSX that compiles. Match input_defs to the component's signal props (name, type, default, label) so the timeline can control them.
+When providing code to createComponent or editComponent, supply complete, valid TSX that compiles. Match input_defs to the component's signal props (name, type, default, label; for type "enum" include options) so the timeline can control them.
 
 ## Shaders (experimental)
 

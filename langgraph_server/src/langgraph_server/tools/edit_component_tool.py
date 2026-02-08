@@ -36,7 +36,7 @@ def editComponent(
         code: Updated Motion Canvas TSX source code (complete replacement).
         name: Updated display name.
         component_name: Updated exported class name.
-        input_defs: Updated input definitions list. Each dict has keys: name, type, default, label (optional).
+        input_defs: Updated input definitions list. Each dict has keys: name, type ("string"|"number"|"boolean"|"color"|"enum"), default, label (optional). For type "enum" include options (list of strings); default must be one of the options.
         description: Updated description.
     """
     context = _agent_context or {}

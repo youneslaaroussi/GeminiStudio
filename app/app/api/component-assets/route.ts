@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     name: string;
     code: string;
     componentName: string;
-    inputDefs?: Array<{ name: string; type: string; default: string | number | boolean; label?: string }>;
+    inputDefs?: Array<{ name: string; type: string; default: string | number | boolean; label?: string; options?: string[] }>;
   };
 
   try {

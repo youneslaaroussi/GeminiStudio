@@ -184,6 +184,27 @@ function InputField({
           </div>
         </div>
       );
+    case "enum": {
+      const options = def.options?.length ? def.options : [String(def.default)];
+      const current = String(value);
+      const validValue = options.includes(current) ? current : options[0] ?? "";
+      return (
+        <div>
+          <label className={labelClassName}>{label}</label>
+          <select
+            value={validValue}
+            onChange={(e) => onChange(e.target.value)}
+            className={inputClassName}
+          >
+            {options.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
+        </div>
+      );
+    }
     default:
       return null;
   }

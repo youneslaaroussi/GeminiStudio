@@ -194,7 +194,7 @@ Use the **exact** fontFamily string in Txt or components so text renders (e.g. f
 
 **inputDefs** (input variables) are **static values** set on the timeline. They are NOT animatable — they do not change during clip playback. You cannot tween or keyframe an input variable. Inputs are set once in the inspector panel and remain constant.
 
-**Input types are primitives only**: inputDefs support "string", "number", "boolean", and "color". You cannot pass arrays or objects. For structured data (e.g. chart data), encode as a delimited string (e.g. "Apple:394, Google:307, Microsoft:211") and **parse in the constructor** with `.split(',').map(...)`. Never call `.map()` on a string input — always split first.
+**Input types are primitives only**: inputDefs support "string", "number", "boolean", "color", and "enum". For "enum", provide an "options" array of strings (e.g. ["Small", "Medium", "Large"]) so the user can choose from them in the inspector; "default" must be one of the options. You cannot pass arrays or objects for other types. For structured data (e.g. chart data), encode as a delimited string (e.g. "Apple:394, Google:307, Microsoft:211") and **parse in the constructor** with `.split(',').map(...)`. Never call `.map()` on a string input — always split first.
 
 If a user wants **animated behavior** (typewriter text, counter counting up, progress bar filling, pulsing opacity, or any temporal change):
 

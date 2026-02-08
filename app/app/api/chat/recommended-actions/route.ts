@@ -4,7 +4,7 @@ import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { verifyAuth } from "@/app/lib/server/auth";
 import { getCurrentGeminiKey, runWithGeminiKeyRotation } from "@/app/lib/server/gemini-api-keys";
-import { DEFAULT_DIGEST_MODEL } from "@/app/lib/model-ids";
+import { getRecommendedActionsModelId } from "@/app/lib/model-ids";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -86,7 +86,7 @@ async function generateSuggestions(prompt: string): Promise<string[]> {
   return runWithGeminiKeyRotation(async (apiKey) => {
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: DEFAULT_DIGEST_MODEL,
+      model: getRecommendedActionsModelId(),
       contents: prompt,
       config: {
         responseMimeType: "application/json",

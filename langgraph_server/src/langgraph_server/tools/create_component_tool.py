@@ -33,7 +33,7 @@ def createComponent(
         name: Display name for the component asset (e.g. "Progress Ring").
         code: Complete Motion Canvas TSX source code for the component.
         component_name: The exported class name (e.g. "ProgressRing"). Must be a valid JS identifier.
-        input_defs: Optional list of input definitions. Each dict has keys: name (str), type ("string"|"number"|"boolean"|"color"), default (str|number|bool), label (optional str).
+        input_defs: Optional list of input definitions. Each dict has keys: name (str), type ("string"|"number"|"boolean"|"color"|"enum"), default (str|number|bool), label (optional str). For type "enum" also pass options (list of strings) — the user will choose from these in the UI; default must be one of the options.
         description: Optional short description of what the component does.
     """
     context = _agent_context or {}

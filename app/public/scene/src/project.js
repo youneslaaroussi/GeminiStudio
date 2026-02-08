@@ -31777,7 +31777,13 @@ function createComponentElements({ clips, view }) {
       };
       const instance = new ComponentClass(props);
       ref(instance);
-      view.add(instance);
+      const effectShaders = getEffectShaderConfig(clip2.effect);
+      if (effectShaders) {
+        const wrapper2 = /* @__PURE__ */ jsx$1(Node, { cache: true, shaders: effectShaders, children: instance }, `component-effect-${clip2.id}`);
+        view.add(wrapper2);
+      } else {
+        view.add(instance);
+      }
       entries.push({ clip: clip2, ref });
     } catch (err) {
       console.error(`[component] Failed to create "${clip2.componentName}" for clip ${clip2.id}:`, err);
@@ -32151,7 +32157,6 @@ const description = makeScene2D(function* (view) {
       )
     );
   }
-  yield;
   videoEntries.forEach(({ ref, maskRef }) => {
     var _a2, _b;
     (_a2 = ref()) == null ? void 0 : _a2.pause();

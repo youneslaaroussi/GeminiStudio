@@ -942,14 +942,19 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
     };
     playerInstance.setVariables(initialVariables);
     (playerInstance as unknown as { requestRecalculation?: () => void }).requestRecalculation?.();
-    
-    // Seek to current playhead position so we don't reset to frame 0
-    // Use setTimeout to give the player time to initialize before seeking
+
+    // Wait for the scene to finish recalculating, then seek to the current
+    // playhead position and render a frame so the preview isn't empty.
     const initialFrame = Math.floor(latestCurrentTimeRef.current * PREVIEW_FPS);
-    const seekTimeout = setTimeout(() => {
+    const unsubRecalc = playerInstance.onRecalculated.subscribe(() => {
+      unsubRecalc();
       playerInstance.requestSeek(initialFrame);
       playerInstance.requestRender();
-    }, 50);
+    });
+    // Also fire a seek+render immediately in case recalculation already ran
+    // synchronously or completes before the next frame.
+    playerInstance.requestSeek(initialFrame);
+    playerInstance.requestRender();
 
     // Style the canvas
     const canvas = stageInstance.finalBuffer;
@@ -965,7 +970,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
     onCanvasReady?.(canvas);
 
     return () => {
-      clearTimeout(seekTimeout);
+      unsubRecalc();
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
