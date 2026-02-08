@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint",
     "export:tools": "tsx scripts/export-tool-manifest.ts",
-    "add-credits": "tsx scripts/add-credits.ts"
+    "add-credits": "tsx scripts/add-credits.ts",
+    "verify:templates": "tsx scripts/verify-component-templates.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "file:../ai-sdk/packages/google",
@@ -176,6 +177,7 @@
     "typescript": "^5",
     "vite-tsconfig-paths": "^6.0.5",
     "vitest": "^4.0.18",
+    "@gemini-studio/scene-compiler": "workspace:*",
     "zod-to-json-schema": "^3.24.0"
   }
 }

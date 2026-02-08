@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "type": "module",
   "private": true,
+  "exports": {
+    "./compiler": "./dist/compiler.js"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc --project tsconfig.build.json",

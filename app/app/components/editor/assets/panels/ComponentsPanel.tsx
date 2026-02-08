@@ -15,6 +15,8 @@ import {
   Hash,
   ToggleLeft,
   Palette,
+  Undo2,
+  AlertCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -119,9 +121,16 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
   const [showInputDefs, setShowInputDefs] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [compileError, setCompileError] = useState<string | null>(null);
   const editorRef = useRef<unknown>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const removeClipsByAssetId = useProjectStore((s) => s.removeClipsByAssetId);
+  const componentAssetsRef = useRef(componentAssets);
+  componentAssetsRef.current = componentAssets;
+
+  // Last-known-good snapshot per asset (before each save). Used for Undo.
+  const lastGoodRef = useRef<Record<string, { code: string; name: string; componentName: string; inputDefs: ComponentInputDef[] }>>({});
+  const [hasLastGood, setHasLastGood] = useState(false);
 
   // Refs that always hold the latest editing values.
   // handleSave reads from these so the debounced callback never sends stale data.
@@ -144,19 +153,27 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
   // re-fetched (which may return stale data after a save).
   const loadedAssetIdRef = useRef<string | null>(null);
 
-  // When selection changes, load the asset data into editing state
+  // When selection changes, load the asset data into editing state and set last-good for Undo
   useEffect(() => {
     if (selectedAsset) {
       if (loadedAssetIdRef.current !== selectedAsset.id) {
-        setEditingCode(selectedAsset.code ?? "");
-        setEditingName(selectedAsset.name);
-        setEditingComponentName(selectedAsset.componentName ?? "MyComponent");
-        setEditingInputDefs(selectedAsset.inputDefs ?? []);
+        const code = selectedAsset.code ?? "";
+        const name = selectedAsset.name;
+        const componentName = selectedAsset.componentName ?? "MyComponent";
+        const inputDefs = selectedAsset.inputDefs ?? [];
+        setEditingCode(code);
+        setEditingName(name);
+        setEditingComponentName(componentName);
+        setEditingInputDefs(inputDefs);
         setHasUnsavedChanges(false);
+        setCompileError(null);
         loadedAssetIdRef.current = selectedAsset.id;
+        lastGoodRef.current[selectedAsset.id] = { code, name, componentName, inputDefs };
+        setHasLastGood(true);
       }
     } else {
       loadedAssetIdRef.current = null;
+      setHasLastGood(false);
     }
   }, [selectedAsset]);
 
@@ -202,18 +219,50 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
     }
   }, [projectId, onAssetsChanged]);
 
+  // Build component files map for compile check (same shape as ScenePlayer).
+  const buildComponentFiles = useCallback(
+    (currentAssetId: string, overrides: { code: string; componentName: string }) => {
+      const files: Record<string, string> = {};
+      const assets = componentAssetsRef.current;
+      for (const a of assets) {
+        if (a.type !== "component" || !a.componentName) continue;
+        const path = `src/components/custom/${a.componentName}.tsx`;
+        if (a.id === currentAssetId) {
+          files[path] = overrides.code;
+        } else if (a.code) {
+          files[path] = a.code;
+        }
+      }
+      return files;
+    },
+    []
+  );
+
+  // Parse compile error for display: try to extract file and line (e.g. "path:12:34" or "at path (line 12)").
+  const formatCompileError = useCallback((message: string, currentComponentName?: string) => {
+    const lineMatch = message.match(/(?:\.tsx?):(\d+)(?::(\d+))?/);
+    const fileMatch = message.match(/([^/\\]+\.tsx?)(?::\d| \()/);
+    const line = lineMatch ? lineMatch[1] : null;
+    const file = fileMatch ? fileMatch[1] : currentComponentName ? `${currentComponentName}.tsx` : null;
+    if (file && line) return `Line ${line} in ${file}: ${message.replace(/^[^:]*:\d+(?::\d+)?\s*/, "").slice(0, 120)}`;
+    return message.slice(0, 200);
+  }, []);
+
   // Stable save function: reads latest values from refs so it never sends stale data.
-  // After PATCH, optimistically updates the local assets list (no full refetch needed).
+  // Before save, snapshot current state as last-known-good for Undo. After PATCH, runs compile check and shows errors.
   const handleSave = useCallback(async () => {
     if (!projectId || !selectedId) return;
+    const code = editingCodeRef.current;
+    const name = editingNameRef.current;
+    const componentName = editingComponentNameRef.current;
+    const inputDefs = editingInputDefsRef.current;
+    lastGoodRef.current[selectedId] = { code, name, componentName, inputDefs };
+    setHasLastGood(true);
+
     setIsSaving(true);
+    setCompileError(null);
     try {
-      const savePayload = {
-        name: editingNameRef.current,
-        code: editingCodeRef.current,
-        componentName: editingComponentNameRef.current,
-        inputDefs: editingInputDefsRef.current,
-      };
+      const savePayload = { name, code, componentName, inputDefs };
 
       const authHeaders = await getAuthHeaders();
       const url = new URL(`/api/assets/${selectedId}`, window.location.origin);
@@ -230,11 +279,33 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
       }
 
       setHasUnsavedChanges(false);
-
-      // Optimistically update the asset in local state so ScenePlayer
-      // (and the rest of the app) immediately sees the saved values.
-      // No full refetch needed — avoids stale-data race conditions.
       onAssetUpdated(selectedId, savePayload);
+
+      // Compile check: so user sees inline errors instead of only "Failed to load scene" in preview.
+      const files = buildComponentFiles(selectedId, { code, componentName });
+      if (Object.keys(files).length > 0) {
+        try {
+          const compileRes = await fetch("/api/compile-scene", {
+            method: "POST",
+            headers: { ...authHeaders, "Content-Type": "application/json" },
+            body: JSON.stringify({ files }),
+          });
+          if (!compileRes.ok) {
+            const errData = await compileRes.json().catch(() => ({}));
+            const errMsg = (errData as { error?: string }).error ?? `Compilation failed (${compileRes.status})`;
+            const formatted = formatCompileError(errMsg, componentName);
+            setCompileError(formatted);
+            toast.error("Component saved but has compile errors", {
+              description: formatted,
+              duration: 8000,
+            });
+          } else {
+            setCompileError(null);
+          }
+        } catch {
+          // Compiler unavailable; don't block or confuse the user
+        }
+      }
     } catch (err) {
       console.error("Failed to save component:", err);
       toast.error("Failed to save", {
@@ -243,7 +314,7 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
     } finally {
       setIsSaving(false);
     }
-  }, [projectId, selectedId, onAssetUpdated]);
+  }, [projectId, selectedId, onAssetUpdated, buildComponentFiles, formatCompileError]);
 
   // Auto-save on code change (debounced).
   // handleSave is stable (no editing state in deps), so the timeout always
@@ -253,6 +324,7 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
       const code = value ?? "";
       setEditingCode(code);
       setHasUnsavedChanges(true);
+      setCompileError(null);
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
         handleSave();
@@ -260,6 +332,18 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
     },
     [handleSave]
   );
+
+  const handleUndo = useCallback(() => {
+    if (!selectedId) return;
+    const last = lastGoodRef.current[selectedId];
+    if (!last) return;
+    setEditingCode(last.code);
+    setEditingName(last.name);
+    setEditingComponentName(last.componentName);
+    setEditingInputDefs(last.inputDefs);
+    setHasUnsavedChanges(false);
+    setCompileError(null);
+  }, [selectedId]);
 
   const handleDelete = useCallback(
     async (assetId: string) => {
@@ -446,6 +530,17 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
                 placeholder="Component name"
               />
               <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs gap-1 shrink-0"
+                onClick={handleUndo}
+                disabled={!selectedId || !hasLastGood}
+                title="Revert to last saved version"
+              >
+                <Undo2 className="size-3" />
+                Undo
+              </Button>
+              <Button
                 variant={hasUnsavedChanges ? "default" : "ghost"}
                 size="sm"
                 className="h-7 text-xs gap-1 shrink-0"
@@ -604,6 +699,22 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
               </div>
             )}
           </div>
+
+          {/* Compile error banner */}
+          {compileError && (
+            <div className="mx-3 mt-2 flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-destructive">
+              <AlertCircle className="size-4 shrink-0 mt-0.5" />
+              <p className="text-xs flex-1 break-words">{compileError}</p>
+              <button
+                type="button"
+                onClick={() => setCompileError(null)}
+                className="shrink-0 text-destructive/80 hover:text-destructive"
+                aria-label="Dismiss"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* Monaco Editor */}
           <div className="flex-1 min-h-0">
