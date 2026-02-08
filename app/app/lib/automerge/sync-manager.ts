@@ -107,11 +107,17 @@ export class ProjectSyncManager {
         this.onUpdate(cached);
       }
 
-      // 2. Sync with Realtime Database if online (non-blocking: don't block init on RTDB read)
+      // 2. Sync with Realtime Database if online. When we have no cached doc (e.g. switching
+      //    to another branch), we must await so branch data is loaded before we create an
+      //    empty doc — otherwise the store would briefly show branch data then overwrite with empty.
       if (this.isOnline) {
-        this.syncWithRTDB().catch((err) =>
-          console.error(`[SYNC] Background RTDB fetch failed (${this.projectId}/${this.branchId}):`, err)
-        );
+        if (!this.automergeDoc) {
+          await this.syncWithRTDB();
+        } else {
+          this.syncWithRTDB().catch((err) =>
+            console.error(`[SYNC] Background RTDB fetch failed (${this.projectId}/${this.branchId}):`, err)
+          );
+        }
       }
 
       // 3. If still no document, create an empty one

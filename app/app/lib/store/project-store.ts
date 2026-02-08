@@ -437,7 +437,20 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
         });
         // Ensure main branch exists in RTDB immediately so branch selector and listBranches see it
         await syncManager.forceSyncToFirestore();
-        set({ project: currentProject, syncManager, currentBranch: branchId, projectId });
+        // Re-read doc in case it was updated by RTDB sync during applyChange; don't overwrite with empty
+        const docAfter = syncManager.getDocument();
+        if (docAfter?.projectJSON) {
+          try {
+            let project = JSON.parse(docAfter.projectJSON);
+            project = stripClipUrlFields(project);
+            project = applyMetadataName(project);
+            set({ project, syncManager, currentBranch: branchId, projectId });
+          } catch {
+            set({ project: currentProject, syncManager, currentBranch: branchId, projectId });
+          }
+        } else {
+          set({ project: currentProject, syncManager, currentBranch: branchId, projectId });
+        }
         scheduleCorrection();
       } else {
         console.log('[SYNC] No project data in Firebase or Automerge doc is null');
