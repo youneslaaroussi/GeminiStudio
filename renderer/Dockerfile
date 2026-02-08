@@ -16,11 +16,10 @@ ENV PATH="$PNPM_HOME:$PATH"
 
 RUN npm install -g pnpm@9
 
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
-COPY app/package.json app/pnpm-workspace.yaml ./app/
+COPY package.json pnpm-lock.yaml tsconfig.base.json ./
+# Minimal workspace so we only install renderer (avoids pulling app → @gemini-studio/scene-compiler)
+RUN echo 'packages:\n  - renderer\n' > pnpm-workspace.yaml
 COPY renderer/package.json renderer/tsconfig.json renderer/tsconfig.build.json ./renderer/
-# app depends on local @ai-sdk/google (file:../ai-sdk/packages/google); workspace install resolves it
-COPY ai-sdk/packages/google ./ai-sdk/packages/google
 RUN pnpm install --filter @gemini-studio/renderer... --prefer-offline
 
 COPY . .
