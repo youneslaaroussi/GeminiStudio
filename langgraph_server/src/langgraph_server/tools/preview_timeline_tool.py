@@ -370,6 +370,13 @@ def previewTimeline(
     }
     if timeline_duration > 0:
         job_payload["timelineDuration"] = timeline_duration
+    # Explicit variables so renderer/headless use our branch timeline (avoids any loss from project in queue)
+    layers = project_payload.get("layers", [])
+    if layers and timeline_duration > 0:
+        job_payload["variables"] = {
+            "layers": layers,
+            "duration": timeline_duration,
+        }
     if component_files:
         job_payload["componentFiles"] = component_files
 

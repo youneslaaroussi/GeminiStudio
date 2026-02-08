@@ -390,7 +390,7 @@ export function ChatPanel() {
     const controller = new AbortController();
     recommendedActionsAbortRef.current = controller;
     setRecommendedActionsLoading(true);
-    const DEBOUNCE_MS = 2000;
+    const DEBOUNCE_MS = 10000;
     recommendedActionsDebounceRef.current = setTimeout(() => {
       recommendedActionsDebounceRef.current = null;
       getAuthHeaders()
@@ -1227,7 +1227,7 @@ export function ChatPanel() {
                 Ask about your project, generate content, or let me help edit
                 your timeline.
               </p>
-              {recommendedActionsLoading && (
+              {recommendedActionsLoading && recommendedActions.length === 0 && (
                 <div className="w-full max-w-md grid grid-cols-1 gap-3 px-2">
                   {[1, 2, 3, 4].map((i) => (
                     <Skeleton
@@ -1238,7 +1238,7 @@ export function ChatPanel() {
                 </div>
               )}
               <AnimatePresence>
-                {!recommendedActionsLoading && recommendedActions.length > 0 && (
+                {recommendedActions.length > 0 && (
                   <motion.div
                     className="w-full max-w-md grid grid-cols-1 gap-3 px-2"
                     initial="hidden"
