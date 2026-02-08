@@ -90,3 +90,42 @@ export async function fetchWithGeminiKeyRotation(
     return res;
   });
 }
+
+/** Merge headers so x-goog-api-key is set to the given key. */
+function requestInitWithKey(init: RequestInit | undefined, apiKey: string): RequestInit {
+  if (!init) return { headers: { "x-goog-api-key": apiKey } };
+  const prev = init.headers;
+  const nextHeaders =
+    prev instanceof Headers
+      ? new Headers(prev)
+      : Array.isArray(prev)
+        ? (Object.fromEntries(prev) as Record<string, string>)
+        : { ...(prev as Record<string, string>) };
+  if (nextHeaders instanceof Headers) {
+    nextHeaders.set("x-goog-api-key", apiKey);
+    return { ...init, headers: nextHeaders };
+  }
+  return { ...init, headers: { ...nextHeaders, "x-goog-api-key": apiKey } };
+}
+
+/**
+ * Returns a fetch implementation that injects the current Gemini API key and, on 429,
+ * rotates to the next key (when GOOGLE_GENERATIVE_AI_API_KEYS has multiple keys) and retries once.
+ * Use with createGoogleGenerativeAI({ fetch: createGeminiFetchWithRotation() }) so that
+ * chat/streamText benefit from key rotation like the langgraph server.
+ */
+export function createGeminiFetchWithRotation(): typeof fetch {
+  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const key = getCurrentGeminiKey();
+    const initWithKey = key ? requestInitWithKey(init, key) : init;
+    let res = await fetch(input, initWithKey);
+    if (res.status === 429 && keys.length > 1) {
+      rotateGeminiKey();
+      const nextKey = getCurrentGeminiKey();
+      if (nextKey) {
+        res = await fetch(input, requestInitWithKey(init, nextKey));
+      }
+    }
+    return res;
+  };
+}

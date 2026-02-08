@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { google } from "@ai-sdk/google";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createGeminiFetchWithRotation } from "@/app/lib/server/gemini-api-keys";
 import {
   convertToModelMessages,
   stepCountIs,
@@ -280,6 +281,7 @@ export async function POST(req: Request) {
     ...messagesWithAttachments,
   ]);
 
+  const google = createGoogleGenerativeAI({ fetch: createGeminiFetchWithRotation() });
   const result = streamText({
     model: google(process.env.AI_CHAT_GOOGLE_MODEL ?? "gemini-3-pro-preview"),
     providerOptions: {
