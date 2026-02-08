@@ -4,6 +4,7 @@ import type { Project } from "@/app/types/timeline";
 import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
+import { requestCompileScene } from "@/app/lib/compile-scene-client";
 
 const inputDefSchema = z.object({
   name: z.string(),
@@ -190,11 +191,10 @@ export const editComponentTool: ToolDefinition<
           files[`src/components/custom/${componentName}.tsx`] = newCode;
 
           const authHeaders2 = await getAuthHeaders();
-          const compileRes = await fetch("/api/compile-scene", {
-            method: "POST",
-            headers: { ...authHeaders2, "Content-Type": "application/json" },
-            body: JSON.stringify({ files, includeDiagnostics: true }),
-          });
+          const compileRes = await requestCompileScene(
+            { files, includeDiagnostics: true },
+            authHeaders2
+          );
 
           const compileData = (await compileRes.json().catch(() => ({}))) as {
             error?: string;

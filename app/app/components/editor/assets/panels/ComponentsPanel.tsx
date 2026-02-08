@@ -43,6 +43,7 @@ import { cn } from "@/lib/utils";
 import type { RemoteAsset, ComponentInputDef } from "@/app/types/assets";
 import { ASSET_DRAG_DATA_MIME } from "@/app/types/assets";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
+import { requestCompileScene } from "@/app/lib/compile-scene-client";
 import { MOTION_CANVAS_TYPES } from "@/app/lib/monaco-types-data";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { useAssetHighlightStore } from "@/app/lib/store/asset-highlight-store";
@@ -317,11 +318,7 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
       const files = buildComponentFiles(selectedId, { code, componentName });
       if (Object.keys(files).length > 0) {
         try {
-          const compileRes = await fetch("/api/compile-scene", {
-            method: "POST",
-            headers: { ...authHeaders, "Content-Type": "application/json" },
-            body: JSON.stringify({ files }),
-          });
+          const compileRes = await requestCompileScene({ files }, authHeaders);
           if (!compileRes.ok) {
             const errData = await compileRes.json().catch(() => ({}));
             const errMsg = (errData as { error?: string }).error ?? `Compilation failed (${compileRes.status})`;

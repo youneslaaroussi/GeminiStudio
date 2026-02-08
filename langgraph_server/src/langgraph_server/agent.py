@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import json
 import logging
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -25,11 +25,6 @@ from .prompts import get_system_prompt
 from .tools import get_registered_tools, get_tools_by_name
 
 logger = logging.getLogger(__name__)
-
-
-def _count_tool_messages(messages: Sequence[Any]) -> int:
-    """Return how many ToolMessages exist so far to enforce relentless iteration reminders."""
-    return sum(1 for message in messages if isinstance(message, ToolMessage))
 
 
 def _build_media_message(result: dict[str, Any], source_tool: str | None = None) -> HumanMessage | None:
@@ -135,9 +130,7 @@ def create_graph(settings: Settings | None = None):
         tool_outputs: list[ToolMessage | HumanMessage] = []
         media_to_inject: list[HumanMessage] = []
         last_message = state["messages"][-1]
-        base_tool_calls = _count_tool_messages(list(state["messages"]))
-        cumulative_tool_calls = base_tool_calls
-        
+
         # Extract context from runtime (passed via graph.stream(..., context={...}))
         # Falls back to reading directly from configurable (for ainvoke() calls)
         runtime = config.get("configurable", {}).get("__pregel_runtime")
@@ -199,13 +192,6 @@ def create_graph(settings: Settings | None = None):
                 except Exception as exc:  # pragma: no cover - surface tool exceptions
                     logger.exception("[AGENT] Tool execution failed: %s", tool_name)
                     observation = f"Tool '{tool_name}' failed: {exc}"
-            cumulative_tool_calls += 1
-            relentless_suffix = (
-                f"\n\n[TOOL_CALL_COUNT={cumulative_tool_calls}] "
-                "RELENTLESS EXECUTION: if total tool calls are below 100 you MUST immediately schedule another tool action—"
-                "rerender, reinspect, repull metadata, or deepen analysis without pausing."
-            )
-            observation = f"{observation}{relentless_suffix}"
             tool_outputs.append(ToolMessage(content=observation, tool_call_id=tool_call["id"]))
         
         # Append media messages after tool outputs so model sees them in next turn

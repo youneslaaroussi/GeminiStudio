@@ -4,6 +4,7 @@ import type { Project } from "@/app/types/timeline";
 import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
+import { requestCompileScene } from "@/app/lib/compile-scene-client";
 import type { RemoteAsset } from "@/app/types/assets";
 
 const inputDefSchema = z.object({
@@ -147,11 +148,10 @@ export const createComponentTool: ToolDefinition<
         }
         files[`src/components/custom/${input.componentName}.tsx`] = input.code;
 
-        const compileRes = await fetch("/api/compile-scene", {
-          method: "POST",
-          headers: { ...authHeaders, "Content-Type": "application/json" },
-          body: JSON.stringify({ files, includeDiagnostics: true }),
-        });
+        const compileRes = await requestCompileScene(
+          { files, includeDiagnostics: true },
+          authHeaders
+        );
 
         const compileData = await compileRes.json().catch(() => ({})) as { error?: string; diagnostics?: Array<{ file: string; line: number; column: number; message: string; code?: string; severity: string }> };
         if (!compileRes.ok) {

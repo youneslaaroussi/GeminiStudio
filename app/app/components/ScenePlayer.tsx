@@ -13,6 +13,7 @@ import { PreviewSkeleton } from '@/app/components/editor/PreviewSkeleton';
 import { motion, AnimatePresence } from 'motion/react';
 import { getAuthHeaders } from '@/app/lib/hooks/useAuthFetch';
 import { computeCodeHash, getCachedScene, setCachedScene } from '@/app/lib/cache/scene-cache';
+import { requestCompileScene } from '@/app/lib/compile-scene-client';
 
 export interface ScenePlayerHandle {
   recenter: () => void;
@@ -264,11 +265,10 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
       }
 
       const authHeaders = await getAuthHeaders();
-      const res = await fetch('/api/compile-scene', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ files: Object.keys(files).length > 0 ? files : undefined }),
-      });
+      const res = await requestCompileScene(
+        { files: Object.keys(files).length > 0 ? files : undefined },
+        authHeaders
+      );
       if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Compile failed (${res.status}): ${errText}`);

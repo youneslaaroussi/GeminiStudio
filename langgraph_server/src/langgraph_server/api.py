@@ -94,7 +94,7 @@ async def invoke(
     if settings.default_project_id:
         configurable.setdefault("project_id", settings.default_project_id)
 
-    config: RunnableConfig = {"configurable": configurable}
+    config: RunnableConfig = {"configurable": configurable, "recursion_limit": 15}
     config["thread_id"] = payload.thread_id
 
     inputs = {"messages": _as_langchain_messages(payload.messages)}
@@ -443,6 +443,7 @@ Media Assets in Project ({len(assets_info)}):
             "branch_id": branch_id,
         },
         "thread_id": thread_id,
+        "recursion_limit": 15,  # Cap agent steps so it cannot run away (model->tools->model cycles)
     }
 
     import time
