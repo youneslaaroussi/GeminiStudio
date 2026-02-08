@@ -342,6 +342,15 @@ Add these to your Vercel dashboard (Settings → Environment Variables).
 
 ## Day-to-Day Operations
 
+### Portainer (container management UI)
+
+Portainer runs in the stack and is available at **https://portainer.your-domain** (e.g. `https://portainer.geminivideo.studio`). Caddy provides HTTPS; no extra ports are exposed.
+
+- **First visit:** Create an admin username and password (no default credentials).
+- Use it to restart containers, view logs, manage stacks, and inspect resources.
+
+Ensure DNS has an A record for `portainer.<your-domain>` pointing at the VM’s IP (same as the main app), or add it to your hosts file for local use.
+
 ### View Logs
 
 ```bash

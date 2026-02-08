@@ -1,6 +1,11 @@
 # Caddy reverse proxy configuration
 # Automatically provisions SSL from Let's Encrypt
 
+# Portainer - container management UI (HTTPS via Caddy; create admin on first visit)
+portainer.{$DOMAIN:localhost} {
+    reverse_proxy portainer:9000
+}
+
 {$DOMAIN:localhost}, www.{$DOMAIN:localhost} {
     # Billing service API (for Stripe webhooks and client calls)
     handle /credits/* {

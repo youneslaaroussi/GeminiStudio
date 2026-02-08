@@ -309,6 +309,17 @@ services:
     networks:
       - gemini-network
 
+  # Portainer - container management UI (restart, logs, stacks)
+  portainer:
+    image: portainer/portainer-ce:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer-data:/data
+    networks:
+      - gemini-network
+    # No public ports - access via Caddy at https://portainer.${DOMAIN}
+
   # Billing Service - Stripe integration for credits
   billing-service:
     build:
@@ -343,6 +354,7 @@ volumes:
   renderer-tmp:
   caddy-data:
   caddy-config:
+  portainer-data:
 
 networks:
   gemini-network:
