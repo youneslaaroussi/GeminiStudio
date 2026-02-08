@@ -364,7 +364,8 @@ def renderVideo(
   if agent_metadata:
     metadata["agent"] = agent_metadata
 
-  # Payload identical to app/api/render/route.ts: project, timelineDuration, output, componentFiles only (no variables)
+  # Payload: project, timelineDuration, output, componentFiles. Also send variables explicitly
+  # so the renderer worker always has layers and duration even if job.project is altered in the queue.
   job_payload: Dict[str, Any] = {
     "project": project_payload,
     "output": output_payload,
@@ -372,6 +373,12 @@ def renderVideo(
   }
   if timeline_duration > 0:
     job_payload["timelineDuration"] = timeline_duration
+  layers = project_payload.get("layers", [])
+  if layers and timeline_duration > 0:
+    job_payload["variables"] = {
+      "layers": layers,
+      "duration": timeline_duration,
+    }
   if component_files:
     job_payload["componentFiles"] = component_files
 

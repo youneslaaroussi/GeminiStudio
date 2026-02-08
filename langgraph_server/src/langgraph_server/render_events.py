@@ -201,6 +201,15 @@ class RenderEventSubscriber:
                         break
 
                 logger.info("Extracted ai_response: %s", ai_response[:100] if ai_response else None)
+                # Get video download URL when render completed (for Telegram and Firebase)
+                render_download_url: Optional[str] = None
+                if event_type == "render.completed":
+                    ev_result = event.get("result") or {}
+                    gcs_path = ev_result.get("gcsPath")
+                    if gcs_path:
+                        render_download_url = _generate_signed_download_url(
+                            gcs_path, self._settings
+                        )
                 if ai_response:
                     # Fetch current messages and append
                     session = await asyncio.to_thread(fetch_chat_session, thread_id, self._settings)
@@ -213,29 +222,22 @@ class RenderEventSubscriber:
                         "createdAt": datetime.utcnow().isoformat() + "Z",
                     }
                     # Embed video in chat when we have a signed download URL
-                    if event_type == "render.completed":
-                        result = event.get("result") or {}
-                        gcs_path = result.get("gcsPath")
-                        if gcs_path:
-                            download_url = _generate_signed_download_url(
-                                gcs_path, self._settings
-                            )
-                            if download_url:
-                                extra_meta = metadata.get("extra") or {}
-                                project_name = (extra_meta.get("projectName") or "Render")[:60]
-                                new_message["metadata"] = {
-                                    "attachments": [
-                                        {
-                                            "id": f"render-{int(time.time() * 1000)}",
-                                            "name": f"Render: {project_name}",
-                                            "mimeType": "video/mp4",
-                                            "size": 0,
-                                            "category": "video",
-                                            "signedUrl": download_url,
-                                            "uploadedAt": datetime.utcnow().isoformat() + "Z",
-                                        }
-                                    ]
+                    if event_type == "render.completed" and render_download_url:
+                        extra_meta = metadata.get("extra") or {}
+                        project_name = (extra_meta.get("projectName") or "Render")[:60]
+                        new_message["metadata"] = {
+                            "attachments": [
+                                {
+                                    "id": f"render-{int(time.time() * 1000)}",
+                                    "name": f"Render: {project_name}",
+                                    "mimeType": "video/mp4",
+                                    "size": 0,
+                                    "category": "video",
+                                    "signedUrl": render_download_url,
+                                    "uploadedAt": datetime.utcnow().isoformat() + "Z",
                                 }
+                            ]
+                        }
                     current_messages.append(new_message)
                     
                     await asyncio.to_thread(
@@ -246,26 +248,38 @@ class RenderEventSubscriber:
                         self._settings,
                     )
                     logger.info("Wrote render notification to Firebase for thread %s", thread_id)
-                    
-                    # Send to Telegram if this is a Telegram session
-                    if thread_id.startswith("telegram-"):
-                        telegram_chat_id = thread_id.replace("telegram-", "")
-                        try:
-                            await send_telegram_message(telegram_chat_id, ai_response, self._settings)
-                            logger.info("Sent render notification to Telegram chat %s", telegram_chat_id)
-                        except Exception as e:
-                            logger.warning("Failed to send to Telegram: %s", e)
-                    else:
-                        # Check if user has Telegram linked for non-Telegram sessions
-                        telegram_chat_id = await asyncio.to_thread(
-                            get_telegram_chat_id_for_user, user_id, self._settings
-                        )
-                        if telegram_chat_id:
-                            try:
-                                await send_telegram_message(telegram_chat_id, ai_response, self._settings)
-                                logger.info("Sent render notification to linked Telegram chat %s", telegram_chat_id)
-                            except Exception as e:
-                                logger.warning("Failed to send to Telegram: %s", e)
+                
+                # Send to Telegram: always send video + URL when render completed, else AI text
+                telegram_chat_id = None
+                if thread_id.startswith("telegram-"):
+                    telegram_chat_id = thread_id.replace("telegram-", "")
+                elif user_id:
+                    telegram_chat_id = await asyncio.to_thread(
+                        get_telegram_chat_id_for_user, user_id, self._settings
+                    )
+                if telegram_chat_id and (ai_response or render_download_url):
+                    try:
+                        if render_download_url:
+                            # Send video so user gets the file
+                            await send_telegram_message(
+                                telegram_chat_id,
+                                ai_response or "Your render is ready.",
+                                self._settings,
+                                attachments=[
+                                    {"url": render_download_url, "type": "video", "caption": ai_response or "Your render is ready."},
+                                ],
+                            )
+                            # Send the URL in a separate message so user can copy it
+                            await send_telegram_message(
+                                telegram_chat_id,
+                                f"Video URL (copy to share or open in browser):\n{render_download_url}",
+                                self._settings,
+                            )
+                        else:
+                            await send_telegram_message(telegram_chat_id, ai_response or "", self._settings)
+                        logger.info("Sent render notification to Telegram chat %s", telegram_chat_id)
+                    except Exception as e:
+                        logger.warning("Failed to send to Telegram: %s", e)
             else:
                 logger.warning("Skipping Firebase write: user_id=%s, has_messages=%s", user_id, bool(result.get("messages")))
 

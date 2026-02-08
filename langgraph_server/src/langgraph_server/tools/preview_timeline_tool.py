@@ -362,7 +362,8 @@ def previewTimeline(
             "requestId": request_id,
         }
 
-    # Payload identical to app preview: project, timelineDuration, output, options.resolutionScale, componentFiles (no variables)
+    # Payload: project, timelineDuration, output, options, componentFiles. Also send variables
+    # explicitly so the renderer worker always has layers and duration.
     job_payload: Dict[str, Any] = {
         "project": project_payload,
         "output": output_payload,
@@ -373,6 +374,12 @@ def previewTimeline(
     }
     if timeline_duration > 0:
         job_payload["timelineDuration"] = timeline_duration
+    layers = project_payload.get("layers", [])
+    if layers and timeline_duration > 0:
+        job_payload["variables"] = {
+            "layers": layers,
+            "duration": timeline_duration,
+        }
     if component_files:
         job_payload["componentFiles"] = component_files
 
