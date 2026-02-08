@@ -268,12 +268,6 @@ class RenderEventSubscriber:
                             },
                         ],
                     )
-                    # Send the URL so user can copy/share
-                    await send_telegram_message(
-                        telegram_chat_id,
-                        f"Video URL (copy to share or open in browser):\n{render_download_url}",
-                        self._settings,
-                    )
                 else:
                     await send_telegram_message(
                         telegram_chat_id, notification_text, self._settings
