@@ -2217,7 +2217,13 @@ function renderMessagePart(
       );
     }
     return (
-      <div className={cn("prose prose-sm max-w-none", isUser && "prose-invert")}>
+      <div
+        className={cn(
+          "prose prose-sm max-w-none",
+          !isUser && "chat-assistant-prose overflow-hidden",
+          isUser && "prose-invert"
+        )}
+      >
         <MemoizedMarkdown id={`${key}-text`} content={part.text} />
       </div>
     );

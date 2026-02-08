@@ -6,7 +6,7 @@ import {
   type NodeViewProps,
 } from "@tiptap/react";
 import type { LucideIcon } from "lucide-react";
-import { FileVideo, Image, Music, File } from "lucide-react";
+import { FileVideo, Image, Music, File, Box } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const MENTION_TOKEN_REGEX = /@([^\s]+)/g;
@@ -20,6 +20,7 @@ const MENTION_APPEARANCES: Record<string, MentionAppearance> = {
   video: { className: "mention-chip--video", Icon: FileVideo },
   image: { className: "mention-chip--image", Icon: Image },
   audio: { className: "mention-chip--audio", Icon: Music },
+  component: { className: "mention-chip--component", Icon: Box },
   other: { className: "mention-chip--other", Icon: File },
 };
 

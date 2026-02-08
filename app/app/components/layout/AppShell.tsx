@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Lock } from "lucide-react";
 import { useAuth } from "@/app/lib/hooks/useAuth";
 import { AppHeader } from "./AppHeader";
 
@@ -47,9 +48,16 @@ export function AppShell({ children }: AppShellProps) {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-[#0f0f12] text-foreground">
+    <div className="min-h-screen bg-[#0f0f12] text-foreground flex flex-col pb-12">
       <AppHeader user={user} onLogout={handleLogout} />
-      <main>{children}</main>
+      <main className="flex-1">{children}</main>
+      <footer className="shrink-0 py-3 px-4 border-t border-slate-800">
+        <p className="flex flex-wrap items-center justify-center gap-x-1.5 text-center text-xs text-slate-500">
+          <Lock className="size-3.5 shrink-0" aria-hidden />
+          <span>Your data is private and secure.</span>
+          <a href="/privacy" className="hover:text-slate-300 transition-colors underline underline-offset-2">Privacy</a>
+        </p>
+      </footer>
     </div>
   );
 }

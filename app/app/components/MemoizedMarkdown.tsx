@@ -2,7 +2,10 @@
 
 import { memo, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import { marked } from "marked";
+import "katex/dist/katex.min.css";
 
 function parseMarkdown(content: string): string[] {
   const tokens = marked.lexer(content ?? "");
@@ -11,7 +14,14 @@ function parseMarkdown(content: string): string[] {
 
 const MarkdownBlock = memo(
   ({ content }: { content: string }) => {
-    return <ReactMarkdown>{content}</ReactMarkdown>;
+    return (
+      <ReactMarkdown
+        remarkPlugins={[remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+      >
+        {content}
+      </ReactMarkdown>
+    );
   },
   (prev, next) => prev.content === next.content
 );

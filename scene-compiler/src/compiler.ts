@@ -102,9 +102,12 @@ function applyPostBuildPatches(js: string): string {
  */
 const ALLOWED_FILE_PATH_REGEX = /^src\/components\/custom\/[a-zA-Z0-9_-]+\.tsx$/;
 
+/** Decorators that live in @motion-canvas/2d, not in core. */
+const DECORATORS_FROM_2D = new Set(['signal', 'initial', 'colorSignal']);
+
 /**
  * Normalize component source so it compiles with Motion Canvas 3.x.
- * - "signal" is not exported from @motion-canvas/core/lib/signals; it comes from @motion-canvas/2d.
+ * - "signal", "initial", "colorSignal" are from @motion-canvas/2d, not core.
  * - "makeComponent" is not exported from @motion-canvas/core; we provide it in scene src/lib/makeComponent.
  * - "random" is not exported from @motion-canvas/core; use useRandom() and store as instance field for class components.
  */
@@ -130,19 +133,25 @@ function normalizeComponentSource(content: string): string {
     return lines.length ? lines.join('\n') + '\n' : '';
   });
 
-  // 2) Fix: import { makeComponent, random, ... } from "@motion-canvas/core"
-  //    makeComponent → from our polyfill; random → useRandom (not exported as "random").
+  // 2) Fix: import { makeComponent, random, signal, initial, colorSignal, ... } from "@motion-canvas/core"
+  //    makeComponent → polyfill; random → useRandom; signal/initial/colorSignal → from @motion-canvas/2d.
   const coreMainImport = /import\s*\{([^}]*)\}\s*from\s*['"]@motion-canvas\/core['"]\s*;?\s*\n?/g;
   out = out.replace(coreMainImport, (fullMatch, namesStr) => {
     const names = namesStr.split(',').map((n: string) => n.trim());
     const nameKey = (n: string) => n.split(/\s+as\s+/)[0]?.trim() ?? n;
     let outNames = names.filter((n: string) => nameKey(n) !== 'makeComponent');
+    const decoratorsFrom2d = outNames.filter((n: string) => DECORATORS_FROM_2D.has(nameKey(n)));
+    outNames = outNames.filter((n: string) => !DECORATORS_FROM_2D.has(nameKey(n)));
     const hadRandom = outNames.some((n: string) => nameKey(n) === 'random');
     const hasUseRandom = outNames.some((n: string) => nameKey(n) === 'useRandom');
     if (hadRandom && !hasUseRandom) {
       outNames = outNames.filter((n: string) => nameKey(n) !== 'random');
       outNames.push('useRandom');
     }
+    const twoDLine =
+      decoratorsFrom2d.length > 0
+        ? `import { ${decoratorsFrom2d.join(', ')} } from '@motion-canvas/2d';\n`
+        : '';
     const coreLine =
       outNames.length > 0
         ? `import { ${outNames.join(', ')} } from '@motion-canvas/core';\n`
@@ -150,7 +159,7 @@ function normalizeComponentSource(content: string): string {
     const makeComponentLine = names.some((n: string) => nameKey(n) === 'makeComponent')
       ? "import { makeComponent } from '../../lib/makeComponent';\n"
       : '';
-    return coreLine + makeComponentLine;
+    return twoDLine + coreLine + makeComponentLine;
   });
 
   // 3) Fix: usages of "random." (random was replaced with useRandom in import) — inject class field and use this._random.
@@ -300,9 +309,10 @@ export async function compileScene(
 
         for (const file of componentFiles) {
           const name = basename(file, '.tsx');
-          // Support both default export (e.g. export default makeComponent(...)) and named export (e.g. export class X)
+          // Support both default export (e.g. export default makeComponent(...)) and named export (e.g. export class X).
+          // Cast to avoid TS2339 when the module has only a named export (no "default" on the type).
           lines.push(`import * as ${name}Module from './${name}';`);
-          lines.push(`const ${name} = ${name}Module.default ?? ${name}Module.${name};`);
+          lines.push(`const ${name} = (${name}Module as { default?: unknown; [k: string]: unknown }).default ?? ${name}Module.${name};`);
           lines.push('');
         }
 

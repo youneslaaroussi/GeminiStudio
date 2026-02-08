@@ -8,7 +8,7 @@ When you create or edit Motion Canvas components (createComponent, editComponent
   1. A **props interface** extending NodeProps (or LayoutProps, ShapeProps, etc.) with optional props typed as `propName?: SignalValue<Type>`. For colors use PossibleColor (or similar) inside SignalValue<>.
   2. For **every** prop that the component accepts, the class must have a **matching declared property**: use decorators `@initial(defaultValue)` (recommended) then `@signal()` for normal types or `@colorSignal()` for colors, then `public declare readonly propName: SimpleSignal<Type, this>` or `ColorSignal<this>`. Properties must be public, declare, and readonly. Example: `@initial(0) @signal() public declare readonly progress: SimpleSignal<number, this>;` and `@initial('#fff') @colorSignal() public declare readonly fillColor: ColorSignal<this>;`.
   3. **Constructor**: call `super({ ...props });` then build the visual subtree with `this.add(<Rect>...</Rect>)` (or Layout, Circle, etc.). Use createRef() and ref={} for any child you need to animate or read later. You may read this.propName() in the constructor to set initial layout.
-  4. **Animation**: expose generator methods (e.g. `public *animate(duration: number) { yield* this.bar().scale.x(1, duration); }`) and call them from the scene with `yield* comp().animate(1);`.
+  4. **Timeline animation (required for components used on the timeline)**: The timeline calls **only** the method **animate(duration?: number)**. You **must** implement `public *animate(duration?: number): ThreadGenerator`. Use any internal names you like (e.g. *reveal(), *fall(), *run()) and have animate delegate: e.g. `public *animate(duration?: number) { yield* this.reveal(duration ?? 1); }` or `public *animate(duration?: number) { yield* this.fall(duration ?? 5); }`. If the component has no animation, implement `public *animate() {}` or `public *animate(_duration?: number) { yield* waitFor(0); }`.
 
 - **input_defs** (for createComponent): When the component will be used on the timeline, each user-adjustable prop can be exposed as an input. Pass input_defs as a list of dicts: each dict has "name" (string, matches a prop name or your internal name), "type" ("string" | "number" | "boolean" | "color"), "default" (value matching that type), and optionally "label" (string). The component's @signal props should align with these so the timeline can drive them.
 
@@ -43,11 +43,18 @@ When you create or edit Motion Canvas components (createComponent, editComponent
 - **Circle**: fill, stroke, lineWidth, size (diameter), position, etc.
 - **Layout**: set layout prop; gap, padding, alignItems, justifyContent, direction; children laid out automatically.
 - **Txt**: text, fontSize, fill, fontFamily, fontWeight, lineHeight, wrap.
-- **Latex**: **tex** (string or array for animatable parts), **fill** (required — otherwise nothing shows), fontSize. For animatable parts use tex={['a^2','+','b^2']} or tex="{{a}} + {{b}}". In JS strings escape backslash: tex={'{{\\\\frac{1}{2}}}'} or tex="{{\\frac{1}{2}}}". Space between parts: use ['\\\\Delta','{y}'] not ['\\\\Delta','y'] (else \\Deltay).
+- **Code**: code (string or CODE-tagged template), fontSize, fill. Use **CODE** so signals update: code={CODE`const ${nameSignal} = 7;`}. **Code.createSignal**(initial) for reactive code. Animate: code().code(newCode, duration); code().code.append(text, duration) / prepend; code().code.insert([line,col], text, duration), replace(range, text, duration), remove(range, duration); code().code.edit(duration)`...${insert('...')}...${replace('a','b')}...`; code().selection(ranges, duration). Ranges: word(line, col, length), lines(start, end). Find: code().findFirstRange('str'), findAllRanges(/re/). Project has Code.defaultHighlighter = LezerHighlighter(@lezer/javascript) with dialect 'jsx ts'. Other languages: set **highlighter** on node (e.g. LezerHighlighter(parser) for @lezer/python, @lezer/rust, etc.).
+- **Latex**: **tex** (string or array for animatable parts), **fill** (required — otherwise nothing shows), fontSize. Animating: tex={['a^2','+','b^2']} or tex="{{a}} + {{b}}"; tween with yield* texRef().tex(['2','+','3'], 1). In JS strings escape backslash: tex={'{{\\\\frac{1}{2}}}'} or tex="{{\\frac{1}{2}}}". Space between parts: use ['\\\\Delta','{y}'] not ['\\\\Delta','y'] (else \\Deltay).
 - **Line**: points, lineWidth, stroke, startArrow, endArrow, arrowSize, start, end (0–1), startOffset, endOffset.
 - **Spline**: points (array of [x,y]) or **Knot** children with position, startHandle, endHandle (relative to knot); lineWidth, stroke, fill, smoothness (0–1), closed. start/end (0–1) for draw animation. getPointAtPercentage(t) → { position, tangent }.
 - **Path**: data (SVG path d string), lineWidth, stroke, fill; tween data for morph; getPointAtPercentage(t).
 - **QuadBezier / CubicBezier**: p0, p1 [, p2, p3 for cubic], lineWidth, stroke, startArrow, endArrow, arrowSize, start, end (0–1). Points are compound signals (e.g. bezier().p0.x(200, 1)). Animate drawing by tweening end 0→1.
+
+## Code (syntax highlighting)
+
+- **CODE** tag: code={CODE`...${signal}...`} so signals update; plain template strings capture once.
+- **Code.createSignal**(initial); animate via code property: code().code(val, dur), code().code.append(text, dur), .insert([line,col], text, dur), .replace(range, text, dur), .remove(range, dur), .edit(dur)`...`, .selection(ranges, dur). Ranges: word(line, col, len), lines(start, end). findFirstRange('s'), findAllRanges(/re/).
+- **Grammars**: Project uses **@lezer/javascript** (JS/TS/JSX). Other languages: install grammar (e.g. npm i @lezer/python, @lezer/rust) and set **highlighter** on the Code node: highlighter={new LezerHighlighter(parser)}. Available: @lezer/javascript, @lezer/python, @lezer/rust, @lezer/cpp, @lezer/html, @lezer/css, @lezer/json, @lezer/markdown, @lezer/go, @lezer/java, @lezer/php, @lezer/xml, @lezer/yaml, @lezer/sass, @lezer/clojure, @lezer/julia.
 
 ## Latex pitfalls
 
@@ -79,6 +86,7 @@ When you create or edit Motion Canvas components (createComponent, editComponent
 - **Do not** assume (0,0) is top-left or that positive y is up; origin is center, y down.
 - **Always** provide **complete** TSX for createComponent/editComponent: full file with imports from '@motion-canvas/2d' and '@motion-canvas/core', exported component class (and optionally props interface). No partial snippets or invalid syntax.
 - **Always** use valid TypeScript/JSX: correct decorators, types, and semicolons so the server-side compiler can compile the component.
+- **Always** implement **animate(duration?)** for components used on the timeline — the timeline calls no other method (no reveal, fall, run, etc.). Have animate delegate to your internal logic.
 
 ## Imports (use these to avoid compile errors)
 
@@ -128,14 +136,16 @@ export class MyWidget extends Node {
 
 **input_defs** (input variables) are **static values** set on the timeline. They are NOT animatable — they do not change over the course of the clip's playback. You cannot tween or keyframe an input variable. When a user drags a component onto the timeline, inputs are set once (e.g. in the inspector panel) and remain constant.
 
+**Timeline entry point**: The timeline calls **only** `animate(duration?)`. You must implement `public *animate(duration?: number)`; it can delegate to any internal method (e.g. `yield* this.fill(duration);`). Do not rely on other names (reveal, fall, run, fill, etc.) — only `animate` is invoked.
+
 If a user wants **animated behavior** (e.g. typewriter text, a counter counting up, a progress bar filling, pulsing opacity, or any value that changes over time):
 
 1. **Use generator methods and signals inside the component**, not input variables.
 2. Input variables can control **parameters** of the animation (speed, delay, target value, easing) but the animation itself must be driven by a generator that yields tweens on signals.
-3. For a **typewriter effect**: store the full text as an input variable, then use a generator method that reveals characters over time via a signal (e.g. a `progress` signal that controls how many characters of the text are visible). The component's `Txt` node reads a derived signal: `text={() => this.fullText().slice(0, Math.floor(this.progress() * this.fullText().length))}`.
-4. For **counting / filling / any temporal change**: expose a `*animate(duration)` generator that tweens a signal from 0 to 1 (or any range). Use input variables only for static config like `targetValue`, `speed`, `color`, `fontSize`.
+3. For a **typewriter effect**: store the full text as an input variable, then use a generator method that reveals characters over time via a signal (e.g. a `progress` signal that controls how many characters of the text are visible). The component's `Txt` node reads a derived signal: `text={() => this.fullText().slice(0, Math.floor(this.progress() * this.fullText().length))}`. Implement `*animate(duration?) { yield* this.reveal(duration); }`.
+4. For **counting / filling / any temporal change**: implement `*animate(duration?)` that tweens a signal (e.g. delegate to an internal `*fill(duration?)`). Use input variables only for static config like `targetValue`, `speed`, `color`, `fontSize`.
 
-**Pattern**: inputs = what to show and how fast; generators + signals = the actual motion.
+**Pattern**: inputs = what to show and how fast; generators + signals = the actual motion; **animate(duration?)** = the single entry point the timeline calls.
 
 ```tsx
 // WRONG: trying to animate via input variable (will not work — value is static)
@@ -171,9 +181,14 @@ export class ProgressBar extends Node {
     );
   }
 
-  // Animation via generator — this is what makes it move
+  // Internal animation logic
   public *fill(duration?: number) {
     yield* this.progress(1, duration ?? this.speed());
+  }
+
+  // Timeline only calls animate — delegate to fill
+  public *animate(duration?: number) {
+    yield* this.fill(duration);
   }
 }
 ```

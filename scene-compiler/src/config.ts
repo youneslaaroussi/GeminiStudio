@@ -41,7 +41,7 @@ export const loadConfig = (): CompilerConfig => {
     sharedSecret: SCENE_COMPILER_SHARED_SECRET || undefined,
     maxInputBytes: Number(MAX_INPUT_BYTES ?? 204800), // 200KB
     buildTimeoutMs: Number(BUILD_TIMEOUT_MS ?? 30000), // 30s
-    maxOutputBytes: Number(MAX_OUTPUT_BYTES ?? 2097152), // 2MB
+    maxOutputBytes: Number(MAX_OUTPUT_BYTES ?? 8388608), // 8MB
     // In dev: point to ../scene/src; in Docker: /app/base-scene
     baseSceneDir: BASE_SCENE_DIR ?? new URL('../../scene', import.meta.url).pathname,
     viteCacheDir,

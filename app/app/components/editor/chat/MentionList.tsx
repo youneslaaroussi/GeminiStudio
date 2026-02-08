@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, memo } from "react";
-import { Loader2, Image, Video, Music, FileText } from "lucide-react";
+import { Loader2, Image, Video, Music, FileText, Box } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MentionListProps, MentionListRef, MentionSuggestionItem } from "./types";
 import type { AssetType } from "@/app/types/assets";
@@ -16,6 +16,8 @@ function getAssetIcon(type: AssetType) {
       return Video;
     case "audio":
       return Music;
+    case "component":
+      return Box;
     default:
       return FileText;
   }

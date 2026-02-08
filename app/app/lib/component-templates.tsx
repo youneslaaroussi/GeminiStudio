@@ -100,6 +100,11 @@ export class TypewriterText extends Node {
       : this.fullText().length * this.charDelay();
     yield* tween(dur, (v) => this.progress(easeInOutCubic(v)));
   }
+
+  /** Timeline entry point — calls reveal. */
+  public *animate(duration?: number): ThreadGenerator {
+    yield* this.reveal(duration);
+  }
 }
 `,
   },
@@ -191,6 +196,11 @@ export class ProgressRing extends Node {
     this.currentProgress(0);
     yield* tween(duration, (v) => this.currentProgress(easeInOutCubic(v) * target));
   }
+
+  /** Timeline entry point — calls animateIn. */
+  public *animate(duration?: number): ThreadGenerator {
+    yield* this.animateIn(duration ?? 1.5);
+  }
 }
 `,
   },
@@ -274,6 +284,11 @@ export class AnimatedCounter extends Node {
   public *animateIn(duration?: number): ThreadGenerator {
     yield* this.countUp(duration);
   }
+
+  /** Timeline entry point — calls animateIn. */
+  public *animate(duration?: number): ThreadGenerator {
+    yield* this.animateIn(duration);
+  }
 }
 `,
   },
@@ -349,6 +364,11 @@ export class PulsingDot extends Node {
       yield* tween(0.8, (v) => this.glowScale(1 + easeInOutSine(v) * 0.6));
       yield* tween(0.8, (v) => this.glowScale(1.6 - easeInOutSine(v) * 0.6));
     }.bind(this));
+  }
+
+  /** Timeline entry point — calls animateIn. */
+  public *animate(duration?: number): ThreadGenerator {
+    yield* this.animateIn(duration ?? 2);
   }
 }
 `,
@@ -447,6 +467,11 @@ export class LowerThirdBar extends Node {
       tween(duration * 0.5, (v) => this.container().opacity(easeInOutCubic(v))),
       tween(duration, (v) => this.clipWidth(easeInOutCubic(v) * this.barWidth())),
     );
+  }
+
+  /** Timeline entry point — calls animateIn. */
+  public *animate(duration?: number): ThreadGenerator {
+    yield* this.animateIn(duration ?? 0.8);
   }
 }
 `,

@@ -1,5 +1,12 @@
 import { makeProject } from '@motion-canvas/core';
+import { Code, LezerHighlighter } from '@motion-canvas/2d';
+import { parser } from '@lezer/javascript';
 import nle_timeline from './scenes/nle_timeline?scene';
+
+// Default syntax highlighting for Code nodes (JS/TS/JSX via dialect)
+Code.defaultHighlighter = new LezerHighlighter(
+  parser.configure({ dialect: 'jsx ts' }),
+);
 
 export default makeProject({
   name: 'gemini-studio-scene',

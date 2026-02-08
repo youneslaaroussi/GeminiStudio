@@ -94,6 +94,17 @@
   background-color: hsl(160 84% 39% / 0.25);
 }
 
+/* Component (reference components) - violet */
+.mention-chip--component {
+  background-color: hsl(263 70% 50% / 0.15);
+  color: hsl(263 70% 65%);
+  border: 1px solid hsl(263 70% 50% / 0.5);
+}
+
+.mention-chip--component:hover {
+  background-color: hsl(263 70% 50% / 0.25);
+}
+
 /* Other - muted */
 .mention-chip--other {
   background-color: hsl(var(--muted) / 0.5);

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Save, Upload, Check, Loader2, Film, LogOut, Plus, RefreshCw, Settings, CreditCard, Keyboard, Command } from "lucide-react";
+import { Save, Upload, Check, Loader2, Film, Lock, LogOut, Plus, RefreshCw, Settings, CreditCard, Keyboard, Command } from "lucide-react";
 import { FiEdit2 } from "react-icons/fi";
 import { LayoutSelector, type EditorLayoutPreset } from "./LayoutSelector";
 import { BranchSelector } from "./BranchSelector";
@@ -359,6 +359,11 @@ export function TopBar({ previewCanvas, renderDialogOpen: renderDialogOpenProp, 
           <span className="text-xs text-muted-foreground">
             {project.resolution.width}×{project.resolution.height} @ {project.fps}
             fps
+          </span>
+          <span className="ml-4 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Lock className="size-3.5 shrink-0" aria-hidden />
+            <span>Your data is private and secure.</span>
+            <a href="/privacy" className="hover:text-foreground transition-colors underline underline-offset-2">Privacy</a>
           </span>
         </div>
       </div>

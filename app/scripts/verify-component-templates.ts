@@ -22,7 +22,7 @@ async function main() {
     baseSceneDir: sceneDir,
     maxInputBytes: 204800,
     buildTimeoutMs: 60000,
-    maxOutputBytes: 2097152,
+    maxOutputBytes: 8388608,
   };
 
   let failed = 0;

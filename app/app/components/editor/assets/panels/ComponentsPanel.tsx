@@ -940,6 +940,56 @@ function MonacoEditor({
     for (const { path: filePath, content } of MOTION_CANVAS_TYPES) {
       ts.typescriptDefaults.addExtraLib(content, `file:///${filePath}`);
     }
+
+    // Stub @motion-canvas/core so the editor always finds common symbols (Monaco often fails to
+    // resolve export * from relative paths in extra libs). We add explicit declarations and the
+    // real MOTION_CANVAS_TYPES above still provide full types when resolution works.
+    const coreStub = `
+declare module '@motion-canvas/core' {
+  export function signal(): PropertyDecorator;
+  export function initial<T>(value: T): PropertyDecorator;
+  export function colorSignal(): PropertyDecorator;
+  export type SignalValue<T> = T | (() => T);
+  export type SimpleSignal<TValue = unknown, TReturn = unknown> = {
+    (): TValue;
+    (value: SignalValue<TValue>): TReturn;
+  };
+  export type Signal<TSetter = unknown, TValue = TSetter, TOwner = unknown> = SimpleSignal<TValue, TOwner>;
+  export type ColorSignal<TOwner = unknown> = SimpleSignal<string, TOwner>;
+  export type PossibleColor = string;
+  export type ThreadGenerator = Generator<unknown, void, unknown>;
+  export type Vector2 = { x: number; y: number };
+  export function createSignal<T>(initial?: SignalValue<T>): SimpleSignal<T>;
+  export function createRef<T>(): { (): T; current: T };
+  export function waitFor(seconds?: number, after?: ThreadGenerator): ThreadGenerator;
+  export function tween(duration: number, callback: (t: number) => void): ThreadGenerator;
+  export function easeInOutCubic(t: number): number;
+  export function easeInCubic(t: number): number;
+  export function easeOutCubic(t: number): number;
+  export function easeInOutQuad(t: number): number;
+  export function all(...values: ThreadGenerator[]): ThreadGenerator;
+  export function sequence(...values: ThreadGenerator[]): ThreadGenerator;
+  export function loop(fn: () => ThreadGenerator, count?: number): ThreadGenerator;
+  export function delay(duration: number, task: () => ThreadGenerator): ThreadGenerator;
+  export function run(task: () => ThreadGenerator): ThreadGenerator;
+  export function spawn(generator: () => ThreadGenerator): ThreadGenerator;
+  export function cancel(token: unknown): void;
+  export function join(token: unknown): ThreadGenerator;
+  export function useContext(): unknown;
+  export function useScene(): unknown;
+  export function useThread(): unknown;
+  export function useRandom(seed?: number): { next(): number; nextInt(a: number, b?: number): number };
+  export function useDuration(): number;
+  export function usePlayback(): unknown;
+  export function useTime(): number;
+  export function makeRef<T>(target: T): T;
+  export const DEFAULT: unique symbol;
+}
+`;
+    ts.typescriptDefaults.addExtraLib(
+      coreStub,
+      "file:///node_modules/@motion-canvas/core/lib/component-editor-stub.d.ts"
+    );
   }, []);
 
   if (!Editor) {
