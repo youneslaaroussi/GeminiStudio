@@ -36,8 +36,10 @@ COPY --from=base /app/scene-compiler/node_modules ./node_modules
 COPY --from=base /app/scene-compiler/dist ./dist
 COPY --from=base /app/scene-compiler/package.json ./package.json
 
-# Copy the base scene source for runtime compilation
+# Copy the base scene source for runtime compilation.
+# Remove its node_modules (pnpm symlinks that break when the directory moves).
 COPY --from=base /app/scene ./base-scene
+RUN rm -rf ./base-scene/node_modules
 
 # Point the compiler at the base scene directory
 ENV BASE_SCENE_DIR=/app/scene-compiler/base-scene

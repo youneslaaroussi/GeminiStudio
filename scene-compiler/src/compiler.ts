@@ -104,12 +104,36 @@ export async function compileScene(
       rmSync(tmpNodeModules, { recursive: true, force: true });
     }
 
-    // Symlink node_modules: prefer scene-level, fall back to monorepo root
-    const sceneNodeModules = join(baseSceneRoot, 'node_modules');
-    const rootNodeModules = join(baseSceneRoot, '..', 'node_modules');
-    const symlinkTarget = existsSync(sceneNodeModules) ? sceneNodeModules : rootNodeModules;
-    if (existsSync(symlinkTarget)) {
+    // Symlink node_modules from a working location.
+    //
+    // IMPORTANT: In Docker/pnpm deployments the base-scene's own node_modules
+    // may contain broken relative symlinks (pnpm symlinks that pointed at the
+    // workspace root .pnpm store, which moved when the scene was copied to
+    // base-scene/). We verify the candidate actually contains a resolvable
+    // @motion-canvas/core before using it; otherwise fall through.
+    const candidates = [
+      join(baseSceneRoot, 'node_modules'),           // scene-level
+      join(baseSceneRoot, '..', 'node_modules'),     // scene-compiler-level / parent
+      join(baseSceneRoot, '..', '..', 'node_modules'), // monorepo root
+    ];
+
+    let symlinkTarget: string | null = null;
+    for (const candidate of candidates) {
+      if (!existsSync(candidate)) continue;
+      // Verify the candidate has a usable @motion-canvas/core (not a broken symlink)
+      const probe = join(candidate, '@motion-canvas', 'core', 'package.json');
+      if (existsSync(probe)) {
+        symlinkTarget = candidate;
+        break;
+      }
+      logger.debug({ candidate, probe }, 'Skipping node_modules candidate (probe not found)');
+    }
+
+    if (symlinkTarget) {
       symlinkSync(symlinkTarget, tmpNodeModules, 'junction');
+      logger.debug({ symlinkTarget }, 'Symlinked node_modules');
+    } else {
+      logger.warn({ candidates }, 'No usable node_modules found for scene compilation');
     }
 
     // 2. Apply file overrides
