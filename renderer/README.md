@@ -89,6 +89,10 @@ If you see `PERMISSION_DENIED: User not authorized to perform this action` error
 
 If Pub/Sub is not configured or permissions are missing, renders will still complete successfully but events won't be published (errors will be logged).
 
+**Clearing the render queue:** To drain or fully clear the BullMQ queue (e.g. when it’s backing up or you want a clean slate), from `renderer/` run:
+- `pnpm run drain-queue` — removes waiting jobs only.
+- `pnpm run drain-queue --obliterate` — removes all jobs (waiting, active, completed, failed). Requires `REDIS_URL` in env.
+
 ### 4. Run in development
 
 ```bash
