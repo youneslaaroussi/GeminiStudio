@@ -262,6 +262,8 @@ services:
       # Scene compiler - compiles Motion Canvas scenes on demand per render
       - SCENE_COMPILER_URL=http://scene-compiler:4001
       - SCENE_COMPILER_SHARED_SECRET=${SCENE_COMPILER_SHARED_SECRET:-}
+      # Headless browser network isolation: hosts allowed for asset requests. Same-origin always allowed.
+      - HEADLESS_ALLOWED_REQUEST_HOSTS=storage.googleapis.com,*.googleapis.com
     volumes:
       - ./secrets:/app/secrets:ro
       - renderer-tmp:/tmp/gemini-renderer

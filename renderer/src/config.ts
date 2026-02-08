@@ -21,6 +21,8 @@ export interface RendererConfig {
   maxResolution: number; // Max dimension of longest side (preserves aspect ratio)
   maxDuration: number; // Max duration in seconds
   maxQuality: string; // Maximum allowed quality level
+  /** Allowed hosts for headless browser requests (e.g. storage.googleapis.com). Same-origin is always allowed. */
+  headlessAllowedRequestHosts: string[];
 }
 
 export const loadConfig = (): RendererConfig => {
@@ -43,7 +45,13 @@ export const loadConfig = (): RendererConfig => {
     RENDERER_MAX_RESOLUTION,
     RENDERER_MAX_DURATION,
     RENDERER_MAX_QUALITY,
+    HEADLESS_ALLOWED_REQUEST_HOSTS,
   } = process.env;
+
+  const headlessAllowedRequestHosts = (HEADLESS_ALLOWED_REQUEST_HOSTS ?? '')
+    .split(',')
+    .map((h) => h.trim())
+    .filter(Boolean);
 
   return {
     port: Number(PORT ?? 4000),
@@ -64,5 +72,6 @@ export const loadConfig = (): RendererConfig => {
     maxResolution: Number(RENDERER_MAX_RESOLUTION ?? 1280), // 720p default (1280x720)
     maxDuration: Number(RENDERER_MAX_DURATION ?? 30), // 30 seconds default
     maxQuality: RENDERER_MAX_QUALITY ?? 'web',
+    headlessAllowedRequestHosts,
   };
 };

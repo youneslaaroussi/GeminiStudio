@@ -13,7 +13,7 @@
 import { build, type InlineConfig, type PluginOption } from 'vite';
 import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync, symlinkSync } from 'fs';
 import { tmpdir } from 'os';
-import { basename, dirname, join } from 'path';
+import { basename, dirname, join, resolve } from 'path';
 import { spawnSync } from 'child_process';
 import { logger } from './logger.js';
 import type { CompilerConfig } from './config.js';
@@ -83,8 +83,14 @@ function applyPostBuildPatches(js: string): string {
   return patched;
 }
 
+/**
+ * Only custom component paths are allowed for file overrides.
+ * Pattern: src/components/custom/<name>.tsx where name is a single path segment.
+ */
+const ALLOWED_FILE_PATH_REGEX = /^src\/components\/custom\/[a-zA-Z0-9_-]+\.tsx$/;
+
 export interface CompileRequest {
-  /** File overrides: path relative to scene root (e.g. "src/components/Foo.tsx") mapped to file content. */
+  /** File overrides: path relative to scene root (e.g. "src/components/custom/Foo.tsx") mapped to file content. */
   files?: Record<string, string>;
 }
 
@@ -168,20 +174,19 @@ export async function compileScene(
       logger.warn({ candidates }, 'No usable node_modules found for scene compilation');
     }
 
-    // 2. Apply file overrides
+    // 2. Apply file overrides (path allowlist: only src/components/custom/<name>.tsx)
     if (request.files) {
+      const resolvedTmpDir = resolve(tmpDir);
       for (const [relativePath, content] of Object.entries(request.files)) {
-        // Security: prevent path traversal
         const normalizedPath = relativePath.replace(/\.\./g, '').replace(/^\//, '');
-        const targetPath = join(tmpDir, normalizedPath);
-
-        // Ensure target is within tmpDir
-        if (!targetPath.startsWith(tmpDir)) {
-          logger.warn({ relativePath }, 'Skipping file override with suspicious path');
-          continue;
+        if (!ALLOWED_FILE_PATH_REGEX.test(normalizedPath)) {
+          throw new Error(`File path not allowed: "${relativePath}". Only src/components/custom/<name>.tsx is permitted.`);
+        }
+        const targetPath = resolve(tmpDir, normalizedPath);
+        if (!targetPath.startsWith(resolvedTmpDir)) {
+          throw new Error(`File path not allowed: "${relativePath}" (resolved outside scene).`);
         }
 
-        // Create parent directories if needed
         const parentDir = dirname(targetPath);
         if (!existsSync(parentDir)) {
           mkdirSync(parentDir, { recursive: true });

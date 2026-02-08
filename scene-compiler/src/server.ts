@@ -70,6 +70,8 @@ export const createServer = (config: CompilerConfig): Express => {
 
         if (message.includes('timed out')) {
           res.status(504).json({ error: message });
+        } else if (message.includes('not allowed')) {
+          res.status(400).json({ error: message });
         } else {
           res.status(500).json({ error: message });
         }

@@ -488,7 +488,45 @@ export class RenderRunner {
 
       const segmentProgressWeight = 70; // 5..75 for rendering, rest for merge/upload
 
+      const serverOrigin = `http://127.0.0.1:${port}`;
+      const allowedHosts = new Set(config.headlessAllowedRequestHosts);
+
+      const isHostAllowlisted = (hostname: string): boolean => {
+        for (const pattern of allowedHosts) {
+          if (pattern.startsWith('*.')) {
+            const suffix = pattern.slice(1);
+            if (hostname === suffix || hostname.endsWith(suffix)) return true;
+          } else if (hostname === pattern) {
+            return true;
+          }
+        }
+        return false;
+      };
+
       await cluster.task(async ({ page, data: segment }) => {
+        await page.setRequestInterception(true);
+        page.on('request', (request) => {
+          const requestUrl = request.url();
+          let allowed = false;
+          try {
+            const url = new URL(requestUrl);
+            const origin = url.origin;
+            if (origin === serverOrigin) {
+              allowed = true;
+            } else if (isHostAllowlisted(url.hostname)) {
+              allowed = true;
+            }
+          } catch {
+            // Invalid URL: block
+          }
+          if (allowed) {
+            request.continue().catch(() => {});
+          } else {
+            logger.debug({ jobId: job.id, url: requestUrl }, 'Headless request blocked (network isolation)');
+            request.abort('blockedbyclient').catch(() => {});
+          }
+        });
+
         await page.exposeFunction(
           'nodeHandleRenderProgress',
           async (frame: number, total: number) => {

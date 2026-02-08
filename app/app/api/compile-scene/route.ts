@@ -12,6 +12,12 @@ import { compileScene } from "@/app/lib/server/scene-compiler-client";
 /** Maximum request body size (200KB) */
 const MAX_BODY_BYTES = 204800;
 
+/**
+ * Only custom component paths are allowed for compile overrides.
+ * Pattern: src/components/custom/<name>.tsx where name is a single path segment (alphanumeric, underscore, hyphen).
+ */
+const ALLOWED_FILE_PATH_REGEX = /^src\/components\/custom\/[a-zA-Z0-9_-]+\.tsx$/;
+
 export async function POST(request: NextRequest) {
   try {
     // 1. Verify authentication
@@ -44,11 +50,16 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Check that all values are strings
       for (const [key, value] of Object.entries(files)) {
         if (typeof value !== "string") {
           return NextResponse.json(
             { error: `files["${key}"] must be a string` },
+            { status: 400 }
+          );
+        }
+        if (!ALLOWED_FILE_PATH_REGEX.test(key)) {
+          return NextResponse.json(
+            { error: `files: path "${key}" is not allowed. Only src/components/custom/<name>.tsx is permitted.` },
             { status: 400 }
           );
         }
