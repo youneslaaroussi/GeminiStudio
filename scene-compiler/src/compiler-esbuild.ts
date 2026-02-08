@@ -69,12 +69,38 @@ function computeInputHash(
   files?: Record<string, string>,
 ): string {
   const h = createHash('sha256');
-  // Include base scene project.ts mtime as a proxy for base changes
-  try {
-    const stat = statSync(join(baseSceneDir, 'src', 'project.ts'));
-    h.update(String(stat.mtimeMs));
-  } catch {
-    h.update('no-project');
+  // Include base scene source mtimes so any change to the scene skeleton
+  // invalidates the compile cache (project.ts, nle_timeline.tsx, etc.)
+  const sourceFiles = [
+    join(baseSceneDir, 'src', 'project.ts'),
+    join(baseSceneDir, 'src', 'scenes', 'nle_timeline.tsx'),
+  ];
+  for (const file of sourceFiles) {
+    try {
+      const stat = statSync(file);
+      h.update(file + ':' + String(stat.mtimeMs));
+    } catch {
+      h.update(file + ':missing');
+    }
+  }
+  // Also include mtimes of lib/ and components/ directories for clip/shader changes
+  for (const subdir of ['src/lib', 'src/components', 'src/shaders']) {
+    const dirPath = join(baseSceneDir, subdir);
+    try {
+      const entries = readdirSync(dirPath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile()) {
+          try {
+            const stat = statSync(join(dirPath, entry.name));
+            h.update(entry.name + ':' + String(stat.mtimeMs));
+          } catch {
+            // skip
+          }
+        }
+      }
+    } catch {
+      h.update(subdir + ':missing');
+    }
   }
   if (files && Object.keys(files).length > 0) {
     const sorted = Object.entries(files).sort(([a], [b]) => a.localeCompare(b));
