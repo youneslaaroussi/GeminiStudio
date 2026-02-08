@@ -144,6 +144,19 @@ def _get_asset_signed_url(
     return None
 
 
+def _compute_timeline_duration(project_data: dict[str, Any]) -> float:
+    """Compute total timeline duration from layers (same as app/renderer)."""
+    layers = project_data.get("layers", [])
+    max_end = 0.0
+    for layer in layers:
+        for clip in layer.get("clips", []):
+            speed = clip.get("speed") or 1
+            duration = clip.get("duration") or 0
+            end = clip.get("start", 0) + duration / max(speed, 0.0001)
+            max_end = max(max_end, end)
+    return max_end
+
+
 def _resolve_project_assets_for_render(
     project_data: dict[str, Any], settings: Settings, user_id: str, project_id: str
 ) -> dict[str, Any]:
@@ -284,10 +297,13 @@ def previewTimeline(
     project_payload.setdefault("background", project_payload.get("background", "#000000"))
     project_payload.setdefault("fps", PREVIEW_FPS)
 
-    # Include custom component source so the scene compiler compiles component layers
+    # Include custom component source so the scene compiler compiles component layers (match app)
     component_files = get_component_files_for_project(
         settings, user_id, project_id or target_project.get("id") or ""
     )
+
+    # Timeline duration from project layers so renderer has explicit duration (match app)
+    timeline_duration = _compute_timeline_duration(project_data)
 
     # Get resolution and apply scale
     resolution = project_data.get("resolution") or {}
@@ -352,6 +368,8 @@ def previewTimeline(
             "resolutionScale": PREVIEW_RESOLUTION_SCALE,
         },
     }
+    if timeline_duration > 0:
+        job_payload["timelineDuration"] = timeline_duration
     if component_files:
         job_payload["componentFiles"] = component_files
 

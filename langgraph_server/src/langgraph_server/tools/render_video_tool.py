@@ -153,6 +153,19 @@ def _get_asset_signed_url(
   return None
 
 
+def _compute_timeline_duration(project_data: dict[str, Any]) -> float:
+  """Compute total timeline duration from layers (same as app/renderer)."""
+  layers = project_data.get("layers", [])
+  max_end = 0.0
+  for layer in layers:
+    for clip in layer.get("clips", []):
+      speed = clip.get("speed") or 1
+      duration = clip.get("duration") or 0
+      end = clip.get("start", 0) + duration / max(speed, 0.0001)
+      max_end = max(max_end, end)
+  return max_end
+
+
 def _resolve_project_assets_for_render(
   project_data: dict[str, Any], settings: Settings, user_id: str, project_id: str
 ) -> dict[str, Any]:
@@ -298,10 +311,20 @@ def renderVideo(
   project_payload.setdefault("background", project_payload.get("background", "#000000"))
   project_payload.setdefault("fps", project_payload.get("fps", output_fps))
 
-  # Include custom component source so the scene compiler compiles component layers
+  # Include custom component source so the scene compiler compiles component layers (match app)
   component_files = get_component_files_for_project(
     settings, effective_user_id, effective_project_id or ""
   )
+
+  # Timeline duration from project layers so renderer has explicit duration (match app)
+  timeline_duration = _compute_timeline_duration(project_data)
+  if effective_branch_id:
+    logger.info(
+      "[RENDER] Branch %s: %d layers, timeline duration %.2fs",
+      effective_branch_id[:24],
+      len(project_data.get("layers", [])),
+      timeline_duration,
+    )
 
   # Generate signed upload URL for GCS
   effective_project_id = effective_project_id or target_project.get("id") or "unknown"
@@ -365,6 +388,8 @@ def renderVideo(
     "output": output_payload,
     "metadata": metadata,
   }
+  if timeline_duration > 0:
+    job_payload["timelineDuration"] = timeline_duration
   if component_files:
     job_payload["componentFiles"] = component_files
 
