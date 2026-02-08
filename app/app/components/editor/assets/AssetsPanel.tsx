@@ -692,6 +692,7 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
                   onDelete={deleteAsset}
                   onDeleteMany={deleteAssets}
                   onRefresh={fetchAssets}
+                  projectId={projectId}
                   transcodingAssetIds={transcodingAssetIds}
                   pipelineStates={pipelineStates}
                 />

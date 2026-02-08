@@ -26,6 +26,30 @@ import { useAssetHighlightStore } from "@/app/lib/store/asset-highlight-store";
 
 const ASSET_REORDER_MIME = "application/x-gemini-asset-reorder";
 
+/** Derive file extension from MIME type for download filename when not in Content-Disposition. */
+function extensionFromMimeType(mimeType: string): string {
+  const mime = (mimeType || "").split(";")[0].trim().toLowerCase();
+  const map: Record<string, string> = {
+    "video/mp4": ".mp4",
+    "video/quicktime": ".mov",
+    "video/webm": ".webm",
+    "video/x-matroska": ".mkv",
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/svg+xml": ".svg",
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/wav": ".wav",
+    "audio/webm": ".weba",
+    "audio/ogg": ".ogg",
+    "audio/mp4": ".m4a",
+  };
+  return map[mime] ?? "";
+}
+
 interface AssetListProps {
   assets: RemoteAsset[];
   isLoading: boolean;
@@ -42,6 +66,8 @@ interface AssetListProps {
   onDelete: (assetId: string) => Promise<boolean>;
   onDeleteMany?: (assetIds: string[]) => Promise<void>;
   onRefresh: () => void;
+  /** Current project ID (required for asset download proxy) */
+  projectId: string | null;
   /** Asset IDs currently transcoding (locked, no drag, shimmer overlay) */
   transcodingAssetIds?: ReadonlySet<string>;
   /** Pipeline steps per asset (for progress indicator in row) */
@@ -64,6 +90,7 @@ export function AssetList({
   onDelete,
   onDeleteMany,
   onRefresh,
+  projectId,
   transcodingAssetIds = new Set<string>(),
   pipelineStates = {},
 }: AssetListProps) {
@@ -120,7 +147,7 @@ export function AssetList({
   const handleDownload = useCallback(async (asset: RemoteAsset) => {
     setDownloadingIds((prev) => new Set(prev).add(asset.id));
     try {
-      // Component assets: download code as .jsx
+      // Components: download as .jsx from code
       if (asset.type === "component" && asset.code != null) {
         const baseName =
           (asset.componentName || asset.name || "Component").replace(
@@ -142,14 +169,15 @@ export function AssetList({
         return;
       }
 
-      const base = asset.url;
-      const sep = base.includes("?") ? "&" : "?";
-      const downloadUrl = `${base}${sep}download=1`;
-      const res = await fetch(downloadUrl, { credentials: "include" });
-      if (!res.ok) throw new Error(res.statusText);
+      // Video, image, audio, other: download via server proxy (fetches real file from GCS)
+      if (!projectId) throw new Error("Project not loaded");
+      const proxyUrl = `/api/assets/${asset.id}/download?projectId=${encodeURIComponent(projectId)}`;
+      const res = await fetch(proxyUrl, { credentials: "include" });
+      if (!res.ok) throw new Error(res.statusText || "Download failed");
       const cd = res.headers.get("Content-Disposition");
       const match = cd?.match(/filename\*?=(?:UTF-8'')?"?([^";\n]+)"?/i);
-      const filename = match ? decodeURIComponent(match[1].trim()) : (asset.name || "download");
+      const filename =
+        match ? decodeURIComponent(match[1].trim()) : (asset.name || "download").trim() || `asset-${asset.id}${extensionFromMimeType(asset.mimeType ?? "")}`;
       const blob = await res.blob();
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -166,7 +194,7 @@ export function AssetList({
         return next;
       });
     }
-  }, []);
+  }, [projectId]);
 
   const handleDragStart = useCallback(
     (asset: RemoteAsset, event: React.DragEvent<HTMLDivElement>) => {
