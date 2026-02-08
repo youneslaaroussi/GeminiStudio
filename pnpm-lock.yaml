@@ -931,6 +931,9 @@ importers:
 
   scene-compiler:
     dependencies:
+      '@lezer/javascript':
+        specifier: ^1.5.0
+        version: 1.5.4
       '@motion-canvas/2d':
         specifier: ^3.17.2
         version: 3.17.2
