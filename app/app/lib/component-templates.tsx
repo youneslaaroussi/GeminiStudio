@@ -7,6 +7,7 @@
 
 import type { ComponentInputDef } from "@/app/types/assets";
 import type { ReactNode } from "react";
+import { AFRICA_PATH } from "@/app/lib/geo/africa-path";
 
 export interface ComponentTemplate {
   /** Unique slug */
@@ -23,7 +24,7 @@ export interface ComponentTemplate {
   inputDefs: ComponentInputDef[];
   /** Complete Motion Canvas TSX source */
   code: string;
-  /** Inline SVG/CSS preview for the template picker (48x32 viewBox) */
+  /** Inline SVG/CSS preview for the template picker (viewBox 0 0 72 40) */
   preview?: () => ReactNode;
 }
 
@@ -364,6 +365,101 @@ export class PulsingDot extends Node {
       yield* tween(0.8, (v) => this.glowScale(1 + easeInOutSine(v) * 0.6));
       yield* tween(0.8, (v) => this.glowScale(1.6 - easeInOutSine(v) * 0.6));
     }.bind(this));
+  }
+
+  /** Timeline entry point — calls animateIn. */
+  public *animate(duration?: number): ThreadGenerator {
+    yield* this.animateIn(duration ?? 2);
+  }
+}
+`,
+  },
+
+  // ---------------------------------------------------------------------------
+  // WORLD MAP (Mercator + animated region outline)
+  // ---------------------------------------------------------------------------
+  {
+    id: "world-map-africa-outline",
+    name: "World Map (Africa Outline)",
+    description: "Mercator-style world map with animated outline around Africa",
+    category: "shape",
+    componentName: "WorldMapAfricaOutline",
+    preview: () => (
+      <svg viewBox="-200 -100 400 200" className="w-full h-full">
+        <rect x={-200} y={-100} width={400} height={200} fill="#1a365d" />
+        <path d={AFRICA_PATH} fill="none" stroke="#68ABDF" strokeWidth={4} />
+      </svg>
+    ),
+    inputDefs: [
+      { name: "mapWidth", type: "number", default: 480, label: "Map Width" },
+      { name: "outlineColor", type: "color", default: "#68ABDF", label: "Outline Color" },
+      { name: "outlineWidth", type: "number", default: 3, label: "Outline Width" },
+      { name: "oceanColor", type: "color", default: "#1a365d", label: "Ocean Color" },
+    ],
+    code: `import { Node, NodeProps, Rect, Path, signal, initial, colorSignal } from '@motion-canvas/2d';
+import {
+  SignalValue, SimpleSignal, ColorSignal, PossibleColor,
+  createRef, tween, easeInOutCubic,
+  type ThreadGenerator,
+} from '@motion-canvas/core';
+
+export interface WorldMapAfricaOutlineProps extends NodeProps {
+  mapWidth?: SignalValue<number>;
+  outlineColor?: SignalValue<PossibleColor>;
+  outlineWidth?: SignalValue<number>;
+  oceanColor?: SignalValue<PossibleColor>;
+}
+
+// Natural Earth 110m, Mercator. Regenerate: node scripts/generate-africa-path.mjs
+const AFRICA_PATH = ${JSON.stringify(AFRICA_PATH)};
+
+export class WorldMapAfricaOutline extends Node {
+  @initial(480) @signal()
+  public declare readonly mapWidth: SimpleSignal<number, this>;
+
+  @initial('#68ABDF') @colorSignal()
+  public declare readonly outlineColor: ColorSignal<this>;
+
+  @initial(3) @signal()
+  public declare readonly outlineWidth: SimpleSignal<number, this>;
+
+  @initial('#1a365d') @colorSignal()
+  public declare readonly oceanColor: ColorSignal<this>;
+
+  private readonly africaPath = createRef<Path>();
+
+  public constructor(props?: WorldMapAfricaOutlineProps) {
+    super({ ...props });
+    const w = this.mapWidth();
+    const h = w / 2;
+
+    this.add([
+      <Rect
+        width={w}
+        height={h}
+        fill={() => this.oceanColor()}
+        stroke={'#2d3748'}
+        lineWidth={2}
+        radius={4}
+      />,
+      <Path
+        ref={this.africaPath}
+        data={AFRICA_PATH}
+        stroke={() => this.outlineColor()}
+        lineWidth={() => this.outlineWidth()}
+        fill={null}
+        lineCap={'round'}
+        lineJoin={'round'}
+        end={0}
+        scale={w / 400}
+      />,
+    ]);
+  }
+
+  /** Animate drawing the outline around Africa. */
+  public *animateIn(duration: number = 2): ThreadGenerator {
+    this.africaPath().end(0);
+    yield* this.africaPath().end(1, duration, easeInOutCubic);
   }
 
   /** Timeline entry point — calls animateIn. */

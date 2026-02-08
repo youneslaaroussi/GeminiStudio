@@ -846,8 +846,11 @@ function TemplatePicker({
                     >
                       <div className="flex gap-2 p-2">
                         {template.preview && (
-                          <div className="h-10 w-14 shrink-0 rounded bg-muted/50 flex items-center justify-center overflow-hidden">
-                            <div className="w-full h-full p-0.5 [&_svg]:max-h-full [&_svg]:max-w-full [&_svg]:object-contain">
+                          <div
+                            className="shrink-0 rounded bg-muted/50 flex items-center justify-center overflow-hidden"
+                            style={{ width: 72, height: 40 }}
+                          >
+                            <div className="w-full h-full [&_svg]:w-full [&_svg]:h-full [&_svg]:block">
                               {template.preview()}
                             </div>
                           </div>

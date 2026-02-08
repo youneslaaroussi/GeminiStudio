@@ -228,3 +228,15 @@ When providing code to createComponent or editComponent, supply complete, valid 
 - **Reproducible randomness**: use **useRandom()** from '@motion-canvas/core' (do **not** import `random` — it is not exported). In class components, call it in the constructor or a field: `private readonly _random = useRandom();` then use `this._random.nextInt(0, 10)`. In scene generators: `const random = useRandom(); const n = random.nextInt(0, 10);`
   - **Custom seed**: `useRandom(123)` for a fixed sequence. The default seed is stored in the scene meta file.
 - **API**: see Random in Motion Canvas core (nextInt, nextFloat, etc.). Use for varied heights, positions, or visual variety while keeping the animation deterministic.
+
+## Geographic / map path data (d3-geo)
+
+The **scene compiler** includes **d3-geo**. In custom components you can import and use it to generate SVG path strings from GeoJSON for map/region outlines.
+
+- **Import**: `import { geoMercator, geoPath } from 'd3-geo';`
+- **Data**: Fetch GeoJSON (e.g. Natural Earth countries) and filter by property. Example URL: `https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson`. Filter: `features.filter(f => f.properties?.CONTINENT === 'Africa')` (or another continent/country).
+- **Projection**: `const projection = geoMercator().fitExtent([[-200, -100], [200, 100]], featureCollection);` — fits the geo object in 400×200 with center (0,0).
+- **Path string**: `const path = geoPath().projection(projection); const pathString = path(featureCollection);`
+- **Async**: Fetch is async. Use a signal for the path data (e.g. `pathData`), default `''`. In constructor or a method, `fetch(url).then(r => r.json()).then(fc => { ... pathData(path(fc)); });`. Use that signal for **Path**'s `data` prop.
+- **Path node**: `<Path data={() => this.pathData()} stroke={...} lineWidth={...} end={0} />`. Animate outline by tweening `pathRef().end(1, duration)` in `*animate()`.
+- **Scale**: Use `scale={mapWidth/400}` on the Path (or a parent) so coordinates [-200,200]×[-100,100] fit the desired map size. Ocean = **Rect** behind the path.
