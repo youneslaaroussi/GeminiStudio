@@ -2315,7 +2315,55 @@ function ToolCallCard({
   output?: unknown;
   error?: string;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  // Check if the output contains code diffs (ToolExecutionResult with code outputs)
+  const hasCodeOutput = useMemo(() => {
+    if (!output || !isToolExecutionResult(output)) return false;
+    const outputs = (output as { outputs?: unknown[] }).outputs;
+    if (!Array.isArray(outputs)) return false;
+    return outputs.some(
+      (o) => typeof o === "object" && o !== null && (o as Record<string, unknown>).type === "code"
+    );
+  }, [output]);
+
+  // Auto-expand when output has code diffs
+  const [expanded, setExpanded] = useState(hasCodeOutput);
+  useEffect(() => {
+    if (hasCodeOutput) setExpanded(true);
+  }, [hasCodeOutput]);
+
+  // Build a summary-friendly version of input (truncate long code fields)
+  const inputSummary = useMemo(() => {
+    if (!input || Object.keys(input).length === 0) return null;
+    const summary: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(input)) {
+      if (
+        (key === "code" || key === "oldCode") &&
+        typeof value === "string" &&
+        value.length > 120
+      ) {
+        summary[key] = `[${value.split("\n").length} lines]`;
+      } else {
+        summary[key] = value;
+      }
+    }
+    return summary;
+  }, [input]);
+
+  // Extract code outputs to render at the top level (not inside the collapsed output section)
+  const { codeOutputs, otherOutputs } = useMemo(() => {
+    if (!output || !isToolExecutionResult(output) || (output as { status: string }).status !== "success") {
+      return { codeOutputs: [] as Record<string, unknown>[], otherOutputs: output };
+    }
+    const outputs = ((output as { outputs?: unknown[] }).outputs ?? []) as Record<string, unknown>[];
+    const code = outputs.filter((o) => o.type === "code");
+    const other = outputs.filter((o) => o.type !== "code");
+    return {
+      codeOutputs: code,
+      otherOutputs: other.length > 0
+        ? { status: "success", outputs: other }
+        : null,
+    };
+  }, [output]);
 
   return (
     <div className="my-2 rounded-lg border border-border/60 bg-background/80 text-xs overflow-hidden">
@@ -2343,28 +2391,56 @@ function ToolCallCard({
           <ChevronRight className="size-3.5 text-muted-foreground" />
         )}
       </button>
+
+      {/* Code diffs rendered prominently outside the collapsed section */}
+      {codeOutputs.length > 0 && (
+        <div className="border-t border-border/40">
+          {codeOutputs.map((entry, idx) => {
+            const codeEntry = entry as {
+              language?: string;
+              filename?: string;
+              code?: string;
+              oldCode?: string;
+              summary?: string;
+            };
+            if (!codeEntry.code) return null;
+            return (
+              <CodeToolResultCard
+                key={idx}
+                language={codeEntry.language ?? "tsx"}
+                filename={codeEntry.filename}
+                code={codeEntry.code}
+                oldCode={codeEntry.oldCode}
+                summary={codeEntry.summary}
+                defaultExpanded
+              />
+            );
+          })}
+        </div>
+      )}
+
       {expanded && (
         <div className="px-2.5 pb-2.5 space-y-2 border-t border-border/40 pt-2">
-          {input && Object.keys(input).length > 0 && (
+          {inputSummary && Object.keys(inputSummary).length > 0 && (
             <div>
               <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
                 Input
               </p>
               <pre className="text-[11px] bg-muted/40 rounded p-2 overflow-auto max-h-32">
-                {JSON.stringify(input, null, 2)}
+                {JSON.stringify(inputSummary, null, 2)}
               </pre>
             </div>
           )}
           {status === "error" && error && (
             <p className="text-destructive">{error}</p>
           )}
-          {status === "success" && (output as any) && (
+          {status === "success" && otherOutputs && (
             <div>
               <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
                 Output
               </p>
               <div className="bg-muted/40 rounded p-2 overflow-auto max-h-48">
-                {renderToolResultBody(output)}
+                {renderToolResultBody(otherOutputs)}
               </div>
             </div>
           )}
@@ -2386,9 +2462,32 @@ function resolveToolLabel(partType: string) {
 }
 
 function renderToolResultBody(output: unknown) {
-  if (!isToolResultOutput(output)) {
-    if (!output)
+  if (!output)
+    return <p className="text-muted-foreground text-[11px]">No output</p>;
+
+  // Handle ToolExecutionResult shape: { status, outputs: [...] }
+  if (isToolExecutionResult(output)) {
+    if (output.status === "error") {
+      return (
+        <p className="text-destructive text-[11px]">
+          {output.error ?? "Tool execution failed"}
+        </p>
+      );
+    }
+    const outputs = output.outputs as Array<Record<string, unknown>>;
+    if (!outputs || outputs.length === 0) {
       return <p className="text-muted-foreground text-[11px]">No output</p>;
+    }
+    return (
+      <div className="space-y-2">
+        {outputs.map((entry, index) => (
+          <div key={index}>{renderToolOutputEntry(entry, index)}</div>
+        ))}
+      </div>
+    );
+  }
+
+  if (!isToolResultOutput(output)) {
     return (
       <pre className="text-[11px] overflow-auto">
         {JSON.stringify(output, null, 2)}
@@ -2436,6 +2535,98 @@ function renderToolResultBody(output: unknown) {
       return (
         <pre className="text-[11px] overflow-auto">
           {JSON.stringify(output, null, 2)}
+        </pre>
+      );
+  }
+}
+
+/** Render a single entry from ToolExecutionResult.outputs */
+function renderToolOutputEntry(entry: Record<string, unknown>, key: number) {
+  if (!entry || typeof entry !== "object" || !entry.type) {
+    return (
+      <pre className="text-[11px] overflow-auto">
+        {JSON.stringify(entry, null, 2)}
+      </pre>
+    );
+  }
+
+  switch (entry.type) {
+    case "code": {
+      const codeEntry = entry as {
+        language?: string;
+        filename?: string;
+        code?: string;
+        oldCode?: string;
+        summary?: string;
+      };
+      if (!codeEntry.code) return null;
+      return (
+        <CodeToolResultCard
+          language={codeEntry.language ?? "tsx"}
+          filename={codeEntry.filename}
+          code={codeEntry.code}
+          oldCode={codeEntry.oldCode}
+          summary={codeEntry.summary}
+          defaultExpanded
+        />
+      );
+    }
+    case "text": {
+      const text = (entry as { text?: string }).text;
+      if (!text) return null;
+      // Also check for <!--code:...--> markers (from tool-output-adapter)
+      if (text.startsWith("<!--code:")) {
+        try {
+          const jsonStr = text.slice("<!--code:".length, text.indexOf("-->"));
+          const codeData = JSON.parse(jsonStr) as {
+            language: string;
+            filename?: string;
+            code: string;
+            oldCode?: string;
+            summary?: string;
+          };
+          return (
+            <CodeToolResultCard
+              language={codeData.language}
+              filename={codeData.filename}
+              code={codeData.code}
+              oldCode={codeData.oldCode}
+              summary={codeData.summary}
+              defaultExpanded
+            />
+          );
+        } catch {
+          // Fall through to markdown
+        }
+      }
+      return (
+        <div className="prose prose-sm max-w-none text-[11px]">
+          <MemoizedMarkdown id={`tool-exec-output-${key}`} content={text} />
+        </div>
+      );
+    }
+    case "json": {
+      return (
+        <pre className="text-[11px] overflow-auto">
+          {JSON.stringify((entry as { data?: unknown }).data, null, 2)}
+        </pre>
+      );
+    }
+    case "image": {
+      const imgEntry = entry as { url?: string; alt?: string };
+      if (!imgEntry.url) return null;
+      return (
+        <img
+          src={imgEntry.url}
+          alt={imgEntry.alt ?? "Tool output"}
+          className="max-h-48 w-auto rounded border border-border/40"
+        />
+      );
+    }
+    default:
+      return (
+        <pre className="text-[11px] overflow-auto">
+          {JSON.stringify(entry, null, 2)}
         </pre>
       );
   }
@@ -2537,6 +2728,22 @@ function isToolResultOutput(value: unknown): value is ToolResultOutput {
     value !== null &&
     "type" in value &&
     typeof (value as { type: unknown }).type === "string"
+  );
+}
+
+/** Detect ToolExecutionResult shape: { status: "success"|"error", outputs?: [...] } */
+function isToolExecutionResult(
+  value: unknown
+): value is {
+  status: "success" | "error";
+  outputs?: unknown[];
+  error?: string;
+} {
+  if (typeof value !== "object" || value === null) return false;
+  const maybe = value as Record<string, unknown>;
+  return (
+    (maybe.status === "success" || maybe.status === "error") &&
+    (maybe.status === "error" || Array.isArray(maybe.outputs))
   );
 }
 
