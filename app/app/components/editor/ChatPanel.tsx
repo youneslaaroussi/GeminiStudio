@@ -174,6 +174,8 @@ export function ChatPanel() {
   const [recommendedActionsLoading, setRecommendedActionsLoading] = useState(false);
   const cloudUnsubscribeRef = useRef<(() => void) | null>(null);
   const teleportAbortRef = useRef<AbortController | null>(null);
+  const recommendedActionsAbortRef = useRef<AbortController | null>(null);
+  const recommendedActionsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatInputRef = useRef<ChatInputRef>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -279,6 +281,9 @@ export function ChatPanel() {
 
           // Update recommended actions when agent response is done (conversation text only, no tool results)
           if (conversationContext.trim()) {
+            recommendedActionsAbortRef.current?.abort();
+            const controller = new AbortController();
+            recommendedActionsAbortRef.current = controller;
             getAuthHeaders()
               .then((headers) =>
                 fetch("/api/chat/recommended-actions", {
@@ -288,11 +293,13 @@ export function ChatPanel() {
                     type: "afterResponse",
                     conversationText: conversationContext.trim(),
                   }),
+                  signal: controller.signal,
                 })
               )
               .then((res) => res.json())
               .then((data) => {
-                if (Array.isArray(data?.actions)) setRecommendedActions(data.actions);
+                if (!controller.signal.aborted && Array.isArray(data?.actions))
+                  setRecommendedActions(data.actions);
               })
               .catch(() => {});
           }
@@ -374,27 +381,48 @@ export function ChatPanel() {
 
   const hasNoMessages = !messages?.length;
   useEffect(() => {
-    if (hasNoMessages && projectId) {
-      setRecommendedActionsLoading(true);
+    if (!hasNoMessages || !projectId) {
+      setRecommendedActionsLoading(false);
+      return;
+    }
+    recommendedActionsAbortRef.current?.abort();
+    recommendedActionsDebounceRef.current && clearTimeout(recommendedActionsDebounceRef.current);
+    const controller = new AbortController();
+    recommendedActionsAbortRef.current = controller;
+    setRecommendedActionsLoading(true);
+    const DEBOUNCE_MS = 2000;
+    recommendedActionsDebounceRef.current = setTimeout(() => {
+      recommendedActionsDebounceRef.current = null;
       getAuthHeaders()
         .then((headers) =>
           fetch("/api/chat/recommended-actions", {
             method: "POST",
             headers: { "Content-Type": "application/json", ...headers },
             body: JSON.stringify({ type: "empty", assetsContext }),
+            signal: controller.signal,
           })
         )
         .then((res) => res.json())
         .then((data) => {
-          if (Array.isArray(data?.actions) && data.actions.length > 0) {
+          if (
+            !controller.signal.aborted &&
+            Array.isArray(data?.actions) &&
+            data.actions.length > 0
+          ) {
             setRecommendedActions(data.actions);
           }
         })
         .catch(() => {})
-        .finally(() => setRecommendedActionsLoading(false));
-    } else {
-      setRecommendedActionsLoading(false);
-    }
+        .finally(() => {
+          if (!controller.signal.aborted) setRecommendedActionsLoading(false);
+        });
+    }, DEBOUNCE_MS);
+    return () => {
+      recommendedActionsDebounceRef.current && clearTimeout(recommendedActionsDebounceRef.current);
+      recommendedActionsDebounceRef.current = null;
+      controller.abort();
+      recommendedActionsAbortRef.current = null;
+    };
   }, [hasNoMessages, projectId, assetsContext]);
 
   autoSaveChatStateRef.current = {
