@@ -52,6 +52,7 @@
 - [Architecture](#components)
 - [How the Execution Layer Works](#how-the-execution-layer-works)
 - [Programmatic Motion Graphics: The Agent Writes Components, Not Templates](#programmatic-motion-graphics-the-agent-writes-components-not-templates)
+- [Component plugins: data viz, maps, color, and noise](#component-plugins-data-viz-maps-color-and-noise)
 - [Motion Canvas: The Perfect Rendering Layer for LLMs](#motion-canvas-the-perfect-rendering-layer-for-llms)
 - [Autonomous Video Production: The Agent Can Watch Its Own Work](#autonomous-video-production-the-agent-can-watch-its-own-work)
 - [Tech Stack](#tech-stack)
@@ -327,6 +328,21 @@ This is a deliberate design: it gives users simple controls while the agent hand
 | **Data-driven visuals** | Components that take numbers/text as inputs and animate them |
 | **Iterative refinement** | Agent previews its own component, adjusts timing/easing, recompiles |
 | **Zero-template ceiling** | No fixed library. The agent writes new components for every request |
+
+### Component plugins: data viz, maps, color, and noise
+
+The scene compiler bundles **first-class plugins** so the agent can generate components that go far beyond static shapes and text. Every plugin is **compute-then-render**: the library produces data (path strings, positions, colors, numbers); Motion Canvas renders it. No DOM, no charting framework—just the right primitives for AI-generated video.
+
+| Plugin | What it does | What the agent can build |
+|--------|----------------|--------------------------|
+| **d3-geo** | Geographic projections and SVG path strings from GeoJSON | Animated maps, region highlights, country/continent outlines |
+| **d3-shape** | Arc, pie, line, and area path generators | Pie charts, donuts, line charts, area charts, animated data series |
+| **d3-scale** | Map data domains to pixel ranges and color scales | Bar positions, axes, data-driven colors and sizes |
+| **d3-hierarchy** | Tree, treemap, and pack layout algorithms | Tree diagrams, treemaps, sunbursts, nested visualizations |
+| **simplex-noise** | Procedural 2D/3D/4D noise | Organic motion, flowing backgrounds, terrain, generative-style effects |
+| **chroma-js** | Color scales, interpolation (LAB/LCH), lighten/darken/saturate | Palettes, data-driven colors, accessible contrast, brand-matched fills |
+
+The in-app **Monaco editor** is wired with TypeScript types for all of these: when the agent (or you) edits a component, IntelliSense and type checking work for `d3-shape`, `d3-scale`, `chroma`, and the rest. **Result:** the agent can say *"animate a bar chart from this data"*, *"draw a map of Europe and highlight Germany"*, or *"add a smooth noise-based background"* and produce real, compilable code with full editor support.
 
 **This is what separates Gemini Studio from every other AI video tool.** Others wrap a fixed API. We have a real runtime underneath that the AI programs against. The agent doesn't pick from a menu—it writes code, compiles it, previews it, and ships it.
 

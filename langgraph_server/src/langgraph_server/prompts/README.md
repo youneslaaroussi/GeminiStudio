@@ -9,7 +9,7 @@ The agent's system prompt is built from the `.txt` files in this directory, in t
 | `base.txt` | Identity, absolute rules (no questions, one tool per response). |
 | `render_and_defaults.txt` | Render immediately, format/quality defaults. |
 | `timeline_layers.txt` | Layer order, title cards, transitions. |
-| `motion_canvas.txt` | Motion Canvas TSX for createComponent/editComponent: signals, refs, tweening, components, primitives, geographic path data (d3-geo). |
+| `motion_canvas.txt` | Motion Canvas TSX for createComponent/editComponent: signals, refs, tweening, components, primitives, d3-geo (maps), d3-shape/d3-scale (charts), d3-hierarchy (trees/treemaps), simplex-noise, chroma-js. |
 | `video_iteration.txt` | Preview → review → final render workflow. |
 | `video_effects.txt` | Digest clip then apply effect (e.g. segmentation). |
 | `narrative.txt` | Vlog/story from raw clips: createEditPlan first, then execute; metadata, transcript, shots, offset/duration, search. |

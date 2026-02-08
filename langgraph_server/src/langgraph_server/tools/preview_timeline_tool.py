@@ -10,7 +10,6 @@ import hashlib
 import hmac
 import json
 import logging
-import re
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -24,9 +23,7 @@ from langchain_core.tools import tool
 
 from ..config import Settings, get_settings
 from ..credits import deduct_credits, get_credits_for_action, InsufficientCreditsError
-from ..firebase import fetch_user_projects
 from ..gemini_files import upload_file_sync
-from .create_component_tool import get_component_files_for_project
 
 logger = logging.getLogger(__name__)
 
@@ -43,12 +40,6 @@ MAX_POLL_TIME_SECONDS = 300  # 5 minutes max
 def _sign_renderer_request(body: str, timestamp: int, secret: str) -> str:
     """Sign a renderer request body with HMAC-SHA256."""
     payload = f"{timestamp}.{body}"
-    return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
-
-
-def _sign_asset_request(timestamp: int, secret: str) -> str:
-    """Sign an asset service GET request with HMAC-SHA256."""
-    payload = f"{timestamp}."
     return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
 
 
@@ -123,83 +114,6 @@ def _generate_signed_download_url(
         return None
 
 
-def _get_asset_signed_url(
-    settings: Settings, user_id: str, project_id: str, asset_id: str
-) -> str | None:
-    """Fetch signed playback URL for an asset. Used only for render payload, never stored."""
-    if not settings.asset_service_url:
-        return None
-    endpoint = f"{settings.asset_service_url.rstrip('/')}/api/assets/{user_id}/{project_id}/{asset_id}"
-    headers: dict[str, str] = {}
-    if settings.asset_service_shared_secret:
-        ts = int(time.time() * 1000)
-        headers["X-Signature"] = _sign_asset_request(ts, settings.asset_service_shared_secret)
-        headers["X-Timestamp"] = str(ts)
-    try:
-        resp = httpx.get(endpoint, headers=headers, timeout=10.0)
-        if resp.status_code == 200:
-            return resp.json().get("signedUrl")
-    except Exception as e:
-        logger.warning("Failed to get signed URL for asset %s: %s", asset_id, e)
-    return None
-
-
-def _compute_timeline_duration(project_data: dict[str, Any]) -> float:
-    """Compute total timeline duration from layers (same as app/renderer)."""
-    layers = project_data.get("layers", [])
-    max_end = 0.0
-    for layer in layers:
-        for clip in layer.get("clips", []):
-            speed = clip.get("speed") or 1
-            duration = clip.get("duration") or 0
-            end = clip.get("start", 0) + duration / max(speed, 0.0001)
-            max_end = max(max_end, end)
-    return max_end
-
-
-def _resolve_project_assets_for_render(
-    project_data: dict[str, Any], settings: Settings, user_id: str, project_id: str
-) -> dict[str, Any]:
-    """Resolve assetId -> signed URL for all media clips. Payload only; never persisted."""
-    project = dict(project_data)
-    layers = project.get("layers", [])
-
-    for layer in layers:
-        for clip in layer.get("clips", []):
-            ctype = clip.get("type")
-            if ctype not in ("video", "audio", "image"):
-                continue
-            asset_id = clip.get("assetId")
-            if not asset_id:
-                continue
-            url = _get_asset_signed_url(settings, user_id, project_id, asset_id)
-            if url:
-                clip["src"] = url
-            if ctype == "video" and clip.get("maskAssetId"):
-                mask_url = _get_asset_signed_url(settings, user_id, project_id, clip["maskAssetId"])
-                if mask_url:
-                    clip["maskSrc"] = mask_url
-
-    project["layers"] = layers
-    return project
-
-
-def _extract_project(projects: list[dict[str, Any]], project_id: str | None) -> dict[str, Any] | None:
-    if not projects:
-        return None
-    if project_id:
-        for entry in projects:
-            if entry.get("id") == project_id:
-                return entry
-    return projects[0]
-
-
-def _slugify(name: str) -> str:
-    """Convert project name into a filesystem-friendly slug."""
-    normalized = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
-    return normalized or "preview"
-
-
 def _poll_job_status(job_id: str, settings: Settings) -> dict[str, Any]:
     """Poll the renderer for job status until complete or timeout."""
     endpoint = f"{settings.renderer_base_url.rstrip('/')}/jobs/{job_id}"
@@ -216,7 +130,6 @@ def _poll_job_status(job_id: str, settings: Settings) -> dict[str, Any]:
                     return {"status": "completed", "data": status}
                 elif state == "failed":
                     return {"status": "failed", "error": status.get("failedReason", "Unknown error")}
-                # Still waiting or active - continue polling
             elif response.status_code == 404:
                 return {"status": "error", "error": "Job not found"}
         except httpx.HTTPError as e:
@@ -256,28 +169,13 @@ def previewTimeline(
         }
 
     project_id = context.get("project_id")
-    branch_id = context.get("branch_id")
+    branch_id = context.get("branch_id") or "main"
 
-    if branch_id and project_id:
-        projects = fetch_user_projects(user_id, settings, branch_id=branch_id, project_id=project_id)
-    else:
-        projects = fetch_user_projects(user_id, settings)
-
-    target_project = _extract_project(projects, project_id)
-    if not target_project:
+    if not project_id:
         return {
             "status": "error",
-            "message": "No project found. Ask the user to open a project in Studio.",
+            "message": "No project ID available. Ask the user to open a project in Studio.",
         }
-
-    project_data = target_project.get("_projectData")
-    if not isinstance(project_data, dict):
-        return {
-            "status": "error",
-            "message": "Project data is unavailable. Please sync the project.",
-        }
-
-    project_name = project_data.get("name") or target_project.get("name") or "Preview"
 
     # Deduct credits (reduced cost for preview)
     base_cost = get_credits_for_action("render")
@@ -290,32 +188,10 @@ def previewTimeline(
             "message": f"Insufficient credits. Need {e.required} R-Credits for preview render.",
         }
 
-    project_payload = _resolve_project_assets_for_render(
-        project_data, settings, user_id, project_id or target_project.get("id") or ""
-    )
-    project_payload.setdefault("background", project_payload.get("background", "#000000"))
-    project_payload.setdefault("fps", PREVIEW_FPS)
-
-    # Include custom component source so the scene compiler compiles component layers (match app)
-    component_files = get_component_files_for_project(
-        settings, user_id, project_id or target_project.get("id") or ""
-    )
-
-    # Timeline duration from project layers (match app)
-    timeline_duration = _compute_timeline_duration(project_data)
-
-    # Same as app: output.size = project.resolution, options.resolutionScale for preview
-    resolution = project_data.get("resolution") or {}
-    output_width = int(resolution.get("width") or 1280)
-    output_height = int(resolution.get("height") or 720)
-
     request_id = uuid4().hex
-    timestamp_ms = int(time.time() * 1000)
-    destination = f"/tmp/render-{timestamp_ms}.mp4"
 
     # Generate signed upload URL for GCS
-    effective_project_id = project_id or target_project.get("id") or "unknown"
-    gcs_object_name = f"previews/{user_id}/{effective_project_id}/{request_id}.mp4"
+    gcs_object_name = f"previews/{user_id}/{project_id}/{request_id}.mp4"
 
     upload_url = _generate_signed_upload_url(gcs_object_name, "video/mp4", settings)
     if not upload_url:
@@ -324,119 +200,56 @@ def previewTimeline(
             "message": "Failed to generate upload URL for preview.",
         }
 
-    # Range: same as app — always send range (full timeline or partial)
+    # Build output
+    output_payload: Dict[str, Any] = {
+        "format": "mp4",
+        "fps": PREVIEW_FPS,
+        "quality": PREVIEW_QUALITY,
+        "includeAudio": True,
+        "uploadUrl": upload_url,
+    }
+
     if (
         start_time is not None
         and end_time is not None
         and end_time > start_time
     ):
-        render_range: list[float] = [start_time, end_time]
-    else:
-        render_range = [0.0, timeline_duration]
-
-    output_payload: Dict[str, Any] = {
-        "format": "mp4",
-        "fps": PREVIEW_FPS,
-        "size": {"width": output_width, "height": output_height},
-        "quality": PREVIEW_QUALITY,
-        "destination": destination,
-        "range": render_range,
-        "includeAudio": True,
-        "uploadUrl": upload_url,
-    }
+        output_payload["range"] = [start_time, end_time]
 
     thread_id = context.get("thread_id")
     metadata: Dict[str, Any] = {
         "tags": ["gemini-agent", "previewTimeline", "preview"],
         "extra": {
             "requestedAt": datetime.now(timezone.utc).isoformat(),
-            "projectName": project_name,
             "previewMode": True,
         },
     }
     if thread_id:
         metadata["agent"] = {
             "threadId": thread_id,
-            "projectId": effective_project_id,
+            "projectId": project_id,
             "userId": user_id,
             "requestId": request_id,
+            "branchId": branch_id,
         }
 
-    # Payload: project, timelineDuration, output, options, componentFiles. Also send variables
-    # explicitly so the renderer worker always has layers and duration.
+    # Minimal payload — renderer fetches project data, resolves URLs, etc.
     job_payload: Dict[str, Any] = {
-        "project": project_payload,
+        "userId": user_id,
+        "projectId": project_id,
+        "branchId": branch_id,
         "output": output_payload,
-        "metadata": metadata,
         "options": {
             "resolutionScale": PREVIEW_RESOLUTION_SCALE,
         },
+        "metadata": metadata,
     }
-    if timeline_duration > 0:
-        job_payload["timelineDuration"] = timeline_duration
-    layers = project_payload.get("layers", [])
-    if layers and timeline_duration > 0:
-        job_payload["variables"] = {
-            "layers": layers,
-            "duration": timeline_duration,
-        }
-    if component_files:
-        job_payload["componentFiles"] = component_files
 
     endpoint = settings.renderer_base_url.rstrip("/") + "/renders"
 
-    # --- Detailed render payload logging (previewTimeline) ---
-    layers = job_payload.get("variables", {}).get("layers") or job_payload.get("project", {}).get("layers", [])
-    comp_files = job_payload.get("componentFiles") or {}
     logger.info(
-        "[RENDER] previewTimeline calling renderer: endpoint=%s, timelineDuration=%.2fs, layers=%d, componentFiles=%d",
-        endpoint,
-        job_payload.get("timelineDuration", 0),
-        len(layers),
-        len(comp_files),
-    )
-    for li, layer in enumerate(layers):
-        clips = layer.get("clips", [])
-        logger.info(
-            "[RENDER] previewTimeline layer[%d] id=%s name=%s clips=%d",
-            li,
-            layer.get("id"),
-            layer.get("name"),
-            len(clips),
-        )
-        for ci, clip in enumerate(clips):
-            logger.info(
-                "[RENDER] previewTimeline   clip[%d] type=%s assetId=%s start=%.2f duration=%.2f speed=%s componentName=%s",
-                ci,
-                clip.get("type"),
-                clip.get("assetId"),
-                clip.get("start"),
-                clip.get("duration"),
-                clip.get("speed"),
-                clip.get("componentName"),
-            )
-    if comp_files:
-        for name, content in comp_files.items():
-            logger.info(
-                "[RENDER] previewTimeline componentFiles key=%s length=%d",
-                name,
-                len(content) if isinstance(content, str) else len(str(content)),
-            )
-
-    def _redact_for_log(obj: Any) -> Any:
-        if isinstance(obj, dict):
-            return {k: _redact_for_log(v) for k, v in obj.items()}
-        if isinstance(obj, list):
-            return [_redact_for_log(x) for x in obj]
-        if isinstance(obj, str) and (
-            obj.startswith("http://") or obj.startswith("https://") or "?" in obj
-        ):
-            return f"<url len={len(obj)}>"
-        return obj
-
-    logger.info(
-        "[RENDER] previewTimeline payload (URLs redacted): %s",
-        json.dumps(_redact_for_log(job_payload), indent=2, default=str),
+        "[RENDER] previewTimeline calling renderer: endpoint=%s, userId=%s, projectId=%s, branchId=%s",
+        endpoint, user_id, project_id, branch_id,
     )
 
     # Sign the request
@@ -528,7 +341,7 @@ def previewTimeline(
         uploaded = upload_file_sync(
             video_bytes,
             "video/mp4",
-            display_name=f"Timeline Preview - {project_name}",
+            display_name=f"Timeline Preview",
         )
     except Exception as exc:
         logger.exception("Failed to upload preview to Gemini Files API")
@@ -544,19 +357,12 @@ def previewTimeline(
     if start_time is not None and end_time is not None and end_time > start_time:
         range_note = f" (segment {start_time}s–{end_time}s)"
 
-    # Effective preview size after options.resolutionScale
-    effective_w = int(output_width * PREVIEW_RESOLUTION_SCALE)
-    effective_h = int(output_height * PREVIEW_RESOLUTION_SCALE)
-
     return {
         "status": "success",
-        "message": f"Preview render of '{project_name}'{range_note} ready ({effective_w}x{effective_h} @ {PREVIEW_FPS}fps). The video is now visible.",
+        "message": f"Preview render{range_note} ready ({PREVIEW_FPS}fps, low quality). The video is now visible.",
         "_injectMedia": True,
         "fileUri": file_uri,
         "mimeType": "video/mp4",
-        "assetName": f"{project_name} (preview)",
         "jobId": job_id,
-        "projectName": project_name,
-        "resolution": f"{effective_w}x{effective_h}",
         "fps": PREVIEW_FPS,
     }

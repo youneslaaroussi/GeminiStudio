@@ -10,17 +10,6 @@ const ALLOWED_UPLOAD_DOMAINS = [
   'storage.cloud.google.com',
 ];
 
-// Allowed domains for asset base URLs
-const ALLOWED_ASSET_DOMAINS = [
-  'storage.googleapis.com',
-  'storage.cloud.google.com',
-  'localhost',
-  '127.0.0.1',
-];
-
-// Safe temp directory for render outputs
-const SAFE_OUTPUT_DIR = '/tmp';
-
 /**
  * Validate that a URL is from an allowed domain.
  */
@@ -36,15 +25,6 @@ const isAllowedDomain = (url: string, allowedDomains: string[]): boolean => {
 };
 
 /**
- * Validate that a file path is within the safe output directory.
- * Prevents path traversal attacks.
- */
-const isSafePath = (path: string): boolean => {
-  const resolved = resolve(normalize(path));
-  return resolved.startsWith(SAFE_OUTPUT_DIR + '/') || resolved === SAFE_OUTPUT_DIR;
-};
-
-/**
  * Custom validator for upload URLs - must be GCS signed URLs only.
  */
 const safeUploadUrl = z.string().url().refine(
@@ -53,67 +33,42 @@ const safeUploadUrl = z.string().url().refine(
 );
 
 /**
- * Custom validator for asset base URLs - must be from allowed domains.
+ * Minimal render job schema.
+ *
+ * Callers send only identifiers + render settings.
+ * The renderer fetches all project data, assets, components, and transcriptions itself.
  */
-const safeAssetBaseUrl = z.string().url().refine(
-  (url) => isAllowedDomain(url, ALLOWED_ASSET_DOMAINS),
-  { message: 'Asset base URL must be from an allowed domain' }
-);
-
-/**
- * Custom validator for output destination - must be in /tmp.
- */
-const safeDestination = z.string().refine(
-  (path) => isSafePath(path),
-  { message: 'Output destination must be within /tmp directory' }
-);
-
 export const renderJobSchema = z.object({
-  project: z.custom<Project>(),
-  timelineDuration: z.number().positive().optional(),
+  /** Project owner user ID (trusted — verified by caller). */
+  userId: z.string().min(1),
+  /** Project ID. */
+  projectId: z.string().min(1),
+  /** Branch ID (e.g. "main"). */
+  branchId: z.string().min(1),
+
   output: z.object({
     format: outputFormatEnum,
-    fps: z.number().positive(),
-    size: z.object({
-      width: z.number().positive(),
-      height: z.number().positive(),
-    }),
+    /** FPS override. If not provided, uses project fps. */
+    fps: z.number().positive().optional(),
     quality: z.string().default('web'),
-    destination: safeDestination,
+    /** Time range [start, end] in seconds. If not provided, renders full timeline. */
     range: z.tuple([z.number().min(0), z.number().min(0)]).optional(),
-    toClipboard: z.boolean().optional(),
     includeAudio: z.boolean().optional(),
-    uploadUrl: safeUploadUrl.optional(),
+    /** Pre-signed GCS upload URL. */
+    uploadUrl: safeUploadUrl,
   }),
-  variables: z
-    .object({
-      duration: z.number().positive().optional(),
-      transitions: z.record(z.any()).optional(),
-      layers: z.any().optional(),
-      transcriptions: z.record(z.any()).optional(),
-      captionSettings: z.any().optional(),
-      textClipSettings: z.any().optional(),
-    })
-    .optional(),
-  assets: z
-    .object({
-      baseUrl: safeAssetBaseUrl.optional(),
-      token: z.string().optional(),
-      headers: z.record(z.string()).optional(),
-    })
-    .optional(),
+
   options: z
     .object({
+      /** Resolution scale factor (0.1-1.0). Used for preview renders to reduce resolution. */
+      resolutionScale: z.number().min(0.1).max(1).optional(),
       useDedicatedGpu: z.boolean().optional(),
       segments: z.number().int().positive().optional(),
       segmentDuration: z.number().positive().optional(),
       maxSegmentDuration: z.number().positive().optional(),
-      /** Resolution scale factor (0.1-1.0). Used for preview renders to reduce resolution. */
-      resolutionScale: z.number().min(0.1).max(1).optional(),
     })
     .optional(),
-  /** Custom component file overrides to pass to the scene compiler. */
-  componentFiles: z.record(z.string(), z.string()).optional(),
+
   metadata: z
     .object({
       agent: z
@@ -131,4 +86,56 @@ export const renderJobSchema = z.object({
     .optional(),
 });
 
-export type RenderJobData = z.infer<typeof renderJobSchema>;
+export type RenderJobInput = z.infer<typeof renderJobSchema>;
+
+/**
+ * Internal hydrated render job data — includes the fetched project and computed values.
+ * This is what gets passed to the render runner after the project-fetcher runs.
+ */
+export interface RenderJobData {
+  project: Project;
+  timelineDuration?: number;
+  output: {
+    format: 'mp4' | 'webm' | 'gif';
+    fps: number;
+    size: { width: number; height: number };
+    quality: string;
+    destination: string;
+    range?: [number, number];
+    toClipboard?: boolean;
+    includeAudio?: boolean;
+    uploadUrl?: string;
+  };
+  variables?: {
+    duration?: number;
+    transitions?: Record<string, unknown>;
+    layers?: unknown;
+    transcriptions?: Record<string, unknown>;
+    captionSettings?: unknown;
+    textClipSettings?: unknown;
+  };
+  assets?: {
+    baseUrl?: string;
+    token?: string;
+    headers?: Record<string, string>;
+  };
+  options?: {
+    useDedicatedGpu?: boolean;
+    segments?: number;
+    segmentDuration?: number;
+    maxSegmentDuration?: number;
+    resolutionScale?: number;
+  };
+  componentFiles?: Record<string, string>;
+  metadata?: {
+    agent?: {
+      threadId?: string;
+      projectId?: string;
+      userId?: string;
+      requestId?: string;
+      branchId?: string;
+    };
+    tags?: string[];
+    extra?: Record<string, unknown>;
+  };
+}

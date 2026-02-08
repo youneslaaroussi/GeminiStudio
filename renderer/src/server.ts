@@ -2,9 +2,10 @@ import express from 'express';
 import type { Request, Response, NextFunction, Express } from 'express';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { enqueueRenderJob, renderQueue } from './queue.js';
-import { renderJobSchema, type RenderJobData } from './jobs/render-job.js';
+import { renderJobSchema, type RenderJobInput, type RenderJobData } from './jobs/render-job.js';
 import { logger } from './logger.js';
 import { loadConfig } from './config.js';
+import { fetchRenderData } from './services/project-fetcher.js';
 
 const SHARED_SECRET = process.env.RENDERER_SHARED_SECRET;
 const MAX_TIMESTAMP_DRIFT_MS = 5 * 60 * 1000; // 5 minutes
@@ -22,7 +23,7 @@ const QUALITY_LEVELS: Record<string, number> = {
 };
 
 /**
- * Apply hard limits to render job settings.
+ * Apply hard limits to hydrated render job settings.
  * Clamps FPS, resolution (preserving aspect ratio), duration, and quality.
  */
 function applyRenderLimits(job: RenderJobData): RenderJobData {
@@ -49,13 +50,11 @@ function applyRenderLimits(job: RenderJobData): RenderJobData {
   }
 
   // Clamp duration
-  // First, clamp timelineDuration if provided
   let clampedTimelineDuration = job.timelineDuration;
   if (clampedTimelineDuration && clampedTimelineDuration > limits.maxDuration) {
     clampedTimelineDuration = limits.maxDuration;
   }
   
-  // Clamp range if provided
   let clampedRange: [number, number] | undefined = job.output.range;
   if (clampedRange) {
     const duration = clampedRange[1] - clampedRange[0];
@@ -64,7 +63,6 @@ function applyRenderLimits(job: RenderJobData): RenderJobData {
     }
   }
   
-  // If no range but we have a duration that exceeds limit, set a range
   const computedDuration = clampedTimelineDuration ?? 
     (clampedRange ? clampedRange[1] - clampedRange[0] : undefined) ??
     job.variables?.duration;
@@ -79,7 +77,6 @@ function applyRenderLimits(job: RenderJobData): RenderJobData {
   const maxQualityLevel = QUALITY_LEVELS[limits.maxQuality.toLowerCase()] ?? QUALITY_LEVELS.web;
   const clampedQuality = currentQualityLevel <= maxQualityLevel ? currentQuality : limits.maxQuality;
 
-  // Log if any limits were applied
   const rangeChanged = clampedRange !== job.output.range && 
     (clampedRange === undefined || job.output.range === undefined ||
      clampedRange[0] !== job.output.range[0] ||
@@ -235,22 +232,61 @@ export const createServer = (): Express => {
     }
   });
 
-  // Render endpoint uses raw body capture for HMAC verification
+  // Render endpoint: accepts minimal payload, fetches project data, enqueues hydrated job
   app.post('/renders', captureRawBody, verifySignature, async (req: Request, res: Response) => {
+    // Validate minimal input
     const parse = renderJobSchema.safeParse(req.body);
     if (!parse.success) {
       res.status(400).json({ error: parse.error.flatten() });
       return;
     }
 
+    const input: RenderJobInput = parse.data;
+
     try {
-      // Apply hard limits to the render job
-      const limitedJob = applyRenderLimits(parse.data);
+      // Fetch all project data from Firebase + asset service
+      const renderData = await fetchRenderData(
+        config,
+        input.userId,
+        input.projectId,
+        input.branchId,
+      );
+
+      const { project, componentFiles, timelineDuration } = renderData;
+
+      // Derive output settings from fetched project + input overrides
+      const timestamp = Date.now();
+      const extension = input.output.format === 'gif' ? 'gif' : input.output.format === 'webm' ? 'webm' : 'mp4';
+      const fps = input.output.fps ?? project.fps ?? 30;
+      const size = { ...project.resolution };
+
+      // Build hydrated job data
+      const jobData: RenderJobData = {
+        project,
+        timelineDuration,
+        output: {
+          format: input.output.format,
+          fps,
+          size,
+          quality: input.output.quality ?? 'web',
+          destination: `/tmp/render-${timestamp}.${extension}`,
+          range: input.output.range,
+          includeAudio: input.output.includeAudio,
+          uploadUrl: input.output.uploadUrl,
+        },
+        options: input.options,
+        metadata: input.metadata,
+        ...(Object.keys(componentFiles).length > 0 && { componentFiles }),
+      };
+
+      // Apply hard limits
+      const limitedJob = applyRenderLimits(jobData);
       const job = await enqueueRenderJob(limitedJob);
       res.status(202).json({ jobId: job.id });
     } catch (err) {
-      logger.error({ err }, 'Failed to enqueue render job');
-      res.status(500).json({ error: 'Failed to enqueue job' });
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      logger.error({ err, userId: input.userId, projectId: input.projectId }, 'Failed to process render request');
+      res.status(500).json({ error: `Failed to process render request: ${message}` });
     }
   });
 

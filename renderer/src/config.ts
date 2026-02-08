@@ -23,6 +23,12 @@ export interface RendererConfig {
   maxQuality: string; // Maximum allowed quality level
   /** Allowed hosts for headless browser requests (e.g. storage.googleapis.com). Same-origin is always allowed. */
   headlessAllowedRequestHosts: string[];
+  /** Firebase service account key (JSON string or file path) for RTDB access */
+  firebaseServiceAccountKey?: string;
+  /** Firebase Realtime Database URL (derived from gcpProjectId if not set) */
+  firebaseDatabaseUrl?: string;
+  /** GCS bucket name for asset storage */
+  assetGcsBucket?: string;
 }
 
 export const loadConfig = (): RendererConfig => {
@@ -46,6 +52,9 @@ export const loadConfig = (): RendererConfig => {
     RENDERER_MAX_DURATION,
     RENDERER_MAX_QUALITY,
     HEADLESS_ALLOWED_REQUEST_HOSTS,
+    FIREBASE_SERVICE_ACCOUNT_KEY,
+    FIREBASE_DATABASE_URL,
+    ASSET_GCS_BUCKET,
   } = process.env;
 
   const headlessAllowedRequestHosts = (HEADLESS_ALLOWED_REQUEST_HOSTS ?? '')
@@ -73,5 +82,8 @@ export const loadConfig = (): RendererConfig => {
     maxDuration: Number(RENDERER_MAX_DURATION ?? 30), // 30 seconds default
     maxQuality: RENDERER_MAX_QUALITY ?? 'web',
     headlessAllowedRequestHosts,
+    firebaseServiceAccountKey: FIREBASE_SERVICE_ACCOUNT_KEY,
+    firebaseDatabaseUrl: FIREBASE_DATABASE_URL,
+    assetGcsBucket: ASSET_GCS_BUCKET,
   };
 };

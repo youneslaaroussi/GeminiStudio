@@ -207,13 +207,40 @@ When providing code to createComponent or editComponent, supply complete, valid 
 
 ## Shaders (experimental)
 
-- The agent can add shaders to components. Shaders allow custom WebGL effects on any node via the **shaders** property.
-- **Simple use**: pass a string (GLSL fragment shader code): `shaders={myShader}`. Import the GLSL file: `import myShader from './myShader.glsl';`.
+- Shaders allow custom WebGL effects on any node via the **shaders** property.
+- **IMPORTANT**: Custom components are single `.tsx` files — you **cannot** import `.glsl` files. Instead, **inline the GLSL as a string constant** in the component file. Do NOT use `import ... from './shader.glsl'` or `#include` directives — those only work for pre-bundled shaders.
+- **Inline shader**: Define the GLSL as a template literal or string constant. You must manually declare any uniforms you use (the `#include "common.glsl"` preprocessor does not work with inline strings).
+- **Default uniforms** (declare these at the top of your inline GLSL when needed):
+  ```
+  in vec2 sourceUV;
+  in vec2 destinationUV;
+  in vec2 screenUV;
+  out vec4 outColor;
+  uniform float time;
+  uniform float deltaTime;
+  uniform float framerate;
+  uniform int frame;
+  uniform vec2 resolution;
+  uniform sampler2D sourceTexture;
+  uniform sampler2D destinationTexture;
+  ```
+- **Simple use**: pass the inline string directly: `shaders={myShader}` where `myShader` is a `const myShader = \`#version 300 es\nprecision highp float;\n...\`;`.
 - **With custom uniforms**: pass an object: `shaders={{ fragment: myShader, uniforms: { myFloat: 0.5, myVec2: new Vector2(2, 5), myColor: new Color('blue') } }}`. Uniform types: number → float, [n,n] or Vector2 → vec2, [n,n,n] → vec3, [n,n,n,n] or Color → vec4, BBox → vec4, Spacing → vec4.
-- **GLSL preprocessor**: use `#include "path"` for relative files or `#include "@motion-canvas/core/shaders/common.glsl"` for package files. Include common.glsl to get default uniforms: time, deltaTime, framerate, frame, resolution, sourceTexture, destinationTexture, sourceUV, destinationUV, sourceMatrix, destinationMatrix, outColor.
 - **Source vs destination**: sourceTexture = the node being rendered; destinationTexture = what's already on screen. Sample with sourceUV and destinationUV; combine like globalCompositeOperation.
 - **Caching**: Nodes with shaders are automatically cached. Use **cachePadding** if the effect extends beyond the node's logical size. For view-wide effects, increase view cachePadding.
-- Example (invert colors): fragment shader sets `outColor.rgb = 1.0 - texture(sourceTexture, sourceUV).rgb;` after including common.glsl.
+- **Example** (invert colors):
+  ```
+  const invertShader = `#version 300 es
+  precision highp float;
+  in vec2 sourceUV;
+  out vec4 outColor;
+  uniform sampler2D sourceTexture;
+  void main() {
+      vec4 c = texture(sourceTexture, sourceUV);
+      outColor = vec4(1.0 - c.rgb, c.a);
+  }`;
+  ```
+  Then use: `<Rect shaders={invertShader} ... />`
 
 ## Spawners (reactive children)
 
@@ -240,3 +267,43 @@ The **scene compiler** includes **d3-geo**. In custom components you can import 
 - **Async**: Fetch is async. Use a signal for the path data (e.g. `pathData`), default `''`. In constructor or a method, `fetch(url).then(r => r.json()).then(fc => { ... pathData(path(fc)); });`. Use that signal for **Path**'s `data` prop.
 - **Path node**: `<Path data={() => this.pathData()} stroke={...} lineWidth={...} end={0} />`. Animate outline by tweening `pathRef().end(1, duration)` in `*animate()`.
 - **Scale**: Use `scale={mapWidth/400}` on the Path (or a parent) so coordinates [-200,200]×[-100,100] fit the desired map size. Ocean = **Rect** behind the path.
+
+## Charts and data viz (d3-shape, d3-scale)
+
+The **scene compiler** includes **d3-shape** and **d3-scale**. Use them to generate SVG path strings and map data values to pixel coordinates. Feed results into Motion Canvas **Path**, **Line**, or **Rect** nodes — no DOM; compute then render.
+
+- **Imports**: `import { arc, pie, line, area } from 'd3-shape';` and `import { scaleLinear, scaleBand, scaleOrdinal } from 'd3-scale';`
+- **Scales (d3-scale)**: Pure functions. `scaleLinear().domain([0, 100]).range([0, 800])` maps data to pixels. `scaleBand().domain(['A','B','C']).range([0, 300]).padding(0.1)` for bar positions/widths. `scaleOrdinal().domain(categories).range(['#a','#b','#c'])` for categorical colors. Call the scale with a data value to get position/size/color.
+- **Pie/arc (d3-shape)**: `pie()(values)` returns arcs with startAngle/endAngle (radians). `arc()({ innerRadius, outerRadius, startAngle, endAngle })` returns an SVG path string; use e.g. `const arcGen = arc().innerRadius(0).outerRadius(r);` then `arcGen(arc)` per slice. Use one **Path** per slice with `data={arcGen(arc)}`; animate by tweening **end** 0→1 or by recomputing with updated endAngle.
+- **Line/area (d3-shape)**: `line().x(d => xScale(d.x)).y(d => yScale(d.y))(data)` returns path string for a line; use with **Path**. `area()` same but with .y0() for baseline (area chart). Animate drawing with Path **end** 0→1.
+- **Bar charts**: Use scaleBand for x positions and widths; create **Rect** nodes at `(x(d), 0)`, size `(bandwidth, yScale(d.value))`. Animate height by tweening scale.y or the height signal from 0.
+- **Pattern**: Compute path strings or positions in constructor or from a signal; use signals for Path **data** or for node positions/sizes so updates are reactive.
+
+## Hierarchy layouts (d3-hierarchy)
+
+The **scene compiler** includes **d3-hierarchy** for tree, treemap, and pack layouts. It computes x, y, and size; you create Motion Canvas nodes at those positions.
+
+- **Import**: `import { hierarchy, tree, treemap, pack } from 'd3-hierarchy';`
+- **Data**: `hierarchy(data, childrenAccessor)` builds a tree from nested data (default children: d => d.children). Then call a layout: `.size([width, height])` and `layout(root)` to assign each node .x, .y, .dx, .dy (or .r for pack).
+- **Tree**: `tree().size([w, h])(root)` — nodes get .x, .y. Use **Line** or **Spline** for links (parent x,y to child x,y); use **Circle** or **Txt** at node.x, node.y.
+- **Treemap**: `treemap().size([w,h]).padding(n)(root)` — nodes get .x0, .y0, .x1, .y1 (rectangle). Create **Rect** with position (center of rect), size (x1-x0, y1-y0).
+- **Pack**: `pack().size([w,h]).padding(n)(root)` — nodes get .x, .y, .r`. Create **Circle** at (node.x, node.y) with size 2*node.r.
+- **Pattern**: Layout runs once (or when data signal changes); create nodes in a spawner or in constructor from root.descendants() and root.links(). No DOM — only read layout results and add MC nodes.
+
+## Procedural noise (simplex-noise)
+
+The **scene compiler** includes **simplex-noise**. Use it for organic motion, flowing backgrounds, or variation — it returns numbers only; drive signals or positions from it.
+
+- **Import**: `import { createNoise2D } from 'simplex-noise';` (or createNoise3D, createNoise4D for more dimensions).
+- **Create**: `const noise2D = createNoise2D();` — optionally pass a random function for seeding (e.g. from useRandom() for reproducibility).
+- **Sample**: `noise2D(x, y)` returns about -1 to 1. Use for offset: e.g. `position.x(baseX + noise2D(t, 0) * amount)`. Animate by passing time or a signal as first arg.
+- **Use in signals**: e.g. `createSignal(() => baseY + noise2D(this.time(), 0) * 20)` so position updates when time changes. Good for gentle floating, terrain, or blob outlines.
+
+## Color scales and manipulation (chroma-js)
+
+The **scene compiler** includes **chroma-js**. Use it for color scales, interpolation, and contrast — returns hex/rgb strings you pass to fill/stroke.
+
+- **Import**: `import chroma from 'chroma-js';`
+- **Scale**: `chroma.scale(['#fff', '#f00']).mode('lab')(t)` — t 0..1 returns hex. Use for gradients along a path or over time. `chroma.scale('Spectral').domain([0, max])(value)` for data-driven colors.
+- **Manipulate**: `chroma('#abc').darken(0.5).hex()`, `.brighten()`, `.saturate()`, `.alpha(0.8)` — chain and `.hex()` or `.css()` for Motion Canvas fill/stroke.
+- **Pattern**: Call chroma in a function passed to a signal (e.g. fill={() => chroma.scale(colors)(progress())}) or compute once and pass the string. No DOM — use result as **fill** or **stroke** on Rect, Circle, Path, Txt, etc.

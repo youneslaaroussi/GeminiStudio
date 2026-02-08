@@ -5,6 +5,7 @@ import { join } from "path";
 export const runtime = "nodejs";
 
 const PACKAGES = ["@motion-canvas/2d", "@motion-canvas/core"] as const;
+const PLUGIN_PACKAGES = ["d3-geo", "d3-shape", "d3-scale", "d3-hierarchy", "simplex-noise", "chroma-js"] as const;
 
 /**
  * Recursively collect all .d.ts files under dir. relativeDir is the path from pkg root (e.g. "lib" or "lib/code").
@@ -53,10 +54,51 @@ function getPackageTypes(
   return out;
 }
 
+/** Collect .d.ts from @types/pkg; paths as node_modules/pkg/... for resolution. */
+function collectDtsFromAtTypes(
+  nodeModules: string,
+  pkg: string,
+  dir: string,
+  relativeDir: string,
+  out: { path: string; content: string }[]
+): void {
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const name of entries) {
+    const fullPath = join(dir, name);
+    const relativePath = relativeDir ? join(relativeDir, name) : name;
+    const monacoPath = join("node_modules", pkg, relativePath).replace(/\\/g, "/");
+    try {
+      if (statSync(fullPath).isDirectory()) {
+        collectDtsFromAtTypes(nodeModules, pkg, fullPath, relativePath, out);
+      } else if (name.endsWith(".d.ts")) {
+        out.push({ path: monacoPath, content: readFileSync(fullPath, "utf-8") });
+      }
+    } catch {
+      // skip
+    }
+  }
+}
+
+function getPluginTypes(
+  nodeModules: string,
+  pkg: string
+): { path: string; content: string }[] {
+  const typesPath = join(nodeModules, "@types", pkg);
+  if (!existsSync(typesPath)) return [];
+  const out: { path: string; content: string }[] = [];
+  collectDtsFromAtTypes(nodeModules, pkg, typesPath, "", out);
+  return out;
+}
+
 /**
  * GET /api/component-types
- * Returns all .d.ts contents for @motion-canvas/2d and @motion-canvas/core
- * so the Monaco editor can load real types (fixes "add" does not exist, constructor args, etc.).
+ * Returns .d.ts for @motion-canvas/2d, @motion-canvas/core, and component plugins (d3-*, chroma-js, simplex-noise)
+ * so the Monaco editor can load real types.
  */
 export async function GET() {
   const nodeModules = join(process.cwd(), "node_modules");
@@ -67,6 +109,10 @@ export async function GET() {
     if (!existsSync(pkgPath)) continue;
     const collected = getPackageTypes(nodeModules, pkg);
     files.push(...collected);
+  }
+
+  for (const pkg of PLUGIN_PACKAGES) {
+    files.push(...getPluginTypes(nodeModules, pkg));
   }
 
   return NextResponse.json({ files });

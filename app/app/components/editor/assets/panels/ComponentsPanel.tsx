@@ -957,6 +957,18 @@ function MonacoEditor({
         "@motion-canvas/2d/jsx-dev-runtime": ["node_modules/@motion-canvas/2d/lib/jsx-dev-runtime.d.ts"],
         "@motion-canvas/core": ["node_modules/@motion-canvas/core/lib/index.d.ts"],
         "@motion-canvas/core/*": ["node_modules/@motion-canvas/core/*"],
+        "d3-geo": ["node_modules/d3-geo/index.d.ts"],
+        "d3-geo/*": ["node_modules/d3-geo/*"],
+        "d3-shape": ["node_modules/d3-shape/index.d.ts"],
+        "d3-shape/*": ["node_modules/d3-shape/*"],
+        "d3-scale": ["node_modules/d3-scale/index.d.ts"],
+        "d3-scale/*": ["node_modules/d3-scale/*"],
+        "d3-hierarchy": ["node_modules/d3-hierarchy/index.d.ts"],
+        "d3-hierarchy/*": ["node_modules/d3-hierarchy/*"],
+        "simplex-noise": ["node_modules/simplex-noise/dist/esm/simplex-noise.d.ts"],
+        "simplex-noise/*": ["node_modules/simplex-noise/*"],
+        "chroma-js": ["node_modules/chroma-js/index.d.ts"],
+        "chroma-js/*": ["node_modules/chroma-js/*"],
       },
     });
 

@@ -4,8 +4,8 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { create } from "zustand";
 import { toast } from "sonner";
-import type { Project } from "@/app/types/timeline";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
+import { useProjectStore } from "@/app/lib/store/project-store";
 
 export type RenderFormat = "mp4" | "webm" | "gif";
 export type RenderQuality = "low" | "web" | "social" | "studio";
@@ -344,7 +344,7 @@ export interface UseRenderReturn {
   isRendering: boolean;
   jobStatus: RenderJobStatus | null;
   error: string | null;
-  startRender: (project: Project, projectId: string, options: RenderOptions) => Promise<void>;
+  startRender: (projectId: string, options: RenderOptions) => Promise<void>;
   cancelPolling: () => void;
   reset: () => void;
   activeJobs: StoredRenderJob[];
@@ -384,18 +384,32 @@ export function useRender(): UseRenderReturn {
     }
   };
 
-  const startRender = async (project: Project, projectId: string, options: RenderOptions) => {
+  const startRender = async (projectId: string, options: RenderOptions) => {
     store.setIsRendering(true);
     store.setError(null);
     store.setJobStatus(null);
     cancelPolling();
 
     try {
+      // Force sync Automerge state to Firebase before rendering
+      // so the renderer fetches the latest project data
+      try {
+        const { forceSyncToFirestore } = useProjectStore.getState();
+        await forceSyncToFirestore();
+      } catch (syncErr) {
+        console.warn("Failed to sync project before render:", syncErr);
+        // Continue anyway — renderer will get whatever is in Firebase
+      }
+
+      const { currentBranch } = useProjectStore.getState();
+      const { project } = useProjectStore.getState();
+      const branchId = currentBranch || "main";
+
       const authHeaders = await getAuthHeaders();
       const response = await fetch("/api/render", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({ project, projectId, output: options }),
+        body: JSON.stringify({ projectId, branchId, output: options }),
       });
 
       if (!response.ok) {
@@ -436,7 +450,7 @@ export function useRender(): UseRenderReturn {
         outputPath: data.outputPath || "",
         startedAt: Date.now(),
         status: initialStatus,
-        projectName: project.name,
+        projectName: project?.name,
         format: options.format,
       });
       store.setActiveJobs(loadStoredJobs());

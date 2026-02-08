@@ -162,8 +162,8 @@ export function RenderDialog({
       }
     }
 
-    await startRender(project, projectId, options);
-  }, [startRender, project, projectId, format, quality, fps, useRange, rangeStartStr, rangeEndStr, saveProject, analytics]);
+    await startRender(projectId, options);
+  }, [startRender, projectId, format, quality, fps, useRange, rangeStartStr, rangeEndStr, saveProject, analytics]);
 
   const handleClose = useCallback(
     (nextOpen: boolean) => {

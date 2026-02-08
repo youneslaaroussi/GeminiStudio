@@ -2,7 +2,6 @@ import { Queue, Worker, JobsOptions, Job, QueueEvents } from 'bullmq';
 import { Redis } from 'ioredis';
 import crypto from 'crypto';
 import type { RenderJobData } from './jobs/render-job.js';
-import { renderJobSchema } from './jobs/render-job.js';
 import { logger } from './logger.js';
 import { loadConfig } from './config.js';
 import { publishRenderEvent } from './pubsub.js';
@@ -194,15 +193,7 @@ export const createRenderWorker = (
   const worker = new Worker<RenderJobData>(
     RENDER_QUEUE_NAME,
     async (job) => {
-      const parseResult = renderJobSchema.safeParse(job.data);
-      if (!parseResult.success) {
-        logger.error({ err: parseResult.error }, 'Invalid render job payload');
-        throw parseResult.error;
-      }
-
-      // Type assertion is safe after validation
-      (job as Job<RenderJobData>).data = parseResult.data;
-
+      // Job data is already hydrated and validated by the server before enqueueing
       return processor(job as Job<RenderJobData>);
     },
     {

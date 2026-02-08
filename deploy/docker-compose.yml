@@ -255,6 +255,9 @@ services:
       - RENDERER_HEADLESS=true
       - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/google-service-account.json
+      - FIREBASE_SERVICE_ACCOUNT_KEY=/app/secrets/firebase-service-account.json
+      - FIREBASE_DATABASE_URL=${FIREBASE_DATABASE_URL}
+      - ASSET_GCS_BUCKET=${ASSET_GCS_BUCKET}
       - RENDERER_EVENT_TOPIC=${RENDER_EVENT_TOPIC:-gemini-render-events}
       - RENDERER_TASK_TIMEOUT_MS=${RENDERER_TASK_TIMEOUT_MS:-600000}
       # Render limits - hard caps on render settings
@@ -341,7 +344,7 @@ services:
     volumes:
       - ./secrets:/app/secrets:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3100/health"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3100/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
