@@ -6,15 +6,13 @@ import logging
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from google.api_core.exceptions import NotFound
 from google.cloud import pubsub_v1, storage
 from google.cloud.pubsub_v1.subscriber.message import Message
 from google.oauth2 import service_account
-from langchain_core.messages import AIMessage, HumanMessage
 
-from .agent import graph
 from .config import Settings
 from .firebase import fetch_chat_session, update_chat_session_messages, send_telegram_message, get_telegram_chat_id_for_user
 
@@ -74,6 +72,7 @@ class RenderEventSubscriber:
         self._subscriber: Optional[pubsub_v1.SubscriberClient] = None
         self._streaming_future: Optional[pubsub_v1.subscriber.futures.StreamingPullFuture] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._processed_jobs: set[str] = set()
 
     async def start(self) -> None:
         if self._streaming_future and not self._streaming_future.done():
@@ -123,26 +122,29 @@ class RenderEventSubscriber:
             self._subscriber = None
 
     async def _handle_message(self, message: Message) -> None:
+        # Ack immediately to prevent Pub/Sub redelivery.
+        # The previous approach acked only after _dispatch_event completed,
+        # but graph.ainvoke() could take 30+ seconds, exceeding the ack
+        # deadline and causing the same message to be delivered (and processed)
+        # multiple times.
+        message.ack()
+
         try:
             raw = message.data.decode("utf-8")
         except Exception:
-            logger.warning("Received non-text render event payload; acking.")
-            message.ack()
+            logger.warning("Received non-text render event payload.")
             return
 
         try:
             event = json.loads(raw)
         except json.JSONDecodeError:
             logger.warning("Discarded malformed render event payload: %s", raw[:120])
-            message.ack()
             return
 
         try:
             await self._dispatch_event(event)
-            message.ack()
         except Exception:
-            logger.exception("Failed to process render event; acking to avoid retry.")
-            message.ack()
+            logger.exception("Failed to process render event.")
 
     async def _dispatch_event(self, event: Dict[str, Any]) -> None:
         event_type = event.get("type")
@@ -164,183 +166,143 @@ class RenderEventSubscriber:
             )
             return
 
-        configurable: Dict[str, str] = {"thread_id": thread_id}
+        # Deduplicate by job_id — even with immediate ack, Pub/Sub has
+        # at-least-once delivery semantics so duplicates are possible.
+        if job_id:
+            if job_id in self._processed_jobs:
+                logger.info("Skipping already-processed render event for job_id=%s", job_id)
+                return
+            self._processed_jobs.add(job_id)
+            # Keep the set bounded
+            if len(self._processed_jobs) > 1000:
+                to_remove = list(self._processed_jobs)[:500]
+                self._processed_jobs -= set(to_remove)
+
         project_id = agent_meta.get("projectId")
         user_id = agent_meta.get("userId")
-        branch_id = agent_meta.get("branchId")
-        if project_id:
-            configurable["project_id"] = project_id
-        if user_id:
-            configurable["user_id"] = user_id
-        if branch_id:
-            configurable["branch_id"] = branch_id
 
-        messages = self._build_messages(event_type, event)
-        if not messages:
+        notification_text = self._build_notification_text(event_type, event)
+        if not notification_text:
             return
 
-        try:
-            result = await graph.ainvoke({"messages": messages}, config={"configurable": configurable})
-            logger.info("Dispatched render event to agent", extra={"job_id": job_id, "type": event_type})
+        logger.info(
+            "Processing render event: job_id=%s, type=%s, user_id=%s",
+            job_id, event_type, user_id,
+        )
 
-            # Extract AI response and write to Firebase
-            logger.info("user_id=%s, result keys=%s", user_id, list(result.keys()) if result else None)
-            if user_id and result.get("messages"):
-                ai_response = None
-                for msg in reversed(result["messages"]):
-                    logger.info("Checking message type: %s", type(msg).__name__)
-                    if isinstance(msg, AIMessage):
-                        content = msg.content
-                        if isinstance(content, str):
-                            ai_response = content
-                        elif isinstance(content, list):
-                            ai_response = "".join(
-                                block.get("text", "") if isinstance(block, dict) else str(block)
-                                for block in content
-                            )
-                        break
+        # Generate signed download URL for completed renders
+        render_download_url: Optional[str] = None
+        if event_type == "render.completed":
+            ev_result = event.get("result") or {}
+            gcs_path = ev_result.get("gcsPath")
+            if gcs_path:
+                render_download_url = _generate_signed_download_url(
+                    gcs_path, self._settings
+                )
 
-                logger.info("Extracted ai_response: %s", ai_response[:100] if ai_response else None)
-                # Get video download URL when render completed (for Telegram and Firebase)
-                render_download_url: Optional[str] = None
-                if event_type == "render.completed":
-                    ev_result = event.get("result") or {}
-                    gcs_path = ev_result.get("gcsPath")
-                    if gcs_path:
-                        render_download_url = _generate_signed_download_url(
-                            gcs_path, self._settings
-                        )
-                if ai_response:
-                    # Fetch current messages and append
-                    session = await asyncio.to_thread(fetch_chat_session, thread_id, self._settings)
-                    current_messages = list(session.get("messages", [])) if session else []
+        # ── Write notification to Firebase chat session ──────────────
+        if user_id:
+            try:
+                session = await asyncio.to_thread(
+                    fetch_chat_session, thread_id, self._settings
+                )
+                current_messages = list(session.get("messages", [])) if session else []
 
-                    new_message = {
-                        "id": f"msg-{int(time.time() * 1000)}-render",
-                        "role": "assistant",
-                        "parts": [{"type": "text", "text": ai_response}],
-                        "createdAt": datetime.utcnow().isoformat() + "Z",
+                new_message: Dict[str, Any] = {
+                    "id": f"msg-{int(time.time() * 1000)}-render",
+                    "role": "assistant",
+                    "parts": [{"type": "text", "text": notification_text}],
+                    "createdAt": datetime.utcnow().isoformat() + "Z",
+                }
+                # Embed video attachment in Firebase chat for the web UI
+                if event_type == "render.completed" and render_download_url:
+                    project_name = (extra_meta.get("projectName") or "Render")[:60]
+                    new_message["metadata"] = {
+                        "attachments": [
+                            {
+                                "id": f"render-{int(time.time() * 1000)}",
+                                "name": f"Render: {project_name}",
+                                "mimeType": "video/mp4",
+                                "size": 0,
+                                "category": "video",
+                                "signedUrl": render_download_url,
+                                "uploadedAt": datetime.utcnow().isoformat() + "Z",
+                            }
+                        ]
                     }
-                    # Embed video in chat when we have a signed download URL
-                    if event_type == "render.completed" and render_download_url:
-                        extra_meta = metadata.get("extra") or {}
-                        project_name = (extra_meta.get("projectName") or "Render")[:60]
-                        new_message["metadata"] = {
-                            "attachments": [
-                                {
-                                    "id": f"render-{int(time.time() * 1000)}",
-                                    "name": f"Render: {project_name}",
-                                    "mimeType": "video/mp4",
-                                    "size": 0,
-                                    "category": "video",
-                                    "signedUrl": render_download_url,
-                                    "uploadedAt": datetime.utcnow().isoformat() + "Z",
-                                }
-                            ]
-                        }
-                    current_messages.append(new_message)
-                    
-                    await asyncio.to_thread(
-                        update_chat_session_messages,
-                        user_id,
-                        thread_id,
-                        current_messages,
+                current_messages.append(new_message)
+
+                await asyncio.to_thread(
+                    update_chat_session_messages,
+                    user_id,
+                    thread_id,
+                    current_messages,
+                    self._settings,
+                )
+                logger.info("Wrote render notification to Firebase for thread %s", thread_id)
+            except Exception:
+                logger.exception("Failed to write render notification to Firebase")
+
+        # ── Send notification to Telegram ────────────────────────────
+        telegram_chat_id = None
+        if thread_id.startswith("telegram-"):
+            telegram_chat_id = thread_id.replace("telegram-", "")
+        elif user_id:
+            telegram_chat_id = await asyncio.to_thread(
+                get_telegram_chat_id_for_user, user_id, self._settings
+            )
+
+        if telegram_chat_id:
+            try:
+                if render_download_url:
+                    # Send video so user gets the file directly
+                    await send_telegram_message(
+                        telegram_chat_id,
+                        notification_text,
+                        self._settings,
+                        attachments=[
+                            {
+                                "url": render_download_url,
+                                "type": "video",
+                                "caption": notification_text,
+                            },
+                        ],
+                    )
+                    # Send the URL so user can copy/share
+                    await send_telegram_message(
+                        telegram_chat_id,
+                        f"Video URL (copy to share or open in browser):\n{render_download_url}",
                         self._settings,
                     )
-                    logger.info("Wrote render notification to Firebase for thread %s", thread_id)
-                
-                # Send to Telegram: always send video + URL when render completed, else AI text
-                telegram_chat_id = None
-                if thread_id.startswith("telegram-"):
-                    telegram_chat_id = thread_id.replace("telegram-", "")
-                elif user_id:
-                    telegram_chat_id = await asyncio.to_thread(
-                        get_telegram_chat_id_for_user, user_id, self._settings
+                else:
+                    await send_telegram_message(
+                        telegram_chat_id, notification_text, self._settings
                     )
-                if telegram_chat_id and (ai_response or render_download_url):
-                    try:
-                        if render_download_url:
-                            # Send video so user gets the file
-                            await send_telegram_message(
-                                telegram_chat_id,
-                                ai_response or "Your render is ready.",
-                                self._settings,
-                                attachments=[
-                                    {"url": render_download_url, "type": "video", "caption": ai_response or "Your render is ready."},
-                                ],
-                            )
-                            # Send the URL in a separate message so user can copy it
-                            await send_telegram_message(
-                                telegram_chat_id,
-                                f"Video URL (copy to share or open in browser):\n{render_download_url}",
-                                self._settings,
-                            )
-                        else:
-                            await send_telegram_message(telegram_chat_id, ai_response or "", self._settings)
-                        logger.info("Sent render notification to Telegram chat %s", telegram_chat_id)
-                    except Exception as e:
-                        logger.warning("Failed to send to Telegram: %s", e)
-            else:
-                logger.warning("Skipping Firebase write: user_id=%s, has_messages=%s", user_id, bool(result.get("messages")))
+                logger.info("Sent render notification to Telegram chat %s", telegram_chat_id)
+            except Exception as e:
+                logger.warning("Failed to send render notification to Telegram: %s", e)
 
-        except Exception:
-            logger.exception("Failed to inject render event into agent flow", extra={"job_id": job_id})
-
-    def _build_messages(self, event_type: str | None, event: Dict[str, Any]) -> List:
-        job_id = event.get("jobId")
+    def _build_notification_text(
+        self, event_type: str | None, event: Dict[str, Any]
+    ) -> str | None:
+        """Build a human-readable notification for the render event."""
         metadata = event.get("metadata") or {}
         extra_meta = metadata.get("extra") or {}
         project_name = extra_meta.get("projectName")
-        timestamp = event.get("timestamp")
-        asset_id = event.get("assetId")
 
         if event_type == "render.completed":
-            result = event.get("result") or {}
-            gcs_path = result.get("gcsPath")
-            output_path = result.get("outputPath")
-            details = [
-                f"Job ID: {job_id}",
-                "Status: completed",
-            ]
             if project_name:
-                details.append(f"Project: {project_name}")
-
-            # Generate signed download URL if we have a GCS path
-            if gcs_path:
-                download_url = _generate_signed_download_url(gcs_path, self._settings)
-                if download_url:
-                    details.append(f"Download URL: {download_url}")
-                else:
-                    details.append(f"GCS Path: {gcs_path}")
-            elif output_path:
-                details.append(f"Output path: {output_path}")
-
-            # Include asset ID for agent iteration
-            if asset_id:
-                details.append(f"Asset ID: {asset_id}")
-                details.append("You can use getAssetMetadata with this asset ID to review the rendered video and iterate if needed.")
-
-            if timestamp:
-                details.append(f"Completed at: {timestamp}")
-
-            body = "Render job finished successfully:\n" + "\n".join(f"- {item}" for item in details)
+                return f"Your render for '{project_name}' is ready."
+            return "Your render is ready."
         elif event_type == "render.failed":
-            failed_reason = event.get("failedReason") or event.get("error") or "Renderer reported an unknown error."
-            details = [
-                f"Job ID: {job_id}",
-                "Status: failed",
-                f"Reason: {failed_reason}",
-            ]
+            failed_reason = (
+                event.get("failedReason")
+                or event.get("error")
+                or "Unknown error"
+            )
             if project_name:
-                details.append(f"Project: {project_name}")
-            if timestamp:
-                details.append(f"Reported at: {timestamp}")
-
-            body = "Render job failed:\n" + "\n".join(f"- {item}" for item in details)
+                return f"Render for '{project_name}' failed: {failed_reason}"
+            return f"Render failed: {failed_reason}"
         else:
             logger.debug("Ignoring unsupported render event type: %s", event_type)
-            return []
-
-        # Just inject the event as information - let the agent decide what to do
-        # based on its system prompt and conversation context
-        return [HumanMessage(content=body)]
+            return None
