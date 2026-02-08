@@ -35,6 +35,12 @@ import { ASSET_DRAG_DATA_MIME } from "@/app/types/assets";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
 import { MOTION_CANVAS_TYPES } from "@/app/lib/monaco-types-data";
 import { useProjectStore } from "@/app/lib/store/project-store";
+import {
+  COMPONENT_TEMPLATES,
+  CATEGORY_LABELS,
+  groupTemplatesByCategory,
+  type ComponentTemplate,
+} from "@/app/lib/component-templates";
 
 const INPUT_TYPE_OPTIONS: { value: ComponentInputDef["type"]; label: string; Icon: LucideIcon }[] = [
   { value: "string", label: "String", Icon: Type },
@@ -112,6 +118,7 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
   const [isSaving, setIsSaving] = useState(false);
   const [showInputDefs, setShowInputDefs] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const editorRef = useRef<unknown>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const removeClipsByAssetId = useProjectStore((s) => s.removeClipsByAssetId);
@@ -153,12 +160,13 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
     }
   }, [selectedAsset]);
 
-  const handleCreate = useCallback(async () => {
+  const handleCreate = useCallback(async (template?: ComponentTemplate) => {
     if (!projectId) {
       toast.error("No project selected");
       return;
     }
     setIsCreating(true);
+    setShowTemplatePicker(false);
     try {
       const authHeaders = await getAuthHeaders();
       const response = await fetch("/api/component-assets", {
@@ -166,10 +174,10 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
         headers: { ...authHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId,
-          name: "New Component",
-          code: DEFAULT_COMPONENT_CODE,
-          componentName: "MyComponent",
-          inputDefs: [
+          name: template?.name ?? "New Component",
+          code: template?.code ?? DEFAULT_COMPONENT_CODE,
+          componentName: template?.componentName ?? "MyComponent",
+          inputDefs: template?.inputDefs ?? [
             { name: "label", type: "string", default: "Hello", label: "Label" },
           ],
         }),
@@ -181,7 +189,7 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
       }
 
       const data = await response.json();
-      toast.success("Component created");
+      toast.success(template ? `Added "${template.name}"` : "Component created");
       onAssetsChanged();
       setSelectedId(data.asset.id);
     } catch (err) {
@@ -329,21 +337,45 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
         <span className="text-xs font-medium text-muted-foreground">
           {componentAssets.length} component{componentAssets.length !== 1 ? "s" : ""}
         </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs gap-1"
-          onClick={handleCreate}
-          disabled={isCreating || !projectId}
-        >
-          {isCreating ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <Plus className="size-3.5" />
-          )}
-          New
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "h-7 text-xs gap-1",
+              showTemplatePicker && "bg-primary/10 text-primary"
+            )}
+            onClick={() => setShowTemplatePicker(!showTemplatePicker)}
+            disabled={isCreating || !projectId}
+          >
+            <Code2 className="size-3.5" />
+            Templates
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            onClick={() => handleCreate()}
+            disabled={isCreating || !projectId}
+          >
+            {isCreating ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Plus className="size-3.5" />
+            )}
+            Blank
+          </Button>
+        </div>
       </div>
+
+      {/* Template Picker */}
+      {showTemplatePicker && (
+        <TemplatePicker
+          onSelect={(template) => handleCreate(template)}
+          onClose={() => setShowTemplatePicker(false)}
+          disabled={isCreating}
+        />
+      )}
 
       {/* Component List */}
       <div className="border-b border-border">
@@ -595,6 +627,100 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Template Picker
+// ---------------------------------------------------------------------------
+
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  text: Type,
+  data: Hash,
+  shape: Palette,
+  overlay: Code2,
+};
+
+function TemplatePicker({
+  onSelect,
+  onClose,
+  disabled,
+}: {
+  onSelect: (template: ComponentTemplate) => void;
+  onClose: () => void;
+  disabled?: boolean;
+}) {
+  const grouped = useMemo(() => groupTemplatesByCategory(), []);
+
+  return (
+    <div className="border-b border-border">
+      <ScrollArea className="max-h-[320px]">
+        <div className="p-2 space-y-3">
+          {Object.entries(grouped).map(([category, templates]) => {
+            const Icon = CATEGORY_ICONS[category] ?? Code2;
+            return (
+              <div key={category}>
+                <div className="flex items-center gap-1.5 px-1 mb-1.5">
+                  <Icon className="size-3 text-muted-foreground" />
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                    {CATEGORY_LABELS[category] ?? category}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {templates.map((template) => (
+                    <button
+                      key={template.id}
+                      disabled={disabled}
+                      onClick={() => onSelect(template)}
+                      className={cn(
+                        "text-left rounded-lg border border-border/60 bg-muted/30 hover:bg-muted/60 hover:border-border transition-colors overflow-hidden group",
+                        "disabled:opacity-50 disabled:cursor-not-allowed"
+                      )}
+                    >
+                      {/* Preview thumbnail */}
+                      {template.preview && (
+                        <div className="h-[44px] bg-zinc-900/80 border-b border-border/30 flex items-center justify-center overflow-hidden">
+                          <div className="w-full h-full p-1">
+                            {template.preview()}
+                          </div>
+                        </div>
+                      )}
+                      <div className="p-2">
+                        <p className="text-xs font-medium text-foreground truncate">
+                          {template.name}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">
+                          {template.description}
+                        </p>
+                        <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                          {template.inputDefs.slice(0, 3).map((def) => (
+                            <span
+                              key={def.name}
+                              className="text-[9px] bg-background/80 border border-border/40 rounded px-1.5 py-0.5 text-muted-foreground"
+                            >
+                              {def.label ?? def.name}
+                            </span>
+                          ))}
+                          {template.inputDefs.length > 3 && (
+                            <span className="text-[9px] text-muted-foreground">
+                              +{template.inputDefs.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Monaco Editor
+// ---------------------------------------------------------------------------
 
 /** Lazy-loaded Monaco editor wrapper to avoid SSR issues */
 function MonacoEditor({
