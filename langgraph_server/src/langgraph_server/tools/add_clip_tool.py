@@ -198,6 +198,7 @@ def _find_or_create_layer(project_data: dict, clip_type: str, layer_id: str | No
         "audio": "audio",
         "image": "image",
         "text": "text",
+        "component": "component",
     }
     target_type = type_map.get(clip_type, clip_type)
     
@@ -242,7 +243,7 @@ def addClipToTimeline(
     for in/out effects. Types: fade, slide-left, slide-right, slide-up, slide-down, zoom, dip-to-black.
 
     Args:
-        clip_type: Type of clip - "video", "audio", "image", or "text". Optional for media clips if asset_id is provided.
+        clip_type: Type of clip - "video", "audio", "image", "text", or "component". Optional for media/component clips if asset_id is provided.
         start: Start time in seconds on the timeline (defaults to 0)
         duration: Duration of the clip in seconds. Optional - defaults to asset duration or 5s for images.
         offset: Start time in seconds within the source media (defaults to 0). Use with duration to trim to a segment.
@@ -287,6 +288,8 @@ def addClipToTimeline(
     resolved_duration = duration
     asset_filename = None
     asset_duration = None
+    component_name: str | None = None
+    component_inputs: dict[str, Any] | None = None
 
     if asset_id:
         # Fetch asset metadata from Firestore
@@ -307,7 +310,7 @@ def addClipToTimeline(
             # Infer type from asset if not provided
             if not resolved_type:
                 asset_type = asset_data.get("type", "").lower()
-                if asset_type in ("video", "audio", "image"):
+                if asset_type in ("video", "audio", "image", "component"):
                     resolved_type = asset_type
                     logger.info("[ADD_CLIP] Inferred clip_type from asset: %s", resolved_type)
             
@@ -319,6 +322,16 @@ def addClipToTimeline(
             asset_duration = asset_data.get("duration")
 
             asset_filename = asset_data.get("name") or asset_data.get("fileName")
+
+            # For component assets, store componentName and default inputs for the clip
+            if asset_data.get("type") == "component":
+                component_name = asset_data.get("componentName")
+                input_defs = asset_data.get("inputDefs") or []
+                component_inputs = {
+                    d.get("name"): d.get("default")
+                    for d in input_defs
+                    if isinstance(d, dict) and d.get("name") is not None
+                }
         else:
             logger.warning("[ADD_CLIP] Asset not found: %s", asset_id)
 
@@ -329,15 +342,15 @@ def addClipToTimeline(
             "message": "Duration must be greater than 0.",
         }
 
-    # Default duration for images
+    # Default duration for images and components
     if not resolved_duration:
-        resolved_duration = 5 if resolved_type == "image" else 10
+        resolved_duration = 5 if resolved_type in ("image", "component") else 10
 
     # Validate resolved values
-    if resolved_type and resolved_type not in ("video", "audio", "image", "text"):
+    if resolved_type and resolved_type not in ("video", "audio", "image", "text", "component"):
         return {
             "status": "error",
-            "message": f"Invalid clip_type '{resolved_type}'. Must be video, audio, image, or text.",
+            "message": f"Invalid clip_type '{resolved_type}'. Must be video, audio, image, text, or component.",
         }
 
     # Media clips need asset_id and a playback URL (signed URL from asset service)
@@ -352,6 +365,19 @@ def addClipToTimeline(
             return {
                 "status": "error",
                 "message": "Asset has no playback URL yet. Wait for upload to complete and try again.",
+            }
+
+    # Component clips need asset_id and component metadata (no playback URL; code resolved at render)
+    if resolved_type == "component":
+        if not asset_id:
+            return {
+                "status": "error",
+                "message": "asset_id is required for component clips.",
+            }
+        if not component_name:
+            return {
+                "status": "error",
+                "message": "Component asset not found or has no componentName. Create the component with createComponent first.",
             }
 
     # Text clips need type and text
@@ -380,7 +406,7 @@ def addClipToTimeline(
             "status": "error",
             "message": "Offset must be >= 0 (start time within source media in seconds).",
         }
-    if asset_duration is not None and source_offset + resolved_duration > asset_duration:
+    if asset_duration is not None and resolved_type in ("video", "audio") and source_offset + resolved_duration > asset_duration:
         return {
             "status": "error",
             "message": f"Segment (offset={source_offset}s, duration={resolved_duration}s) extends past source duration ({asset_duration}s).",
@@ -457,7 +483,14 @@ def addClipToTimeline(
         if asset_id and resolved_type in ("video", "audio", "image"):
             clip["assetId"] = asset_id
             logger.info("[ADD_CLIP] Added media clip asset_id=%s (URL resolved at render)", asset_id)
-        
+
+        # For component clips, store assetId, componentName, and inputs (code resolved at render)
+        if resolved_type == "component" and asset_id and component_name is not None:
+            clip["assetId"] = asset_id
+            clip["componentName"] = component_name
+            clip["inputs"] = component_inputs or {}
+            logger.info("[ADD_CLIP] Added component clip asset_id=%s componentName=%s", asset_id, component_name)
+
         if text:
             clip["text"] = text
 

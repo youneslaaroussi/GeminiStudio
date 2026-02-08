@@ -90,9 +90,10 @@ def editComponent(
         headers = get_asset_service_headers(body_str)
         headers["Content-Type"] = "application/json"
 
+        # Send the exact bytes we signed so asset-service HMAC verification succeeds
         response = httpx.patch(
             endpoint,
-            json=patch_body,
+            content=body_str.encode("utf-8"),
             headers=headers,
             timeout=15.0,
         )

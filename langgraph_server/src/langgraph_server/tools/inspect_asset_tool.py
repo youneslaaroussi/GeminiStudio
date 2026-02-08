@@ -51,8 +51,10 @@ def inspectAsset(
     end_time: Optional[str] = None,
     _agent_context: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
-    """Load an asset (video, image, or audio) by ID so you can see/hear it directly.
+    """Load an asset by ID so you can see/hear it or read its description.
 
+    For video, image, or audio: returns the media for multimodal viewing.
+    For component assets: returns a text description (name, class, inputs, code preview) since they have no playable URL.
     Use start_time/end_time (in seconds) to focus on a specific segment of video.
     Use this when you need to analyze media with conversation context, compare to discussed styles,
     answer follow-up questions, or when the user wants you to "look at" or "inspect" a specific asset.
@@ -128,6 +130,34 @@ def inspectAsset(
     asset_name = asset.get("name")
     asset_type = asset.get("type", "unknown")
 
+    # Component assets have no URL; return a text description so the agent can use them
+    if asset_type == "component":
+        comp_name = asset.get("componentName", "Unknown")
+        description = asset.get("description") or ""
+        input_defs = asset.get("inputDefs") or []
+        code = asset.get("code") or ""
+        code_preview = (code[:500] + "...") if len(code) > 500 else code
+        inputs_str = ", ".join(
+            f"{d.get('name', '')}({d.get('type', '')})={d.get('default')}"
+            for d in input_defs
+            if isinstance(d, dict) and d.get("name")
+        )
+        return {
+            "status": "success",
+            "message": (
+                f"Component asset '{asset_name}' (class: {comp_name}). "
+                f"{description}. "
+                f"Inputs: {inputs_str or 'none'}. "
+                f"Code preview: {code_preview}"
+            ),
+            "assetId": asset_id,
+            "assetName": asset_name,
+            "assetType": "component",
+            "componentName": comp_name,
+            "description": description,
+            "inputDefs": input_defs,
+        }
+
     if not asset_url:
         return {
             "status": "error",
@@ -144,7 +174,7 @@ def inspectAsset(
     if asset_type not in supported_types:
         return {
             "status": "error",
-            "message": f"Asset type '{asset_type}' is not supported. Supported: {', '.join(supported_types)}.",
+            "message": f"Asset type '{asset_type}' is not supported. Supported: {', '.join(supported_types)}, or component (returns description).",
         }
 
     normalized_mime = _normalize_mime_type(mime_type)
