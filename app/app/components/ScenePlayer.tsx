@@ -1032,6 +1032,21 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
     (player as unknown as { requestRecalculation?: () => void }).requestRecalculation?.();
     player.requestRender();
     onVariablesUpdatedRef.current?.();
+
+    // After variables change, the scene recalculates from frame 0. Seek back to the current
+    // playhead so the preview stays in sync and component state is correct at this time.
+    const targetFrame = Math.floor(latestCurrentTimeRef.current * PREVIEW_FPS);
+    const onRecalculated = (player as unknown as { onRecalculated?: { subscribe: (cb: () => void) => () => void } }).onRecalculated;
+    if (onRecalculated) {
+      const unsub = onRecalculated.subscribe(() => {
+        unsub();
+        player.requestSeek(targetFrame);
+        player.requestRender();
+      });
+    }
+    // In case recalculation already completed synchronously
+    player.requestSeek(targetFrame);
+    player.requestRender();
   }, [player]);
 
   useEffect(() => {

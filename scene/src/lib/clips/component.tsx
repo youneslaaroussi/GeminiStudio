@@ -34,12 +34,18 @@ export function createComponentElements({ clips, view }: CreateComponentElements
     try {
       const ref = createRef<Node>();
 
-      // Build props from inputs + standard positioning.
-      // Note: don't pass `ref` as a prop -- MC's JSX factory handles refs,
-      // but direct construction via `new` does not. We set it manually below.
+      // Only pass defined input values so we don't overwrite component signals with undefined
+      const inputs = clip.inputs ?? {};
+      const definedInputs = Object.fromEntries(
+        Object.entries(inputs).filter(([, v]) => v !== undefined && v !== null)
+      ) as Record<string, string | number | boolean>;
+
+      // Key includes inputs fingerprint so when user changes label/inputs we don't reuse a
+      // stale node — forces a fresh instance with the new values (fixes disappearing/static content).
+      const inputsKey = JSON.stringify(definedInputs);
       const props: Record<string, unknown> = {
-        ...clip.inputs,
-        key: `component-clip-${clip.id}`,
+        ...definedInputs,
+        key: `component-clip-${clip.id}-${inputsKey}`,
         x: clip.position.x,
         y: clip.position.y,
         scale: clip.scale,
@@ -54,7 +60,7 @@ export function createComponentElements({ clips, view }: CreateComponentElements
       const effectShaders = getEffectShaderConfig(clip.effect);
       if (effectShaders) {
         const wrapper = (
-          <Node key={`component-effect-${clip.id}`} cache shaders={effectShaders}>
+          <Node key={`component-effect-${clip.id}-${inputsKey}`} cache shaders={effectShaders}>
             {instance}
           </Node>
         );

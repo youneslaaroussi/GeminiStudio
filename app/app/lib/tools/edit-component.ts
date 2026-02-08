@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolFieldDefinition } from "./types";
 import type { Project } from "@/app/types/timeline";
+import type { ComponentClip } from "@/app/types/timeline";
+import type { ComponentInputDef } from "@/app/types/assets";
 import { useAssetsStore } from "@/app/lib/store/assets-store";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { getAuthHeaders } from "@/app/lib/hooks/useAuthFetch";
@@ -30,6 +32,46 @@ const editComponentSchema = z.object({
 });
 
 type EditComponentInput = z.infer<typeof editComponentSchema>;
+
+/**
+ * Sync all timeline clips that reference this component asset to the asset's
+ * current componentName and inputDefs. Preserves existing input values where
+ * the input still exists; uses defaults for new inputs; drops removed inputs.
+ */
+function syncComponentClipsToAsset(
+  assetId: string,
+  asset: { componentName?: string; inputDefs?: ComponentInputDef[] }
+): void {
+  const projectStore = useProjectStore.getState();
+  const project = projectStore.project;
+  const newInputDefs = asset.inputDefs ?? [];
+  const newComponentName = asset.componentName;
+
+  for (const layer of project.layers) {
+    for (const clip of layer.clips) {
+      if (clip.type !== "component" || clip.assetId !== assetId) continue;
+
+      const compClip = clip as ComponentClip;
+      const inputs: Record<string, string | number | boolean> = {};
+      for (const def of newInputDefs) {
+        const existing = compClip.inputs?.[def.name];
+        const useExisting =
+          existing !== undefined &&
+          (def.type !== "enum" ||
+            (def.options?.length && def.options.includes(String(existing))));
+        inputs[def.name] = useExisting ? existing : def.default;
+      }
+
+      const updates: Partial<ComponentClip> = {
+        inputDefs: newInputDefs,
+        inputs,
+      };
+      if (newComponentName !== undefined) updates.componentName = newComponentName;
+
+      projectStore.updateClip(compClip.id, updates);
+    }
+  }
+}
 
 const fields: ToolFieldDefinition[] = [
   {
@@ -146,6 +188,15 @@ export const editComponentTool: ToolDefinition<
           a.id === assetId ? { ...a, ...patchBody } : a
         )
       );
+
+      // Sync all timeline clips that use this component to the updated asset schema
+      const updatedAsset = useAssetsStore.getState().getAssetById(assetId);
+      if (updatedAsset?.type === "component") {
+        syncComponentClipsToAsset(assetId, {
+          componentName: updatedAsset.componentName,
+          inputDefs: updatedAsset.inputDefs,
+        });
+      }
 
       const oldCode = existing.code;
       const newCode = updates.code;
