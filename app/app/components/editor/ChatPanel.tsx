@@ -27,6 +27,7 @@ import {
   MessageSquare,
   ListTodo,
   Paperclip,
+  Mic,
   X,
   Image as ImageIcon,
   FileVideo,
@@ -44,6 +45,7 @@ import {
   VolumeX,
   Copy,
   ExternalLink,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
@@ -76,6 +78,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { getAudioInputDevices } from "@/app/lib/live";
+import type { AudioDevice } from "@/app/lib/live";
+import { AudioWaveVisualizer } from "@/app/components/AudioWaveVisualizer";
 import { toolRegistry, executeTool } from "@/app/lib/tools/tool-registry";
 import type {
   ToolDefinition,
@@ -178,6 +188,22 @@ export function ChatPanel() {
   const recommendedActionsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatInputRef = useRef<ChatInputRef>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordLevel, setRecordLevel] = useState(0);
+  const [micPopoverOpen, setMicPopoverOpen] = useState(false);
+  const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
+  const [selectedMicId, setSelectedMicId] = useState("");
+  const [showMicSelector, setShowMicSelector] = useState(false);
+  const [isRefreshingMicDevices, setIsRefreshingMicDevices] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recordingRafRef = useRef<number | null>(null);
+  const recordingContextRef = useRef<AudioContext | null>(null);
+  const recordingAnalyserRef = useRef<AnalyserNode | null>(null);
+  const recordingDataArrayRef = useRef<Uint8Array | null>(null);
+
+  const CHAT_MIC_STORAGE_KEY = "chat-record-mic-device-id";
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesScrollContainerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -561,6 +587,124 @@ export function ChatPanel() {
     setPendingAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
   }, []);
 
+  // Load mic devices when popover opens
+  useEffect(() => {
+    if (!micPopoverOpen) return;
+    getAudioInputDevices().then((devices) => {
+      setAudioDevices(devices);
+      if (devices.length === 0) return;
+      const savedId =
+        typeof window !== "undefined" ? localStorage.getItem(CHAT_MIC_STORAGE_KEY) : null;
+      const stillAvailable = savedId && devices.some((d) => d.deviceId === savedId);
+      setSelectedMicId(stillAvailable ? savedId : devices[0].deviceId);
+    });
+  }, [micPopoverOpen]);
+
+  const refreshMicDevices = useCallback(() => {
+    setIsRefreshingMicDevices(true);
+    getAudioInputDevices()
+      .then((devices) => {
+        setAudioDevices(devices);
+        if (devices.length > 0) {
+          const savedId =
+            typeof window !== "undefined" ? localStorage.getItem(CHAT_MIC_STORAGE_KEY) : null;
+          const stillAvailable = savedId && devices.some((d) => d.deviceId === savedId);
+          setSelectedMicId(stillAvailable ? savedId : devices[0].deviceId);
+        }
+      })
+      .finally(() => setTimeout(() => setIsRefreshingMicDevices(false), 300));
+  }, []);
+
+  const setSelectedMicIdAndSave = useCallback((deviceId: string) => {
+    setSelectedMicId(deviceId);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(CHAT_MIC_STORAGE_KEY, deviceId);
+    }
+  }, []);
+
+  const toggleRecording = useCallback(async () => {
+    if (isRecording) {
+      const mr = mediaRecorderRef.current;
+      const stream = streamRef.current;
+      if (recordingRafRef.current != null) {
+        cancelAnimationFrame(recordingRafRef.current);
+        recordingRafRef.current = null;
+      }
+      recordingContextRef.current?.close();
+      recordingContextRef.current = null;
+      recordingAnalyserRef.current = null;
+      recordingDataArrayRef.current = null;
+      setRecordLevel(0);
+      if (mr && mr.state !== "inactive") {
+        mr.stop();
+      }
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+      mediaRecorderRef.current = null;
+      setIsRecording(false);
+      return;
+    }
+    try {
+      const constraints: MediaStreamConstraints = {
+        audio: selectedMicId ? { deviceId: { exact: selectedMicId } } : true,
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
+
+      // Level meter: AudioContext + AnalyserNode
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      recordingContextRef.current = ctx;
+      recordingAnalyserRef.current = analyser;
+      recordingDataArrayRef.current = dataArray;
+
+      const tick = () => {
+        const analyserNode = recordingAnalyserRef.current;
+        const data = recordingDataArrayRef.current;
+        if (!analyserNode || !data) return;
+        analyserNode.getByteFrequencyData(data as Uint8Array<ArrayBuffer>);
+        const sum = data.reduce((a, b) => a + b, 0);
+        const level = Math.min(1, sum / (data.length * 128));
+        setRecordLevel(level);
+        recordingRafRef.current = requestAnimationFrame(tick);
+      };
+      tick();
+
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+      const recorder = new MediaRecorder(stream);
+      recordedChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        const chunks = recordedChunksRef.current;
+        if (chunks.length > 0) {
+          const blob = new Blob(chunks, { type: mimeType });
+          const file = new File([blob], `recording-${Date.now()}.webm`, {
+            type: mimeType.split(";")[0],
+          });
+          void uploadFiles([file]);
+        }
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      };
+      recorder.start(100);
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Failed to start recording:", err);
+      toast.error("Could not access microphone");
+    }
+  }, [isRecording, selectedMicId, uploadFiles]);
+
   const taskListSnapshot = useMemo(
     () => deriveTaskListSnapshot(messages),
     [messages]
@@ -616,7 +760,11 @@ export function ChatPanel() {
 
   const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // Trigger submit via ChatInput ref
+    // Allow send with attachments only (ChatInput bails on empty text)
+    if (pendingAttachments.length > 0 && !hasInputContent) {
+      handleChatSubmit("", []);
+      return;
+    }
     chatInputRef.current?.submit();
   };
 
@@ -1151,6 +1299,19 @@ export function ChatPanel() {
 
   useEffect(() => {
     if (!messages || messages.length === 0) return;
+
+    // Tools that must wait for all other tools in the same batch to complete
+    // before they start (they read state that other tools may be writing).
+    const DEFERRED_TOOLS = new Set(["previewTimeline"]);
+
+    type ToolCall = {
+      toolName: string;
+      toolCallId: string;
+      input: Record<string, unknown>;
+    };
+    const immediateCalls: ToolCall[] = [];
+    const deferredCalls: ToolCall[] = [];
+
     for (const message of messages) {
       const parts = Array.isArray(message.parts) ? message.parts : [];
       for (const rawPart of parts) {
@@ -1169,12 +1330,41 @@ export function ChatPanel() {
         if (!clientToolMap.has(toolName)) continue;
         if (handledToolCalls.current.has(part.toolCallId)) continue;
         handledToolCalls.current.add(part.toolCallId);
-        void runClientToolForCall({
+
+        const call: ToolCall = {
           toolName,
           toolCallId: part.toolCallId,
           input: (part.input as Record<string, unknown>) ?? {},
-        });
+        };
+
+        if (DEFERRED_TOOLS.has(toolName)) {
+          deferredCalls.push(call);
+        } else {
+          immediateCalls.push(call);
+        }
       }
+    }
+
+    if (immediateCalls.length === 0 && deferredCalls.length === 0) return;
+
+    if (deferredCalls.length === 0) {
+      // No deferred tools — fire everything concurrently as before.
+      for (const call of immediateCalls) {
+        void runClientToolForCall(call);
+      }
+    } else {
+      // Run immediate tools first; once they all finish, start deferred tools
+      // so that preview sees the latest state written by edit tools.
+      void (async () => {
+        if (immediateCalls.length > 0) {
+          await Promise.all(
+            immediateCalls.map((call) => runClientToolForCall(call))
+          );
+        }
+        for (const call of deferredCalls) {
+          void runClientToolForCall(call);
+        }
+      })();
     }
   }, [messages, clientToolMap, runClientToolForCall]);
 
@@ -1727,6 +1917,119 @@ export function ChatPanel() {
               <Send className="size-4" />
             </button>
           )}
+          {/* Mic: popover with device picker + waveform + record (send as attachment) */}
+          <Popover
+            open={micPopoverOpen}
+            onOpenChange={(open) => {
+              if (!open && isRecording) return;
+              setMicPopoverOpen(open);
+            }}
+          >
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                disabled={isBusy || isUploadingAttachments}
+                className={cn(
+                  "shrink-0 rounded-lg border px-2.5 py-2 transition-colors disabled:opacity-50",
+                  isRecording
+                    ? "border-red-500/50 bg-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/30"
+                    : "border-border bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+                title="Record audio to send as attachment"
+              >
+                <Mic className={cn("size-4", isRecording && "animate-pulse")} />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" side="top" className="w-72 p-0">
+              <div className="flex flex-col gap-3 p-3">
+                {/* Waveform when recording */}
+                {isRecording && (
+                  <div className="h-16 w-full rounded-md overflow-hidden bg-muted/50">
+                    <AudioWaveVisualizer
+                      level={recordLevel}
+                      isActive={true}
+                      color="#ef4444"
+                      className="w-full h-full"
+                    />
+                  </div>
+                )}
+                {/* Mic selector (when not recording) */}
+                {!isRecording && audioDevices.length > 0 && (
+                  <div className="relative">
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className="text-xs text-muted-foreground">Microphone</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          refreshMicDevices();
+                        }}
+                        disabled={isRefreshingMicDevices}
+                        className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-70"
+                        title="Refresh list"
+                      >
+                        <RefreshCw className={cn("size-3.5", isRefreshingMicDevices && "animate-spin")} />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowMicSelector((v) => !v)}
+                      className="flex items-center gap-1.5 w-full px-2.5 py-2 rounded-md border border-border bg-background text-left text-sm hover:bg-muted transition-colors"
+                    >
+                      <Mic className="size-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate flex-1">
+                        {audioDevices.find((d) => d.deviceId === selectedMicId)?.label ?? "Default"}
+                      </span>
+                      <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", showMicSelector && "rotate-180")} />
+                    </button>
+                    {showMicSelector && (
+                      <div className="absolute top-full left-0 right-0 mt-1 py-1 rounded-md border border-border bg-popover shadow-lg max-h-40 overflow-y-auto z-10">
+                        {audioDevices.map((device) => (
+                          <button
+                            key={device.deviceId}
+                            type="button"
+                            onClick={() => {
+                              setSelectedMicIdAndSave(device.deviceId);
+                              setShowMicSelector(false);
+                            }}
+                            className={cn(
+                              "w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors",
+                              device.deviceId === selectedMicId ? "text-primary font-medium" : "text-foreground"
+                            )}
+                          >
+                            {device.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* Record / Stop button */}
+                <button
+                  type="button"
+                  onClick={toggleRecording}
+                  className={cn(
+                    "flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors",
+                    isRecording
+                      ? "border-red-500/50 bg-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/30"
+                      : "border-border bg-primary text-primary-foreground hover:bg-primary/90"
+                  )}
+                >
+                  {isRecording ? (
+                    <>
+                      <Square className="size-4 fill-current" />
+                      Stop & send as attachment
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="size-4" />
+                      Start recording
+                    </>
+                  )}
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </form>
 
         {/* Powered by branding and credits */}

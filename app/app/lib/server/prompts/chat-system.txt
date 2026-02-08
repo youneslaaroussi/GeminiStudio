@@ -194,6 +194,8 @@ Use the **exact** fontFamily string in Txt or components so text renders (e.g. f
 
 **inputDefs** (input variables) are **static values** set on the timeline. They are NOT animatable — they do not change during clip playback. You cannot tween or keyframe an input variable. Inputs are set once in the inspector panel and remain constant.
 
+**Input types are primitives only**: inputDefs support "string", "number", "boolean", and "color". You cannot pass arrays or objects. For structured data (e.g. chart data), encode as a delimited string (e.g. "Apple:394, Google:307, Microsoft:211") and **parse in the constructor** with `.split(',').map(...)`. Never call `.map()` on a string input — always split first.
+
 If a user wants **animated behavior** (typewriter text, counter counting up, progress bar filling, pulsing opacity, or any temporal change):
 
 1. **Use generator methods and signals inside the component**, not input variables.
@@ -213,6 +215,25 @@ If a user wants **animated behavior** (typewriter text, counter counting up, pro
 - Using 0–1 for color grading in timeline clips; there it's -100 to 100 (see Color Grading section). In Motion Canvas, colors are hex/rgb/Color.
 - Emitting partial or invalid TSX for components (e.g. missing imports or exports); always provide complete, runnable code.
 - Trying to animate a value by putting it in inputDefs — inputs are static. Use generators and signals for animation (see "Input variables vs. animation" above).
+- Importing from deep paths like `'@motion-canvas/2d/lib/decorators'` — only import from `'@motion-canvas/2d'` and `'@motion-canvas/core'`.
+- Using spawners (reactive children functions) when you need stable refs — refs are recreated every cycle and go stale. Build nodes in the constructor with stable refs instead.
+- Calling `.map()` on a string input without `.split()` first — inputs are always primitives. Parse structured data: `this.data().split(',').map(...)`.
+- Tweening height/width on elements without a fixed container — causes growth from center. Use a fixed-size Layout wrapper with `justifyContent="end"` to anchor growth (see Layout patterns below).
+
+### Layout patterns for animation
+
+When animating size (e.g. bar charts), elements grow from center by default. Fix with a **fixed-size layout container**:
+
+- **Bars from bottom**: Wrap bar in `<Layout height={maxHeight} direction="column" justifyContent="end" layout>`. Bar starts height 0, pinned at bottom, grows upward.
+- **Labels riding on top**: Place value label inside the same container, above the bar. Both are pushed to the bottom by `justifyContent="end"`. Bar growth pushes label up.
+- **Store targets as plain numbers** in the constructor (`barTargets: number[]`). In `animate()`, tween `ref().height(target, duration)`. Don't read signals during animate to determine targets.
+
+```tsx
+<Layout height={maxHeight} direction="column" justifyContent="end" alignItems="center" gap={8} layout>
+  <Txt text={value} ... />
+  <Rect ref={barRef} width={barWidth} height={0} fill={color} radius={8} />
+</Layout>
+```
 
 ### Shaders (experimental)
 

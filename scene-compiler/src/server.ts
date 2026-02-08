@@ -3,8 +3,13 @@ import type { Request, Response, Express } from 'express';
 import { z } from 'zod';
 import { captureRawBody, verifySignature, type RequestWithRawBody } from './auth.js';
 import { compileScene } from './compiler.js';
+import { compileSceneEsbuild } from './compiler-esbuild.js';
 import { logger } from './logger.js';
 import type { CompilerConfig } from './config.js';
+
+/** Pick the compiler implementation based on env var. Default: esbuild (fast). */
+const useEsbuild = process.env.SCENE_COMPILER_ENGINE !== 'vite';
+const compile = useEsbuild ? compileSceneEsbuild : compileScene;
 
 /** Zod schema for the compile request body. */
 const compileRequestSchema = z.object({
@@ -56,7 +61,7 @@ export const createServer = (config: CompilerConfig): Express => {
 
       try {
         const result = await Promise.race([
-          compileScene(config, { files, includeDiagnostics }),
+          compile(config, { files, includeDiagnostics }),
           new Promise<never>((_, reject) => {
             controller.signal.addEventListener('abort', () =>
               reject(new Error(`Build timed out after ${config.buildTimeoutMs}ms`)),

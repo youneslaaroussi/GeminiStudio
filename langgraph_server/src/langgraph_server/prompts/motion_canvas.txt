@@ -94,15 +94,40 @@ Monospace (code): JetBrains Mono.
 - **Do not** add a prop to the interface without the matching @initial/@signal (or @colorSignal) and declare readonly on the class — Motion Canvas requires both.
 - **Do not** omit fill on Latex.
 - **Do not** assume (0,0) is top-left or that positive y is up; origin is center, y down.
+- **Do not** import from deep paths like `'@motion-canvas/2d/lib/decorators'` — only import from `'@motion-canvas/2d'` and `'@motion-canvas/core'`. Deep paths break compilation.
+- **Do not** use spawners (reactive children functions) when you need stable refs for animation — refs are recreated every spawner cycle and become stale. Build nodes in the constructor instead.
+- **Do not** call `.map()` on input props that are strings — inputs are always primitives. Parse structured data with `.split(',').map(...)` first.
 - **Always** provide **complete** TSX for createComponent/editComponent: full file with imports from '@motion-canvas/2d' and '@motion-canvas/core', exported component class (and optionally props interface). No partial snippets or invalid syntax.
 - **Always** use valid TypeScript/JSX: correct decorators, types, and semicolons so the server-side compiler can compile the component.
 - **Always** implement **animate(duration?)** for components used on the timeline — the timeline calls no other method (no reveal, fall, run, etc.). Have animate delegate to your internal logic.
+- **Always** build animated nodes in the **constructor** with stable refs and store animation targets in plain arrays (e.g. `barTargets: number[]`). Do not read signal values during animate() to determine targets — compute them once in the constructor.
 
 ## Imports (use these to avoid compile errors)
 
-- **signal, initial, colorSignal**: import from **'@motion-canvas/2d'** (not from core).
+- **signal, initial, colorSignal**: import from **'@motion-canvas/2d'** (not from core, not from deep paths like `'@motion-canvas/2d/lib/decorators'`).
 - **createSignal, createRef, tween, SignalValue, SimpleSignal, etc.**: import from **'@motion-canvas/core'**.
 - **Function components**: if you use a function that returns JSX (e.g. with createSignal for props), wrap it with **makeComponent** and import: `import { makeComponent } from '../../lib/makeComponent';` (do not import makeComponent from @motion-canvas/core — it is provided by the project).
+
+## Layout patterns for animation
+
+When animating heights/widths of elements that should grow from a specific edge (e.g. bar charts growing from bottom), the default behavior is growth from center. Fix this with a **fixed-size layout container**:
+
+- **Bars growing from bottom**: Wrap each bar in a Layout with a **fixed height** equal to the maximum, `direction="column"`, `justifyContent="end"`. The bar starts at height 0 inside the container, pinned to the bottom. Tween height — the bar grows upward while the container size never changes.
+- **Labels that ride on top of a growing bar**: Place the label **inside** the same fixed-height container, above the bar. With `justifyContent="end"`, both label and bar are pushed to the bottom. As the bar grows, it pushes the label upward.
+
+```tsx
+// Bar chart column pattern:
+<Layout direction="column" alignItems="center" gap={12}>
+  <Layout height={maxHeight} direction="column" justifyContent="end" alignItems="center" gap={8} layout>
+    <Txt text={value} ... />   {/* value label — rides on top of bar */}
+    <Rect ref={barRef} width={barWidth} height={0} fill={color} radius={8} />
+  </Layout>
+  <Txt text={label} ... />     {/* name label — stays at bottom */}
+</Layout>
+```
+
+- **Horizontal bars growing from left**: Same pattern but `direction="row"`, `justifyContent="start"`, fixed **width** container.
+- **General rule**: Never rely on the component's root position to anchor animated growth. Use a fixed-size inner container with flex alignment to pin the growing edge.
 
 ## Example skeleton (createComponent)
 
@@ -145,6 +170,8 @@ export class MyWidget extends Node {
 ## Input variables vs. animation (critical distinction)
 
 **input_defs** (input variables) are **static values** set on the timeline. They are NOT animatable — they do not change over the course of the clip's playback. You cannot tween or keyframe an input variable. When a user drags a component onto the timeline, inputs are set once (e.g. in the inspector panel) and remain constant.
+
+**Input types are primitives only**: input_defs support "string", "number", "boolean", and "color". You **cannot** pass arrays or objects as inputs. If the component needs structured data (e.g. chart data points), encode it as a **delimited string** (e.g. `"Apple:394, Google:307, Microsoft:211"`) and **parse it in the constructor** with `.split(',').map(...)`. Never call `.map()` directly on a string input — always split first.
 
 **Timeline entry point**: The timeline calls **only** `animate(duration?)`. You must implement `public *animate(duration?: number)`; it can delegate to any internal method (e.g. `yield* this.fill(duration);`). Do not rely on other names (reveal, fall, run, fill, etc.) — only `animate` is invoked.
 

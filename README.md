@@ -52,6 +52,7 @@
 - [Architecture](#components)
 - [How the Execution Layer Works](#how-the-execution-layer-works)
 - [Programmatic Motion Graphics: The Agent Writes Components, Not Templates](#programmatic-motion-graphics-the-agent-writes-components-not-templates)
+- [Scene Compiler: esbuild for Millisecond-Fast Compilation](#scene-compiler-esbuild-for-millisecond-fast-compilation)
 - [Component plugins: data viz, maps, color, and noise](#component-plugins-data-viz-maps-color-and-noise)
 - [Motion Canvas: The Perfect Rendering Layer for LLMs](#motion-canvas-the-perfect-rendering-layer-for-llms)
 - [Autonomous Video Production: The Agent Can Watch Its Own Work](#autonomous-video-production-the-agent-can-watch-its-own-work)
@@ -198,7 +199,7 @@ This is the full loop: **ingest → perceive → reason → generate → render.
 | **asset-service**  | FastAPI, GCS, Firestore      | 8081           | [asset-service/README.md](asset-service/README.md) |
 | **renderer**       | Express, BullMQ, Puppeteer, FFmpeg | 4000    | [renderer/README.md](renderer/README.md) |
 | **scene**          | Motion Canvas, Vite          | (build only)   | — |
-| **scene-compiler** | Vite, Motion Canvas plugin   | 4001           | — |
+| **scene-compiler** | esbuild (default), optional Vite | 4001           | See [Scene Compiler](#scene-compiler-esbuild-for-millisecond-fast-compilation) |
 | **video-effects-service** | FastAPI, Replicate | —        | [video-effects-service/README.md](video-effects-service/README.md) |
 | **billing-service** | NestJS, Firebase             | —              | [billing-service/README.md](billing-service/README.md) |
 
@@ -308,10 +309,27 @@ Agent writes TSX → Scene Compiler builds it → Preview renders live → Rende
 | Stage | What Happens |
 |-------|-------------|
 | **Create** | Agent calls `createComponent` with full TSX code, input definitions, and a class name |
-| **Compile** | Scene Compiler service (Vite + Motion Canvas plugin) compiles the component into the scene bundle. A barrel file is auto-generated—no manual registration needed |
+| **Compile** | Scene Compiler service compiles the component into the scene bundle (esbuild by default; see below). A barrel file is auto-generated—no manual registration needed |
 | **Preview** | `ScenePlayer` detects the new component asset, recompiles, and renders it live in the browser at 30fps. Changes appear in real time |
 | **Control** | Input definitions (`inputDefs`) surface as controls in the timeline inspector. Users tweak values (text, color, speed, size) without code |
 | **Render** | The renderer compiles with the same component files and exports production-quality video via headless Puppeteer + FFmpeg |
+
+### Scene Compiler: esbuild for Millisecond-Fast Compilation
+
+The **scene-compiler** service turns Motion Canvas TypeScript (project + scenes + custom components) into a single JavaScript bundle that the preview and renderer load. It used to use **Vite** with the Motion Canvas plugin; we now use **esbuild** by default for roughly **25× faster** cold compiles and **instant** cache hits.
+
+| Scenario | Before (Vite) | After (esbuild) |
+|----------|----------------|------------------|
+| Cold compile | ~3.5 s | **~130 ms** |
+| Same inputs (cache hit) | ~3.5 s | **0 ms** |
+| Custom component change | ~3.5 s | **~70 ms** |
+
+**How it works:** The compiler replicates the Motion Canvas Vite plugin behavior (e.g. `?scene` wrappers, `.meta` and `.glsl` handling, `virtual:settings.meta`, custom component injection) in a custom esbuild plugin. Because esbuild strips URL query suffixes like `?scene` before plugin callbacks see them, we read and rewrite `project.ts` at build time so scene imports use a custom `__mc_scene__` suffix that the plugin can resolve. The result is the same bundle the Vite pipeline produced, with a small in-memory LRU cache (50 entries, 5 min TTL) so repeated compiles with identical inputs return immediately.
+
+**Rollback:** To use the original Vite-based compiler, set `SCENE_COMPILER_ENGINE=vite` in the scene-compiler environment. No code changes required.
+
+- **Port:** 4001  
+- **Config:** `scene-compiler/` (e.g. `BASE_SCENE_DIR`, `SCENE_COMPILER_SHARED_SECRET`)
 
 ### Inputs vs. Animation
 
@@ -525,7 +543,7 @@ GeminiStudio/
 ├── app/                    # Next.js app (editor, chat, assets UI)
 ├── ai-sdk/                 # Patched Vercel AI SDK (file-url in tool results for Gemini); see Credits
 ├── scene/                  # Motion Canvas project (Vite)
-├── scene-compiler/         # On-demand scene compilation service (Vite, Express)
+├── scene-compiler/         # On-demand scene compilation (esbuild default, optional Vite; Express)
 ├── renderer/               # Render service (Express, BullMQ, headless bundle)
 ├── langgraph_server/       # LangGraph agent (FastAPI, Gemini 3, tools)
 ├── asset-service/          # Asset upload & pipeline (Gemini analysis, GCS, Firestore)
@@ -545,7 +563,7 @@ GeminiStudio/
 | Agent & tools | `langgraph_server/agent.py`, `langgraph_server/tools/` |
 | AI SDK fork   | `ai-sdk/` (patched `@ai-sdk/google` for multimodal tool results; app uses `file:../ai-sdk/packages/google`) |
 | Tool manifest | `shared/tools/manifest.json` |
-| Scene compiler | `scene-compiler/` (on-demand Vite compilation with custom component injection) |
+| Scene compiler | `scene-compiler/` (esbuild-based on-demand compilation with custom component injection; optional Vite via `SCENE_COMPILER_ENGINE=vite`) |
 | Renderer      | `renderer/` |
 | Scene         | `scene/` (Motion Canvas project, component registry, clip playback) |
 | App           | `app/app/` |

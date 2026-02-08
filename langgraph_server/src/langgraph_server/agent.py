@@ -145,7 +145,17 @@ def create_graph(settings: Settings | None = None):
         logger.info("[AGENT] call_tool: context = thread_id=%s, user_id=%s, project_id=%s, branch_id=%s",
                     thread_id, user_id, project_id, branch_id)
         
-        for tool_call in last_message.tool_calls:
+        # Sort tool calls so that state-reading tools (previewTimeline) always
+        # run after state-writing tools (edit/add/delete).  This avoids a race
+        # condition where a preview renders stale state because Gemini placed
+        # the preview call before the edits in the same parallel batch.
+        _DEFERRED_TOOLS = {"previewTimeline"}
+        sorted_tool_calls = sorted(
+            last_message.tool_calls,
+            key=lambda tc: tc["name"] in _DEFERRED_TOOLS,
+        )
+
+        for tool_call in sorted_tool_calls:
             tool = tools_by_name.get(tool_call["name"])
             tool_name = tool_call["name"]
             logger.info("[AGENT] Executing tool: %s", tool_name)

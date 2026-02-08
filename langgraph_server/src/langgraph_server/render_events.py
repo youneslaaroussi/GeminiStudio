@@ -12,9 +12,10 @@ from google.api_core.exceptions import NotFound
 from google.cloud import pubsub_v1, storage
 from google.cloud.pubsub_v1.subscriber.message import Message
 from google.oauth2 import service_account
+from langchain_core.messages import AIMessage, HumanMessage
 
 from .config import Settings
-from .firebase import fetch_chat_session, update_chat_session_messages, send_telegram_message, get_telegram_chat_id_for_user
+from .firebase import fetch_chat_session, update_chat_session_messages
 
 logger = logging.getLogger(__name__)
 
@@ -190,8 +191,9 @@ class RenderEventSubscriber:
             job_id, event_type, user_id,
         )
 
-        # Generate signed download URL for completed renders
+        # Generate signed download URL and get asset_id for completed renders
         render_download_url: Optional[str] = None
+        asset_id: Optional[str] = None
         if event_type == "render.completed":
             ev_result = event.get("result") or {}
             gcs_path = ev_result.get("gcsPath")
@@ -199,6 +201,8 @@ class RenderEventSubscriber:
                 render_download_url = _generate_signed_download_url(
                     gcs_path, self._settings
                 )
+            # Renderer registers the output as a project asset; agent uses this for sendAttachment
+            asset_id = event.get("assetId") or None
 
         # ── Write notification to Firebase chat session ──────────────
         if user_id:
@@ -214,22 +218,21 @@ class RenderEventSubscriber:
                     "parts": [{"type": "text", "text": notification_text}],
                     "createdAt": datetime.utcnow().isoformat() + "Z",
                 }
-                # Embed video attachment in Firebase chat for the web UI
+                # Embed video attachment in Firebase chat for the web UI; include assetId for agent
                 if event_type == "render.completed" and render_download_url:
                     project_name = (extra_meta.get("projectName") or "Render")[:60]
-                    new_message["metadata"] = {
-                        "attachments": [
-                            {
-                                "id": f"render-{int(time.time() * 1000)}",
-                                "name": f"Render: {project_name}",
-                                "mimeType": "video/mp4",
-                                "size": 0,
-                                "category": "video",
-                                "signedUrl": render_download_url,
-                                "uploadedAt": datetime.utcnow().isoformat() + "Z",
-                            }
-                        ]
+                    attachment: Dict[str, Any] = {
+                        "id": f"render-{int(time.time() * 1000)}",
+                        "name": f"Render: {project_name}",
+                        "mimeType": "video/mp4",
+                        "size": 0,
+                        "category": "video",
+                        "signedUrl": render_download_url,
+                        "uploadedAt": datetime.utcnow().isoformat() + "Z",
                     }
+                    if asset_id:
+                        attachment["assetId"] = asset_id
+                    new_message["metadata"] = {"attachments": [attachment]}
                 current_messages.append(new_message)
 
                 await asyncio.to_thread(
@@ -243,38 +246,79 @@ class RenderEventSubscriber:
             except Exception:
                 logger.exception("Failed to write render notification to Firebase")
 
-        # ── Send notification to Telegram ────────────────────────────
-        telegram_chat_id = None
-        if thread_id.startswith("telegram-"):
-            telegram_chat_id = thread_id.replace("telegram-", "")
-        elif user_id:
-            telegram_chat_id = await asyncio.to_thread(
-                get_telegram_chat_id_for_user, user_id, self._settings
-            )
-
-        if telegram_chat_id:
+        # ── Re-invoke agent so it can use sendAttachment (no separate Telegram send) ──
+        if (
+            event_type == "render.completed"
+            and thread_id
+            and user_id
+            and project_id
+            and asset_id
+        ):
             try:
-                if render_download_url:
-                    # Send video so user gets the file directly
-                    await send_telegram_message(
-                        telegram_chat_id,
-                        notification_text,
-                        self._settings,
-                        attachments=[
-                            {
-                                "url": render_download_url,
-                                "type": "video",
-                                "caption": notification_text,
-                            },
-                        ],
-                    )
-                else:
-                    await send_telegram_message(
-                        telegram_chat_id, notification_text, self._settings
-                    )
-                logger.info("Sent render notification to Telegram chat %s", telegram_chat_id)
-            except Exception as e:
-                logger.warning("Failed to send render notification to Telegram: %s", e)
+                from .agent import graph
+
+                configurable: Dict[str, str] = {
+                    "thread_id": thread_id,
+                    "user_id": user_id,
+                    "project_id": project_id,
+                }
+                if agent_meta.get("branchId"):
+                    configurable["branch_id"] = agent_meta["branchId"]
+
+                # Inject event so agent sees render is ready and can call sendAttachment(asset_id, type="video")
+                event_message = (
+                    f"Render completed. The output is available as a project asset.\n"
+                    f"Asset ID: {asset_id}\n"
+                    "If the user asked to see or receive the render, use sendAttachment to send it to them now."
+                )
+                result = await graph.ainvoke(
+                    {"messages": [HumanMessage(content=event_message)]},
+                    config={"configurable": configurable, "recursion_limit": 15},
+                )
+                logger.info(
+                    "Dispatched render.completed to agent for thread %s (asset_id=%s)",
+                    thread_id,
+                    asset_id,
+                )
+
+                # Append agent response to Firebase so chat history stays in sync (no Telegram)
+                if result.get("messages"):
+                    ai_response = None
+                    for msg in reversed(result["messages"]):
+                        if isinstance(msg, AIMessage):
+                            content = msg.content
+                            if isinstance(content, str):
+                                ai_response = content
+                            elif isinstance(content, list):
+                                ai_response = "".join(
+                                    block.get("text", "") if isinstance(block, dict) else str(block)
+                                    for block in content
+                                )
+                            break
+                    if ai_response:
+                        session = await asyncio.to_thread(
+                            fetch_chat_session, thread_id, self._settings
+                        )
+                        current = list(session.get("messages", [])) if session else []
+                        current.append({
+                            "id": f"msg-{int(time.time() * 1000)}-agent",
+                            "role": "assistant",
+                            "parts": [{"type": "text", "text": ai_response}],
+                            "createdAt": datetime.utcnow().isoformat() + "Z",
+                        })
+                        await asyncio.to_thread(
+                            update_chat_session_messages,
+                            user_id,
+                            thread_id,
+                            current,
+                            self._settings,
+                        )
+                        logger.info("Wrote agent render response to Firebase for thread %s", thread_id)
+            except Exception:
+                logger.exception(
+                    "Failed to dispatch render.completed to agent for thread %s",
+                    thread_id,
+                )
 
     def _build_notification_text(
         self, event_type: str | None, event: Dict[str, Any]

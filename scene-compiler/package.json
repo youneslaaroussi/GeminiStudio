@@ -17,6 +17,7 @@
     "@motion-canvas/core": "^3.17.2",
     "@motion-canvas/vite-plugin": "^3.17.2",
     "dotenv": "^16.4.5",
+    "esbuild": "^0.23.1",
     "express": "^4.19.2",
     "pino": "^9.4.0",
     "vite": "^5",
