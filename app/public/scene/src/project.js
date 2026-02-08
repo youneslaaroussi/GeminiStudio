@@ -13967,31 +13967,36 @@ function* playComponent({ entry, sceneWidth, sceneHeight }) {
   const node = ref();
   if (!node) return;
   yield* applyEnterTransition(node, clip.enterTransition, 1, sceneWidth, sceneHeight);
-  if (timing.mainDuration > 0) {
-    const instance = node;
-    const animateMethod = instance.animateIn ?? instance.reveal ?? instance.animate;
-    if (typeof animateMethod === "function") {
-      const gen = animateMethod.call(instance, timing.mainDuration);
-      if (gen) {
+  const instance = node;
+  const animateMethod = instance.animateIn ?? instance.reveal ?? instance.animate;
+  const hasAnimate = typeof animateMethod === "function";
+  const durationArg = timing.mainDuration > 0 ? timing.mainDuration : void 0;
+  const mainDuration = timing.mainDuration > 0 ? timing.mainDuration : 0;
+  if (hasAnimate) {
+    const gen = animateMethod.call(instance, durationArg);
+    if (gen) {
+      yield* all(
+        gen,
+        ...timing.mainDuration > 0 && clip.animation && clip.animation !== "none" ? [applyClipAnimation(node, clip.animation, timing.mainDuration, clip.animationIntensity)] : []
+      );
+    } else if (mainDuration > 0) {
+      if (clip.animation && clip.animation !== "none") {
         yield* all(
-          gen,
-          ...clip.animation && clip.animation !== "none" ? [applyClipAnimation(node, clip.animation, timing.mainDuration, clip.animationIntensity)] : []
-        );
-      } else if (clip.animation && clip.animation !== "none") {
-        yield* all(
-          waitFor(timing.mainDuration),
-          applyClipAnimation(node, clip.animation, timing.mainDuration, clip.animationIntensity)
+          waitFor(mainDuration),
+          applyClipAnimation(node, clip.animation, mainDuration, clip.animationIntensity)
         );
       } else {
-        yield* waitFor(timing.mainDuration);
+        yield* waitFor(mainDuration);
       }
-    } else if (clip.animation && clip.animation !== "none") {
+    }
+  } else if (mainDuration > 0) {
+    if (clip.animation && clip.animation !== "none") {
       yield* all(
-        waitFor(timing.mainDuration),
-        applyClipAnimation(node, clip.animation, timing.mainDuration, clip.animationIntensity)
+        waitFor(mainDuration),
+        applyClipAnimation(node, clip.animation, mainDuration, clip.animationIntensity)
       );
     } else {
-      yield* waitFor(timing.mainDuration);
+      yield* waitFor(mainDuration);
     }
   }
   yield* applyExitTransition(node, clip.exitTransition, sceneWidth, sceneHeight);

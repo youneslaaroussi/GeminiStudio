@@ -35,9 +35,21 @@ export interface CompileSceneRequest {
   files?: Record<string, string>;
 }
 
+/** A single type/lint diagnostic from the compiler. */
+export interface CompileSceneDiagnostic {
+  file: string;
+  line: number;
+  column: number;
+  message: string;
+  code?: string;
+  severity: 'error' | 'warning';
+}
+
 export interface CompileSceneResponse {
   /** The compiled project.js content. */
   js: string;
+  /** Type/lint diagnostics from tsc (when available). Present even when build succeeded. */
+  diagnostics?: CompileSceneDiagnostic[];
 }
 
 /**

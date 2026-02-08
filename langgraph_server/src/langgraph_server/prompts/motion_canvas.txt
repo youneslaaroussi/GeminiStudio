@@ -58,7 +58,17 @@ When you create or edit Motion Canvas components (createComponent, editComponent
 ## Path and Spline details
 
 - **Path**: data = full SVG d string; tween data for morph; start/end and getPointAtPercentage like Line/Spline.
-- **Spline**: points= gives auto handles (cardinal). Knot children: startHandle, endHandle relative to knot; one handle = other mirrored; both = broken knot (corner). smoothness, closed.
+- **Spline**: Smooth curves through control points. Set lineWidth and stroke (or fill) or it won't be visible.
+  - **points** (array of [x,y]): simplest; auto handles (Cardinal spline). smoothness (0–1) shapes the curve.
+  - **Knot children**: finer control. `<Spline><Knot position={[x,y]} /><Knot position={...} startHandle={[dx,dy]} endHandle={[dx,dy]} /></Spline>`. Handles are **relative to the knot**. One handle only → the other is mirrored (flipped). Both startHandle and endHandle → **broken knot** (sharp corner). closed={true} to close the path.
+  - **Knot auto**: blend user handles with auto-calculated (0 = user, 1 = auto). Use startHandleAuto / endHandleAuto for per-handle blend; animatable.
+  - **Drawing**: start and end (0–1) are percentage of arclength to draw. Tween end 0→1 to animate drawing; start/end work with startOffset/endOffset.
+  - **Motion along spline**: spline().getPointAtPercentage(t) returns { position, tangent }; use for placing/moving a node along the curve (tangent.degrees for rotation).
+  - Animating knot positions only works when using Knot nodes, not the points property.
+- **QuadBezier / CubicBezier**: Single Bézier curves (quad = one control point, cubic = two). Use for simple curves; use Spline for complex paths.
+  - **QuadBezier**: p0, p1, p2. **CubicBezier**: p0, p1, p2, p3. All points are **compound signals** (e.g. bezier().p0.x(200, 1), bezier().p1.y(-50, 1)).
+  - lineWidth, stroke; startArrow, endArrow, arrowSize for arrowheads. To **animate arrows appearing**, set arrowSize={0} with startArrow/endArrow and tween arrowSize to the desired size (arrowSize is animatable; the booleans are not).
+  - **Drawing**: start, end (0–1). Tween end from 0 to 1 to animate drawing the curve.
 
 ## Do not / Always
 
@@ -166,3 +176,27 @@ export class ProgressBar extends Node {
 ```
 
 When providing code to createComponent or editComponent, supply complete, valid TSX that compiles. Match input_defs to the component's signal props (name, type, default, label) so the timeline can control them.
+
+## Shaders (experimental)
+
+- The agent can add shaders to components. Shaders allow custom WebGL effects on any node via the **shaders** property.
+- **Simple use**: pass a string (GLSL fragment shader code): `shaders={myShader}`. Import the GLSL file: `import myShader from './myShader.glsl';`.
+- **With custom uniforms**: pass an object: `shaders={{ fragment: myShader, uniforms: { myFloat: 0.5, myVec2: new Vector2(2, 5), myColor: new Color('blue') } }}`. Uniform types: number → float, [n,n] or Vector2 → vec2, [n,n,n] → vec3, [n,n,n,n] or Color → vec4, BBox → vec4, Spacing → vec4.
+- **GLSL preprocessor**: use `#include "path"` for relative files or `#include "@motion-canvas/core/shaders/common.glsl"` for package files. Include common.glsl to get default uniforms: time, deltaTime, framerate, frame, resolution, sourceTexture, destinationTexture, sourceUV, destinationUV, sourceMatrix, destinationMatrix, outColor.
+- **Source vs destination**: sourceTexture = the node being rendered; destinationTexture = what's already on screen. Sample with sourceUV and destinationUV; combine like globalCompositeOperation.
+- **Caching**: Nodes with shaders are automatically cached. Use **cachePadding** if the effect extends beyond the node's logical size. For view-wide effects, increase view cachePadding.
+- Example (invert colors): fragment shader sets `outColor.rgb = 1.0 - texture(sourceTexture, sourceUV).rgb;` after including common.glsl.
+
+## Spawners (reactive children)
+
+- **Spawners** are functions that return children; they recompute when dependencies change (reactive). Use when the number or identity of children depends on signals.
+- **Non-reactive (wrong)**: `{range(count()).map(() => <Circle />)}` — changing count does not update the tree.
+- **Reactive (correct)**: `{() => range(count()).map(() => <Circle size={32} fill="white" />)}` — wrap in a function so it re-runs when count() changes.
+- **Performance**: Creating many nodes each frame is costly. For large reactive lists, use an **object pool**: pre-create nodes (e.g. `const pool = range(64).map(i => <Circle ... />)`), then in the spawner return `pool.slice(0, count())`. Only the spawner function should read the pool; use parent's helper methods to get refs to spawned children (e.g. `layout().childrenAs<Circle>()`). Do not hold refs to spawned children across spawn updates — they can be invalidated.
+- **Note**: Spawners are built on signals (lazy evaluation); future versions may reimplement with effects. Prefer effects when that API is available for new code.
+
+## Random values
+
+- **Reproducible randomness**: use **useRandom()** from '@motion-canvas/core'. Returns an RNG for the current scene; values are the same on every playback. Example: `const random = useRandom(); const n = random.nextInt(0, 10);`
+- **Custom seed**: `useRandom(123)` for a fixed sequence. The default seed is stored in the scene meta file.
+- **API**: see Random in Motion Canvas core (nextInt, nextFloat, etc.). Use for varied heights, positions, or visual variety while keeping the animation deterministic.

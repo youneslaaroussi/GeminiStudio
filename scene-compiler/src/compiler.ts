@@ -14,8 +14,38 @@ import { build, type InlineConfig, type PluginOption } from 'vite';
 import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync, symlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { basename, dirname, join } from 'path';
+import { spawnSync } from 'child_process';
 import { logger } from './logger.js';
 import type { CompilerConfig } from './config.js';
+
+/** A single type/lint diagnostic (file, position, message). */
+export interface CompileDiagnostic {
+  file: string;
+  line: number;
+  column: number;
+  message: string;
+  code?: string;
+  severity: 'error' | 'warning';
+}
+
+/** Parse tsc stderr into a list of diagnostics. Format: "file(line,col): error TS1234: message" */
+function parseTscDiagnostics(stderr: string): CompileDiagnostic[] {
+  const diagnostics: CompileDiagnostic[] = [];
+  // Match: path(line,col): error TS1234: message  or  path(line,col): warning TS1234: message
+  const re = /^(.+?)\((\d+),(\d+)\):\s*(error|warning)\s*(TS\d+)?:\s*(.+)$/gm;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(stderr)) !== null) {
+    diagnostics.push({
+      file: m[1].trim(),
+      line: parseInt(m[2], 10),
+      column: parseInt(m[3], 10),
+      message: m[6].trim(),
+      code: m[5] ?? undefined,
+      severity: m[4] === 'warning' ? 'warning' : 'error',
+    });
+  }
+  return diagnostics;
+}
 
 /**
  * Dynamically import the Motion Canvas Vite plugin.
@@ -61,6 +91,8 @@ export interface CompileRequest {
 export interface CompileResult {
   /** The compiled project.js content. */
   js: string;
+  /** Type/lint diagnostics from tsc --noEmit (when available). Present even when build succeeded. */
+  diagnostics?: CompileDiagnostic[];
 }
 
 /**
@@ -238,10 +270,28 @@ export async function compileScene(
     // Apply post-build patches
     js = applyPostBuildPatches(js);
 
+    // 5b. Run tsc --noEmit to collect type/lint diagnostics (build can succeed while types have errors)
+    let diagnostics: CompileDiagnostic[] | undefined;
+    const tsconfigPath = join(tmpDir, 'tsconfig.json');
+    if (existsSync(tsconfigPath)) {
+      const tscResult = spawnSync('npx', ['tsc', '--noEmit'], {
+        cwd: tmpDir,
+        encoding: 'utf8',
+        maxBuffer: 1024 * 1024,
+      });
+      const tscOutput = (tscResult.stderr ?? '') + (tscResult.stdout ?? '');
+      if (tscOutput) {
+        diagnostics = parseTscDiagnostics(tscOutput);
+        if (diagnostics.length > 0) {
+          logger.info({ count: diagnostics.length, files: [...new Set(diagnostics.map((d) => d.file))] }, 'Type-check reported diagnostics');
+        }
+      }
+    }
+
     const elapsed = Date.now() - startTime;
     logger.info({ elapsed, outputSize: Buffer.byteLength(js) }, 'Scene compilation complete');
 
-    return { js };
+    return diagnostics ? { js, diagnostics } : { js };
   } finally {
     // 6. Cleanup temp directory
     try {

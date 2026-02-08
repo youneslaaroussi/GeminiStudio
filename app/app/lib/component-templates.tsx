@@ -95,99 +95,10 @@ export class TypewriterText extends Node {
 
   public *reveal(duration?: number): ThreadGenerator {
     this.progress(0);
-    const dur = duration ?? this.fullText().length * this.charDelay();
+    const dur = (duration != null && duration > 0)
+      ? duration
+      : this.fullText().length * this.charDelay();
     yield* tween(dur, (v) => this.progress(easeInOutCubic(v)));
-  }
-}
-`,
-  },
-  {
-    id: "gradient-heading",
-    name: "Gradient Heading",
-    description: "Bold heading with a horizontal color gradient",
-    category: "text",
-    componentName: "GradientHeading",
-    preview: () => (
-      <svg viewBox="0 0 72 40" className="w-full h-full">
-        <defs>
-          <linearGradient id="gh-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#4285F4" />
-            <stop offset="100%" stopColor="#EA4335" />
-          </linearGradient>
-        </defs>
-        <text x="6" y="26" fontSize="14" fontFamily="sans-serif" fontWeight="900" fill="url(#gh-grad)">TITLE</text>
-      </svg>
-    ),
-    inputDefs: [
-      { name: "text", type: "string", default: "GEMINI STUDIO", label: "Text" },
-      { name: "colorA", type: "color", default: "#4285F4", label: "Color A" },
-      { name: "colorB", type: "color", default: "#EA4335", label: "Color B" },
-      { name: "textSize", type: "number", default: 72, label: "Font Size" },
-    ],
-    code: `import { Node, NodeProps, Layout, Rect, Txt, signal, initial, colorSignal } from '@motion-canvas/2d';
-import {
-  SignalValue, SimpleSignal, ColorSignal, PossibleColor,
-  createRef, createSignal, tween, easeInOutCubic,
-  type ThreadGenerator,
-} from '@motion-canvas/core';
-
-export interface GradientHeadingProps extends NodeProps {
-  text?: SignalValue<string>;
-  colorA?: SignalValue<PossibleColor>;
-  colorB?: SignalValue<PossibleColor>;
-  textSize?: SignalValue<number>;
-}
-
-export class GradientHeading extends Node {
-  @initial('GEMINI STUDIO') @signal()
-  public declare readonly text: SimpleSignal<string, this>;
-
-  @initial('#4285F4') @colorSignal()
-  public declare readonly colorA: ColorSignal<this>;
-
-  @initial('#EA4335') @colorSignal()
-  public declare readonly colorB: ColorSignal<this>;
-
-  @initial(72) @signal()
-  public declare readonly textSize: SimpleSignal<number, this>;
-
-  private readonly letters: Txt[] = [];
-  private readonly opacity = createSignal(0);
-
-  public constructor(props?: GradientHeadingProps) {
-    super({ ...props });
-    const layoutRef = createRef<Layout>();
-    this.add(
-      <Layout ref={layoutRef} layout gap={2} opacity={() => this.opacity()}>
-        {(() => {
-          const chars = this.text().split('');
-          return chars.map((char, i) => {
-            const t = chars.length > 1 ? i / (chars.length - 1) : 0;
-            const ref = createRef<Txt>();
-            const node = (
-              <Txt
-                ref={ref}
-                text={char === ' ' ? '\\u00A0' : char}
-                fill={() => {
-                  const a = this.colorA();
-                  const b = this.colorB();
-                  return \`color-mix(in srgb, \${a} \${Math.round((1 - t) * 100)}%, \${b})\`;
-                }}
-                fontSize={() => this.textSize()}
-                fontFamily={'Inter Variable'}
-                fontWeight={900}
-              />
-            );
-            this.letters.push(ref());
-            return node;
-          });
-        })()}
-      </Layout>,
-    );
-  }
-
-  public *fadeIn(duration: number = 0.8): ThreadGenerator {
-    yield* tween(duration, (v) => this.opacity(easeInOutCubic(v)));
   }
 }
 `,
@@ -358,6 +269,11 @@ export class AnimatedCounter extends Node {
     this.current(0);
     yield* tween(duration ?? this.speed(), (v) => this.current(easeInOutCubic(v) * t));
   }
+
+  /** Called by the timeline; counts up from 0 to target over the clip duration. */
+  public *animateIn(duration?: number): ThreadGenerator {
+    yield* this.countUp(duration);
+  }
 }
 `,
   },
@@ -396,6 +312,8 @@ export interface PulsingDotProps extends NodeProps {
   dotSize?: SignalValue<number>;
 }
 
+const PULSE_CYCLE = 1.6;
+
 export class PulsingDot extends Node {
   @initial('#22c55e') @colorSignal()
   public declare readonly dotColor: ColorSignal<this>;
@@ -424,81 +342,13 @@ export class PulsingDot extends Node {
     ]);
   }
 
-  public *pulse(): ThreadGenerator {
-    yield* loop(Infinity, function* (this: PulsingDot) {
+  /** Pulse for the given duration (finite cycles); used by the timeline. */
+  public *animateIn(duration: number = 2): ThreadGenerator {
+    const cycles = Math.max(1, Math.ceil(duration / PULSE_CYCLE));
+    yield* loop(cycles, function* (this: PulsingDot) {
       yield* tween(0.8, (v) => this.glowScale(1 + easeInOutSine(v) * 0.6));
       yield* tween(0.8, (v) => this.glowScale(1.6 - easeInOutSine(v) * 0.6));
     }.bind(this));
-  }
-}
-`,
-  },
-  {
-    id: "divider-line",
-    name: "Animated Divider",
-    description: "Horizontal line that draws itself — section separator",
-    category: "shape",
-    componentName: "AnimatedDivider",
-    preview: () => (
-      <svg viewBox="0 0 72 40" className="w-full h-full">
-        <line x1="10" y1="20" x2="62" y2="20" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeDasharray="52" strokeDashoffset="52">
-          <animate attributeName="stroke-dashoffset" from="52" to="0" dur="1s" fill="freeze" repeatCount="indefinite" />
-        </line>
-      </svg>
-    ),
-    inputDefs: [
-      { name: "lineColor", type: "color", default: "#ffffff", label: "Color" },
-      { name: "lineWidth", type: "number", default: 400, label: "Width" },
-      { name: "lineThickness", type: "number", default: 2, label: "Thickness" },
-      { name: "speed", type: "number", default: 0.6, label: "Duration (s)" },
-    ],
-    code: `import { Line, Node, NodeProps, signal, initial, colorSignal } from '@motion-canvas/2d';
-import {
-  SignalValue, SimpleSignal, ColorSignal, PossibleColor,
-  createRef, tween, easeInOutCubic,
-  type ThreadGenerator,
-} from '@motion-canvas/core';
-
-export interface AnimatedDividerProps extends NodeProps {
-  lineColor?: SignalValue<PossibleColor>;
-  lineWidth?: SignalValue<number>;
-  lineThickness?: SignalValue<number>;
-  speed?: SignalValue<number>;
-}
-
-export class AnimatedDivider extends Node {
-  @initial('#ffffff') @colorSignal()
-  public declare readonly lineColor: ColorSignal<this>;
-
-  @initial(400) @signal()
-  public declare readonly lineWidth: SimpleSignal<number, this>;
-
-  @initial(2) @signal()
-  public declare readonly lineThickness: SimpleSignal<number, this>;
-
-  @initial(0.6) @signal()
-  public declare readonly speed: SimpleSignal<number, this>;
-
-  private readonly line = createRef<Line>();
-
-  public constructor(props?: AnimatedDividerProps) {
-    super({ ...props });
-    const w = this.lineWidth();
-    this.add(
-      <Line
-        ref={this.line}
-        points={[[-w / 2, 0], [w / 2, 0]]}
-        stroke={() => this.lineColor()}
-        lineWidth={() => this.lineThickness()}
-        end={0}
-        lineCap={'round'}
-      />,
-    );
-  }
-
-  public *draw(duration?: number): ThreadGenerator {
-    this.line().end(0);
-    yield* tween(duration ?? this.speed(), (v) => this.line().end(easeInOutCubic(v)));
   }
 }
 `,
@@ -597,93 +447,6 @@ export class LowerThirdBar extends Node {
       tween(duration * 0.5, (v) => this.container().opacity(easeInOutCubic(v))),
       tween(duration, (v) => this.clipWidth(easeInOutCubic(v) * this.barWidth())),
     );
-  }
-}
-`,
-  },
-  {
-    id: "callout-badge",
-    name: "Callout Badge",
-    description: "Rounded pill with icon-style dot and label — great for tags, statuses, CTAs",
-    category: "overlay",
-    componentName: "CalloutBadge",
-    preview: () => (
-      <svg viewBox="0 0 72 40" className="w-full h-full">
-        <rect x="12" y="12" width="48" height="18" rx="9" fill="#22c55e" opacity="0.15" />
-        <circle cx="25" cy="21" r="3" fill="#22c55e" />
-        <text x="32" y="24" fontSize="8" fontFamily="sans-serif" fontWeight="700" fill="#22c55e">NEW</text>
-      </svg>
-    ),
-    inputDefs: [
-      { name: "text", type: "string", default: "NEW", label: "Text" },
-      { name: "badgeColor", type: "color", default: "#22c55e", label: "Color" },
-      { name: "textSize", type: "number", default: 16, label: "Font Size" },
-    ],
-    code: `import { Circle, Layout, Rect, Node, NodeProps, Txt, signal, initial, colorSignal } from '@motion-canvas/2d';
-import {
-  SignalValue, SimpleSignal, ColorSignal, PossibleColor,
-  createRef, createSignal, tween, easeInOutCubic,
-  type ThreadGenerator,
-} from '@motion-canvas/core';
-
-export interface CalloutBadgeProps extends NodeProps {
-  text?: SignalValue<string>;
-  badgeColor?: SignalValue<PossibleColor>;
-  textSize?: SignalValue<number>;
-}
-
-export class CalloutBadge extends Node {
-  @initial('NEW') @signal()
-  public declare readonly text: SimpleSignal<string, this>;
-
-  @initial('#22c55e') @colorSignal()
-  public declare readonly badgeColor: ColorSignal<this>;
-
-  @initial(16) @signal()
-  public declare readonly textSize: SimpleSignal<number, this>;
-
-  private readonly scaleVal = createSignal(0);
-
-  public constructor(props?: CalloutBadgeProps) {
-    super({ ...props });
-    this.add(
-      <Layout
-        layout
-        gap={8}
-        padding={[8, 18]}
-        alignItems={'center'}
-        scale={() => this.scaleVal()}
-      >
-        <Rect
-          fill={() => \`\${this.badgeColor()}22\`}
-          radius={999}
-          padding={[8, 18]}
-          layout
-          gap={8}
-          alignItems={'center'}
-        >
-          <Circle
-            width={10} height={10}
-            fill={() => this.badgeColor()}
-          />
-          <Txt
-            text={() => this.text()}
-            fill={() => this.badgeColor()}
-            fontSize={() => this.textSize()}
-            fontFamily={'Inter Variable'}
-            fontWeight={700}
-          />
-        </Rect>
-      </Layout>,
-    );
-  }
-
-  public *popIn(duration: number = 0.4): ThreadGenerator {
-    this.scaleVal(0);
-    yield* tween(duration, (v) => {
-      const t = easeInOutCubic(v);
-      this.scaleVal(t > 1 ? 1 : t);
-    });
   }
 }
 `,

@@ -47,12 +47,12 @@ async function verifyToken(request: NextRequest): Promise<string | null> {
   }
 }
 
-/** Collect asset IDs from media clips (src is never stored; we resolve at render time). */
+/** Collect asset IDs from media clips that require upload (video, image, audio). Component clips are excluded — they are code assets with nothing to upload. */
 function collectPendingAssetIds(project: Project): string[] {
   const assetIds: string[] = [];
   for (const layer of project.layers) {
     for (const clip of layer.clips) {
-      if (clip.type !== "text" && "assetId" in clip && clip.assetId) {
+      if ((clip.type === "video" || clip.type === "audio" || clip.type === "image") && "assetId" in clip && clip.assetId) {
         assetIds.push(clip.assetId);
       }
       if (clip.type === "video" && "maskAssetId" in clip && clip.maskAssetId) {

@@ -134,10 +134,10 @@ export const createComponentTool: ToolDefinition<
       const inputCount = input.inputDefs?.length ?? 0;
       const summary = `Created component "${input.componentName}"${inputCount > 0 ? ` with ${inputCount} input${inputCount > 1 ? "s" : ""}` : ""}`;
 
-      // 4. Trial compile to validate the component code
+      // 4. Trial compile to validate the component code and collect type/lint diagnostics
       let compileError: string | null = null;
+      let compileDiagnostics: Array<{ file: string; line: number; column: number; message: string; code?: string; severity: string }> | undefined;
       try {
-        // Gather all component assets and build file overrides for the scene compiler
         const allAssets = useAssetsStore.getState().assets;
         const files: Record<string, string> = {};
         for (const a of allAssets) {
@@ -145,7 +145,6 @@ export const createComponentTool: ToolDefinition<
             files[`src/components/custom/${a.componentName}.tsx`] = a.code;
           }
         }
-        // Override with the just-created component (in case store hasn't synced)
         files[`src/components/custom/${input.componentName}.tsx`] = input.code;
 
         const compileRes = await fetch("/api/compile-scene", {
@@ -154,9 +153,11 @@ export const createComponentTool: ToolDefinition<
           body: JSON.stringify({ files }),
         });
 
+        const compileData = await compileRes.json().catch(() => ({})) as { error?: string; diagnostics?: Array<{ file: string; line: number; column: number; message: string; code?: string; severity: string }> };
         if (!compileRes.ok) {
-          const errData = await compileRes.json().catch(() => ({}));
-          compileError = (errData as { error?: string }).error ?? `Compilation failed (HTTP ${compileRes.status})`;
+          compileError = compileData.error ?? `Compilation failed (HTTP ${compileRes.status})`;
+        } else if (compileData.diagnostics?.length) {
+          compileDiagnostics = compileData.diagnostics;
         }
       } catch {
         // Scene compiler unavailable — skip validation silently
@@ -183,6 +184,14 @@ export const createComponentTool: ToolDefinition<
         outputs.push({
           type: "text",
           text: `COMPILATION ERROR: ${compileError}. The component was saved but the code has errors that prevent it from being used. Please call editComponent to fix the issues.`,
+        });
+      } else if (compileDiagnostics?.length) {
+        const lines = compileDiagnostics.map(
+          (d) => `  ${d.file}:${d.line}:${d.column} ${d.code ?? ""} — ${d.message}`
+        );
+        outputs.push({
+          type: "text",
+          text: `The component was created and the build succeeded, but type-check reported the following issues. Consider calling editComponent to fix them:\n\n${lines.join("\n")}`,
         });
       }
 

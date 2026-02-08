@@ -177,7 +177,7 @@ export const editComponentTool: ToolDefinition<
         text: summary,
       });
 
-      // Trial compile to validate the component code (only when code changed)
+      // Trial compile to validate the component code and collect type/lint diagnostics (only when code changed)
       if (codeChanged) {
         try {
           const allAssets = useAssetsStore.getState().assets;
@@ -187,7 +187,6 @@ export const editComponentTool: ToolDefinition<
               files[`src/components/custom/${a.componentName}.tsx`] = a.code;
             }
           }
-          // Override with the just-edited code (in case store hasn't synced)
           files[`src/components/custom/${componentName}.tsx`] = newCode;
 
           const authHeaders2 = await getAuthHeaders();
@@ -197,12 +196,23 @@ export const editComponentTool: ToolDefinition<
             body: JSON.stringify({ files }),
           });
 
+          const compileData = (await compileRes.json().catch(() => ({}))) as {
+            error?: string;
+            diagnostics?: Array<{ file: string; line: number; column: number; message: string; code?: string; severity: string }>;
+          };
           if (!compileRes.ok) {
-            const errData = await compileRes.json().catch(() => ({}));
-            const compileError = (errData as { error?: string }).error ?? `Compilation failed (HTTP ${compileRes.status})`;
+            const compileError = compileData.error ?? `Compilation failed (HTTP ${compileRes.status})`;
             outputs.push({
               type: "text",
               text: `COMPILATION ERROR: ${compileError}. The component was saved but the code has errors that prevent it from being used. Please call editComponent to fix the issues.`,
+            });
+          } else if (compileData.diagnostics?.length) {
+            const lines = compileData.diagnostics.map(
+              (d) => `  ${d.file}:${d.line}:${d.column} ${d.code ?? ""} — ${d.message}`
+            );
+            outputs.push({
+              type: "text",
+              text: `The component was updated and the build succeeded, but type-check reported the following issues. Consider calling editComponent again to fix them:\n\n${lines.join("\n")}`,
             });
           }
         } catch {

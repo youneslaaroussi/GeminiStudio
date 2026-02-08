@@ -17,6 +17,7 @@ import {
   Palette,
   Undo2,
   AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -24,6 +25,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  PopoverHeader,
+  PopoverTitle,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -425,16 +433,41 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
           <Button
             variant="ghost"
             size="sm"
-            className={cn(
-              "h-7 text-xs gap-1",
-              showTemplatePicker && "bg-primary/10 text-primary"
-            )}
-            onClick={() => setShowTemplatePicker(!showTemplatePicker)}
-            disabled={isCreating || !projectId}
+            className="h-7 w-7 p-0"
+            onClick={() => onAssetsChanged()}
+            disabled={!projectId}
+            title="Refresh components from assets"
           >
-            <Code2 className="size-3.5" />
-            Templates
+            <RefreshCw className="size-3.5" />
           </Button>
+          <Popover open={showTemplatePicker} onOpenChange={setShowTemplatePicker}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "h-7 text-xs gap-1",
+                  showTemplatePicker && "bg-primary/10 text-primary"
+                )}
+                disabled={isCreating || !projectId}
+              >
+                <Code2 className="size-3.5" />
+                Templates
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              className="w-[260px] p-0 overflow-hidden flex flex-col"
+              align="start"
+              sideOffset={6}
+              onOpenAutoFocus={(e) => e.preventDefault()}
+            >
+              <TemplatePicker
+                onSelect={(template) => handleCreate(template)}
+                onClose={() => setShowTemplatePicker(false)}
+                disabled={isCreating}
+              />
+            </PopoverContent>
+          </Popover>
           <Button
             variant="ghost"
             size="sm"
@@ -451,15 +484,6 @@ export function ComponentsPanel({ projectId, assets, onAssetsChanged, onAssetUpd
           </Button>
         </div>
       </div>
-
-      {/* Template Picker */}
-      {showTemplatePicker && (
-        <TemplatePicker
-          onSelect={(template) => handleCreate(template)}
-          onClose={() => setShowTemplatePicker(false)}
-          disabled={isCreating}
-        />
-      )}
 
       {/* Component List */}
       <div className="border-b border-border">
@@ -762,59 +786,70 @@ function TemplatePicker({
   const grouped = useMemo(() => groupTemplatesByCategory(), []);
 
   return (
-    <div className="border-b border-border">
-      <ScrollArea className="max-h-[320px]">
-        <div className="p-2 space-y-3">
+    <>
+      <PopoverHeader className="px-4 pt-4 pb-2">
+        <PopoverTitle className="text-sm font-medium">Choose a template</PopoverTitle>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Start from a preset or use Blank for an empty component.
+        </p>
+      </PopoverHeader>
+      <ScrollArea className="h-[min(320px,60vh)] min-h-0 overflow-hidden">
+        <div className="px-4 pb-4 space-y-4 min-w-0">
           {Object.entries(grouped).map(([category, templates]) => {
             const Icon = CATEGORY_ICONS[category] ?? Code2;
             return (
               <div key={category}>
-                <div className="flex items-center gap-1.5 px-1 mb-1.5">
-                  <Icon className="size-3 text-muted-foreground" />
-                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                <div className="flex items-center gap-2 mb-2">
+                  <Icon className="size-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                     {CATEGORY_LABELS[category] ?? category}
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-1 gap-1.5">
                   {templates.map((template) => (
                     <button
                       key={template.id}
+                      type="button"
                       disabled={disabled}
                       onClick={() => onSelect(template)}
                       className={cn(
-                        "text-left rounded-lg border border-border/60 bg-muted/30 hover:bg-muted/60 hover:border-border transition-colors overflow-hidden group",
-                        "disabled:opacity-50 disabled:cursor-not-allowed"
+                        "rounded-lg border bg-card text-card-foreground shadow-sm w-full min-w-0",
+                        "text-left transition-colors overflow-hidden",
+                        "hover:bg-accent hover:text-accent-foreground hover:border-border",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        "disabled:opacity-50 disabled:pointer-events-none"
                       )}
                     >
-                      {/* Preview thumbnail */}
-                      {template.preview && (
-                        <div className="h-[44px] bg-zinc-900/80 border-b border-border/30 flex items-center justify-center overflow-hidden">
-                          <div className="w-full h-full p-1">
-                            {template.preview()}
+                      <div className="flex gap-2 p-2">
+                        {template.preview && (
+                          <div className="h-10 w-14 shrink-0 rounded bg-muted/50 flex items-center justify-center overflow-hidden">
+                            <div className="w-full h-full p-0.5 [&_svg]:max-h-full [&_svg]:max-w-full [&_svg]:object-contain">
+                              {template.preview()}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                      <div className="p-2">
-                        <p className="text-xs font-medium text-foreground truncate">
-                          {template.name}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">
-                          {template.description}
-                        </p>
-                        <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                          {template.inputDefs.slice(0, 3).map((def) => (
-                            <span
-                              key={def.name}
-                              className="text-[9px] bg-background/80 border border-border/40 rounded px-1.5 py-0.5 text-muted-foreground"
-                            >
-                              {def.label ?? def.name}
-                            </span>
-                          ))}
-                          {template.inputDefs.length > 3 && (
-                            <span className="text-[9px] text-muted-foreground">
-                              +{template.inputDefs.length - 3}
-                            </span>
-                          )}
+                        )}
+                        <div className="flex-1 min-w-0 text-left">
+                          <p className="text-xs font-medium truncate">
+                            {template.name}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">
+                            {template.description}
+                          </p>
+                          <div className="flex items-center gap-1 mt-1 flex-wrap">
+                            {template.inputDefs.slice(0, 3).map((def) => (
+                              <span
+                                key={def.name}
+                                className="text-[9px] rounded-md bg-muted px-1.5 py-0.5 text-muted-foreground"
+                              >
+                                {def.label ?? def.name}
+                              </span>
+                            ))}
+                            {template.inputDefs.length > 3 && (
+                              <span className="text-[9px] text-muted-foreground">
+                                +{template.inputDefs.length - 3}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </button>
@@ -825,7 +860,7 @@ function TemplatePicker({
           })}
         </div>
       </ScrollArea>
-    </div>
+    </>
   );
 }
 
@@ -879,7 +914,12 @@ function MonacoEditor({
 
     // Use ReactJSX transform with Motion Canvas's jsx-runtime (no React in scope, no react/jsx-runtime)
     const JsxEmit = ts.JsxEmit ?? { React: 2, ReactJSX: 4 };
+    // ES2015+ and downlevelIteration allow generator iteration (e.g. yield* with ThreadGenerator)
+    const ScriptTarget = (m as { languages?: { typescript?: { ScriptTarget?: { ES2015?: number } } } }).languages?.typescript?.ScriptTarget;
     ts.typescriptDefaults.setCompilerOptions({
+      target: ScriptTarget?.ES2015 ?? 2,
+      downlevelIteration: true,
+      experimentalDecorators: true,
       jsx: JsxEmit.ReactJSX ?? 4,
       jsxImportSource: "@motion-canvas/2d",
       moduleResolution: 2, // Node
