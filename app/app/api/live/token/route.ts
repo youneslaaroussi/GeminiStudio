@@ -46,17 +46,15 @@ export async function POST(req: Request) {
   }
 
   try {
+    // Create ephemeral token with 30 minute expiry (computed outside callback for response)
+    const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const newSessionExpireTime = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+
     const token = await runWithGeminiKeyRotation(async (apiKey) => {
-      // Client must be configured with v1alpha for ephemeral tokens
       const client = new GoogleGenAI({
         apiKey,
         httpOptions: { apiVersion: "v1alpha" },
       });
-
-      // Create ephemeral token with 30 minute expiry
-      const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-      const newSessionExpireTime = new Date(Date.now() + 2 * 60 * 1000).toISOString();
-
       return client.authTokens.create({
         config: {
           uses: 1,
