@@ -37,6 +37,42 @@ Each suggestion must be a single short sentence the user could send as their nex
 Suggestions should naturally continue the conversation: clarify, go deeper, or do a related task (e.g. "Apply that to the second clip too", "Export in 4K", "Add background music").
 Keep each suggestion under 80 characters.`;
 
+/** Shown when the project has no assets and no chat—suggest things to do from scratch. We randomly sample from this list. */
+const EMPTY_PROJECT_SUGGESTIONS: string[] = [
+  "Create a component that shows a title card with my text",
+  "Generate a short Veo video (e.g. a 5-second clip of waves on a beach)",
+  "Create a simple animated scene with shapes and motion",
+  "Add an intro animation I can customize",
+  "Generate a Veo video from a prompt and add it to the timeline",
+  "Create a component that displays a countdown timer",
+  "Generate a Veo video of a city timelapse at sunset",
+  "Create a lower-third component for names and titles",
+  "Add a component that animates text word by word",
+  "Generate a 5-second Veo clip of rain on a window",
+  "Create a simple logo reveal animation",
+  "Make a component that shows a subscribe or CTA button",
+  "Generate a Veo video of clouds moving over mountains",
+  "Create an outro card with social handles",
+  "Add a component that fades in a quote or testimonial",
+  "Generate a short Veo clip of a coffee cup steam",
+  "Create a progress or loading bar component",
+  "Generate a Veo video of a candle flame",
+  "Create a component that types out code or text",
+  "Add a simple map or location pin animation",
+  "Generate a Veo clip of leaves falling",
+  "Create a component that flips between two images",
+  "Generate a Veo video of a campfire at night",
+  "Create a waveform or audio visualizer component",
+  "Add a component that zooms into a photo dramatically",
+];
+
+const EMPTY_PROJECT_SAMPLE_SIZE = 5;
+
+function sampleEmptyProjectSuggestions(): string[] {
+  const shuffled = [...EMPTY_PROJECT_SUGGESTIONS].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, EMPTY_PROJECT_SAMPLE_SIZE);
+}
+
 function normalizeActions(raw: string[]): string[] {
   return raw
     .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
@@ -92,9 +128,9 @@ export async function POST(request: NextRequest) {
   if (body.type === "empty") {
     const assetsContext =
       typeof body.assetsContext === "string" ? body.assetsContext.trim() : "";
-    // Stricter: when no assets context, return nothing (no suggestions without context)
+    // When project is empty (no assets), return a random sample of curated suggestions.
     if (!assetsContext) {
-      return NextResponse.json({ actions: [] });
+      return NextResponse.json({ actions: sampleEmptyProjectSuggestions() });
     }
     const userContent = `Assets in the project (name, type, optional description):\n\n${assetsContext}`;
 
