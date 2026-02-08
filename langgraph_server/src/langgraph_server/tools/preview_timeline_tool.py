@@ -293,7 +293,6 @@ def previewTimeline(
     project_payload = _resolve_project_assets_for_render(
         project_data, settings, user_id, project_id or target_project.get("id") or ""
     )
-    project_payload.setdefault("renderScale", PREVIEW_RESOLUTION_SCALE)
     project_payload.setdefault("background", project_payload.get("background", "#000000"))
     project_payload.setdefault("fps", PREVIEW_FPS)
 
@@ -302,19 +301,17 @@ def previewTimeline(
         settings, user_id, project_id or target_project.get("id") or ""
     )
 
-    # Timeline duration from project layers so renderer has explicit duration (match app)
+    # Timeline duration from project layers (match app)
     timeline_duration = _compute_timeline_duration(project_data)
 
-    # Get resolution and apply scale
+    # Same as app: output.size = project.resolution, options.resolutionScale for preview
     resolution = project_data.get("resolution") or {}
-    full_width = int(resolution.get("width") or 1280)
-    full_height = int(resolution.get("height") or 720)
-    preview_width = int(full_width * PREVIEW_RESOLUTION_SCALE)
-    preview_height = int(full_height * PREVIEW_RESOLUTION_SCALE)
+    output_width = int(resolution.get("width") or 1280)
+    output_height = int(resolution.get("height") or 720)
 
     request_id = uuid4().hex
-    slug = _slugify(project_name)
-    destination = f"/tmp/gemini-preview/{slug}-{request_id}.mp4"
+    timestamp_ms = int(time.time() * 1000)
+    destination = f"/tmp/render-{timestamp_ms}.mp4"
 
     # Generate signed upload URL for GCS
     effective_project_id = project_id or target_project.get("id") or "unknown"
@@ -327,21 +324,26 @@ def previewTimeline(
             "message": "Failed to generate upload URL for preview.",
         }
 
-    output_payload: Dict[str, Any] = {
-        "format": "mp4",
-        "fps": PREVIEW_FPS,
-        "size": {"width": preview_width, "height": preview_height},
-        "quality": PREVIEW_QUALITY,
-        "destination": destination,
-        "includeAudio": True,
-        "uploadUrl": upload_url,
-    }
+    # Range: same as app — always send range (full timeline or partial)
     if (
         start_time is not None
         and end_time is not None
         and end_time > start_time
     ):
-        output_payload["range"] = [start_time, end_time]
+        render_range: list[float] = [start_time, end_time]
+    else:
+        render_range = [0.0, timeline_duration]
+
+    output_payload: Dict[str, Any] = {
+        "format": "mp4",
+        "fps": PREVIEW_FPS,
+        "size": {"width": output_width, "height": output_height},
+        "quality": PREVIEW_QUALITY,
+        "destination": destination,
+        "range": render_range,
+        "includeAudio": True,
+        "uploadUrl": upload_url,
+    }
 
     thread_id = context.get("thread_id")
     metadata: Dict[str, Any] = {
@@ -360,6 +362,7 @@ def previewTimeline(
             "requestId": request_id,
         }
 
+    # Payload identical to app preview: project, timelineDuration, output, options.resolutionScale, componentFiles (no variables)
     job_payload: Dict[str, Any] = {
         "project": project_payload,
         "output": output_payload,
@@ -370,13 +373,6 @@ def previewTimeline(
     }
     if timeline_duration > 0:
         job_payload["timelineDuration"] = timeline_duration
-    # Explicit variables so renderer/headless use our branch timeline (avoids any loss from project in queue)
-    layers = project_payload.get("layers", [])
-    if layers and timeline_duration > 0:
-        job_payload["variables"] = {
-            "layers": layers,
-            "duration": timeline_duration,
-        }
     if component_files:
         job_payload["componentFiles"] = component_files
 
@@ -487,16 +483,19 @@ def previewTimeline(
     if start_time is not None and end_time is not None and end_time > start_time:
         range_note = f" (segment {start_time}s–{end_time}s)"
 
-    # Return text with _injectMedia flag - agent.py will inject media as HumanMessage
+    # Effective preview size after options.resolutionScale
+    effective_w = int(output_width * PREVIEW_RESOLUTION_SCALE)
+    effective_h = int(output_height * PREVIEW_RESOLUTION_SCALE)
+
     return {
         "status": "success",
-        "message": f"Preview render of '{project_name}'{range_note} ready ({preview_width}x{preview_height} @ {PREVIEW_FPS}fps). The video is now visible.",
+        "message": f"Preview render of '{project_name}'{range_note} ready ({effective_w}x{effective_h} @ {PREVIEW_FPS}fps). The video is now visible.",
         "_injectMedia": True,
         "fileUri": file_uri,
         "mimeType": "video/mp4",
         "assetName": f"{project_name} (preview)",
         "jobId": job_id,
         "projectName": project_name,
-        "resolution": f"{preview_width}x{preview_height}",
+        "resolution": f"{effective_w}x{effective_h}",
         "fps": PREVIEW_FPS,
     }

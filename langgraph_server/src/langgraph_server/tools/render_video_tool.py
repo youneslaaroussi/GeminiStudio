@@ -32,9 +32,6 @@ def _sign_renderer_request(body: str, timestamp: int, secret: str) -> str:
 _FORMAT_CHOICES = {"mp4", "webm", "gif"}
 _QUALITY_CHOICES = {"low", "web", "social", "studio"}
 
-# Maximum render resolution to prevent timeouts
-# Cap at 720p (1280 on longest dimension) - higher resolutions cause renderer timeouts
-MAX_RENDER_DIMENSION = 1280
 
 _MIME_TYPES = {
     "mp4": "video/mp4",
@@ -94,26 +91,6 @@ def _slugify(name: str) -> str:
 
   normalized = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
   return normalized or "render"
-
-
-def _clamp_resolution(width: int, height: int, max_dimension: int = MAX_RENDER_DIMENSION) -> tuple[int, int]:
-  """Scale down resolution while maintaining aspect ratio if it exceeds max dimension.
-  
-  This prevents render timeouts caused by high resolution videos.
-  """
-  max_side = max(width, height)
-  if max_side <= max_dimension:
-    return width, height
-  
-  scale = max_dimension / max_side
-  new_width = int(width * scale)
-  new_height = int(height * scale)
-  # Ensure dimensions are even (required for video encoding)
-  new_width = new_width - (new_width % 2)
-  new_height = new_height - (new_height % 2)
-  logger.info("Clamping resolution from %dx%d to %dx%d (max dimension: %d)", 
-              width, height, new_width, new_height, max_dimension)
-  return new_width, new_height
 
 
 def _extract_project(projects: list[dict[str, Any]], project_id: str | None) -> dict[str, Any] | None:
@@ -287,21 +264,20 @@ def renderVideo(
       "current": e.current,
     }
 
+  # Use project resolution as-is (same as app: output.size = project.resolution)
   resolution = project_data.get("resolution") or {}
   default_width = int(resolution.get("width") or 1280)
   default_height = int(resolution.get("height") or 720)
   output_width = int(width or default_width)
   output_height = int(height or default_height)
-  
-  # Clamp resolution to prevent render timeouts with high-res videos
-  output_width, output_height = _clamp_resolution(output_width, output_height)
 
   project_fps = project_data.get("fps") or 30
   output_fps = int(fps or project_fps)
 
   request_id = uuid4().hex
-  slug = _slugify(project_name)
-  destination = f"/tmp/gemini-renderer/{slug}-{request_id}.{output_format}"
+  # Same destination pattern as app: /tmp/render-{timestamp}.{extension}
+  timestamp_ms = int(time.time() * 1000)
+  destination = f"/tmp/render-{timestamp_ms}.{output_format}"
 
   # Resolve assetId -> signed URLs for render payload only (never stored)
   project_payload = _resolve_project_assets_for_render(
@@ -335,18 +311,23 @@ def renderVideo(
       gcs_object_name, content_type, settings
   )
 
+  # Range: same as app — always send range (full timeline or partial)
+  if range_start is not None and range_end is not None:
+    render_range: list[float] = [range_start, range_end]
+  else:
+    render_range = [0.0, timeline_duration]
+
   output_payload: Dict[str, Any] = {
     "format": output_format,
     "fps": output_fps,
     "size": {"width": output_width, "height": output_height},
     "quality": output_quality,
     "destination": destination,
+    "range": render_range,
     "includeAudio": bool(include_audio),
   }
   if effective_upload_url:
     output_payload["uploadUrl"] = effective_upload_url
-  if range_start is not None and range_end is not None:
-    output_payload["range"] = [range_start, range_end]
 
   thread_id = context.get("thread_id")
   if not thread_id:
@@ -383,6 +364,7 @@ def renderVideo(
   if agent_metadata:
     metadata["agent"] = agent_metadata
 
+  # Payload identical to app/api/render/route.ts: project, timelineDuration, output, componentFiles only (no variables)
   job_payload: Dict[str, Any] = {
     "project": project_payload,
     "output": output_payload,
@@ -390,13 +372,6 @@ def renderVideo(
   }
   if timeline_duration > 0:
     job_payload["timelineDuration"] = timeline_duration
-  # Explicit variables so renderer/headless use our branch timeline (avoids any loss from project in queue)
-  layers = project_payload.get("layers", [])
-  if layers and timeline_duration > 0:
-    job_payload["variables"] = {
-      "layers": layers,
-      "duration": timeline_duration,
-    }
   if component_files:
     job_payload["componentFiles"] = component_files
 
