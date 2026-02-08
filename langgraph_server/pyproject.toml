@@ -1,3 +1,40 @@
+[project]
+name = "langgraph-server"
+version = "0.1.0"
+description = "LangGraph-based agent service configured for Google Cloud Run deployment."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "langgraph>=1.0.7,<2.0.0",
+  "langgraph-cli>=0.4.10,<0.5.0",
+  "langgraph-api>=0.7.0,<0.8.0",
+  "langchain>=1.2.0,<2.0.0",
+  "langchain-google-genai>=4.2.0,<5.0.0",
+  "langchain-core>=1.2.0,<2.0.0",
+  "langsmith>=0.1.147,<1.0.0",
+  "fastapi>=0.115.0,<1.0.0",
+  "uvicorn[standard]>=0.30.0,<1.0.0",
+  "pydantic>=2.8.0",
+  "pydantic-settings>=2.4.0",
+  "python-dotenv>=1.0.1",
+  "google-cloud-storage>=2.18.0",
+  "cachetools>=5.3.3",
+  "firebase-admin>=6.6.0",
+  "phonenumbers>=8.13.49",
+  "httpx>=0.28.1,<1.0.0",
+  "rich>=13.7.0",
+  "google-cloud-pubsub>=2.23.0",
+  "google-genai>=1.0.0,<2.0.0",
+  "automerge>=1.0.0rc1",
+  "telegramify-markdown>=0.5.4",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "pytest-asyncio>=0.23.0",
+]
+
 [tool.poetry]
 name = "langgraph-server"
 version = "0.1.0"
