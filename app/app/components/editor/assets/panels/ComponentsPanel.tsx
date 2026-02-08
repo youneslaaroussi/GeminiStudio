@@ -671,30 +671,40 @@ function TemplatePicker({
                       disabled={disabled}
                       onClick={() => onSelect(template)}
                       className={cn(
-                        "text-left rounded-lg border border-border/60 bg-muted/30 hover:bg-muted/60 hover:border-border p-2.5 transition-colors",
+                        "text-left rounded-lg border border-border/60 bg-muted/30 hover:bg-muted/60 hover:border-border transition-colors overflow-hidden group",
                         "disabled:opacity-50 disabled:cursor-not-allowed"
                       )}
                     >
-                      <p className="text-xs font-medium text-foreground truncate">
-                        {template.name}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">
-                        {template.description}
-                      </p>
-                      <div className="flex items-center gap-1 mt-1.5">
-                        {template.inputDefs.slice(0, 3).map((def) => (
-                          <span
-                            key={def.name}
-                            className="text-[9px] bg-background/80 border border-border/40 rounded px-1.5 py-0.5 text-muted-foreground"
-                          >
-                            {def.label ?? def.name}
-                          </span>
-                        ))}
-                        {template.inputDefs.length > 3 && (
-                          <span className="text-[9px] text-muted-foreground">
-                            +{template.inputDefs.length - 3}
-                          </span>
-                        )}
+                      {/* Preview thumbnail */}
+                      {template.preview && (
+                        <div className="h-[44px] bg-zinc-900/80 border-b border-border/30 flex items-center justify-center overflow-hidden">
+                          <div className="w-full h-full p-1">
+                            {template.preview()}
+                          </div>
+                        </div>
+                      )}
+                      <div className="p-2">
+                        <p className="text-xs font-medium text-foreground truncate">
+                          {template.name}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">
+                          {template.description}
+                        </p>
+                        <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                          {template.inputDefs.slice(0, 3).map((def) => (
+                            <span
+                              key={def.name}
+                              className="text-[9px] bg-background/80 border border-border/40 rounded px-1.5 py-0.5 text-muted-foreground"
+                            >
+                              {def.label ?? def.name}
+                            </span>
+                          ))}
+                          {template.inputDefs.length > 3 && (
+                            <span className="text-[9px] text-muted-foreground">
+                              +{template.inputDefs.length - 3}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </button>
                   ))}

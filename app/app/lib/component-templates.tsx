@@ -6,6 +6,7 @@
  */
 
 import type { ComponentInputDef } from "@/app/types/assets";
+import type { ReactNode } from "react";
 
 export interface ComponentTemplate {
   /** Unique slug */
@@ -22,6 +23,8 @@ export interface ComponentTemplate {
   inputDefs: ComponentInputDef[];
   /** Complete Motion Canvas TSX source */
   code: string;
+  /** Inline SVG/CSS preview for the template picker (48x32 viewBox) */
+  preview?: () => ReactNode;
 }
 
 export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
@@ -34,6 +37,14 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
     description: "Text that types itself character by character",
     category: "text",
     componentName: "TypewriterText",
+    preview: () => (
+      <svg viewBox="0 0 72 40" className="w-full h-full">
+        <text x="6" y="24" fontSize="11" fontFamily="monospace" fontWeight="600" fill="#fff">Hello_</text>
+        <rect x="47" y="14" width="7" height="13" fill="#68ABDF" opacity="0.8">
+          <animate attributeName="opacity" values="0.8;0;0.8" dur="1s" repeatCount="indefinite" />
+        </rect>
+      </svg>
+    ),
     inputDefs: [
       { name: "fullText", type: "string", default: "Hello, World!", label: "Text" },
       { name: "charDelay", type: "number", default: 0.04, label: "Char Delay (s)" },
@@ -96,6 +107,17 @@ export class TypewriterText extends Node {
     description: "Bold heading with a horizontal color gradient",
     category: "text",
     componentName: "GradientHeading",
+    preview: () => (
+      <svg viewBox="0 0 72 40" className="w-full h-full">
+        <defs>
+          <linearGradient id="gh-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#4285F4" />
+            <stop offset="100%" stopColor="#EA4335" />
+          </linearGradient>
+        </defs>
+        <text x="6" y="26" fontSize="14" fontFamily="sans-serif" fontWeight="900" fill="url(#gh-grad)">TITLE</text>
+      </svg>
+    ),
     inputDefs: [
       { name: "text", type: "string", default: "GEMINI STUDIO", label: "Text" },
       { name: "colorA", type: "color", default: "#4285F4", label: "Color A" },
@@ -180,6 +202,13 @@ export class GradientHeading extends Node {
     description: "Animated circular progress indicator with percentage label",
     category: "data",
     componentName: "ProgressRing",
+    preview: () => (
+      <svg viewBox="0 0 72 40" className="w-full h-full">
+        <circle cx="36" cy="20" r="14" fill="none" stroke="#333" strokeWidth="3" />
+        <circle cx="36" cy="20" r="14" fill="none" stroke="#68ABDF" strokeWidth="3" strokeLinecap="round" strokeDasharray="66" strokeDashoffset="16.5" transform="rotate(-90 36 20)" />
+        <text x="36" y="23" fontSize="8" fontFamily="sans-serif" fontWeight="700" fill="#fff" textAnchor="middle">75%</text>
+      </svg>
+    ),
     inputDefs: [
       { name: "progress", type: "number", default: 75, label: "Progress (%)" },
       { name: "ringColor", type: "color", default: "#68ABDF", label: "Ring Color" },
@@ -260,6 +289,12 @@ export class ProgressRing extends Node {
     description: "Number that counts up from zero to a target value",
     category: "data",
     componentName: "AnimatedCounter",
+    preview: () => (
+      <svg viewBox="0 0 72 40" className="w-full h-full">
+        <text x="36" y="26" fontSize="18" fontFamily="sans-serif" fontWeight="800" fill="#fff" textAnchor="middle">1,000</text>
+        <text x="36" y="35" fontSize="6" fontFamily="sans-serif" fill="#666" textAnchor="middle">counting up</text>
+      </svg>
+    ),
     inputDefs: [
       { name: "target", type: "number", default: 1000, label: "Target" },
       { name: "prefix", type: "string", default: "", label: "Prefix" },
@@ -336,6 +371,15 @@ export class AnimatedCounter extends Node {
     description: "Glowing circle that pulses — live indicator, accent, or bullet",
     category: "shape",
     componentName: "PulsingDot",
+    preview: () => (
+      <svg viewBox="0 0 72 40" className="w-full h-full">
+        <circle cx="36" cy="20" r="10" fill="#22c55e" opacity="0.2">
+          <animate attributeName="r" values="10;16;10" dur="1.6s" repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.25;0.08;0.25" dur="1.6s" repeatCount="indefinite" />
+        </circle>
+        <circle cx="36" cy="20" r="6" fill="#22c55e" />
+      </svg>
+    ),
     inputDefs: [
       { name: "dotColor", type: "color", default: "#22c55e", label: "Color" },
       { name: "dotSize", type: "number", default: 24, label: "Size" },
@@ -395,6 +439,13 @@ export class PulsingDot extends Node {
     description: "Horizontal line that draws itself — section separator",
     category: "shape",
     componentName: "AnimatedDivider",
+    preview: () => (
+      <svg viewBox="0 0 72 40" className="w-full h-full">
+        <line x1="10" y1="20" x2="62" y2="20" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeDasharray="52" strokeDashoffset="52">
+          <animate attributeName="stroke-dashoffset" from="52" to="0" dur="1s" fill="freeze" repeatCount="indefinite" />
+        </line>
+      </svg>
+    ),
     inputDefs: [
       { name: "lineColor", type: "color", default: "#ffffff", label: "Color" },
       { name: "lineWidth", type: "number", default: 400, label: "Width" },
@@ -462,6 +513,13 @@ export class AnimatedDivider extends Node {
     description: "Animated name + title bar overlay",
     category: "overlay",
     componentName: "LowerThirdBar",
+    preview: () => (
+      <svg viewBox="0 0 72 40" className="w-full h-full">
+        <rect x="6" y="12" width="32" height="3" rx="1.5" fill="#4285F4" />
+        <text x="6" y="24" fontSize="8" fontFamily="sans-serif" fontWeight="700" fill="#fff">Jane Doe</text>
+        <text x="6" y="32" fontSize="6" fontFamily="sans-serif" fill="#888">CEO &amp; Founder</text>
+      </svg>
+    ),
     inputDefs: [
       { name: "heading", type: "string", default: "Jane Doe", label: "Name" },
       { name: "subtitle", type: "string", default: "CEO & Founder", label: "Title" },
@@ -549,6 +607,13 @@ export class LowerThirdBar extends Node {
     description: "Rounded pill with icon-style dot and label — great for tags, statuses, CTAs",
     category: "overlay",
     componentName: "CalloutBadge",
+    preview: () => (
+      <svg viewBox="0 0 72 40" className="w-full h-full">
+        <rect x="12" y="12" width="48" height="18" rx="9" fill="#22c55e" opacity="0.15" />
+        <circle cx="25" cy="21" r="3" fill="#22c55e" />
+        <text x="32" y="24" fontSize="8" fontFamily="sans-serif" fontWeight="700" fill="#22c55e">NEW</text>
+      </svg>
+    ),
     inputDefs: [
       { name: "text", type: "string", default: "NEW", label: "Text" },
       { name: "badgeColor", type: "color", default: "#22c55e", label: "Color" },
