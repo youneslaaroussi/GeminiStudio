@@ -165,6 +165,19 @@ When helping with scene code or custom components, the project uses **Motion Can
 - **Path**: data is full SVG path d string. Tweening data between two path strings gives a morph effect. start/end (0–1) and getPointAtPercentage work like Line/Spline.
 - **Spline with points=**: simple; handles are auto-calculated (cardinal spline). With **Knot** children you control startHandle and endHandle (relative to knot). Mirrored handles: if you set only startHandle, endHandle is set to flipped startHandle. Broken knot: set both for a corner. smoothness affects curve. closed=true to close the loop.
 
+### Input variables vs. animation (critical distinction)
+
+**inputDefs** (input variables) are **static values** set on the timeline. They are NOT animatable — they do not change during clip playback. You cannot tween or keyframe an input variable. Inputs are set once in the inspector panel and remain constant.
+
+If a user wants **animated behavior** (typewriter text, counter counting up, progress bar filling, pulsing opacity, or any temporal change):
+
+1. **Use generator methods and signals inside the component**, not input variables.
+2. Input variables can control **parameters** of the animation (speed, delay, target value, easing) but the animation itself must be driven by a generator that yields tweens on signals.
+3. For a **typewriter effect**: store the full text as an input, use a generator that reveals characters over time via a progress signal. The `Txt` node reads: `text={() => this.fullText().slice(0, Math.floor(this.progress() * this.fullText().length))}`.
+4. For **counting / filling / any temporal change**: expose a `*animate(duration)` generator that tweens a signal. Use inputs only for static config like `targetValue`, `speed`, `color`.
+
+**Pattern**: inputs = what to show and how fast; generators + signals = the actual motion.
+
 ### Common pitfalls (avoid these)
 
 - Using a normal function instead of function* for the scene, or forgetting yield* for tweens (animation won't run).
@@ -174,6 +187,7 @@ When helping with scene code or custom components, the project uses **Motion Can
 - Using (0,0) as top-left or bottom-left; it is always center. Using positive y for "up"; positive y is down.
 - Using 0–1 for color grading in timeline clips; there it's -100 to 100 (see Color Grading section). In Motion Canvas, colors are hex/rgb/Color.
 - Emitting partial or invalid TSX for components (e.g. missing imports or exports); always provide complete, runnable code.
+- Trying to animate a value by putting it in inputDefs — inputs are static. Use generators and signals for animation (see "Input variables vs. animation" above).
 
 ## Tool Usage Guidelines
 

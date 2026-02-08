@@ -111,4 +111,58 @@ export class MyWidget extends Node {
 }
 ```
 
+## Input variables vs. animation (critical distinction)
+
+**input_defs** (input variables) are **static values** set on the timeline. They are NOT animatable — they do not change over the course of the clip's playback. You cannot tween or keyframe an input variable. When a user drags a component onto the timeline, inputs are set once (e.g. in the inspector panel) and remain constant.
+
+If a user wants **animated behavior** (e.g. typewriter text, a counter counting up, a progress bar filling, pulsing opacity, or any value that changes over time):
+
+1. **Use generator methods and signals inside the component**, not input variables.
+2. Input variables can control **parameters** of the animation (speed, delay, target value, easing) but the animation itself must be driven by a generator that yields tweens on signals.
+3. For a **typewriter effect**: store the full text as an input variable, then use a generator method that reveals characters over time via a signal (e.g. a `progress` signal that controls how many characters of the text are visible). The component's `Txt` node reads a derived signal: `text={() => this.fullText().slice(0, Math.floor(this.progress() * this.fullText().length))}`.
+4. For **counting / filling / any temporal change**: expose a `*animate(duration)` generator that tweens a signal from 0 to 1 (or any range). Use input variables only for static config like `targetValue`, `speed`, `color`, `fontSize`.
+
+**Pattern**: inputs = what to show and how fast; generators + signals = the actual motion.
+
+```tsx
+// WRONG: trying to animate via input variable (will not work — value is static)
+// input_defs: [{ name: "progress", type: "number", default: 0 }]
+// The user cannot keyframe this.
+
+// CORRECT: input controls speed, generator drives animation
+export interface ProgressBarProps extends NodeProps {
+  speed?: SignalValue<number>;       // input: how fast
+  fillColor?: SignalValue<string>;   // input: what color
+}
+
+export class ProgressBar extends Node {
+  @initial(1) @signal() public declare readonly speed: SimpleSignal<number, this>;
+  @initial('#4CAF50') @colorSignal() public declare readonly fillColor: ColorSignal<this>;
+
+  // Internal animated signal — NOT an input
+  private readonly progress = createSignal(0);
+  private readonly bar = createRef<Rect>();
+
+  public constructor(props?: ProgressBarProps) {
+    super({ ...props });
+    this.add(
+      <Rect width={200} height={20} radius={4} fill="#333">
+        <Rect
+          ref={this.bar}
+          width={() => this.progress() * 200}
+          height={20}
+          radius={4}
+          fill={this.fillColor}
+        />
+      </Rect>
+    );
+  }
+
+  // Animation via generator — this is what makes it move
+  public *fill(duration?: number) {
+    yield* this.progress(1, duration ?? this.speed());
+  }
+}
+```
+
 When providing code to createComponent or editComponent, supply complete, valid TSX that compiles. Match input_defs to the component's signal props (name, type, default, label) so the timeline can control them.
