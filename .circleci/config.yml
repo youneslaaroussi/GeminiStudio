@@ -13,7 +13,7 @@ jobs:
       - checkout
       - run:
           name: Install pnpm
-          command: npm install -g pnpm@9
+          command: sudo npm install -g pnpm@9
       - run:
           name: Install dependencies
           command: pnpm install --frozen-lockfile
