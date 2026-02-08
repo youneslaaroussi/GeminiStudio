@@ -8,7 +8,7 @@ version: 2.1
 jobs:
   verify-templates:
     docker:
-      - image: cimg/node:22
+      - image: cimg/node:22.11.0
     steps:
       - checkout
       - run:

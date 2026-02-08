@@ -13968,7 +13968,24 @@ function* playComponent({ entry, sceneWidth, sceneHeight }) {
   if (!node) return;
   yield* applyEnterTransition(node, clip.enterTransition, 1, sceneWidth, sceneHeight);
   if (timing.mainDuration > 0) {
-    if (clip.animation && clip.animation !== "none") {
+    const instance = node;
+    const animateMethod = instance.animateIn ?? instance.reveal ?? instance.animate;
+    if (typeof animateMethod === "function") {
+      const gen = animateMethod.call(instance, timing.mainDuration);
+      if (gen) {
+        yield* all(
+          gen,
+          ...clip.animation && clip.animation !== "none" ? [applyClipAnimation(node, clip.animation, timing.mainDuration, clip.animationIntensity)] : []
+        );
+      } else if (clip.animation && clip.animation !== "none") {
+        yield* all(
+          waitFor(timing.mainDuration),
+          applyClipAnimation(node, clip.animation, timing.mainDuration, clip.animationIntensity)
+        );
+      } else {
+        yield* waitFor(timing.mainDuration);
+      }
+    } else if (clip.animation && clip.animation !== "none") {
       yield* all(
         waitFor(timing.mainDuration),
         applyClipAnimation(node, clip.animation, timing.mainDuration, clip.animationIntensity)
