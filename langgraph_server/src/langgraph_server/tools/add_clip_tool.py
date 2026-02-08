@@ -279,6 +279,23 @@ def addClipToTimeline(
             "message": "User and project context required to modify timeline.",
         }
 
+    # Coerce numeric args (model sometimes sends strings)
+    def _num(v: Any) -> int | float | None:
+        if v is None:
+            return None
+        if isinstance(v, (int, float)):
+            return v
+        if isinstance(v, str):
+            try:
+                return float(v) if "." in v else int(v)
+            except ValueError:
+                return None
+        return None
+
+    start = _num(start) if start is not None else 0
+    duration = _num(duration)
+    offset = _num(offset) if offset is not None else 0
+
     # Initialize settings and Firestore client
     settings = get_settings()
     db = get_firestore_client(settings)

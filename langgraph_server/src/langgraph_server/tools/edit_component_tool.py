@@ -71,7 +71,17 @@ def editComponent(
     if component_name is not None:
         patch_body["componentName"] = component_name
     if input_defs is not None:
-        patch_body["inputDefs"] = input_defs
+        # Coerce to list (model sometimes sends JSON string)
+        if isinstance(input_defs, list):
+            patch_body["inputDefs"] = input_defs
+        elif isinstance(input_defs, str):
+            try:
+                parsed = json.loads(input_defs)
+                patch_body["inputDefs"] = parsed if isinstance(parsed, list) else []
+            except json.JSONDecodeError:
+                patch_body["inputDefs"] = []
+        else:
+            patch_body["inputDefs"] = []
     if description is not None:
         patch_body["description"] = description
 

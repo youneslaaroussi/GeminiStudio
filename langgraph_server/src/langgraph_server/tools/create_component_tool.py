@@ -53,6 +53,19 @@ def createComponent(
             "message": "Asset service URL not configured.",
         }
 
+    # Coerce input_defs to list (model sometimes sends JSON string)
+    resolved_input_defs: List[Dict[str, Any]] = []
+    if input_defs is not None:
+        if isinstance(input_defs, list):
+            resolved_input_defs = input_defs
+        elif isinstance(input_defs, str):
+            try:
+                resolved_input_defs = json.loads(input_defs)
+                if not isinstance(resolved_input_defs, list):
+                    resolved_input_defs = []
+            except json.JSONDecodeError:
+                resolved_input_defs = []
+
     # 1. Create the component asset
     create_endpoint = (
         f"{settings.asset_service_url.rstrip('/')}/api/assets/{user_id}/{project_id}/component"
@@ -61,7 +74,7 @@ def createComponent(
         "name": name,
         "code": code,
         "componentName": component_name,
-        "inputDefs": input_defs or [],
+        "inputDefs": resolved_input_defs,
     }
     body_str = json.dumps(create_body)
 

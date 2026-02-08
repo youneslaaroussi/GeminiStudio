@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 import uuid
@@ -54,6 +55,12 @@ def deleteClipFromTimeline(
             "message": "User and project context required to modify timeline.",
         }
 
+    # Accept list or JSON string (model sometimes sends string)
+    if isinstance(clip_ids, str):
+        try:
+            clip_ids = json.loads(clip_ids)
+        except json.JSONDecodeError:
+            clip_ids = []
     if not clip_ids or not isinstance(clip_ids, list):
         return {
             "status": "error",
