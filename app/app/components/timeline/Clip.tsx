@@ -43,6 +43,8 @@ export function Clip({ clip, layerId }: ClipProps) {
   const deleteClip = useProjectStore((s) => s.deleteClip);
   const moveClipToLayer = useProjectStore((s) => s.moveClipToLayer);
   const addClipOnNewLayerAbove = useProjectStore((s) => s.addClipOnNewLayerAbove);
+  const startAddingAssetToTimeline = useProjectStore((s) => s.startAddingAssetToTimeline);
+  const finishAddingAssetToTimeline = useProjectStore((s) => s.finishAddingAssetToTimeline);
   const layers = useProjectStore((s) => s.project.layers);
   const currentTime = useProjectStore((s) => s.currentTime);
   const projectId = useProjectStore((s) => s.projectId);
@@ -356,20 +358,25 @@ export function Clip({ clip, layerId }: ClipProps) {
       const addClipWithNewLayer = (c: Parameters<typeof addClipOnNewLayerAbove>[1]) => {
         addClipOnNewLayerAbove(layerId, c);
       };
-      await addAssetToTimeline({
-        assetId: asset.id,
-        projectId,
-        type: asset.type,
-        name: asset.name || "Asset",
-        duration,
-        start,
-        width: asset.width,
-        height: asset.height,
-        sourceDuration: asset.duration,
-        addClip: addClipWithNewLayer,
-      });
+      startAddingAssetToTimeline();
+      try {
+        await addAssetToTimeline({
+          assetId: asset.id,
+          projectId,
+          type: asset.type,
+          name: asset.name || "Asset",
+          duration,
+          start,
+          width: asset.width,
+          height: asset.height,
+          sourceDuration: asset.duration,
+          addClip: addClipWithNewLayer,
+        });
+      } finally {
+        finishAddingAssetToTimeline();
+      }
     },
-    [clip.start, projectId, zoom, layerId, addClipOnNewLayerAbove]
+    [clip.start, projectId, zoom, layerId, addClipOnNewLayerAbove, startAddingAssetToTimeline, finishAddingAssetToTimeline]
   );
 
   return (

@@ -225,6 +225,8 @@ export function LayerTrackBody({ layer, trackWidth }: LayerTrackBodyProps) {
   const selectedTransitionKey = useProjectStore((s) => s.selectedTransitionKey);
   const setSelectedTransition = useProjectStore((s) => s.setSelectedTransition);
   const addClip = useProjectStore((s) => s.addClip);
+  const startAddingAssetToTimeline = useProjectStore((s) => s.startAddingAssetToTimeline);
+  const finishAddingAssetToTimeline = useProjectStore((s) => s.finishAddingAssetToTimeline);
   const trackRef = useRef<HTMLDivElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -332,6 +334,8 @@ export function LayerTrack({ layer, layerIndex, width, labelWidth, onDragStart, 
   const duration = useProjectStore((s) => s.getDuration());
   const addClip = useProjectStore((s) => s.addClip);
   const deleteLayer = useProjectStore((s) => s.deleteLayer);
+  const startAddingAssetToTimeline = useProjectStore((s) => s.startAddingAssetToTimeline);
+  const finishAddingAssetToTimeline = useProjectStore((s) => s.finishAddingAssetToTimeline);
   const trackRef = useRef<HTMLDivElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -429,23 +433,28 @@ export function LayerTrack({ layer, layerIndex, width, labelWidth, onDragStart, 
       const duration =
         asset.type === "image" || asset.type === "component" ? 5 : (asset.duration ?? 10);
       const layerId = assetMatchesLayer(asset.type, layer.type) ? layer.id : undefined;
-      await addAssetToTimeline({
-        assetId: asset.id,
-        projectId,
-        type: asset.type,
-        name: asset.name || "Asset",
-        duration,
-        start,
-        width: asset.width,
-        height: asset.height,
-        sourceDuration: asset.duration,
-        layerId,
-        addClip,
-        componentName: asset.componentName,
-        inputDefs: asset.inputDefs,
-      });
+      startAddingAssetToTimeline();
+      try {
+        await addAssetToTimeline({
+          assetId: asset.id,
+          projectId,
+          type: asset.type,
+          name: asset.name || "Asset",
+          duration,
+          start,
+          width: asset.width,
+          height: asset.height,
+          sourceDuration: asset.duration,
+          layerId,
+          addClip,
+          componentName: asset.componentName,
+          inputDefs: asset.inputDefs,
+        });
+      } finally {
+        finishAddingAssetToTimeline();
+      }
     },
-    [addClip, layer.id, layer.type, projectId, zoom]
+    [addClip, layer.id, layer.type, projectId, zoom, startAddingAssetToTimeline, finishAddingAssetToTimeline]
   );
 
   const sortedClips = [...layer.clips].sort((a, b) => a.start - b.start);

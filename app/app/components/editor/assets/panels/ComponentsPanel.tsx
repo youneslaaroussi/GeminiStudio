@@ -947,6 +947,7 @@ function MonacoEditor({
       jsx: JsxEmit.ReactJSX ?? 4,
       jsxImportSource: "@motion-canvas/2d",
       moduleResolution: 2, // Node
+      allowSyntheticDefaultImports: true,
       allowNonTsExtensions: true,
       noEmit: true,
       baseUrl: "file:///",
@@ -999,10 +1000,38 @@ declare module '@motion-canvas/core' {
   export function createRef<T>(): { (): T; current: T };
   export function waitFor(seconds?: number, after?: ThreadGenerator): ThreadGenerator;
   export function tween(duration: number, callback: (t: number) => void): ThreadGenerator;
+  export function linear(value: number, from?: number, to?: number): number;
   export function easeInOutCubic(t: number): number;
   export function easeInCubic(t: number): number;
   export function easeOutCubic(t: number): number;
   export function easeInOutQuad(t: number): number;
+  export function easeInQuad(t: number): number;
+  export function easeOutQuad(t: number): number;
+  export function easeInSine(t: number): number;
+  export function easeOutSine(t: number): number;
+  export function easeInOutSine(t: number): number;
+  export function easeInExpo(t: number): number;
+  export function easeOutExpo(t: number): number;
+  export function easeInOutExpo(t: number): number;
+  export function easeInCirc(t: number): number;
+  export function easeOutCirc(t: number): number;
+  export function easeInOutCirc(t: number): number;
+  export function easeInQuart(t: number): number;
+  export function easeOutQuart(t: number): number;
+  export function easeInOutQuart(t: number): number;
+  export function easeInQuint(t: number): number;
+  export function easeOutQuint(t: number): number;
+  export function easeInOutQuint(t: number): number;
+  export const easeInBack: (t: number) => number;
+  export const easeOutBack: (t: number) => number;
+  export const easeInOutBack: (t: number) => number;
+  export const easeInBounce: (t: number) => number;
+  export const easeOutBounce: (t: number) => number;
+  export const easeInOutBounce: (t: number) => number;
+  export const easeInElastic: (t: number) => number;
+  export const easeOutElastic: (t: number) => number;
+  export const easeInOutElastic: (t: number) => number;
+  export interface TimingFunction { (value: number, from?: number, to?: number): number; }
   export function all(...values: ThreadGenerator[]): ThreadGenerator;
   export function sequence(...values: ThreadGenerator[]): ThreadGenerator;
   export function loop(fn: () => ThreadGenerator, count?: number): ThreadGenerator;

@@ -8,7 +8,7 @@ import type { ResolvedLayer, CaptionSettings, TextClipSettings } from "@/app/typ
 import type { ProjectTranscription } from "@/app/types/transcription";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Check, Copy, Crosshair, Code2, Maximize2, Minimize2, Play, Pause, RotateCw } from "lucide-react";
+import { Check, Copy, Crosshair, Code2, Download, Maximize2, Minimize2, Play, Pause, RotateCw } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { usePreloadTimelineMedia } from "@/app/hooks/use-preload-timeline-media";
 import { cn } from "@/lib/utils";
@@ -140,12 +140,49 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [playerKey, setPlayerKey] = useState(0);
   const [fullscreenControlsVisible, setFullscreenControlsVisible] = useState(true);
+  const [hasPreviewCanvas, setHasPreviewCanvas] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const firebaseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fullscreenControlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scenePlayerRef = useRef<ScenePlayerHandle>(null);
   const fullscreenRef = useRef<HTMLDivElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const handleCanvasReady = useCallback(
+    (canvas: HTMLCanvasElement | null) => {
+      previewCanvasRef.current = canvas;
+      setHasPreviewCanvas(!!canvas);
+      onCanvasReady?.(canvas);
+    },
+    [onCanvasReady]
+  );
+
+  const handleCopyFrame = useCallback(async () => {
+    const canvas = previewCanvasRef.current;
+    if (!canvas) return;
+    try {
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/png")
+      );
+      if (blob) {
+        await navigator.clipboard.write([
+          new ClipboardItem({ "image/png": blob }),
+        ]);
+      }
+    } catch {
+      /* clipboard not available or denied */
+    }
+  }, []);
+
+  const handleExportFrame = useCallback(() => {
+    const canvas = previewCanvasRef.current;
+    if (!canvas) return;
+    const link = document.createElement("a");
+    link.download = `preview-frame-${Date.now()}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  }, []);
 
   const handleRecenter = useCallback(() => {
     scenePlayerRef.current?.recenter();
@@ -380,6 +417,40 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
                 <p>Recenter preview (0)</p>
               </TooltipContent>
             </Tooltip>
+            {/* Copy frame to clipboard */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  onClick={handleCopyFrame}
+                  disabled={!hasPreviewCanvas}
+                >
+                  <Copy className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>Copy current frame to clipboard</p>
+              </TooltipContent>
+            </Tooltip>
+            {/* Export frame as PNG */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  onClick={handleExportFrame}
+                  disabled={!hasPreviewCanvas}
+                >
+                  <Download className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>Export current frame as PNG</p>
+              </TooltipContent>
+            </Tooltip>
             {/* Fullscreen button */}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -454,7 +525,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
             key={playerKey}
             ref={scenePlayerRef}
             onPlayerChange={onPlayerChange}
-            onCanvasReady={onCanvasReady}
+            onCanvasReady={handleCanvasReady}
             onVariablesUpdated={handleVariablesUpdated}
             onUpdateQueued={handleUpdateQueued}
             isPlaying={isPlaying}

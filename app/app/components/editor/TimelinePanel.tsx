@@ -82,6 +82,9 @@ export function TimelinePanel({
   const addLayer = useProjectStore((s) => s.addLayer);
   const addClip = useProjectStore((s) => s.addClip);
   const reorderLayers = useProjectStore((s) => s.reorderLayers);
+  const addingAssetToTimelineCount = useProjectStore((s) => s.addingAssetToTimelineCount);
+  const startAddingAssetToTimeline = useProjectStore((s) => s.startAddingAssetToTimeline);
+  const finishAddingAssetToTimeline = useProjectStore((s) => s.finishAddingAssetToTimeline);
 
   const [draggedLayerIndex, setDraggedLayerIndex] = useState<number | null>(null);
   const [dragTargetIndex, setDragTargetIndex] = useState<number | null>(null);
@@ -167,20 +170,25 @@ export function TimelinePanel({
         if (!asset) return;
         const duration =
           asset.type === "image" ? 5 : (asset.duration ?? 10);
-        await addAssetToTimeline({
-          assetId: asset.id,
-          projectId,
-          type: asset.type,
-          name: asset.name || "Asset",
-          duration,
-          start,
-          width: asset.width,
-          height: asset.height,
-          sourceDuration: asset.duration,
-          addClip,
-          componentName: asset.componentName,
-          inputDefs: asset.inputDefs,
-        });
+        startAddingAssetToTimeline();
+        try {
+          await addAssetToTimeline({
+            assetId: asset.id,
+            projectId,
+            type: asset.type,
+            name: asset.name || "Asset",
+            duration,
+            start,
+            width: asset.width,
+            height: asset.height,
+            sourceDuration: asset.duration,
+            addClip,
+            componentName: asset.componentName,
+            inputDefs: asset.inputDefs,
+          });
+        } finally {
+          finishAddingAssetToTimeline();
+        }
         return;
       }
 
@@ -194,7 +202,7 @@ export function TimelinePanel({
         return;
       }
     },
-    [addClip, projectId, zoom]
+    [addClip, projectId, zoom, startAddingAssetToTimeline, finishAddingAssetToTimeline]
   );
 
   // Handlers for empty state drop zone
@@ -224,20 +232,25 @@ export function TimelinePanel({
         if (!asset) return;
         const duration =
           asset.type === "image" ? 5 : (asset.duration ?? 10);
-        await addAssetToTimeline({
-          assetId: asset.id,
-          projectId,
-          type: asset.type,
-          name: asset.name || "Asset",
-          duration,
-          start: 0,
-          width: asset.width,
-          height: asset.height,
-          sourceDuration: asset.duration,
-          addClip,
-          componentName: asset.componentName,
-          inputDefs: asset.inputDefs,
-        });
+        startAddingAssetToTimeline();
+        try {
+          await addAssetToTimeline({
+            assetId: asset.id,
+            projectId,
+            type: asset.type,
+            name: asset.name || "Asset",
+            duration,
+            start: 0,
+            width: asset.width,
+            height: asset.height,
+            sourceDuration: asset.duration,
+            addClip,
+            componentName: asset.componentName,
+            inputDefs: asset.inputDefs,
+          });
+        } finally {
+          finishAddingAssetToTimeline();
+        }
         return;
       }
 
@@ -252,7 +265,7 @@ export function TimelinePanel({
         return;
       }
     },
-    [addClip, projectId]
+    [addClip, projectId, startAddingAssetToTimeline, finishAddingAssetToTimeline]
   );
 
   // Update container width on resize
@@ -836,6 +849,20 @@ export function TimelinePanel({
                     aria-hidden
                   />
                 )}
+                {/* Shimmer overlay while adding asset to timeline (e.g. from Assets tab) */}
+                {addingAssetToTimelineCount > 0 && (
+                  <div
+                    className="absolute inset-0 pointer-events-none z-10 flex items-center justify-center bg-background/40 rounded"
+                    aria-hidden
+                  >
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted/30 overflow-hidden rounded-b">
+                      <div
+                        className="h-full w-1/3 bg-primary/70 rounded-full"
+                        style={{ animation: "asset-shimmer 1s ease-in-out infinite" }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -851,6 +878,16 @@ export function TimelinePanel({
             onDragLeave={handleEmptyDragLeave}
             onDrop={handleEmptyDrop}
           >
+            {addingAssetToTimelineCount > 0 && (
+              <div className="absolute inset-0 flex items-end justify-center pointer-events-none">
+                <div className="w-full max-w-md h-1 bg-muted/30 overflow-hidden rounded-b">
+                  <div
+                    className="h-full w-1/3 bg-primary/70 rounded-full"
+                    style={{ animation: "asset-shimmer 1s ease-in-out infinite" }}
+                  />
+                </div>
+              </div>
+            )}
             <div
               className={cn(
                 "rounded-lg border border-dashed px-6 py-5 text-center transition-all",
@@ -861,9 +898,11 @@ export function TimelinePanel({
             >
               <img src="/gemini-logo.png" alt="Gemini" className="size-8 mx-auto mb-3 opacity-60" />
               <p className="text-sm text-muted-foreground">
-                {isEmptyDropTarget
-                  ? "Drop to add to timeline"
-                  : "Drag assets here or add clips to start building your project."}
+                {addingAssetToTimelineCount > 0
+                  ? "Adding to timeline…"
+                  : isEmptyDropTarget
+                    ? "Drop to add to timeline"
+                    : "Drag assets here or add clips to start building your project."}
               </p>
               <p className="text-xs text-muted-foreground/80 mt-1">
                 0 clips on timeline (0 video, 0 audio, 0 text, 0 image)

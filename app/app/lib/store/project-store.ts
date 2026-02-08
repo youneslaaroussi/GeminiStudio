@@ -40,6 +40,11 @@ interface ProjectStore {
   playbackSpeed: number;
   saveStatus: 'idle' | 'saving' | 'saved';
 
+  /** Count of in-flight "add asset to timeline" ops; timeline shows shimmer while > 0 */
+  addingAssetToTimelineCount: number;
+  startAddingAssetToTimeline: () => void;
+  finishAddingAssetToTimeline: () => void;
+
   // Sync manager for Automerge/Firestore integration
   syncManager: ProjectSyncManager | null;
   currentBranch: string;
@@ -327,6 +332,9 @@ export const useProjectStore = create<ProjectStore>()((set, get): ProjectStore =
     isLooping: true,
     playbackSpeed: 1,
     saveStatus: 'idle',
+    addingAssetToTimelineCount: 0,
+    startAddingAssetToTimeline: () => set((s) => ({ addingAssetToTimelineCount: s.addingAssetToTimelineCount + 1 })),
+    finishAddingAssetToTimeline: () => set((s) => ({ addingAssetToTimelineCount: Math.max(0, s.addingAssetToTimelineCount - 1) })),
     syncManager: null,
     currentBranch: 'main',
     isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,

@@ -205,6 +205,8 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
 
   const addClip = useProjectStore((s) => s.addClip);
   const getDuration = useProjectStore((s) => s.getDuration);
+  const startAddingAssetToTimeline = useProjectStore((s) => s.startAddingAssetToTimeline);
+  const finishAddingAssetToTimeline = useProjectStore((s) => s.finishAddingAssetToTimeline);
 
   // Veo jobs tracking
   const [veoJobs, setVeoJobs] = useState<VeoJob[]>([]);
@@ -447,29 +449,34 @@ export function AssetsPanel({ onSetAssetTabReady }: AssetsPanelProps) {
       const start = getDuration();
       const duration = resolveAssetDuration(asset);
       const assetMetadata = metadata[asset.id];
-      const ok = await addAssetToTimeline({
-        assetId: asset.id,
-        projectId,
-        type: asset.type,
-        name: asset.name || "Asset",
-        duration,
-        start,
-        width: asset.width ?? assetMetadata?.width,
-        height: asset.height ?? assetMetadata?.height,
-        sourceDuration: duration,
-        addClip,
-        componentName: asset.componentName,
-        inputDefs: asset.inputDefs,
-      });
-      if (!ok) {
-        toast.error("Could not add to timeline", {
-          description: "Playback URL not available for this asset yet. Try again in a moment.",
+      startAddingAssetToTimeline();
+      try {
+        const ok = await addAssetToTimeline({
+          assetId: asset.id,
+          projectId,
+          type: asset.type,
+          name: asset.name || "Asset",
+          duration,
+          start,
+          width: asset.width ?? assetMetadata?.width,
+          height: asset.height ?? assetMetadata?.height,
+          sourceDuration: duration,
+          addClip,
+          componentName: asset.componentName,
+          inputDefs: asset.inputDefs,
         });
-        return;
+        if (!ok) {
+          toast.error("Could not add to timeline", {
+            description: "Playback URL not available for this asset yet. Try again in a moment.",
+          });
+          return;
+        }
+        void refreshPipelineStates();
+      } finally {
+        finishAddingAssetToTimeline();
       }
-      void refreshPipelineStates();
     },
-    [addClip, getDuration, resolveAssetDuration, metadata, refreshPipelineStates, projectId]
+    [addClip, getDuration, resolveAssetDuration, metadata, refreshPipelineStates, projectId, startAddingAssetToTimeline, finishAddingAssetToTimeline]
   );
 
 
