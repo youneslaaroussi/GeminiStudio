@@ -1,3 +1,3 @@
 declare module '@gemini-studio/types' {
-  export * from '../../packages/types/src/index';
+  export * from './types/index.js';
 }

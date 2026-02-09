@@ -77,8 +77,8 @@ export const loadConfig = (): RendererConfig => {
     assetServiceSharedSecret: ASSET_SERVICE_SHARED_SECRET,
     sceneCompilerUrl: SCENE_COMPILER_URL ?? 'http://localhost:4001',
     sceneCompilerSharedSecret: SCENE_COMPILER_SHARED_SECRET || undefined,
-    maxFps: Number(RENDERER_MAX_FPS ?? 30),
-    maxResolution: Number(RENDERER_MAX_RESOLUTION ?? 1280), // 720p default (1280x720)
+    maxFps: Number(RENDERER_MAX_FPS ?? 60),
+    maxResolution: Number(RENDERER_MAX_RESOLUTION ?? 4000),
     maxDuration: Number(RENDERER_MAX_DURATION ?? 30), // 30 seconds default
     maxQuality: RENDERER_MAX_QUALITY ?? 'web',
     headlessAllowedRequestHosts,

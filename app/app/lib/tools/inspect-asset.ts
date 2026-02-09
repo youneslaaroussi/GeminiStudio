@@ -26,10 +26,11 @@ export const inspectAssetTool: ToolDefinition<typeof inspectAssetSchema, Project
   name: "inspectAsset",
   label: "Inspect Asset",
   description:
-    "Load an asset (video, image, or audio) by ID so you can see/hear it directly. " +
+    "Load an asset by ID so you can see/hear it or read its description. " +
+    "For video, image, or audio: returns the media for viewing. " +
+    "For component assets: returns name, class, inputs, and code preview (no playable URL). " +
     "Use startTime/endTime (in seconds) to focus on a specific segment of video. " +
-    "Use this when you need to analyze media with conversation context, compare to discussed styles, " +
-    "answer follow-up questions, or when the user wants you to 'look at' or 'inspect' a specific asset.",
+    "Use when you need to analyze media, inspect component code, or when the user says 'look at' or 'inspect' an asset.",
   runLocation: "client",
   inputSchema: inspectAssetSchema,
   fields: [
@@ -86,19 +87,37 @@ export const inspectAssetTool: ToolDefinition<typeof inspectAssetSchema, Project
             { credentials: "include" }
           );
           if (res.ok) {
-            const data = (await res.json()) as { asset?: { id: string; name: string; mimeType: string; type: string; signedUrl?: string; gcsUri?: string; url?: string } };
+            const data = (await res.json()) as {
+              asset?: {
+                id: string;
+                name: string;
+                mimeType: string;
+                type: string;
+                signedUrl?: string;
+                gcsUri?: string;
+                url?: string;
+                code?: string;
+                componentName?: string;
+                inputDefs?: RemoteAsset["inputDefs"];
+                description?: string;
+              };
+            };
             if (data.asset) {
               const a = data.asset;
               asset = {
                 id: a.id,
                 name: a.name,
-                mimeType: a.mimeType,
+                mimeType: a.mimeType ?? "",
                 type: a.type as RemoteAsset["type"],
                 signedUrl: a.signedUrl,
                 gcsUri: a.gcsUri,
                 url: a.signedUrl ?? (a as { url?: string }).url ?? "",
                 size: 0,
                 uploadedAt: "",
+                description: a.description,
+                code: a.code,
+                componentName: a.componentName,
+                inputDefs: a.inputDefs,
               } satisfies RemoteAsset;
             }
           }
@@ -114,11 +133,47 @@ export const inspectAssetTool: ToolDefinition<typeof inspectAssetSchema, Project
         };
       }
 
+      // Component assets: return description and code preview (no media URL)
+      if (asset.type === "component") {
+        const compName = asset.componentName ?? "Unknown";
+        const description = asset.description ?? "";
+        const inputDefs = asset.inputDefs ?? [];
+        const code = asset.code ?? "";
+        const codePreview = code.length > 500 ? code.slice(0, 500) + "..." : code;
+        const inputsStr =
+          inputDefs
+            .filter((d): d is { name: string; type: string; default?: unknown } => !!d && "name" in d)
+            .map((d) => `${d.name}(${d.type})=${String(d.default ?? "")}`)
+            .join(", ") || "none";
+        const timeRange = input.startTime || input.endTime
+          ? ` (${input.startTime ?? "0"}s - ${input.endTime ?? "end"})`
+          : "";
+        return {
+          status: "success" as const,
+          outputs: [
+            {
+              type: "text" as const,
+              text: `Component "${asset.name}" (class: ${compName}). ${description}. Inputs: ${inputsStr}. Code preview: ${codePreview}`,
+            },
+          ],
+          meta: {
+            assetId: asset.id,
+            assetName: asset.name,
+            assetType: "component" as const,
+            componentName: compName,
+            description,
+            inputDefs,
+            codePreview: code.length > 500 ? codePreview : undefined,
+            code: code.length <= 500 ? code : undefined,
+          },
+        };
+      }
+
       const supportedTypes = ["video", "audio", "image"];
       if (!supportedTypes.includes(asset.type)) {
         return {
           status: "error" as const,
-          error: `Asset type "${asset.type}" is not supported. Supported types: video, audio, image.`,
+          error: `Asset type "${asset.type}" is not supported. Supported types: video, audio, image, component.`,
         };
       }
 

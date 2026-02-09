@@ -683,6 +683,9 @@ importers:
       '@fontsource-variable/inter':
         specifier: ^5.2.8
         version: 5.2.8
+      '@fontsource-variable/jetbrains-mono':
+        specifier: ^5.2.8
+        version: 5.2.8
       '@fontsource-variable/literata':
         specifier: ^5.2.8
         version: 5.2.8

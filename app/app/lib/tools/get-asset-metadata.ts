@@ -111,7 +111,7 @@ export const getAssetMetadataTool: ToolDefinition<
   name: "getAssetMetadata",
   label: "Get Asset Metadata",
   description:
-    "Get detailed metadata for an asset including face detection, shot detection, labels, transcription, and more.",
+    "Get detailed metadata for an asset. For media: face detection, shot detection, labels, transcription, etc. For component assets: returns component name, description, inputDefs, and full source code.",
   runLocation: "client",
   inputSchema: getAssetMetadataSchema,
   fields,
@@ -133,6 +133,54 @@ export const getAssetMetadataTool: ToolDefinition<
       return {
         status: "error",
         error: "No project loaded.",
+      };
+    }
+
+    // Component assets have no pipeline; return component source/metadata directly
+    if (asset.type === "component") {
+      const compName = asset.componentName ?? "Unknown";
+      const description = asset.description ?? "";
+      const inputDefs = asset.inputDefs ?? [];
+      const code = asset.code ?? "";
+      const inputsSummary =
+        inputDefs.length > 0
+          ? inputDefs
+              .map(
+                (d) =>
+                  `${d.name} (${d.type}) = ${String(d.default ?? "")}`
+              )
+              .join("; ")
+          : "none";
+      const summaryItems: { type: "text"; text: string }[] = [
+        { type: "text", text: `**Component**: ${compName}` },
+        { type: "text", text: `**Description**: ${description || "(none)"}` },
+        { type: "text", text: `**Inputs**: ${inputsSummary}` },
+        {
+          type: "text",
+          text: `**Code**: ${code ? `${code.length} characters` : "(empty)"}`,
+        },
+      ];
+      return {
+        status: "success",
+        outputs: [
+          {
+            type: "list",
+            title: `Component metadata for '${asset.name}'`,
+            items: summaryItems,
+          },
+          {
+            type: "json",
+            data: {
+              assetId,
+              assetName: asset.name,
+              assetType: "component",
+              componentName: compName,
+              description,
+              inputDefs,
+              code,
+            },
+          },
+        ],
       };
     }
 

@@ -1,7 +1,8 @@
 import { Renderer, RendererResult, Vector2, type Project as MotionCanvasProject } from '@motion-canvas/core';
 import { initSocket, getSocket } from './socket.js';
 import { FFmpegExporterClient } from './ffmpeg-exporter-client.js';
-import type { Project, ProjectTranscription } from '@gemini-studio/types';
+import { FONT_FAMILIES } from '../font-config.js';
+import type { Project, ProjectTranscription } from '../../src/types/index.js';
 
 interface HeadlessJobPayload {
   token: string;
@@ -51,6 +52,27 @@ const fetchJobPayload = async (token: string): Promise<HeadlessJobPayload> => {
     throw new Error(`Failed to fetch job payload: HTTP ${res.status}`);
   }
   return await res.json();
+};
+
+/**
+ * Wait for fonts.css to load then load all font families so canvas text matches app preview.
+ */
+const waitForFonts = async (): Promise<void> => {
+  const link = document.querySelector<HTMLLinkElement>('link[href*="fonts.css"]');
+  if (link) {
+    await new Promise<void>((resolve, reject) => {
+      if (link.sheet) {
+        resolve();
+        return;
+      }
+      link.addEventListener('load', () => resolve());
+      link.addEventListener('error', () => reject(new Error('fonts.css failed to load')));
+      setTimeout(() => resolve(), 8000);
+    });
+  }
+  if (!document.fonts) return;
+  await Promise.all(FONT_FAMILIES.map((family) => document.fonts.load(`400 1em "${family}"`)));
+  await document.fonts.ready;
 };
 
 /**
@@ -186,6 +208,11 @@ const run = async () => {
   project.logger.onLogged.subscribe((entry) => {
     console.debug('[motion-canvas]', entry);
   });
+
+  // Wait for fonts (fonts.css + all font files) so canvas text uses correct font like app preview.
+  console.debug('[headless] Waiting for fonts...');
+  await waitForFonts();
+  console.debug('[headless] Fonts ready');
 
   // Register exporter with Motion Canvas.
   const exporters = project.meta.rendering.exporter.exporters as unknown as Array<typeof FFmpegExporterClient>;

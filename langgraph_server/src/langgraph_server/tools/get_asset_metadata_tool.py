@@ -30,11 +30,11 @@ def getAssetMetadata(
     metadata_type: str | None = None,
     _agent_context: Optional[Dict[str, Any]] = None,
 ) -> dict:
-    """Get detailed metadata for an asset including face detection, shot detection, labels, transcription, and more.
+    """Get detailed metadata for an asset. For media: face detection, shot detection, labels, transcription. For component assets: returns component name, description, inputDefs, and full source code.
 
     Args:
         asset_id: The ID of the asset to get metadata for.
-        metadata_type: Optional filter to get specific metadata type.
+        metadata_type: Optional filter to get specific metadata type (media only).
             Valid values: face-detection, shot-detection, label-detection,
             person-detection, transcription, metadata.
             If not specified, returns all available metadata.
@@ -62,20 +62,20 @@ def getAssetMetadata(
             "message": "Asset service URL not configured.",
         }
 
-    # Validate metadata_type if provided
+    # Validate metadata_type if provided (only used for pipeline metadata)
     if metadata_type and metadata_type not in METADATA_TYPES:
         return {
             "status": "error",
             "message": f"Invalid metadata_type '{metadata_type}'. Valid types: {', '.join(METADATA_TYPES)}",
         }
 
-    # Fetch pipeline state for the asset
-    endpoint = f"{settings.asset_service_url.rstrip('/')}/api/pipeline/{user_id}/{project_id}/{asset_id}"
+    base_url = settings.asset_service_url.rstrip("/")
+    headers = get_asset_service_headers("")
 
+    # Fetch asset first to detect type; components have no pipeline
+    asset_endpoint = f"{base_url}/api/assets/{user_id}/{project_id}/{asset_id}"
     try:
-        # Sign request for asset service authentication
-        headers = get_asset_service_headers("")
-        response = httpx.get(endpoint, headers=headers, timeout=15.0)
+        asset_response = httpx.get(asset_endpoint, headers=headers, timeout=15.0)
     except httpx.HTTPError as exc:
         logger.warning("Failed to contact asset service: %s", exc)
         return {
@@ -83,10 +83,88 @@ def getAssetMetadata(
             "message": f"Could not reach asset service: {exc}",
         }
 
-    if response.status_code == 404:
+    if asset_response.status_code == 404:
         return {
             "status": "error",
-            "message": f"Asset '{asset_id}' not found or has no pipeline data.",
+            "message": f"Asset '{asset_id}' not found. Use listProjectAssets to see available assets.",
+        }
+
+    if asset_response.status_code != 200:
+        return {
+            "status": "error",
+            "message": f"Asset service returned HTTP {asset_response.status_code}: {asset_response.text[:200]}",
+        }
+
+    try:
+        asset = asset_response.json()
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": f"Invalid response from asset service: {exc}",
+        }
+
+    asset_type = asset.get("type", "unknown")
+    asset_name = asset.get("name", asset_id)
+
+    # Component assets: return component source/metadata (no pipeline)
+    if asset_type == "component":
+        comp_name = asset.get("componentName", "Unknown")
+        description = asset.get("description") or ""
+        input_defs = asset.get("inputDefs") or []
+        code = asset.get("code") or ""
+        inputs_summary = "none"
+        if input_defs:
+            parts = []
+            for d in input_defs:
+                if isinstance(d, dict) and d.get("name") is not None:
+                    parts.append(f"{d.get('name')} ({d.get('type', '')}) = {d.get('default', '')}")
+            inputs_summary = "; ".join(parts) if parts else "none"
+        summary_items = [
+            {"type": "text", "text": f"**Component**: {comp_name}"},
+            {"type": "text", "text": f"**Description**: {description or '(none)'}"},
+            {"type": "text", "text": f"**Inputs**: {inputs_summary}"},
+            {"type": "text", "text": f"**Code**: {len(code)} characters" if code else "**Code**: (empty)"},
+        ]
+        return {
+            "status": "success",
+            "outputs": [
+                {
+                    "type": "list",
+                    "title": f"Component metadata for '{asset_name}'",
+                    "items": summary_items,
+                },
+                {
+                    "type": "json",
+                    "data": {
+                        "assetId": asset_id,
+                        "assetName": asset_name,
+                        "assetType": "component",
+                        "componentName": comp_name,
+                        "description": description,
+                        "inputDefs": input_defs,
+                        "code": code,
+                    },
+                },
+            ],
+        }
+
+    # Fetch pipeline state for media assets
+    pipeline_endpoint = f"{base_url}/api/pipeline/{user_id}/{project_id}/{asset_id}"
+    try:
+        response = httpx.get(pipeline_endpoint, headers=headers, timeout=15.0)
+    except httpx.HTTPError as exc:
+        logger.warning("Failed to contact asset service for pipeline: %s", exc)
+        return {
+            "status": "error",
+            "message": f"Could not reach asset service: {exc}",
+        }
+
+    if response.status_code == 404:
+        return {
+            "status": "success",
+            "outputs": [
+                {"type": "text", "text": f"No metadata available for asset '{asset_name}'. Pipeline may not have run yet."},
+            ],
         }
 
     if response.status_code != 200:
@@ -152,13 +230,14 @@ def getAssetMetadata(
         "outputs": [
             {
                 "type": "list",
-                "title": f"Metadata for asset '{asset_id}'",
+                "title": f"Metadata for '{asset_name}'",
                 "items": summary_items,
             },
             {
                 "type": "json",
                 "data": {
                     "assetId": asset_id,
+                    "assetName": asset_name,
                     "metadata": metadata_results,
                 },
             },
