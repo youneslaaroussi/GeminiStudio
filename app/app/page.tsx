@@ -323,6 +323,14 @@ export default function LandingPage() {
               <SiGithub className="size-4 shrink-0" aria-hidden />
               GitHub
             </a>
+            <a
+              href="https://vidova.ai"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-slate-300 transition-colors"
+            >
+              Vidova
+            </a>
             <a href="/privacy" className="hover:text-slate-300 transition-colors">Privacy</a>
             <a href="/tos" className="hover:text-slate-300 transition-colors">Terms</a>
           </div>
