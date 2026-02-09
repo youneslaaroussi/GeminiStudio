@@ -138,7 +138,7 @@ export const timelineAddClipTool: ToolDefinition<
         { value: "text", label: "Text" },
         { value: "component", label: "Component" },
       ],
-      description: "Required for media clips. Optional if assetId is provided (will be inferred from asset). Use 'component' for custom component assets.",
+      description: "Required for media clips. Optional if assetId is provided (will be inferred from asset). Use 'component' for custom component assets; component clips go on component layers.",
     },
     {
       name: "layerId",

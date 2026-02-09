@@ -4,7 +4,7 @@ import type { ToolDefinition } from "./types";
 import type { Project } from "@/app/types/timeline";
 
 const addLayerSchema = z.object({
-  type: z.enum(["video", "audio", "text", "image"]),
+  type: z.enum(["video", "audio", "text", "image", "component"]),
   name: z
     .string()
     .trim()
@@ -20,7 +20,7 @@ export const timelineAddLayerTool: ToolDefinition<
   name: "timelineAddLayer",
   label: "Add Timeline Layer",
   description:
-    "Create a new timeline layer using the existing project store helpers.",
+    "Create a new timeline layer (video, audio, text, image, or component). Component layers hold custom Motion Canvas component clips.",
   runLocation: "client",
   inputSchema: addLayerSchema,
   fields: [
@@ -34,6 +34,7 @@ export const timelineAddLayerTool: ToolDefinition<
         { value: "audio", label: "Audio" },
         { value: "text", label: "Text" },
         { value: "image", label: "Image" },
+        { value: "component", label: "Component" },
       ],
       required: true,
     },

@@ -1,5 +1,9 @@
 # Timeline layers and title cards
 
+## Layer types and add layer / add clip
+- Timeline layer types are: **video**, **audio**, **text**, **image**, and **component**. Add-layer and add-clip tools support all of these.
+- **Component layers** hold custom Motion Canvas component clips. To add a component clip, use addClipToTimeline with clip_type="component" and asset_id set to the component asset ID (from listProjectAssets or createComponent). A matching component layer will be found or created automatically. Timeline auto-correction also moves misplaced clips (including component clips) into the correct layer type.
+
 ## Layer order (what appears on top)
 - Layers are ordered in a list. The FIRST layer in the list is drawn at the BOTTOM (back). The LAST layer is drawn on TOP (front).
 - So for a title card to appear on top of video: the title layer must come AFTER the video layer in the list. If the user says "title should be on top" or "layers are reversed", call reorderLayers with the desired order (e.g. video layer ID first, then text/title layer ID second).

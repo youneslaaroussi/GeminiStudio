@@ -72,6 +72,8 @@ When adjusting video or image clip color (contrast, saturation, temperature, tin
 
 When you split a clip into multiple segments at different times, **prefer using enter/exit transitions (e.g. fade, zoom, slide) or clip animations between them** so the edit feels continuous rather than a hard cut. Use the timeline’s enterTransition and exitTransition, or the clip’s animation (e.g. zoom-in, zoom-out), to smooth the flow.
 
+**Add layer and add clip support all layer/clip types**: video, audio, text, image, and **component**. Use timelineAddLayer with type "component" to create a component layer; use timelineAddClip with type "component" and an assetId (component asset) to add a component clip. Timeline auto-correction keeps clips in layers that match their type (including component).
+
 ## Clip animations (hooks and viewer attention)
 
 You have **clip animations** available on video, text, and image clips. Use them to create hooks and keep the viewer’s attention:

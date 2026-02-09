@@ -24,8 +24,8 @@ function createLayer(type: ClipType, name?: string): Layer {
 
 /**
  * Rule: clips must be in a layer that matches their type.
- * If an image is in a video layer (or video in image layer, etc.),
- * move it to the correct layer (creating one if needed).
+ * If an image is in a video layer (or video in image layer, component in text layer, etc.),
+ * move it to the correct layer (creating one if needed). Handles all clip types including component.
  */
 function correctClipLayerMismatch(project: Project): Project {
   const layers = project.layers ?? [];

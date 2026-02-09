@@ -716,6 +716,7 @@ export function TimelinePanel({
             <option value="audio">Audio</option>
             <option value="text">Text</option>
             <option value="image">Image</option>
+            <option value="component">Component</option>
           </select>
           <button
             type="button"
