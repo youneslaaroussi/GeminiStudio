@@ -132,7 +132,11 @@ export function createGeminiFetchWithRotation(): typeof fetch {
       const res = await fetch(input, requestInitWithKey(init, key));
       lastRes = res;
       if (res.status !== 429) return res;
-      if (keys.length > 1) rotateGeminiKey();
+      if (keys.length > 1) {
+        rotateGeminiKey();
+      } else if (process.env.NODE_ENV !== "test") {
+        console.warn("[gemini-api-keys] 429 with single key (add more keys in GOOGLE_GENERATIVE_AI_API_KEYS for rotation)");
+      }
     }
     resetGeminiKeyIndexToZero();
     return lastRes!;

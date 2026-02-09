@@ -2,10 +2,11 @@ import { randomUUID } from "crypto";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createGeminiFetchWithRotation } from "@/app/lib/server/gemini-api-keys";
+import { createGeminiFetchWithRotation, getGeminiApiKeys } from "@/app/lib/server/gemini-api-keys";
 import { getChatModelIds } from "@/app/lib/model-ids";
 import {
   convertToModelMessages,
+  generateText,
   stepCountIs,
   streamText,
   tool,
@@ -46,6 +47,39 @@ const MODE_DESCRIPTIONS: Record<ChatMode, string> = {
 };
 
 const taskListStore = new Map<string, TaskListSnapshot>();
+
+/** Pick first chat model that accepts a minimal request (key rotation already tried in fetch). Used for model fallback when first model is over quota. */
+async function pickFirstWorkingChatModel(
+  google: ReturnType<typeof createGoogleGenerativeAI>,
+  modelIds: string[],
+): Promise<string> {
+  if (modelIds.length === 0) return "gemini-3-pro-preview";
+  let lastError: unknown;
+  for (let i = 0; i < modelIds.length; i++) {
+    const modelId = modelIds[i]!;
+    try {
+      await generateText({
+        model: google(modelId),
+        prompt: "Hi",
+        maxOutputTokens: 1,
+        maxRetries: 0,
+      });
+      return modelId;
+    } catch (e) {
+      lastError = e;
+      if (i < modelIds.length - 1) {
+        const keyCount = getGeminiApiKeys().length;
+        logger.info(
+          { modelId, nextModel: modelIds[i + 1], fallbackIndex: i + 2, keysTried: keyCount },
+          keyCount === 1
+            ? "[CHAT] Model failed (1 key configured; add more in GOOGLE_GENERATIVE_AI_API_KEYS for rotation), trying next model"
+            : "[CHAT] Model failed after trying all keys, trying next model"
+        );
+      }
+    }
+  }
+  throw lastError;
+}
 
 const planningTaskStatus = z.enum(["pending", "in_progress", "completed"]);
 
@@ -284,8 +318,10 @@ export async function POST(req: Request) {
 
   const google = createGoogleGenerativeAI({ fetch: createGeminiFetchWithRotation() });
   const chatModelIds = getChatModelIds();
+  const chosenModel = await pickFirstWorkingChatModel(google, chatModelIds);
   const result = streamText({
-    model: google(chatModelIds[0] ?? "gemini-3-pro-preview"), // first of DEFAULT_CHAT_MODEL_IDS
+    model: google(chosenModel),
+    maxRetries: 0, // we already try all keys in fetch and all models in pickFirstWorkingChatModel
     providerOptions: {
       google: {
         thinkingConfig: {
