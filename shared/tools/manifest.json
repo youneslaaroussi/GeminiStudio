@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-08T00:10:22.849Z",
+  "generatedAt": "2026-02-09T16:02:23.852Z",
   "tools": {
     "captureAsset": {
       "name": "captureAsset",
@@ -430,7 +430,7 @@
           "name": "type",
           "label": "Layer Type",
           "type": "select",
-          "description": "Choose the media type this layer will hold (video, audio, text, image, or component).",
+          "description": "Choose the media type this layer will hold.",
           "options": [
             {
               "value": "video",
@@ -708,6 +708,13 @@
           "type": "json",
           "placeholder": "{\"type\":\"fade\",\"duration\":0.5}",
           "description": "Out transition when clip ends. Same types as enter."
+        },
+        {
+          "name": "componentInputs",
+          "label": "Component Inputs",
+          "type": "json",
+          "placeholder": "{\"myProp\": \"value\"}",
+          "description": "For component clips: override default input values (keyed by input name)."
         }
       ],
       "inputSchema": {
@@ -895,13 +902,12 @@
               "componentInputs": {
                 "type": "object",
                 "additionalProperties": {
-                  "oneOf": [
-                    { "type": "string" },
-                    { "type": "number" },
-                    { "type": "boolean" }
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
                   ]
-                },
-                "description": "For component clips: override default input values (keyed by input name)."
+                }
               }
             },
             "additionalProperties": false
@@ -962,7 +968,7 @@
     "timelineUpdateClip": {
       "name": "timelineUpdateClip",
       "label": "Update Timeline Clip",
-      "description": "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s). Use animation (none|hover|pulse|float|glow|zoom-in|zoom-out) and animationIntensity (0-5x) for idle animations on video, text, and image clips. COLOR GRADING: contrast, saturation, temperature, tint, highlights, shadows use range -100 to 100 (NOT 0–1). Use 20–50 for visible effect—values like 0.1 or 0.2 are too small. exposure is -2 to 2.",
+      "description": "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. For component clips, use componentInputs to update input values. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s). Use animation (none|hover|pulse|float|glow|zoom-in|zoom-out) and animationIntensity (0-5x) for idle animations on video, text, and image clips. COLOR GRADING: contrast, saturation, temperature, tint, highlights, shadows use range -100 to 100 (NOT 0–1). Use 20–50 for visible effect—values like 0.1 or 0.2 are too small. exposure is -2 to 2.",
       "runLocation": "client",
       "implementations": {
         "app": true,
@@ -1070,6 +1076,13 @@
           "type": "number",
           "placeholder": "1",
           "description": "Animation strength 0–5x (1 = normal). Only applies when animation is set."
+        },
+        {
+          "name": "componentInputs",
+          "label": "Component Inputs",
+          "type": "json",
+          "placeholder": "{\"myProp\": \"value\"}",
+          "description": "For component clips: override input values (keyed by input name). Merges with existing inputs."
         }
       ],
       "inputSchema": {
@@ -1407,6 +1420,16 @@
                 "type": "number",
                 "minimum": 0,
                 "maximum": 5
+              },
+              "componentInputs": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                }
               }
             },
             "required": [
@@ -2675,7 +2698,9 @@
                     },
                     "options": {
                       "type": "array",
-                      "items": { "type": "string" },
+                      "items": {
+                        "type": "string"
+                      },
                       "description": "For type 'enum': list of allowed options the user can choose from"
                     }
                   },
@@ -2800,7 +2825,9 @@
                     },
                     "options": {
                       "type": "array",
-                      "items": { "type": "string" },
+                      "items": {
+                        "type": "string"
+                      },
                       "description": "For type 'enum': list of allowed options the user can choose from"
                     }
                   },

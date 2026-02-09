@@ -722,17 +722,31 @@ export function ChatPanel() {
   const handledToolCalls = useRef<Set<string>>(new Set());
 
   // Auto-scroll to bottom on new messages only when user is already near bottom
+  // Use direct scrollTop manipulation instead of scrollIntoView to prevent layout shifts
   const SCROLL_NEAR_BOTTOM_THRESHOLD = 120;
   useEffect(() => {
     const container = messagesScrollContainerRef.current;
-    const end = messagesEndRef.current;
-    if (!container || !end) return;
-    const { scrollTop, scrollHeight, clientHeight } = container;
-    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-    const isNearBottom = distanceFromBottom <= SCROLL_NEAR_BOTTOM_THRESHOLD;
-    if (isNearBottom) {
-      end.scrollIntoView({ behavior: "smooth" });
-    }
+    if (!container) return;
+    
+    // Use requestAnimationFrame to ensure DOM has updated before measuring
+    requestAnimationFrame(() => {
+      if (!container) return;
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+      const isNearBottom = distanceFromBottom <= SCROLL_NEAR_BOTTOM_THRESHOLD;
+      
+      if (isNearBottom) {
+        // Use scrollTop directly instead of scrollIntoView to prevent layout shifts
+        // Scroll to the maximum scroll position (bottom of content)
+        const maxScrollTop = scrollHeight - clientHeight;
+        if (maxScrollTop > scrollTop) {
+          container.scrollTo({
+            top: maxScrollTop,
+            behavior: "smooth"
+          });
+        }
+      }
+    });
   }, [messages, isBusy]);
 
   const handleChatSubmit = useCallback((text: string, mentions: AssetMention[]) => {
@@ -1392,7 +1406,11 @@ export function ChatPanel() {
       )}
       {/* Messages Area + floating recommended actions */}
       <div className="flex-1 min-h-0 flex flex-col relative">
-        <div ref={messagesScrollContainerRef} className="flex-1 overflow-y-auto">
+        <div 
+          ref={messagesScrollContainerRef} 
+          className="flex-1 overflow-y-auto"
+          style={{ contain: 'layout style paint', willChange: 'scroll-position' }}
+        >
           {/* Task List (sticky at top when present) */}
           {taskListSnapshot && (
             <div className="sticky top-0 z-10 p-3 bg-gradient-to-b from-card via-card to-transparent pb-6">

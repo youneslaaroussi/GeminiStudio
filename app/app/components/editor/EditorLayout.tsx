@@ -809,14 +809,14 @@ export function EditorLayout() {
                       </button>
                     </div>
                     {/* Tab content - all stay mounted, visibility controlled by CSS */}
-                    <div className="flex-1 min-h-0 relative">
+                    <div className="flex-1 min-h-0 relative overflow-hidden">
                       <div className={`absolute inset-0 ${rightPanelTab === "toolbox" ? "visible" : "invisible"}`}>
                         <ToolboxPanel />
                       </div>
                       <div className={`absolute inset-0 ${rightPanelTab === "effects" ? "visible" : "invisible"}`}>
                         <EffectsPanelWrapper resolvedLayers={playbackResolvedLayers} />
                       </div>
-                      <div className={`absolute inset-0 ${rightPanelTab === "chat" ? "visible" : "invisible"}`}>
+                      <div className={`absolute inset-0 ${rightPanelTab === "chat" ? "visible" : "invisible"}`} style={{ contain: 'layout style paint' }}>
                         <ChatPanel />
                       </div>
                     </div>

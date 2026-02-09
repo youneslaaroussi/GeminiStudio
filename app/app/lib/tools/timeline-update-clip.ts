@@ -7,6 +7,7 @@ import type {
   AudioClip,
   ImageClip,
   TextClip,
+  ComponentClip,
   Focus,
   ClipTransition,
   TransitionType,
@@ -125,6 +126,7 @@ const clipUpdateSchema = z.object({
   exitTransition: clipTransitionSchema.optional().nullable(),
   animation: z.enum(["none", "hover", "pulse", "float", "glow", "zoom-in", "zoom-out"]).optional().nullable(),
   animationIntensity: z.number().min(0).max(5).optional(),
+  componentInputs: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 
 type ClipUpdateInput = z.infer<typeof clipUpdateSchema>;
@@ -229,6 +231,15 @@ function buildUpdates(
       }
       return { ...updates, ...textUpdates };
     }
+    case "component": {
+      const componentUpdates: Partial<ComponentClip> = {};
+      if (input.componentInputs !== undefined) {
+        // Merge with existing inputs to allow partial updates
+        const existingInputs = (clip as ComponentClip).inputs ?? {};
+        componentUpdates.inputs = { ...existingInputs, ...input.componentInputs };
+      }
+      return { ...updates, ...componentUpdates };
+    }
     default:
       return updates;
   }
@@ -241,7 +252,7 @@ export const timelineUpdateClipTool: ToolDefinition<
   name: "timelineUpdateClip",
   label: "Update Timeline Clip",
   description:
-    "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s). Use animation (none|hover|pulse|float|glow|zoom-in|zoom-out) and animationIntensity (0-5x) for idle animations on video, text, and image clips. COLOR GRADING: contrast, saturation, temperature, tint, highlights, shadows use range -100 to 100 (NOT 0–1). Use 20–50 for visible effect—values like 0.1 or 0.2 are too small. exposure is -2 to 2.",
+    "Adjust clip timing and type-specific settings. For text clips, use textSettings with template, subtitle, backgroundColor. For component clips, use componentInputs to update input values. Use enterTransition and exitTransition to set fade/slide/zoom in/out effects (type, duration 0.1-5s). Use animation (none|hover|pulse|float|glow|zoom-in|zoom-out) and animationIntensity (0-5x) for idle animations on video, text, and image clips. COLOR GRADING: contrast, saturation, temperature, tint, highlights, shadows use range -100 to 100 (NOT 0–1). Use 20–50 for visible effect—values like 0.1 or 0.2 are too small. exposure is -2 to 2.",
   runLocation: "client",
   inputSchema: clipUpdateSchema,
   fields: [
@@ -349,6 +360,13 @@ export const timelineUpdateClipTool: ToolDefinition<
       type: "number",
       placeholder: "1",
       description: "Animation strength 0–5x (1 = normal). Only applies when animation is set.",
+    },
+    {
+      name: "componentInputs",
+      label: "Component Inputs",
+      type: "json",
+      placeholder: '{"myProp": "value"}',
+      description: "For component clips: override input values (keyed by input name). Merges with existing inputs.",
     },
   ],
   async run(input) {

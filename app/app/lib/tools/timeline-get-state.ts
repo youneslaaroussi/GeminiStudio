@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import type { ToolDefinition, ToolOutput } from "./types";
-import type { Project } from "@/app/types/timeline";
+import type { Project, ComponentClip } from "@/app/types/timeline";
 
 const getStateSchema = z.object({
   includeClipDetails: z
@@ -53,7 +53,7 @@ export const getTimelineStateTool: ToolDefinition<
     const layerSummaries = project.layers.map((layer) => {
       const clipSummaries = layer.clips.map((clip) => {
         if (input.includeClipDetails) {
-          return {
+          const summary: Record<string, any> = {
             id: clip.id,
             name: clip.name ?? "Unnamed",
             type: clip.type,
@@ -61,9 +61,27 @@ export const getTimelineStateTool: ToolDefinition<
             duration: clip.duration,
             end: clip.start + clip.duration / clip.speed,
             speed: clip.speed,
-            ...(clip.type === "text" && clip.text ? { text: clip.text } : {}),
-            ...(clip.type !== "text" && "assetId" in clip && clip.assetId ? { assetId: clip.assetId } : {}),
           };
+          
+          // Include text for text clips
+          if (clip.type === "text" && clip.text) {
+            summary.text = clip.text;
+          }
+          
+          // Include assetId for non-text clips (video, audio, image, component)
+          if (clip.type !== "text" && "assetId" in clip && clip.assetId) {
+            summary.assetId = clip.assetId;
+          }
+          
+          // Include inputs for component clips
+          if (clip.type === "component") {
+            const componentClip = clip as ComponentClip;
+            if (componentClip.inputs && Object.keys(componentClip.inputs).length > 0) {
+              summary.inputs = componentClip.inputs;
+            }
+          }
+          
+          return summary;
         }
         return {
           id: clip.id,

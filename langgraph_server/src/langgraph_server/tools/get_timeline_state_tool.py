@@ -120,6 +120,11 @@ def getTimelineState(
                 clip_info["assetId"] = clip.get("assetId")
             if clip.get("text"):
                 clip_info["text"] = clip.get("text")
+            # Include inputs for component clips
+            if clip.get("type") == "component":
+                component_inputs = clip.get("inputs")
+                if component_inputs and isinstance(component_inputs, dict) and len(component_inputs) > 0:
+                    clip_info["inputs"] = component_inputs
 
             clip_details.append(clip_info)
 

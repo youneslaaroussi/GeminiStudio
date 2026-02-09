@@ -82,6 +82,8 @@ def updateClipInTimeline(
     # Idle animation (video, text, image clips only): hover, pulse, float, glow
     animation: str | None = None,
     animation_intensity: float | None = None,
+    # Component clip inputs (JSON string or dict)
+    component_inputs: str | dict[str, Any] | None = None,
     _agent_context: dict | None = None,
 ) -> dict:
     """Update an existing clip on the project timeline.
@@ -127,6 +129,7 @@ def updateClipInTimeline(
         audio_volume: Optional 0-1 for video clips. Controls the volume of the video's audio track.
         animation: Optional idle animation for video/text/image: hover, pulse, float, glow. "none" to clear.
         animation_intensity: Optional 0-5 (1=normal, 5=5x). Only used when animation is set.
+        component_inputs: Optional JSON string or dict for component clips to update input values (e.g. {"data": "Physics:300, Math:450"}).
 
     Returns:
         Status dict with updated clip info or error message.
@@ -299,6 +302,19 @@ def updateClipInTimeline(
         if 0 <= val <= 1:
             updates["audioVolume"] = val
 
+    # Component inputs (component clips only)
+    component_inputs_dict: dict[str, Any] | None = None
+    if component_inputs is not None:
+        try:
+            if isinstance(component_inputs, str):
+                component_inputs_dict = json.loads(component_inputs)
+            elif isinstance(component_inputs, dict):
+                component_inputs_dict = component_inputs
+            if not isinstance(component_inputs_dict, dict):
+                component_inputs_dict = None
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     # Focus/zoom (video clips only). Clear if "null" or "". Format: {"x": 0.5, "y": 0.5, "zoom": 1}.
     focus_clear = False
     if focus is not None:
@@ -323,7 +339,7 @@ def updateClipInTimeline(
 
     animation_clear = updates.pop("_clear_animation", False)
 
-    if not updates and not transition_clears and not color_grading_merge and not chroma_key_clear and not focus_clear and not animation_clear:
+    if not updates and not transition_clears and not color_grading_merge and not chroma_key_clear and not focus_clear and not animation_clear and not component_inputs_dict:
         return {
             "status": "error",
             "message": "No valid updates provided.",
@@ -373,8 +389,16 @@ def updateClipInTimeline(
         layer, clip = found
         clip_type = clip.get("type", "")
 
-        # For component clips, map text/fontSize/fill/opacity/speed into inputs (scene uses clip.inputs as component props)
+        # For component clips, handle component_inputs parameter and map text/fontSize/fill/opacity/speed into inputs
         if clip_type == "component":
+            # Handle component_inputs parameter (takes precedence)
+            if component_inputs_dict:
+                clip.setdefault("inputs", {})
+                # Merge with existing inputs to allow partial updates
+                existing_inputs = clip.get("inputs", {})
+                clip["inputs"] = {**existing_inputs, **component_inputs_dict}
+            
+            # Legacy: map text/fontSize/fill/opacity/speed into inputs (scene uses clip.inputs as component props)
             component_input_keys = ("text", "fontSize", "fill", "opacity", "speed")
             for key in component_input_keys:
                 if key in updates:
