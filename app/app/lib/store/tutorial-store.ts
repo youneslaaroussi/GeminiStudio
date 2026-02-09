@@ -39,6 +39,7 @@ interface TutorialStore {
   previousStep: () => void;
   skipTutorial: () => void;
   completeTutorial: () => void;
+  closeCompletionModal: () => void;
   
   // Getters
   getCurrentTutorial: () => Tutorial | null;

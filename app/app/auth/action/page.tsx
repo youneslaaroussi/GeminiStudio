@@ -10,7 +10,7 @@
  *    (Firebase replaces %LINK% with the actual action URL; we parse it and apply the code.)
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/app/lib/server/firebase';
@@ -19,7 +19,7 @@ import Image from 'next/image';
 
 type Status = 'loading' | 'success' | 'error';
 
-export default function AuthActionPage() {
+function AuthActionContent() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<Status>('loading');
   const [message, setMessage] = useState<string>('');
@@ -120,5 +120,17 @@ export default function AuthActionPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function AuthActionPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
+        <p className="text-slate-400 text-sm">Loading…</p>
+      </div>
+    }>
+      <AuthActionContent />
+    </Suspense>
   );
 }

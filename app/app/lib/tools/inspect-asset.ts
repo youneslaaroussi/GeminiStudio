@@ -12,7 +12,7 @@
 import { z } from "zod";
 import type { ToolDefinition } from "./types";
 import type { Project } from "@/app/types/timeline";
-import type { RemoteAsset } from "@/app/types/assets";
+import type { RemoteAsset, ComponentInputDef } from "@/app/types/assets";
 import { useProjectStore } from "@/app/lib/store/project-store";
 import { loadAssetsSnapshot, toAbsoluteAssetUrl } from "./asset-utils";
 
@@ -142,7 +142,7 @@ export const inspectAssetTool: ToolDefinition<typeof inspectAssetSchema, Project
         const codePreview = code.length > 500 ? code.slice(0, 500) + "..." : code;
         const inputsStr =
           inputDefs
-            .filter((d): d is { name: string; type: string; default?: unknown } => !!d && "name" in d)
+            .filter((d): d is ComponentInputDef => !!d && "name" in d && "type" in d)
             .map((d) => `${d.name}(${d.type})=${String(d.default ?? "")}`)
             .join(", ") || "none";
         const timeRange = input.startTime || input.endTime
