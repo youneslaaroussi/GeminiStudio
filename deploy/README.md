@@ -619,6 +619,7 @@ docker compose logs <service> | grep listening
 Terraform now forces all ingress traffic to come through Cloudflare's edge network:
 
 - `gemini-studio-cloudflare-ipv4` / `gemini-studio-cloudflare-ipv6` (priorities 800/801) only open ports 80/443 for the IPv4/IPv6 CIDR blocks listed in `var.cloudflare_ip_ranges` (defaults to the ranges published at https://www.cloudflare.com/ips/).
+- `gemini-studio-iap-ssh` (priority 850) allows SSH exclusively from Cloud IAP's `35.235.240.0/20` range so CI/CD and admins can tunnel in without exposing port 22 publicly.
 - `gemini-studio-deny-external-ipv4` / `gemini-studio-deny-external-ipv6` (priorities 900/901) immediately drop every other packet (including SSH) for instances tagged `gemini-studio`.
 
 Implications:

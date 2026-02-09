@@ -63,6 +63,22 @@ resource "google_compute_firewall" "gemini_studio_cloudflare_ingress_ipv6" {
   target_tags   = ["gemini-studio"]
 }
 
+resource "google_compute_firewall" "gemini_studio_iap_ssh" {
+  name        = "gemini-studio-iap-ssh"
+  network     = "default"
+  direction   = "INGRESS"
+  priority    = 850
+  description = "Allow SSH from Cloud IAP so CI/CD and admins can tunnel without public exposure."
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+
+  source_ranges = ["35.235.240.0/20"]
+  target_tags   = ["gemini-studio"]
+}
+
 resource "google_compute_firewall" "gemini_studio_deny_all_ipv4" {
   name        = "gemini-studio-deny-external-ipv4"
   network     = "default"
