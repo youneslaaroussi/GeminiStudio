@@ -23,17 +23,73 @@ resource "google_compute_address" "gemini_studio" {
   region = var.region
 }
 
-# Firewall rule - only SSH and HTTP/HTTPS (backend services are internal-only)
-resource "google_compute_firewall" "gemini_studio" {
-  name    = "gemini-studio-firewall"
-  network = "default"
+locals {
+  cloudflare_ipv4 = [for cidr in var.cloudflare_ip_ranges : cidr if length(regexall(":", cidr)) == 0]
+  cloudflare_ipv6 = [for cidr in var.cloudflare_ip_ranges : cidr if length(regexall(":", cidr)) > 0]
+}
+
+# Firewall rules - only allow Cloudflare ingress to the origin
+resource "google_compute_firewall" "gemini_studio_cloudflare_ingress_ipv4" {
+  count       = length(local.cloudflare_ipv4) > 0 ? 1 : 0
+  name        = "gemini-studio-cloudflare-ipv4"
+  network     = "default"
+  direction   = "INGRESS"
+  priority    = 800
+  description = "Permit IPv4 HTTP/S traffic exclusively from Cloudflare edge networks."
 
   allow {
     protocol = "tcp"
-    ports    = ["22", "80", "443"]
+    ports    = ["80", "443"]
+  }
+
+  source_ranges = local.cloudflare_ipv4
+  target_tags   = ["gemini-studio"]
+}
+
+resource "google_compute_firewall" "gemini_studio_cloudflare_ingress_ipv6" {
+  count       = length(local.cloudflare_ipv6) > 0 ? 1 : 0
+  name        = "gemini-studio-cloudflare-ipv6"
+  network     = "default"
+  direction   = "INGRESS"
+  priority    = 801
+  description = "Permit IPv6 HTTP/S traffic exclusively from Cloudflare edge networks."
+
+  allow {
+    protocol = "tcp"
+    ports    = ["80", "443"]
+  }
+
+  source_ranges = local.cloudflare_ipv6
+  target_tags   = ["gemini-studio"]
+}
+
+resource "google_compute_firewall" "gemini_studio_deny_all_ipv4" {
+  name        = "gemini-studio-deny-external-ipv4"
+  network     = "default"
+  direction   = "INGRESS"
+  priority    = 900
+  description = "Explicitly drop every other inbound IPv4 connection attempt to the origin."
+
+  deny {
+    protocol = "all"
   }
 
   source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["gemini-studio"]
+}
+
+resource "google_compute_firewall" "gemini_studio_deny_all_ipv6" {
+  name        = "gemini-studio-deny-external-ipv6"
+  network     = "default"
+  direction   = "INGRESS"
+  priority    = 901
+  description = "Explicitly drop every other inbound IPv6 connection attempt to the origin."
+
+  deny {
+    protocol = "all"
+  }
+
+  source_ranges = ["::/0"]
   target_tags   = ["gemini-studio"]
 }
 
@@ -119,7 +175,7 @@ resource "google_storage_bucket" "assets" {
 
   name          = var.gcs_bucket_name
   location      = var.region
-  force_destroy = true  # Allow deletion even with objects
+  force_destroy = true # Allow deletion even with objects
 
   uniform_bucket_level_access = true
 
@@ -169,4 +225,3 @@ resource "google_pubsub_topic" "veo_events" {
     ignore_changes  = [labels]
   }
 }
-

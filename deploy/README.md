@@ -592,7 +592,10 @@ gcloud projects add-iam-policy-binding PROJECT_ID \
 
 ```bash
 # Check firewall
-gcloud compute firewall-rules describe gemini-studio-firewall
+gcloud compute firewall-rules describe gemini-studio-cloudflare-ipv4
+gcloud compute firewall-rules describe gemini-studio-cloudflare-ipv6
+gcloud compute firewall-rules describe gemini-studio-deny-external-ipv4
+gcloud compute firewall-rules describe gemini-studio-deny-external-ipv6
 
 # Check services are running
 docker compose ps
@@ -600,6 +603,19 @@ docker compose ps
 # Check service is bound to 0.0.0.0
 docker compose logs <service> | grep listening
 ```
+
+### Cloudflare-only origin access
+
+Terraform now forces all ingress traffic to come through Cloudflare's edge network:
+
+- `gemini-studio-cloudflare-ipv4` / `gemini-studio-cloudflare-ipv6` (priorities 800/801) only open ports 80/443 for the IPv4/IPv6 CIDR blocks listed in `var.cloudflare_ip_ranges` (defaults to the ranges published at https://www.cloudflare.com/ips/).
+- `gemini-studio-deny-external-ipv4` / `gemini-studio-deny-external-ipv6` (priorities 900/901) immediately drop every other packet (including SSH) for instances tagged `gemini-studio`.
+
+Implications:
+
+- If someone learns your VM's public IP, direct HTTPS or SSH attempts will fail; the origin only responds when Cloudflare forwards a request.
+- To refresh the Cloudflare ranges, edit `deploy/terraform/variables.tf` (or override `cloudflare_ip_ranges` in `terraform.tfvars`) with the latest values.
+- If you need a maintenance window from a different source IP, temporarily append that CIDR to `cloudflare_ip_ranges`, run `terraform apply`, finish your work, and then remove it again so the origin stays firewalled.
 
 ## Cost Estimate
 
