@@ -21,6 +21,9 @@ import {
   Eye,
   EyeOff,
   Trash2,
+  Gift,
+  Mail,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +51,7 @@ import {
   listPacks,
   createCheckout,
   createPortalSession,
+  claimSignupBonus,
   type CreditPack,
   type PackId,
 } from "@/app/lib/services/billing-api";
@@ -56,7 +60,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-type SettingsSection = "profile" | "billing" | "integrations";
+type SettingsSection = "profile" | "billing" | "claims" | "integrations";
 
 function ProfileSection() {
   const { user } = useAuth();
@@ -972,6 +976,154 @@ function IntegrationsSection() {
   );
 }
 
+function ClaimsBonusesSection() {
+  const { user, sendVerificationEmail } = useAuth();
+  const [resendLoading, setResendLoading] = useState(false);
+  const [claimLoading, setClaimLoading] = useState(false);
+  const [claimResult, setClaimResult] = useState<{
+    granted: boolean;
+    reason?: string;
+  } | null>(null);
+
+  const handleResendVerification = async () => {
+    if (!user) return;
+    setResendLoading(true);
+    try {
+      await sendVerificationEmail();
+      toast.success("Verification email sent. Check your inbox.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to send verification email");
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  const handleClaimBonus = async () => {
+    setClaimResult(null);
+    setClaimLoading(true);
+    try {
+      const result = await claimSignupBonus();
+      setClaimResult(result);
+      if (result.granted) {
+        toast.success("30 R-Credits added to your account.");
+      } else if (result.reason === "email_not_verified") {
+        toast.error("Verify your email first to claim the signup bonus.");
+      } else {
+        toast.info("Bonus already claimed or not eligible.");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to claim bonus");
+    } finally {
+      setClaimLoading(false);
+    }
+  };
+
+  if (!user) return null;
+
+  const emailVerified = user.emailVerified;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold text-white">Claims & bonuses</h2>
+        <p className="text-sm text-slate-400 mt-1">
+          Email verification and signup bonus
+        </p>
+      </div>
+
+      {/* Email verification */}
+      <div className="rounded-lg border border-slate-800 bg-slate-900/50 overflow-hidden">
+        <div className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+            <div className="p-3 bg-slate-700/50 rounded-lg shrink-0 w-fit">
+              <Mail className="size-5 text-slate-300" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="font-medium text-white">Email verification</h3>
+                {emailVerified ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 text-xs font-medium">
+                    <CheckCircle2 className="size-3" />
+                    Verified
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-xs font-medium">
+                    Not verified
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-slate-400">
+                {emailVerified
+                  ? "Your email is verified. You can claim the signup bonus below if you haven’t already."
+                  : "Verify your email to claim your 30 free R-Credits. Check your inbox for the verification link."}
+              </p>
+            </div>
+          </div>
+        </div>
+        {!emailVerified && (
+          <div className="px-4 sm:px-6 py-4 bg-slate-950/50 border-t border-slate-800">
+            <Button
+              onClick={handleResendVerification}
+              disabled={resendLoading}
+              variant="outline"
+              className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+            >
+              {resendLoading ? (
+                <Loader2 className="size-4 animate-spin mr-2" />
+              ) : (
+                <Mail className="size-4 mr-2" />
+              )}
+              Resend verification email
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Signup bonus */}
+      <div className="rounded-lg border border-slate-800 bg-slate-900/50 overflow-hidden">
+        <div className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+            <div className="p-3 bg-amber-500/10 rounded-lg shrink-0 w-fit">
+              <Gift className="size-5 text-amber-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-medium text-white mb-1">Signup bonus</h3>
+              <p className="text-sm text-slate-400">
+                New users get 30 free R-Credits after verifying their email. One-time only.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="px-4 sm:px-6 py-4 bg-slate-950/50 border-t border-slate-800">
+          {!emailVerified ? (
+            <p className="text-sm text-amber-400/90 mb-3">
+              Verify your email above first, then come back here to claim your credits.
+            </p>
+          ) : null}
+          <Button
+            onClick={handleClaimBonus}
+            disabled={claimLoading || !emailVerified}
+            className="bg-amber-600 hover:bg-amber-700 text-white"
+          >
+            {claimLoading ? (
+              <Loader2 className="size-4 animate-spin mr-2" />
+            ) : (
+              <Gift className="size-4 mr-2" />
+            )}
+            Claim 30 free R-Credits
+          </Button>
+          {claimResult?.granted && (
+            <p className="text-sm text-green-400 mt-3 inline-flex items-center gap-1.5">
+              <CheckCircle2 className="size-4" />
+              Bonus applied. Refresh the Billing page to see your new balance.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const params = useParams();
   const router = useRouter();
@@ -996,6 +1148,8 @@ export default function SettingsPage() {
   switch (tab) {
     case "billing":
       return <BillingSection />;
+    case "claims":
+      return <ClaimsBonusesSection />;
     case "integrations":
       return <IntegrationsSection />;
     case "profile":

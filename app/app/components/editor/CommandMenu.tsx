@@ -40,6 +40,7 @@ import {
   Scissors,
   Clock,
   Layers,
+  GraduationCap,
 } from "lucide-react";
 import { useProjectStore } from "@/app/lib/store/project-store";
 
@@ -61,6 +62,7 @@ interface CommandMenuProps {
   onOpenToolbox: () => void;
   onOpenChat: () => void;
   onToggleVoice: () => void;
+  onStartTutorial?: () => void;
   isPlaying: boolean;
   isMuted: boolean;
   isLooping: boolean;
@@ -85,6 +87,7 @@ export function CommandMenu({
   onOpenToolbox,
   onOpenChat,
   onToggleVoice,
+  onStartTutorial,
   isPlaying,
   isMuted,
   isLooping,
@@ -337,6 +340,12 @@ export function CommandMenu({
             <Mic />
             <span>Toggle voice assistant</span>
           </CommandItem>
+          {onStartTutorial && (
+            <CommandItem onSelect={() => runCommand(onStartTutorial)}>
+              <GraduationCap />
+              <span>Start tutorial</span>
+            </CommandItem>
+          )}
         </CommandGroup>
       </CommandList>
     </CommandDialog>

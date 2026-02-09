@@ -130,6 +130,102 @@ function createGeneralTools(): ToolMap {
   } satisfies ToolMap;
 }
 
+/**
+ * List of tool names that are non-state-changing (read-only "get" operations)
+ * These are allowed in ask mode
+ */
+const READ_ONLY_TOOL_NAMES = new Set([
+  "getDate",
+  "getTime",
+  "getTimelineState",
+  "getAssetMetadata",
+  "listAssets",
+  "inspectAsset",
+  "previewTimeline",
+  "searchAssets",
+  "projectHistory",
+  "videoEffectsList",
+  "videoEffectsJobStatus",
+  "veoJobStatus",
+]);
+
+/**
+ * Filter toolbox tools to only include read-only (non-state-changing) tools
+ */
+function createReadOnlyToolboxTools(): ToolMap {
+  const toolboxEntries = toolRegistry.list();
+  const readOnlyEntries = toolboxEntries.filter((def) =>
+    READ_ONLY_TOOL_NAMES.has(def.name)
+  );
+
+  return readOnlyEntries.reduce<ToolMap>((acc, definition) => {
+    // Return raw ToolExecutionResult so prepareStep can access meta (for _injectMedia)
+    // toModelOutput transforms it for the model
+    acc[definition.name] = tool<any, ToolExecutionResult>({
+      description: definition.description,
+      inputSchema: definition.inputSchema,
+      async execute(
+        input,
+        options?: {
+          toolCallId?: string;
+        }
+      ) {
+        if (definition.runLocation === "client") {
+          if (!options?.toolCallId) {
+            throw new Error("Client tool requests require a toolCallId.");
+          }
+          const context = {
+            tool: definition.name,
+            runLocation: "client",
+            toolCallId: options.toolCallId,
+            inputKeys: Object.keys(input ?? {}),
+          };
+          const result = await waitForClientToolResult({
+            toolCallId: options.toolCallId,
+            toolName: definition.name,
+            timeoutMs: (definition.name === "previewTimeline" || definition.name === "inspectAsset") ? 300_000 : undefined,
+          });
+          if (result.status === "error") {
+            logger.error({ ...context, error: result.error }, "Client tool execution failed");
+            throw new Error(result.error ?? "Client tool execution failed.");
+          }
+          // Return raw result - prepareStep needs meta._injectMedia, toModelOutput transforms for model
+          return result;
+        }
+
+        const context = {
+          tool: definition.name,
+          runLocation: definition.runLocation ?? "server",
+          inputKeys: Object.keys(input ?? {}),
+        };
+        const result = await executeTool({
+          toolName: definition.name,
+          input,
+          context: {},
+        });
+        if (result.status === "error") {
+          logger.error({ ...context, error: result.error }, "Tool execution failed");
+          throw new Error(result.error ?? "Tool execution failed.");
+        }
+        // Return raw result - toModelOutput transforms for model
+        return result;
+      },
+      // Transform raw ToolExecutionResult to ToolResultOutput for the model
+      // (prepareStep already extracted meta._injectMedia for media injection)
+      toModelOutput({ output }): ToolResultOutput {
+        // output is a ToolExecutionResult, transform it for the model
+        const result = output as ToolExecutionResult | undefined;
+        if (!result) {
+          return { type: "text", value: "No output" };
+        }
+        // Use the adapter to transform to ToolResultOutput
+        return toolResultOutputFromExecution(result);
+      },
+    });
+    return acc;
+  }, {} as ToolMap);
+}
+
 function createToolboxTools(): ToolMap {
   const toolboxEntries = toolRegistry.list();
 
@@ -303,13 +399,16 @@ export async function POST(req: Request) {
 
   const generalTools = createGeneralTools();
   const toolboxTools = createToolboxTools();
+  const readOnlyToolboxTools = createReadOnlyToolboxTools();
   const planningTools = createPlanningTools(chatId);
+  const modeSwitchingTools = createModeSwitchingTools();
+  
   const tools =
     activeMode === "ask"
-      ? undefined
+      ? { ...generalTools, ...readOnlyToolboxTools }
       : activeMode === "agent"
-        ? { ...generalTools, ...toolboxTools, ...planningTools }
-        : planningTools;
+        ? { ...generalTools, ...toolboxTools, ...planningTools, ...modeSwitchingTools }
+        : { ...planningTools };
 
   const modelMessages = await convertToModelMessages([
     systemMessage,
@@ -331,7 +430,7 @@ export async function POST(req: Request) {
     },
     messages: modelMessages,
     stopWhen: stepCountIs(5),
-    toolChoice: activeMode === "ask" ? "none" : undefined,
+    toolChoice: undefined, // Allow tools in all modes (ask mode only has read-only tools)
     tools,
     // When a tool returns _injectMedia + fileUri, optionally inject as user message (fallback).
     // Our local @ai-sdk/google already sends the file in the tool result (file-url → fileData),
@@ -652,6 +751,29 @@ function determineActiveMode(
   return fallback;
 }
 
+function createModeSwitchingTools(): ToolMap {
+  const switchToAgentSchema = z.object({});
+  const switchToPlanSchema = z.object({});
+
+  return {
+    switchToAgentMode: tool<z.infer<typeof switchToAgentSchema>, string>({
+      description: "Switch from plan mode to agent mode to start executing the planned tasks. Use this after you have created a plan and are ready to begin implementation.",
+      inputSchema: switchToAgentSchema,
+      needsApproval: true,
+      async execute() {
+        return "Mode switch requested: Please switch to Agent mode to begin executing the planned tasks. The plan is ready for implementation.";
+      },
+    }),
+    switchToPlanMode: tool<z.infer<typeof switchToPlanSchema>, string>({
+      description: "Switch from agent mode to plan mode to create or refine a task plan before executing work.",
+      inputSchema: switchToPlanSchema,
+      async execute() {
+        return "Mode switch requested: Please switch to Plan mode to create or refine a task plan.";
+      },
+    }),
+  } satisfies ToolMap;
+}
+
 function createPlanningTools(chatId: string): ToolMap {
   const createTaskListSchema = z.object({
     title: z.string().min(1).max(160).optional(),
@@ -676,6 +798,8 @@ function createPlanningTools(chatId: string): ToolMap {
   const resetTaskListSchema = z.object({
     title: z.string().min(1).max(160).optional(),
   });
+
+  const modeSwitchingTools = createModeSwitchingTools();
 
   return {
     planCreateTaskList: tool<
@@ -784,6 +908,7 @@ function createPlanningTools(chatId: string): ToolMap {
         } satisfies PlanningToolResponse<"task-list-reset">;
       },
     }),
+    ...modeSwitchingTools,
   } satisfies ToolMap;
 }
 

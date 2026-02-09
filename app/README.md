@@ -49,6 +49,30 @@ Create an `.env.local` based on `env.template` with the following values:
 
 Restart the dev server after editing the environment so the server routes can read the new values.
 
+## Email verification (Resend)
+
+Verification emails are sent via [Resend](https://resend.com) with a custom HTML template (not Firebase’s default).
+
+1. Add `RESEND_API_KEY` to your env (from the [Resend dashboard](https://resend.com)).
+2. Optionally set `RESEND_FROM_EMAIL` (e.g. `Gemini Studio <onboarding@yourdomain.com>`). If unset, the app uses `onboarding@resend.dev` (Resend’s test sender).
+3. The app generates the verification link with Firebase Admin and sends it in a branded email; the link points to your app’s `/auth/action` page.
+
+## Firebase custom action URL (email verification)
+
+To send verification (and other auth) emails to your own domain instead of Firebase’s default link:
+
+1. In [Firebase Console](https://console.firebase.google.com/) go to **Authentication** → **Templates**.
+2. Edit the **Email address verification** template (or others as needed).
+3. Click **Customize action URL** and set the URL to:
+   ```text
+   https://YOUR_DOMAIN/auth/action?link=%LINK%
+   ```
+   Replace `YOUR_DOMAIN` with your app’s origin (e.g. `geminivideo.studio` or `localhost:3000` for dev). Firebase replaces `%LINK%` with the actual action link; the app’s `/auth/action` page parses it and completes verification.
+
+4. Ensure your domain is in **Authentication** → **Sign-in method** → **Authorized domains**.
+
+The handler at `app/auth/action/page.tsx` supports both `?link=%LINK%` and direct params (`?mode=verifyEmail&oobCode=...`).
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

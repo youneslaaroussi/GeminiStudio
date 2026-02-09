@@ -121,6 +121,8 @@ jobs:
             SECRET_MAGIC_LINK=$(gcloud secrets versions access latest --secret=magic-link-secret --project=$PROJECT_ID 2>/dev/null || true)
             SECRET_DEMO_USER_ID=$(gcloud secrets versions access latest --secret=demo-user-id --project=$PROJECT_ID 2>/dev/null || true)
             SECRET_DEMO_PROJECT_ID=$(gcloud secrets versions access latest --secret=demo-project-id --project=$PROJECT_ID 2>/dev/null || true)
+            SECRET_RESEND_API_KEY=$(gcloud secrets versions access latest --secret=resend-api-key --project=$PROJECT_ID 2>/dev/null || true)
+            SECRET_RESEND_FROM_EMAIL=$(gcloud secrets versions access latest --secret=resend-from-email --project=$PROJECT_ID 2>/dev/null || true)
             # Optional: override Gemini model for langgraph-server. If unset, defaults below are used.
             SECRET_GEMINI_MODEL=$(gcloud secrets versions access latest --secret=gemini-model --project=$PROJECT_ID 2>/dev/null || true)
             # Optional: override model priority list (comma-separated). If unset, use: gemini-3-pro-preview,gemini-3-flash-preview,gemini-2.5-pro
@@ -188,6 +190,8 @@ jobs:
               printf "MAGIC_LINK_SECRET=%s\n" "$SECRET_MAGIC_LINK"
               printf "DEMO_USER_ID=%s\n" "$SECRET_DEMO_USER_ID"
               printf "DEMO_PROJECT_ID=%s\n" "$SECRET_DEMO_PROJECT_ID"
+              printf "RESEND_API_KEY=%s\n" "$SECRET_RESEND_API_KEY"
+              printf "RESEND_FROM_EMAIL=%s\n" "$SECRET_RESEND_FROM_EMAIL"
             } > /tmp/deploy.env
 
             gcloud compute scp /tmp/deploy.env runner@$INSTANCE_NAME:/tmp/deploy.env \

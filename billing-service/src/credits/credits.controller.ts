@@ -55,14 +55,15 @@ export class CreditsController {
   @Post('signup-bonus')
   @UseGuards(FirebaseAuthGuard)
   async claimSignupBonus(
-    @Req() req: Request & { [FIREBASE_USER]?: { uid: string; email?: string } },
+    @Req() req: Request & { [FIREBASE_USER]?: { uid: string; email?: string; emailVerified?: boolean } },
   ) {
     const uid = req[FIREBASE_USER]?.uid;
     const email = req[FIREBASE_USER]?.email;
+    const emailVerified = req[FIREBASE_USER]?.emailVerified ?? false;
     if (!uid || !email) {
       throw new BadRequestException('Missing authenticated user or email');
     }
-    return this.billing.grantSignupBonus(uid, email);
+    return this.billing.grantSignupBonus(uid, email, emailVerified);
   }
 
   @Post('portal')

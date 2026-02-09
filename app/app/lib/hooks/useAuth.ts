@@ -9,6 +9,7 @@ import {
   signOut,
 } from 'firebase/auth';
 import { auth } from '@/app/lib/server/firebase';
+import { getAuthHeaders } from '@/app/lib/hooks/useAuthFetch';
 
 /**
  * Hook to get current authenticated user and auth methods
@@ -86,5 +87,33 @@ export function useAuth() {
     }
   };
 
-  return { user, loading, error, signup, login, logout };
+  const sendVerificationEmail = async (continueUrl?: string) => {
+    try {
+      setError(null);
+      if (!auth.currentUser) {
+        throw new Error('No user is currently signed in');
+      }
+      const headers = await getAuthHeaders();
+      if (!headers.Authorization) {
+        throw new Error('Not authenticated');
+      }
+      const url =
+        continueUrl ??
+        (typeof window !== 'undefined' ? `${window.location.origin}/settings/claims` : undefined);
+      const res = await fetch('/api/auth/send-verification-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(url ? { continueUrl: url } : {}),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? 'Failed to send verification email');
+      }
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    }
+  };
+
+  return { user, loading, error, signup, login, logout, sendVerificationEmail };
 }

@@ -13,6 +13,7 @@ import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
 } from "ai";
 import { toast } from "sonner";
 import {
@@ -255,10 +256,17 @@ export function ChatPanel() {
   | null>(null);
   const setMessagesRef = useRef<typeof setMessages | null>(null);
 
-  const { messages, sendMessage, setMessages, status, error, clearError, stop, addToolOutput } =
+  const { messages, sendMessage, setMessages, status, error, clearError, stop, addToolOutput, addToolApprovalResponse } =
     useChat<TimelineChatMessage>({
       transport: chatTransport,
-      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+      sendAutomaticallyWhen: (options) => {
+        // Check for approval responses first
+        if (lastAssistantMessageIsCompleteWithApprovalResponses(options)) {
+          return true;
+        }
+        // Then check for tool calls
+        return lastAssistantMessageIsCompleteWithToolCalls(options);
+      },
       id: sessionId,
       messages: initialMessages,
       onFinish: useCallback(
@@ -785,6 +793,21 @@ export function ChatPanel() {
   const handleRecommendedActionClick = useCallback((action: string) => {
     chatInputRef.current?.setText(action);
     chatInputRef.current?.focus();
+  }, []);
+
+  // Listen for tutorial: send a message programmatically (e.g. "Send your first message" step)
+  useEffect(() => {
+    const handler = (e: CustomEvent<{ text: string }>) => {
+      const text = (e.detail?.text ?? "Add a title card that says Welcome").trim();
+      if (!text) return;
+      chatInputRef.current?.setText(text);
+      // Submit after a tick so the editor has the content
+      requestAnimationFrame(() => {
+        chatInputRef.current?.submit();
+      });
+    };
+    window.addEventListener("tutorial-send-first-message", handler as EventListener);
+    return () => window.removeEventListener("tutorial-send-first-message", handler as EventListener);
   }, []);
 
   const handleExportChat = () => {
@@ -1520,7 +1543,9 @@ export function ChatPanel() {
                       part,
                       `${message.id}-${index}`,
                       isUser,
-                      assetMentions
+                      assetMentions,
+                      addToolApprovalResponse,
+                      setMode
                     );
                     if (!content) return null;
                     return (
@@ -1874,7 +1899,7 @@ export function ChatPanel() {
         )}
 
         {/* Message Input */}
-        <form onSubmit={handleFormSubmit} className="flex gap-2">
+        <form onSubmit={handleFormSubmit} className="flex gap-2" data-tutorial="chat-input">
           {/* Hidden file input */}
           <input
             ref={fileInputRef}
@@ -2551,7 +2576,9 @@ function renderMessagePart(
   part: MessagePart,
   key: string,
   isUser: boolean,
-  assetMentions?: AssetMention[]
+  assetMentions?: AssetMention[],
+  addToolApprovalResponse?: (response: { id: string; approved: boolean; reason?: string }) => void,
+  onModeSwitch?: (mode: ChatMode) => void
 ) {
   if (!part || typeof part !== "object") {
     return null;
@@ -2593,13 +2620,17 @@ function renderMessagePart(
   }
 
   if (typeof part.type === "string" && part.type.startsWith("tool-")) {
-    return renderToolPart(part as unknown as ToolPart);
+    return renderToolPart(part as unknown as ToolPart, addToolApprovalResponse, onModeSwitch);
   }
 
   return null;
 }
 
-function renderToolPart(part: ToolPart) {
+function renderToolPart(
+  part: ToolPart,
+  addToolApprovalResponse?: (response: { id: string; approved: boolean; reason?: string }) => void,
+  onModeSwitch?: (mode: ChatMode) => void
+) {
   const label = resolveToolLabel(part.type);
 
   if (
@@ -2647,6 +2678,16 @@ function renderToolPart(part: ToolPart) {
         />
       );
     case "approval-requested":
+      // Check if this is a mode switching tool
+      if ((part.type === "tool-switchToAgentMode" || part.type === "tool-switchToPlanMode") && addToolApprovalResponse && part.approval?.id) {
+        return (
+          <ModeSwitchApproval
+            part={part}
+            addToolApprovalResponse={addToolApprovalResponse}
+            onModeSwitch={onModeSwitch}
+          />
+        );
+      }
       return (
         <div className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5 py-1">
           <span>{label}: approval required</span>
@@ -2655,6 +2696,75 @@ function renderToolPart(part: ToolPart) {
     default:
       return null;
   }
+}
+
+function ModeSwitchApproval({
+  part,
+  addToolApprovalResponse,
+  onModeSwitch,
+}: {
+  part: ToolPart;
+  addToolApprovalResponse: (response: { id: string; approved: boolean; reason?: string }) => void;
+  onModeSwitch?: (mode: ChatMode) => void;
+}) {
+  const isSwitchToAgent = part.type === "tool-switchToAgentMode";
+  const targetMode = isSwitchToAgent ? "Agent" : "Plan";
+  
+  if (!part.approval?.id) {
+    return null;
+  }
+
+  const handleApprove = () => {
+    addToolApprovalResponse({
+      id: part.approval!.id,
+      approved: true,
+    });
+    // Immediately switch the mode when approved
+    if (onModeSwitch) {
+      onModeSwitch(isSwitchToAgent ? "agent" : "plan");
+    }
+  };
+
+  const handleReject = () => {
+    addToolApprovalResponse({
+      id: part.approval!.id,
+      approved: false,
+      reason: "User declined mode switch",
+    });
+  };
+
+  return (
+    <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 my-2">
+      <div className="flex items-start gap-3">
+        <AlertCircle className="size-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="font-medium text-amber-900 dark:text-amber-100 mb-1">
+            Mode Switch Request
+          </div>
+          <div className="text-sm text-amber-800 dark:text-amber-200 mb-3">
+            The assistant wants to switch to <strong>{targetMode} Mode</strong> to{" "}
+            {isSwitchToAgent
+              ? "begin executing the planned tasks."
+              : "create or refine a task plan."}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleApprove}
+              className="px-4 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600 rounded-md transition-colors"
+            >
+              Approve & Switch
+            </button>
+            <button
+              onClick={handleReject}
+              className="px-4 py-2 text-sm font-medium text-amber-900 dark:text-amber-100 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 rounded-md transition-colors"
+            >
+              Decline
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ToolCallCard({

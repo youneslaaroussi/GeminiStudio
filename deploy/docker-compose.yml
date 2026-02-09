@@ -85,6 +85,9 @@ services:
       - MAGIC_LINK_SECRET=${MAGIC_LINK_SECRET:-}
       - DEMO_USER_ID=${DEMO_USER_ID:-}
       - DEMO_PROJECT_ID=${DEMO_PROJECT_ID:-}
+      # Resend (custom verification emails)
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL:-}
     volumes:
       - ./secrets:/app/secrets:ro
     healthcheck:

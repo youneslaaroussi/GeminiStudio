@@ -43,6 +43,9 @@ import { usePlaybackResolvedLayers } from "@/app/lib/hooks/usePlaybackResolvedLa
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { TutorialProvider } from "@/app/components/tutorial/TutorialProvider";
+import { editorTutorial } from "@/app/lib/tutorials/editor-tutorial";
+import { useTutorialStore } from "@/app/lib/store/tutorial-store";
 
 // Wrapper component that gets selected video or image clip for the Effects tab (from resolved layers so clip has src for APIs)
 function EffectsPanelWrapper({ resolvedLayers }: { resolvedLayers: import("@/app/types/timeline").ResolvedLayer[] }) {
@@ -129,6 +132,29 @@ export function EditorLayout() {
       setRightPanelTab(config.defaultRightTab);
     }
   }, []);
+
+  // Listen for tutorial events to ensure right panel is visible
+  useEffect(() => {
+    const handleEnsureRightPanel = () => {
+      if (!layoutConfig.showRightPanel) {
+        // Switch to agentic layout which always shows the right panel
+        handleLayoutChange('agentic');
+      }
+      // Also ensure chat tab is open
+      setRightPanelTab('chat');
+    };
+
+    const handleSwitchToChat = () => {
+      setRightPanelTab('chat');
+    };
+
+    window.addEventListener('tutorial-ensure-right-panel', handleEnsureRightPanel);
+    window.addEventListener('tutorial-switch-to-chat', handleSwitchToChat);
+    return () => {
+      window.removeEventListener('tutorial-ensure-right-panel', handleEnsureRightPanel);
+      window.removeEventListener('tutorial-switch-to-chat', handleSwitchToChat);
+    };
+  }, [layoutConfig.showRightPanel, handleLayoutChange]);
   const recenterRef = useRef<(() => void) | null>(null);
   const previewRef = useRef<PreviewPanelHandle | null>(null);
   const loadRef = useRef<(() => void) | null>(null);
@@ -610,6 +636,31 @@ export function EditorLayout() {
 
   const [showVoiceChat, setShowVoiceChat] = useState(false);
   const [timelineTool, setTimelineTool] = useState<"selection" | "hand">("selection");
+  
+  // Tutorial
+  const startTutorial = useTutorialStore((s) => s.startTutorial);
+  const handleStartTutorial = useCallback(() => {
+    startTutorial('editor-intro');
+  }, [startTutorial]);
+
+  // Auto-start tutorial for first-time users
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const completed = JSON.parse(
+      localStorage.getItem('tutorial-completed') || '[]'
+    ) as string[];
+    
+    // Only auto-start if tutorial hasn't been completed
+    if (!completed.includes('editor-intro')) {
+      // Small delay to ensure UI is ready
+      const timeoutId = setTimeout(() => {
+        startTutorial('editor-intro');
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [startTutorial]);
   // Position stores left (x) and bottom (distance from viewport bottom)
   const [voiceChatPosition, setVoiceChatPosition] = useState<{ left: number; bottom: number } | null>(null);
   const voiceChatPanelRef = useRef<HTMLDivElement>(null);
@@ -688,7 +739,7 @@ export function EditorLayout() {
   }, []);
 
   return (
-    <>
+    <TutorialProvider tutorials={[editorTutorial]}>
       <div className="flex h-screen w-full flex-col overflow-hidden bg-background">
         <TopBar
           previewCanvas={previewCanvas}
@@ -712,7 +763,7 @@ export function EditorLayout() {
                   <ResizablePanelGroup key={`layout-top-${currentLayout}`} direction="horizontal" className="h-full">
                     {/* Left: Assets */}
                     <ResizablePanel defaultSize={layoutConfig.assetsPanelSize} minSize={30} maxSize={50}>
-                      <div className="h-full bg-card border-r border-border min-w-0">
+                      <div className="h-full bg-card border-r border-border min-w-0" data-tutorial="assets-panel">
                         <AssetsPanel onSetAssetTabReady={handleAssetTabReady} />
                       </div>
                     </ResizablePanel>
@@ -721,7 +772,7 @@ export function EditorLayout() {
 
                     {/* Center: Preview */}
                     <ResizablePanel defaultSize={layoutConfig.previewPanelSize} minSize={30} className="min-w-0">
-                      <div className="h-full bg-card min-w-0">
+                      <div className="h-full bg-card min-w-0" data-tutorial="preview-panel">
                         <PreviewPanel
                           ref={previewRef}
                           onPlayerChange={setPlayer}
@@ -767,7 +818,7 @@ export function EditorLayout() {
 
                 {/* Bottom: Timeline */}
                 <ResizablePanel defaultSize={layoutConfig.timelineSize} minSize={20} className="min-w-0">
-                  <div className="h-full w-full bg-card border-t border-border overflow-hidden">
+                  <div className="h-full w-full bg-card border-t border-border overflow-hidden" data-tutorial="timeline-panel">
                     <TooltipProvider delayDuration={300}>
                       <TimelinePanel
                         hasPlayer={!!player}
@@ -794,7 +845,7 @@ export function EditorLayout() {
 
                 {/* Persistent Rightmost Toolbox + Chat (tabbed, both stay mounted) */}
                 <ResizablePanel defaultSize={layoutConfig.rightPanelSize} minSize={15} maxSize={40}>
-                  <div className="h-full bg-card border-l border-border min-w-[260px] flex flex-col">
+                  <div className="h-full bg-card border-l border-border min-w-[260px] flex flex-col" data-tutorial="right-panel">
                     {/* Tab buttons */}
                     <div className="flex border-b border-border shrink-0">
                       <button
@@ -821,6 +872,7 @@ export function EditorLayout() {
                       </button>
                       <button
                         onClick={() => setRightPanelTab("chat")}
+                        data-tutorial="chat-tab"
                         className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${
                           rightPanelTab === "chat"
                             ? "text-foreground border-b-2 border-primary bg-muted/50"
@@ -1003,11 +1055,12 @@ export function EditorLayout() {
         onOpenToolbox={() => setRightPanelTab("toolbox")}
         onOpenChat={() => setRightPanelTab("chat")}
         onToggleVoice={() => setShowVoiceChat((prev) => !prev)}
+        onStartTutorial={handleStartTutorial}
         isPlaying={isPlaying}
         isMuted={isMuted}
         isLooping={isLooping}
         isFullscreen={isPreviewFullscreen}
       />
-    </>
+    </TutorialProvider>
   );
 }

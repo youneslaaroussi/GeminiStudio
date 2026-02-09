@@ -41,8 +41,8 @@ export async function createCheckout(input: CreateCheckoutInput): Promise<{ url:
   return res.json();
 }
 
-/** Claim signup bonus (30 credits). Only grants if email passes Kickbox verification and has not claimed before. */
-export async function claimSignupBonus(): Promise<{ granted: boolean; credits?: number }> {
+/** Claim signup bonus (30 credits). Only grants if email is verified, passes Kickbox verification, and has not claimed before. */
+export async function claimSignupBonus(): Promise<{ granted: boolean; credits?: number; reason?: string }> {
   if (!BASE) return { granted: false };
   const headers = await getAuthHeaders();
   const res = await fetch(`${BASE}/credits/signup-bonus`, {

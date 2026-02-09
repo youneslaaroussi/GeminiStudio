@@ -2,15 +2,16 @@
 
 import { Suspense } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { User, CreditCard, Plug, ChevronRight } from "lucide-react";
+import { User, CreditCard, Plug, Gift, ChevronRight } from "lucide-react";
 import { AppShell } from "@/app/components/layout";
 import { cn } from "@/lib/utils";
 
-type SettingsSection = "profile" | "billing" | "integrations";
+type SettingsSection = "profile" | "billing" | "claims" | "integrations";
 
 const NAV_ITEMS: { id: SettingsSection; label: string; icon: React.ElementType; href: string }[] = [
   { id: "profile", label: "Profile", icon: User, href: "/settings/profile" },
   { id: "billing", label: "Billing", icon: CreditCard, href: "/settings/billing" },
+  { id: "claims", label: "Claims & bonuses", icon: Gift, href: "/settings/claims" },
   { id: "integrations", label: "Integrations", icon: Plug, href: "/settings/integrations" },
 ];
 
@@ -21,6 +22,7 @@ function SettingsLayoutContent({ children }: { children: React.ReactNode }) {
   // Determine active section from pathname
   const getActiveSection = (): SettingsSection => {
     if (pathname.includes("/billing")) return "billing";
+    if (pathname.includes("/claims")) return "claims";
     if (pathname.includes("/integrations")) return "integrations";
     return "profile";
   };

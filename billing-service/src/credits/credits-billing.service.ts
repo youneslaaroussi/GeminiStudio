@@ -410,12 +410,18 @@ export class CreditsBillingService {
 
   /**
    * Grant signup bonus (30 credits) to new users.
-   * Only grants if: email passes Kickbox verification, and email has not received bonus before (fraud prevention).
+   * Only grants if: email is verified in Firebase, email passes Kickbox verification, and email has not received bonus before (fraud prevention).
    */
-  async grantSignupBonus(userId: string, email: string): Promise<{ granted: boolean; credits?: number }> {
+  async grantSignupBonus(userId: string, email: string, emailVerified: boolean): Promise<{ granted: boolean; credits?: number; reason?: string }> {
     const normalized = email?.trim().toLowerCase();
     if (!normalized) {
       return { granted: false };
+    }
+
+    // Hard requirement: email must be verified in Firebase before granting credits
+    if (!emailVerified) {
+      this.logger.log('Signup bonus denied: email not verified', { userId, email: normalized.slice(0, 3) + '***' });
+      return { granted: false, reason: 'email_not_verified' };
     }
 
     const claimsRef = this.db.collection(SIGNUP_BONUS_CLAIMS);

@@ -217,6 +217,18 @@ echo -n "price_xxx" | gcloud secrets create stripe-price-enterprise --data-file=
 echo -n "whsec_xxx" | gcloud secrets create stripe-webhook-secret --data-file=-
 ```
 
+### 2c. Resend (optional – custom verification emails)
+
+To send customized email verification (via Resend instead of Firebase’s default), create these secrets. CI/CD and Docker Compose read `RESEND_API_KEY` and `RESEND_FROM_EMAIL` from the deploy env (pulled from GCP Secret Manager).
+
+```bash
+# Resend API key (from https://resend.com)
+echo -n "re_xxx" | gcloud secrets create resend-api-key --data-file=-
+
+# Optional: sender address (e.g. "Gemini Studio <onboarding@yourdomain.com>"). If omitted, app uses Resend’s test sender.
+echo -n "Gemini Studio <onboarding@yourdomain.com>" | gcloud secrets create resend-from-email --data-file=-
+```
+
 ### 3. Configure Terraform
 
 ```bash

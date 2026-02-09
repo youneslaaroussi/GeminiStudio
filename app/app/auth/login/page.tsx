@@ -3,39 +3,27 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/lib/hooks/useAuth';
-import { claimSignupBonus } from '@/app/lib/services/billing-api';
 import Image from 'next/image';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { GradientCtaButtonAsButton } from '@/components/landing/gradient-cta-button';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { user, loading: authLoading, login, signup, error } = useAuth();
+  const { user, loading: authLoading, login, signup, sendVerificationEmail, error } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignup, setIsSignup] = useState(false);
   const [loading, setLoading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const [welcomeModalOpen, setWelcomeModalOpen] = useState(false);
-  const [bonusGranted, setBonusGranted] = useState(false);
 
-  // Redirect to app if already logged in (unless we're showing the welcome modal)
+  // Redirect to app if already logged in; new signups go to onboarding
   useEffect(() => {
-    if (!authLoading && user && !welcomeModalOpen) {
+    if (!authLoading && user) {
       router.replace('/app');
     }
-  }, [user, authLoading, router, welcomeModalOpen]);
+  }, [user, authLoading, router]);
 
-  // Show nothing while checking auth or redirecting
-  if (authLoading || (user && !welcomeModalOpen)) {
+  if (authLoading || user) {
     return null;
   }
 
@@ -53,9 +41,12 @@ export default function LoginPage() {
     try {
       if (isSignup) {
         await signup(email, password);
-        setWelcomeModalOpen(true); // Block redirect before claimSignupBonus runs
-        const result = await claimSignupBonus();
-        setBonusGranted(result.granted);
+        try {
+          await sendVerificationEmail();
+        } catch (verifyErr: any) {
+          console.error('Failed to send verification email:', verifyErr);
+        }
+        router.push('/auth/onboarding');
       } else {
         await login(email, password);
         router.push('/app');
@@ -65,11 +56,6 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleWelcomeModalClose = () => {
-    setWelcomeModalOpen(false);
-    router.push('/app');
   };
 
   return (
@@ -153,30 +139,6 @@ export default function LoginPage() {
           </p>
         </div>
       </div>
-
-      {/* Signup welcome modal */}
-      <Dialog open={welcomeModalOpen} onOpenChange={(open) => !open && handleWelcomeModalClose()}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-white">
-              Welcome to Gemini Studio!
-            </DialogTitle>
-            <DialogDescription className="text-slate-400">
-              {bonusGranted
-                ? "You've received 30 free credits to get started. Create your first project and start making videos!"
-                : "Your account is ready. Create your first project and start making videos!"}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <GradientCtaButtonAsButton
-              onClick={handleWelcomeModalClose}
-              className="h-10 px-5"
-            >
-              Get started
-            </GradientCtaButtonAsButton>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
