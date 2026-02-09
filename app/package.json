@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
+    "test": "vitest run",
     "build:scene": "cd ../scene && pnpm run build",
     "start": "next start",
     "lint": "eslint",

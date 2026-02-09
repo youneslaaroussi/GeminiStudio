@@ -14,6 +14,7 @@ from ...api_key_provider import (
     get_current_key,
     is_quota_exhausted,
     keys_count,
+    reset_key_index_to_zero,
     rotate_next_key,
 )
 from ...config import get_settings
@@ -131,36 +132,43 @@ async def description_step(context: PipelineContext) -> PipelineResult:
             error="No analysis available from Gemini step",
         )
 
-    # Generate short description with key rotation on 429
+    # Generate short description with key rotation on 429 and model priority list
     logger.info(f"Generating description for asset {context.asset.id}")
     n_keys = max(1, keys_count())
+    description_model_ids = settings.description_model_ids
     last_exc: Exception | None = None
-    for _ in range(n_keys):
-        api_key = get_current_key()
-        if not api_key:
-            return PipelineResult(
-                status=StepStatus.FAILED,
-                error="GEMINI_API_KEY / GEMINI_API_KEYS is not configured",
-            )
-        try:
-            description = await _generate_description(
-                analysis=analysis,
-                api_key=api_key,
-                model_id="gemini-2.0-flash",  # Use faster model for this simple task
-            )
-            break
-        except Exception as e:
-            last_exc = e
-            if is_quota_exhausted(e) and keys_count() > 1:
-                logger.warning("Description step 429, rotating to next API key: %s", e)
-                rotate_next_key()
-                continue
-            logger.exception(f"Failed to generate description: {e}")
-            return PipelineResult(
-                status=StepStatus.FAILED,
-                error=f"Failed to generate description: {e}",
-            )
+    description = ""
+    for model_id in description_model_ids:
+        for _ in range(n_keys):
+            api_key = get_current_key()
+            if not api_key:
+                return PipelineResult(
+                    status=StepStatus.FAILED,
+                    error="GEMINI_API_KEY / GEMINI_API_KEYS is not configured",
+                )
+            try:
+                description = await _generate_description(
+                    analysis=analysis,
+                    api_key=api_key,
+                    model_id=model_id,
+                )
+                break
+            except Exception as e:
+                last_exc = e
+                if is_quota_exhausted(e) and keys_count() > 1:
+                    logger.warning("Description step 429, rotating to next API key: %s", e)
+                    rotate_next_key()
+                    continue
+                logger.exception(f"Failed to generate description: {e}")
+                return PipelineResult(
+                    status=StepStatus.FAILED,
+                    error=f"Failed to generate description: {e}",
+                )
+        else:
+            continue
+        break
     else:
+        reset_key_index_to_zero()
         logger.exception("Failed to generate description after key rotation: %s", last_exc)
         return PipelineResult(
             status=StepStatus.FAILED,

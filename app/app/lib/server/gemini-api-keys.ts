@@ -36,6 +36,11 @@ export function rotateGeminiKey(): void {
   }
 }
 
+/** Reset current key index to 0. Call when all keys have been tried and failed in one request (loop back). */
+export function resetGeminiKeyIndexToZero(): void {
+  currentIndex = 0;
+}
+
 export function is429Error(error: unknown): boolean {
   if (error instanceof Error) {
     const msg = error.message.toUpperCase();
@@ -70,6 +75,7 @@ export async function runWithGeminiKeyRotation<T>(
       throw e;
     }
   }
+  resetGeminiKeyIndexToZero();
   throw lastError;
 }
 
@@ -110,22 +116,22 @@ function requestInitWithKey(init: RequestInit | undefined, apiKey: string): Requ
 
 /**
  * Returns a fetch implementation that injects the current Gemini API key and, on 429,
- * rotates to the next key (when GOOGLE_GENERATIVE_AI_API_KEYS has multiple keys) and retries once.
- * Use with createGoogleGenerativeAI({ fetch: createGeminiFetchWithRotation() }) so that
- * chat/streamText benefit from key rotation like the langgraph server.
+ * tries the next key in sequence until one succeeds or all fail (stick until fail).
+ * When all keys fail, resets index to 0 and returns the last 429 response.
  */
 export function createGeminiFetchWithRotation(): typeof fetch {
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const key = getCurrentGeminiKey();
-    const initWithKey = key ? requestInitWithKey(init, key) : init;
-    let res = await fetch(input, initWithKey);
-    if (res.status === 429 && keys.length > 1) {
-      rotateGeminiKey();
-      const nextKey = getCurrentGeminiKey();
-      if (nextKey) {
-        res = await fetch(input, requestInitWithKey(init, nextKey));
-      }
+    const n = Math.max(1, keys.length);
+    let lastRes: Response | null = null;
+    for (let i = 0; i < n; i++) {
+      const key = getCurrentGeminiKey();
+      if (!key) return lastRes ?? new Response("No API key configured", { status: 500 });
+      const res = await fetch(input, requestInitWithKey(init, key));
+      lastRes = res;
+      if (res.status !== 429) return res;
+      if (keys.length > 1) rotateGeminiKey();
     }
-    return res;
+    resetGeminiKeyIndexToZero();
+    return lastRes!;
   };
 }

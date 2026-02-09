@@ -53,7 +53,13 @@ services:
       - GOOGLE_GENERATIVE_AI_API_KEY=${GEMINI_API_KEY}
       # Comma-separated list for 429 rotation (optional; falls back to GEMINI_API_KEY)
       - GOOGLE_GENERATIVE_AI_API_KEYS=${GEMINI_API_KEYS:-}
+      - AI_CHAT_GOOGLE_MODEL=${AI_CHAT_GOOGLE_MODEL:-}
+      - GEMINI_CHAT_MODEL_IDS=${GEMINI_CHAT_MODEL_IDS:-gemini-3-pro-preview,gemini-3-flash-preview,gemini-2.5-pro}
       - AI_TITLE_GOOGLE_MODEL=${AI_TITLE_GOOGLE_MODEL:-gemini-2.0-flash}
+      - GEMINI_TITLE_MODEL_IDS=${GEMINI_TITLE_MODEL_IDS:-}
+      - GEMINI_PROMPT_MODEL_IDS=${GEMINI_PROMPT_MODEL_IDS:-}
+      - GEMINI_BANANA_MODEL_IDS=${GEMINI_BANANA_MODEL_IDS:-}
+      - GEMINI_RECOMMENDED_ACTIONS_MODEL_IDS=${GEMINI_RECOMMENDED_ACTIONS_MODEL_IDS:-}
       - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
       - ASSET_GCS_BUCKET=${ASSET_GCS_BUCKET}
       # Service accounts: Firebase only for Firebase; GCP for everything else (Speech, Veo, Lyria, GCS)
@@ -128,6 +134,8 @@ services:
       # Comma-separated list for 429 rotation (optional; falls back to GEMINI_API_KEY)
       - GEMINI_API_KEYS=${GEMINI_API_KEYS:-}
       - GEMINI_MODEL_ID=${GEMINI_MODEL_ID:-gemini-3-pro-preview}
+      - GEMINI_ANALYSIS_MODEL_IDS=${GEMINI_ANALYSIS_MODEL_IDS:-gemini-3-pro-preview,gemini-3-flash-preview,gemini-2.5-pro}
+      - GEMINI_DESCRIPTION_MODEL_IDS=${GEMINI_DESCRIPTION_MODEL_IDS:-}
       - REDIS_URL=redis://redis:6379/0
       - PIPELINE_EVENT_TOPIC=${PIPELINE_EVENT_TOPIC:-gemini-pipeline-events}
       - CLOUDCONVERT_API_KEY=${CLOUDCONVERT_API_KEY:-}
@@ -205,8 +213,12 @@ services:
       # Comma-separated list for 429 rotation (optional; falls back to GEMINI_API_KEY)
       - GEMINI_API_KEYS=${GEMINI_API_KEYS:-}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3-pro-preview}
+      - GEMINI_CHAT_MODEL_IDS=${GEMINI_CHAT_MODEL_IDS:-gemini-3-pro-preview,gemini-3-flash-preview,gemini-2.5-pro}
       - GEMINI_STATUS_MODEL=${GEMINI_STATUS_MODEL:-gemini-2.5-flash}
+      - GEMINI_STATUS_MODEL_IDS=${GEMINI_STATUS_MODEL_IDS:-}
       - GEMINI_TITLE_MODEL=${GEMINI_TITLE_MODEL:-gemini-2.0-flash}
+      - GEMINI_TITLE_MODEL_IDS=${GEMINI_TITLE_MODEL_IDS:-}
+      - GEMINI_BANANA_MODEL_IDS=${GEMINI_BANANA_MODEL_IDS:-}
       - GOOGLE_CLOUD_STORAGE_BUCKET=${CHECKPOINT_GCS_BUCKET:-${ASSET_GCS_BUCKET}}
       - GOOGLE_SERVICE_ACCOUNT_KEY=/app/secrets/google-service-account.json
       - ASSET_SERVICE_URL=http://asset-service:8081

@@ -65,6 +65,13 @@ def rotate_next_key() -> None:
             logger.info("[API_KEY_PROVIDER] Rotated to key index %s (was %s)", _index, old_idx)
 
 
+def reset_key_index_to_zero() -> None:
+    """Reset current key index to 0. Call when all keys have been tried and failed in one request (loop back)."""
+    global _index
+    with _lock:
+        _index = 0
+
+
 def keys_count() -> int:
     """Return number of configured keys."""
     with _lock:

@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { DEFAULT_PROMPT_MODEL } from "@/app/lib/model-ids";
+import { getPromptModelIds } from "@/app/lib/model-ids";
 import { verifyAuth } from "@/app/lib/server/auth";
 import { fetchWithGeminiKeyRotation, getCurrentGeminiKey } from "@/app/lib/server/gemini-api-keys";
-
-const MODEL_ID = process.env.PROMPT_MODEL_ID || DEFAULT_PROMPT_MODEL;
 
 export const runtime = "nodejs";
 
@@ -70,29 +68,26 @@ export async function POST(request: NextRequest) {
 
     const systemPrompt = buildSystemPrompt(body);
     const userContent = `Idea: ${body.idea.trim()}${body.tone ? `\nTone or reference: ${body.tone}` : ""}`;
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_ID}:generateContent`;
-    const response = await fetchWithGeminiKeyRotation(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: `${systemPrompt}\n${userContent}` }],
-          },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      return NextResponse.json({ error: text }, { status: response.status });
+    const requestBody = {
+      contents: [{ role: "user", parts: [{ text: `${systemPrompt}\n${userContent}` }] }],
+    };
+    const promptModelIds = getPromptModelIds();
+    let response: Response | null = null;
+    for (const modelId of promptModelIds) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
+      response = await fetchWithGeminiKeyRotation(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      if (response.ok) break;
+    }
+    if (!response!.ok) {
+      const text = await response!.text();
+      return NextResponse.json({ error: text }, { status: response!.status });
     }
 
-    const payload = (await response.json()) as {
+    const payload = (await response!.json()) as {
       candidates?: Array<{
         content?: {
           parts?: Array<{

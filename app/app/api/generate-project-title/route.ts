@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/app/lib/server/auth";
 import { fetchWithGeminiKeyRotation, getCurrentGeminiKey } from "@/app/lib/server/gemini-api-keys";
+import { getTitleModelIds } from "@/app/lib/model-ids";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const TITLE_MODEL =
-  process.env.AI_TITLE_GOOGLE_MODEL ?? process.env.GEMINI_TITLE_MODEL ?? "gemini-2.0-flash";
 
 const SYSTEM_PROMPT = `You suggest a short project title for a video editing app based on the user's first message or conversation.
 
@@ -55,29 +53,23 @@ export async function POST(request: NextRequest) {
 
   const requestBody = {
     contents: [
-      {
-        role: "user",
-        parts: [
-          { text: SYSTEM_PROMPT },
-          { text: `Conversation context:\n\n${context}` },
-        ],
-      },
+      { role: "user", parts: [{ text: SYSTEM_PROMPT }, { text: `Conversation context:\n\n${context}` }] },
     ],
-    generation_config: {
-      temperature: 0.2,
-      max_output_tokens: 256,
-    },
+    generation_config: { temperature: 0.2, max_output_tokens: 256 },
   };
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${TITLE_MODEL}:generateContent`;
-  const response = await fetchWithGeminiKeyRotation(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
+  const titleModelIds = getTitleModelIds();
+  let response: Response | null = null;
+  for (const modelId of titleModelIds) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
+    response = await fetchWithGeminiKeyRotation(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+    if (response.ok) break;
+  }
+  if (!response!.ok) {
+    const errorText = await response!.text();
     console.error("[generate-title] Gemini API error:", errorText);
     return NextResponse.json(
       { error: "Title generation failed" },
@@ -85,7 +77,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const payload = (await response.json()) as {
+  const payload = (await response!.json()) as {
     candidates?: Array<{
       content?: { parts?: Array<{ text?: string }> };
     }>;

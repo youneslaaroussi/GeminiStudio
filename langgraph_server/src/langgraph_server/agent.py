@@ -17,6 +17,7 @@ from .api_key_provider import (
     init_api_key_provider,
     is_quota_exhausted,
     keys_count,
+    reset_key_index_to_zero,
     rotate_next_key,
 )
 from .checkpoint import create_checkpointer
@@ -81,10 +82,11 @@ def _build_media_message(result: dict[str, Any], source_tool: str | None = None)
     return HumanMessage(content=content)
 
 
-def build_model(settings: Settings, api_key: str) -> ChatGoogleGenerativeAI:
-    """Instantiate the Gemini chat model with the given API key."""
+def build_model(settings: Settings, api_key: str, model_id: str | None = None) -> ChatGoogleGenerativeAI:
+    """Instantiate the Gemini chat model with the given API key and optional model_id."""
+    model = model_id or settings.gemini_model
     return ChatGoogleGenerativeAI(
-        model=settings.gemini_model,
+        model=model,
         api_key=api_key,
         convert_system_message_to_human=True,
         timeout=60,  # 60 second timeout per request
@@ -103,26 +105,30 @@ def create_graph(settings: Settings | None = None):
     system_message = SystemMessage(content=system_prompt_text)
     n_keys = max(1, keys_count())
 
+    chat_model_ids = resolved_settings.chat_model_ids
+
     async def call_model(state: MessagesState, config: RunnableConfig):
         messages = [system_message] + list(state["messages"])
         last_exc: BaseException | None = None
-        for attempt in range(n_keys):
-            api_key = get_current_key()
-            if not api_key:
-                raise RuntimeError("No Gemini API key configured (GOOGLE_API_KEY or GEMINI_API_KEYS)")
-            model = build_model(resolved_settings, api_key)
-            model_with_tools = model.bind_tools(tools)
-            try:
-                response = await model_with_tools.ainvoke(messages, config=config)
-                return {"messages": [response]}
-            except Exception as e:
-                last_exc = e
-                if is_quota_exhausted(e) and keys_count() > 1:
-                    logger.warning("[AGENT] Quota exhausted (429), rotating to next API key: %s", e)
-                    rotate_next_key()
-                    continue
-                raise
+        for model_id in chat_model_ids:
+            for attempt in range(n_keys):
+                api_key = get_current_key()
+                if not api_key:
+                    raise RuntimeError("No Gemini API key configured (GOOGLE_API_KEY or GEMINI_API_KEYS)")
+                model = build_model(resolved_settings, api_key, model_id=model_id)
+                model_with_tools = model.bind_tools(tools)
+                try:
+                    response = await model_with_tools.ainvoke(messages, config=config)
+                    return {"messages": [response]}
+                except Exception as e:
+                    last_exc = e
+                    if is_quota_exhausted(e) and keys_count() > 1:
+                        logger.warning("[AGENT] Quota exhausted (429), rotating to next API key: %s", e)
+                        rotate_next_key()
+                        continue
+                    raise
         if last_exc is not None:
+            reset_key_index_to_zero()
             raise last_exc
         return {"messages": []}
 

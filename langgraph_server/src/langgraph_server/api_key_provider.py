@@ -66,6 +66,13 @@ def rotate_next_key() -> None:
         # else: single key, no rotation
 
 
+def reset_key_index_to_zero() -> None:
+    """Reset current key index to 0. Call when all keys have been tried and failed in one request (loop back)."""
+    global _index
+    with _lock:
+        _index = 0
+
+
 def keys_count() -> int:
     """Return number of configured keys."""
     with _lock:

@@ -21,6 +21,7 @@ from ..api_key_provider import (
     get_current_key,
     is_quota_exhausted,
     keys_count,
+    reset_key_index_to_zero,
     rotate_next_key,
 )
 from ..config import Settings, get_settings
@@ -382,6 +383,7 @@ def generateSpeech(
                 "reason": "api_error",
             }
     else:
+        reset_key_index_to_zero()
         return {
             "status": "error",
             "message": f"Failed to generate speech: {last_exc}",

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { verifyAuth } from "@/app/lib/server/auth";
 import { getCurrentGeminiKey, runWithGeminiKeyRotation } from "@/app/lib/server/gemini-api-keys";
-import { getRecommendedActionsModelId } from "@/app/lib/model-ids";
+import { getRecommendedActionsModelIds } from "@/app/lib/model-ids";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,26 +83,35 @@ function normalizeActions(raw: string[]): string[] {
 async function generateSuggestions(prompt: string): Promise<string[]> {
   const key = getCurrentGeminiKey();
   if (!key) return [];
-  return runWithGeminiKeyRotation(async (apiKey) => {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: getRecommendedActionsModelId(),
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseJsonSchema: zodToJsonSchema(suggestionsSchema),
-      },
-    });
-    const text = response.text?.trim();
-    if (!text) return [];
+  const modelIds = getRecommendedActionsModelIds();
+  let lastError: unknown;
+  for (const modelId of modelIds) {
     try {
-      const parsed = JSON.parse(text);
-      const result = suggestionsSchema.parse(parsed);
-      return normalizeActions(result.suggestions);
-    } catch {
-      return [];
+      return await runWithGeminiKeyRotation(async (apiKey) => {
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({
+          model: modelId,
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            responseJsonSchema: zodToJsonSchema(suggestionsSchema),
+          },
+        });
+        const text = response.text?.trim();
+        if (!text) return [];
+        try {
+          const parsed = JSON.parse(text);
+          const result = suggestionsSchema.parse(parsed);
+          return normalizeActions(result.suggestions);
+        } catch {
+          return [];
+        }
+      });
+    } catch (e) {
+      lastError = e;
     }
-  });
+  }
+  throw lastError;
 }
 
 export async function POST(request: NextRequest) {

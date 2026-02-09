@@ -5,11 +5,9 @@ import { uploadToAssetService, isAssetServiceEnabled } from "@/app/lib/server/as
 import { deductCredits } from "@/app/lib/server/credits";
 import { getCreditsForAction } from "@/app/lib/credits-config";
 import { fetchWithGeminiKeyRotation, getCurrentGeminiKey } from "@/app/lib/server/gemini-api-keys";
-import { DEFAULT_BANANA_MODEL } from "@/app/lib/model-ids";
+import { getBananaModelIds } from "@/app/lib/model-ids";
 
 export const runtime = "nodejs";
-
-const BANANA_MODEL = process.env.BANANA_MODEL_ID || DEFAULT_BANANA_MODEL;
 
 interface BananaSourceImage {
   data?: string;
@@ -104,35 +102,30 @@ export async function POST(request: NextRequest) {
       parts.push({ inlineData: { data: normalizedSource.data!, mimeType: normalizedSource.mimeType } });
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${BANANA_MODEL}:generateContent`;
-    const response = await fetchWithGeminiKeyRotation(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const body = {
+      contents: [{ role: "user", parts }],
+      generationConfig: {
+        responseModalities: ["TEXT", "IMAGE"],
+        imageConfig: { aspectRatio, imageSize },
       },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts,
-          },
-        ],
-        generationConfig: {
-          responseModalities: ["TEXT", "IMAGE"],
-          imageConfig: {
-            aspectRatio,
-            imageSize,
-          },
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      return NextResponse.json({ error: text }, { status: response.status });
+    };
+    const bananaModelIds = getBananaModelIds();
+    let response: Response | null = null;
+    for (const modelId of bananaModelIds) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
+      response = await fetchWithGeminiKeyRotation(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (response.ok) break;
+    }
+    if (!response!.ok) {
+      const text = await response!.text();
+      return NextResponse.json({ error: text }, { status: response!.status });
     }
 
-    const payload = (await response.json()) as {
+    const payload = (await response!.json()) as {
       candidates?: Array<{
         content?: {
           parts?: Array<{

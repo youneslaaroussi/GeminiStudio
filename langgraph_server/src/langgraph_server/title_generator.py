@@ -18,6 +18,7 @@ from .api_key_provider import (
     get_current_key,
     is_quota_exhausted,
     keys_count,
+    reset_key_index_to_zero,
     rotate_next_key,
 )
 from .config import Settings, get_settings
@@ -38,9 +39,9 @@ class TitleResult(TypedDict, total=False):
     reason: str
 
 
-def _build_title_model(settings: Settings, api_key: str) -> ChatGoogleGenerativeAI:
+def _build_title_model(settings: Settings, api_key: str, model_id: str) -> ChatGoogleGenerativeAI:
     return ChatGoogleGenerativeAI(
-        model=settings.gemini_title_model or "gemini-2.0-flash",
+        model=model_id,
         api_key=api_key,
         timeout=15,
         max_retries=1,
@@ -59,42 +60,45 @@ async def generate_project_title(
     if not text:
         return TitleResult(accepted=False, reason="Empty context")
     n_keys = max(1, keys_count())
+    title_model_ids = resolved.title_model_ids
     last_exc: BaseException | None = None
-    for _ in range(n_keys):
-        api_key = get_current_key()
-        if not api_key:
-            return TitleResult(accepted=False, reason="Title model not configured")
-        model = _build_title_model(resolved, api_key)
-        try:
-            prompt = f"{SYSTEM_PROMPT}\n\nConversation context:\n\n{text}"
-            response = await model.ainvoke([HumanMessage(content=prompt)])
-            content = getattr(response, "content", None)
-            if isinstance(content, str):
-                raw = content
-            elif isinstance(content, list) and content:
-                part = content[0]
-                raw = part.get("text", str(part)) if isinstance(part, dict) else str(part)
-            else:
-                raw = str(content) if content else ""
-            raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw).strip()
-            if not raw:
-                return TitleResult(accepted=False, reason="No response from model")
-            parsed = json.loads(raw)
-            accepted = parsed.get("accepted") is True
-            title = (parsed.get("title") or "").strip()[:100]
-            reason = (parsed.get("reason") or "").strip()
-            if accepted and title:
-                return TitleResult(accepted=True, title=title)
-            return TitleResult(accepted=False, reason=reason or "Not enough context")
-        except json.JSONDecodeError as e:
-            logger.debug("Title model returned invalid JSON: %s", e)
-            return TitleResult(accepted=False, reason="Invalid model response")
-        except Exception as e:
-            last_exc = e
-            if is_quota_exhausted(e) and keys_count() > 1:
-                logger.debug("Title model 429, rotating key: %s", e)
-                rotate_next_key()
-                continue
-            logger.debug("Title model call failed: %s", e)
-            return TitleResult(accepted=False, reason="Title generation failed")
+    for model_id in title_model_ids:
+        for _ in range(n_keys):
+            api_key = get_current_key()
+            if not api_key:
+                return TitleResult(accepted=False, reason="Title model not configured")
+            model = _build_title_model(resolved, api_key, model_id)
+            try:
+                prompt = f"{SYSTEM_PROMPT}\n\nConversation context:\n\n{text}"
+                response = await model.ainvoke([HumanMessage(content=prompt)])
+                content = getattr(response, "content", None)
+                if isinstance(content, str):
+                    raw = content
+                elif isinstance(content, list) and content:
+                    part = content[0]
+                    raw = part.get("text", str(part)) if isinstance(part, dict) else str(part)
+                else:
+                    raw = str(content) if content else ""
+                raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw).strip()
+                if not raw:
+                    return TitleResult(accepted=False, reason="No response from model")
+                parsed = json.loads(raw)
+                accepted = parsed.get("accepted") is True
+                title = (parsed.get("title") or "").strip()[:100]
+                reason = (parsed.get("reason") or "").strip()
+                if accepted and title:
+                    return TitleResult(accepted=True, title=title)
+                return TitleResult(accepted=False, reason=reason or "Not enough context")
+            except json.JSONDecodeError as e:
+                logger.debug("Title model returned invalid JSON: %s", e)
+                return TitleResult(accepted=False, reason="Invalid model response")
+            except Exception as e:
+                last_exc = e
+                if is_quota_exhausted(e) and keys_count() > 1:
+                    logger.debug("Title model 429, rotating key: %s", e)
+                    rotate_next_key()
+                    continue
+                logger.debug("Title model call failed: %s", e)
+                return TitleResult(accepted=False, reason="Title generation failed")
+    reset_key_index_to_zero()
     return TitleResult(accepted=False, reason="Title generation failed")

@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # Comma-separated list of Gemini API keys; rotated on 429 quota errors.
     gemini_api_keys: str | None = Field(default=None, alias="GEMINI_API_KEYS")
     gemini_model_id: str = Field(default="gemini-3-pro-preview", alias="GEMINI_MODEL_ID")
+    gemini_analysis_model_ids: str | None = Field(default=None, alias="GEMINI_ANALYSIS_MODEL_IDS")
+    gemini_description_model: str = Field(default="gemini-2.0-flash", alias="GEMINI_DESCRIPTION_MODEL")
+    gemini_description_model_ids: str | None = Field(default=None, alias="GEMINI_DESCRIPTION_MODEL_IDS")
 
     # Speech-to-Text
     speech_project_id: str | None = Field(default=None, alias="SPEECH_PROJECT_ID")
@@ -95,6 +98,35 @@ class Settings(BaseSettings):
     @property
     def effective_transcoder_project_id(self) -> str:
         return self.transcoder_project_id or self.google_project_id
+
+    @staticmethod
+    def _parse_model_ids(ids_env: str | None, single_fallback: str, default: str) -> list[str]:
+        if ids_env and ids_env.strip():
+            out = [s.strip() for s in ids_env.split(",") if s.strip()]
+            if out:
+                return out
+        if single_fallback and single_fallback.strip():
+            return [single_fallback.strip()]
+        return [default]
+
+    # Default model priority: only these three in this order.
+    _DEFAULT_ANALYSIS_MODEL_IDS = ["gemini-3-pro-preview", "gemini-3-flash-preview", "gemini-2.5-pro"]
+
+    @property
+    def analysis_model_ids(self) -> list[str]:
+        if self.gemini_analysis_model_ids and self.gemini_analysis_model_ids.strip():
+            out = [s.strip() for s in self.gemini_analysis_model_ids.split(",") if s.strip()]
+            if out:
+                return out
+        if self.gemini_model_id and self.gemini_model_id.strip():
+            return [self.gemini_model_id.strip()]
+        return list(self._DEFAULT_ANALYSIS_MODEL_IDS)
+
+    @property
+    def description_model_ids(self) -> list[str]:
+        return self._parse_model_ids(
+            self.gemini_description_model_ids, self.gemini_description_model, "gemini-2.0-flash"
+        )
 
 
 @lru_cache

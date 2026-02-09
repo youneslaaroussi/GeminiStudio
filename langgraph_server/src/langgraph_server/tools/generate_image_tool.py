@@ -15,7 +15,7 @@ from google.cloud import storage
 from google.oauth2 import service_account
 from langchain_core.tools import tool
 
-from ..api_key_provider import get_current_key, keys_count, rotate_next_key
+from ..api_key_provider import get_current_key, keys_count, reset_key_index_to_zero, rotate_next_key
 from ..config import Settings, get_settings
 from ..credits import deduct_credits, get_credits_for_action, InsufficientCreditsError
 from ..hmac_auth import get_asset_service_upload_headers
@@ -239,48 +239,56 @@ def generateImage(
     }
 
     n_keys = max(1, keys_count())
+    banana_model_ids = settings.banana_model_ids
     last_status: int | None = None
     last_error_text: str = ""
-    for _ in range(n_keys):
-        api_key = get_current_key()
-        if not api_key:
-            return {
-                "status": "error",
-                "message": "Gemini API key not configured.",
-                "reason": "api_error",
-            }
-        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.banana_model}:generateContent?key={api_key}"
-        try:
-            response = httpx.post(api_url, json=request_body, timeout=120.0)
-        except httpx.HTTPError as exc:
-            logger.exception("[BANANA] API request failed")
-            return {
-                "status": "error",
-                "message": f"Failed to contact Gemini API: {exc}",
-                "reason": "api_error",
-            }
+    response: httpx.Response | None = None
+    for model_id in banana_model_ids:
+        for _ in range(n_keys):
+            api_key = get_current_key()
+            if not api_key:
+                return {
+                    "status": "error",
+                    "message": "Gemini API key not configured.",
+                    "reason": "api_error",
+                }
+            api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
+            try:
+                response = httpx.post(api_url, json=request_body, timeout=120.0)
+            except httpx.HTTPError as exc:
+                logger.exception("[BANANA] API request failed")
+                return {
+                    "status": "error",
+                    "message": f"Failed to contact Gemini API: {exc}",
+                    "reason": "api_error",
+                }
 
-        if response.status_code == 200:
-            break
-        last_status = response.status_code
-        last_error_text = response.text[:200]
-        if response.status_code == 429 and keys_count() > 1:
-            logger.warning("[BANANA] 429 quota exceeded, rotating to next API key")
-            rotate_next_key()
+            if response.status_code == 200:
+                break
+            last_status = response.status_code
+            last_error_text = response.text[:200]
+            if response.status_code == 429 and keys_count() > 1:
+                logger.warning("[BANANA] 429 quota exceeded, rotating to next API key")
+                rotate_next_key()
+                continue
+            logger.error("[BANANA] API error: %s - %s", response.status_code, last_error_text)
+            return {
+                "status": "error",
+                "message": f"Gemini API error (HTTP {response.status_code}): {last_error_text}",
+                "reason": "api_error",
+            }
+        else:
             continue
-        logger.error("[BANANA] API error: %s - %s", response.status_code, last_error_text)
-        return {
-            "status": "error",
-            "message": f"Gemini API error (HTTP {response.status_code}): {last_error_text}",
-            "reason": "api_error",
-        }
+        break
     else:
+        reset_key_index_to_zero()
         return {
             "status": "error",
             "message": f"Gemini API error (HTTP {last_status}): {last_error_text}",
             "reason": "api_error",
         }
 
+    assert response is not None
     try:
         payload = response.json()
     except Exception:

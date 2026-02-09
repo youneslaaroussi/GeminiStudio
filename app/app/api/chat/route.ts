@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createGeminiFetchWithRotation } from "@/app/lib/server/gemini-api-keys";
+import { getChatModelIds } from "@/app/lib/model-ids";
 import {
   convertToModelMessages,
   stepCountIs,
@@ -282,8 +283,9 @@ export async function POST(req: Request) {
   ]);
 
   const google = createGoogleGenerativeAI({ fetch: createGeminiFetchWithRotation() });
+  const chatModelIds = getChatModelIds();
   const result = streamText({
-    model: google(process.env.AI_CHAT_GOOGLE_MODEL ?? "gemini-3-pro-preview"),
+    model: google(chatModelIds[0] ?? "gemini-3-pro-preview"), // first of DEFAULT_CHAT_MODEL_IDS
     providerOptions: {
       google: {
         thinkingConfig: {

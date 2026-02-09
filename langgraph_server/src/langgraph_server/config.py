@@ -18,10 +18,14 @@ class Settings(BaseSettings):
     # Comma-separated list of Gemini API keys; rotated on 429 quota errors.
     gemini_api_keys: str | None = Field(default=None, alias="GEMINI_API_KEYS")
     gemini_model: str = Field(default="gemini-3-pro-preview", alias="GEMINI_MODEL")
+    # Comma-separated model IDs (priority order); fallback to gemini_model when unset.
+    gemini_chat_model_ids: str | None = Field(default=None, alias="GEMINI_CHAT_MODEL_IDS")
     # Smaller model for generating short status messages (Thinking…, Calling X…). Default gemini-2.5-flash; set empty to use static messages.
     gemini_status_model: str | None = Field(default="gemini-2.5-flash", alias="GEMINI_STATUS_MODEL")
+    gemini_status_model_ids: str | None = Field(default=None, alias="GEMINI_STATUS_MODEL_IDS")
     # Smaller model for auto-generating project title from first message.
     gemini_title_model: str = Field(default="gemini-2.0-flash", alias="GEMINI_TITLE_MODEL")
+    gemini_title_model_ids: str | None = Field(default=None, alias="GEMINI_TITLE_MODEL_IDS")
 
     langsmith_api_key: str | None = Field(default=None, alias="LANGSMITH_API_KEY")
     langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", alias="LANGSMITH_ENDPOINT")
@@ -106,6 +110,7 @@ class Settings(BaseSettings):
 
     # Banana image generation
     banana_model: str = Field(default="gemini-3-pro-image-preview", alias="BANANA_MODEL")
+    gemini_banana_model_ids: str | None = Field(default=None, alias="GEMINI_BANANA_MODEL_IDS")
 
     # Lyria music generation (Vertex AI; model lyria-002, predict endpoint)
     # Vertex/Lyria use the GCP service account only (never Firebase). Resolved from GOOGLE_SERVICE_ACCOUNT_KEY or GOOGLE_APPLICATION_CREDENTIALS.
@@ -118,6 +123,51 @@ class Settings(BaseSettings):
     tts_model: str = Field(default="gemini-2.5-flash-preview-tts", alias="TTS_MODEL")
 
     transcode_enabled: bool = Field(default=True, alias="TRANSCODE_ENABLED")
+
+    # Default model priority: only these three in this order. Anything below should fail (no other defaults).
+    _DEFAULT_CHAT_MODEL_IDS = ["gemini-3-pro-preview", "gemini-3-flash-preview", "gemini-2.5-pro"]
+
+    def _parse_model_ids(
+        self, ids_env: str | None, single_fallback: str | None, default: str
+    ) -> list[str]:
+        if ids_env and ids_env.strip():
+            out = [s.strip() for s in ids_env.split(",") if s.strip()]
+            if out:
+                return out
+        if single_fallback and single_fallback.strip():
+            return [single_fallback.strip()]
+        return [default]
+
+    @property
+    def chat_model_ids(self) -> list[str]:
+        """Chat/model priority: gemini-3-pro-preview, gemini-3-flash-preview, gemini-2.5-pro. No other defaults."""
+        if self.gemini_chat_model_ids and self.gemini_chat_model_ids.strip():
+            out = [s.strip() for s in self.gemini_chat_model_ids.split(",") if s.strip()]
+            if out:
+                return out
+        if self.gemini_model and self.gemini_model.strip():
+            return [self.gemini_model.strip()]
+        return list(self._DEFAULT_CHAT_MODEL_IDS)
+
+    @property
+    def title_model_ids(self) -> list[str]:
+        return self._parse_model_ids(
+            self.gemini_title_model_ids, self.gemini_title_model or None, "gemini-2.0-flash"
+        )
+
+    @property
+    def status_model_ids(self) -> list[str]:
+        if not self.gemini_status_model and not self.gemini_status_model_ids:
+            return []
+        return self._parse_model_ids(
+            self.gemini_status_model_ids, self.gemini_status_model, "gemini-2.5-flash"
+        )
+
+    @property
+    def banana_model_ids(self) -> list[str]:
+        return self._parse_model_ids(
+            self.gemini_banana_model_ids, self.banana_model, "gemini-3-pro-image-preview"
+        )
 
 
 @lru_cache

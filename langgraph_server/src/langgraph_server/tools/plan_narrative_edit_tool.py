@@ -15,6 +15,7 @@ from ..api_key_provider import (
     get_current_key,
     is_quota_exhausted,
     keys_count,
+    reset_key_index_to_zero,
     rotate_next_key,
 )
 from ..config import get_settings
@@ -188,37 +189,43 @@ Rules:
 """
 
     n_keys = max(1, keys_count())
+    chat_model_ids = settings.chat_model_ids
     last_exc: Exception | None = None
-    for _ in range(n_keys):
-        api_key = get_current_key()
-        if not api_key:
-            return {
-                "status": "error",
-                "message": "Gemini API key not configured.",
-            }
-        try:
-            model = ChatGoogleGenerativeAI(
-                model=settings.gemini_model,
-                api_key=api_key,
-                convert_system_message_to_human=True,
-                timeout=90,
-                max_retries=1,
-            )
-            structured_llm = model.with_structured_output(EditPlan)
-            plan = structured_llm.invoke(prompt)
-            break
-        except Exception as e:
-            last_exc = e
-            if is_quota_exhausted(e) and keys_count() > 1:
-                logger.warning("createEditPlan 429, rotating key: %s", e)
-                rotate_next_key()
-                continue
-            logger.exception("createEditPlan LLM failed: %s", e)
-            return {
-                "status": "error",
-                "message": f"Failed to generate plan: {e}",
-            }
+    for model_id in chat_model_ids:
+        for _ in range(n_keys):
+            api_key = get_current_key()
+            if not api_key:
+                return {
+                    "status": "error",
+                    "message": "Gemini API key not configured.",
+                }
+            try:
+                model = ChatGoogleGenerativeAI(
+                    model=model_id,
+                    api_key=api_key,
+                    convert_system_message_to_human=True,
+                    timeout=90,
+                    max_retries=1,
+                )
+                structured_llm = model.with_structured_output(EditPlan)
+                plan = structured_llm.invoke(prompt)
+                break
+            except Exception as e:
+                last_exc = e
+                if is_quota_exhausted(e) and keys_count() > 1:
+                    logger.warning("createEditPlan 429, rotating key: %s", e)
+                    rotate_next_key()
+                    continue
+                logger.exception("createEditPlan LLM failed: %s", e)
+                return {
+                    "status": "error",
+                    "message": f"Failed to generate plan: {e}",
+                }
+        else:
+            continue
+        break
     else:
+        reset_key_index_to_zero()
         return {
             "status": "error",
             "message": f"Failed to generate plan: {last_exc}",
