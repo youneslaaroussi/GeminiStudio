@@ -1,5 +1,5 @@
 import { Circle, Node, NodeProps, Txt, signal, initial, colorSignal } from '@motion-canvas/2d';
-import { SignalValue, SimpleSignal, ColorSignal, PossibleColor, createRef, createSignal, easeInOutCubic, tween, type ThreadGenerator,  } from '@motion-canvas/core';
+import { SignalValue, SimpleSignal, ColorSignal, PossibleColor, createSignal, easeInOutCubic, tween, type ThreadGenerator } from '@motion-canvas/core';
 export interface ProgressRingProps extends NodeProps {
   progress?: SignalValue<number>;
   ringColor?: SignalValue<PossibleColor>;
