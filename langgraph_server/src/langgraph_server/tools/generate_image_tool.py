@@ -243,7 +243,9 @@ def generateImage(
     last_status: int | None = None
     last_error_text: str = ""
     response: httpx.Response | None = None
-    for model_id in banana_model_ids:
+    for model_idx, model_id in enumerate(banana_model_ids):
+        if model_idx > 0:
+            logger.info("[BANANA] Trying model %s (fallback %d)", model_id, model_idx + 1)
         for _ in range(n_keys):
             api_key = get_current_key()
             if not api_key:

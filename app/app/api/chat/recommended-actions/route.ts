@@ -85,7 +85,11 @@ async function generateSuggestions(prompt: string): Promise<string[]> {
   if (!key) return [];
   const modelIds = getRecommendedActionsModelIds();
   let lastError: unknown;
-  for (const modelId of modelIds) {
+  for (let i = 0; i < modelIds.length; i++) {
+    const modelId = modelIds[i]!;
+    if (i > 0) {
+      console.warn("[recommended-actions] Trying model %s (fallback %d)", modelId, i + 1);
+    }
     try {
       return await runWithGeminiKeyRotation(async (apiKey) => {
         const ai = new GoogleGenAI({ apiKey });
@@ -109,6 +113,9 @@ async function generateSuggestions(prompt: string): Promise<string[]> {
       });
     } catch (e) {
       lastError = e;
+      if (i < modelIds.length - 1) {
+        console.warn("[recommended-actions] Model %s failed: %s", modelId, e instanceof Error ? e.message : e);
+      }
     }
   }
   throw lastError;

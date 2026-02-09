@@ -56,7 +56,9 @@ async def _call_model(
         return None
     n_keys = max(1, keys_count())
     last_exc: BaseException | None = None
-    for model_id in status_model_ids:
+    for model_idx, model_id in enumerate(status_model_ids):
+        if model_idx > 0:
+            logger.info("[STATUS] Trying model %s (fallback %d)", model_id, model_idx + 1)
         for _ in range(n_keys):
             api_key = get_current_key()
             if not api_key:

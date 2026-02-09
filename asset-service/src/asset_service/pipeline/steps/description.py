@@ -138,7 +138,9 @@ async def description_step(context: PipelineContext) -> PipelineResult:
     description_model_ids = settings.description_model_ids
     last_exc: Exception | None = None
     description = ""
-    for model_id in description_model_ids:
+    for model_idx, model_id in enumerate(description_model_ids):
+        if model_idx > 0:
+            logger.info("Description step trying model %s (fallback %d)", model_id, model_idx + 1)
         for _ in range(n_keys):
             api_key = get_current_key()
             if not api_key:

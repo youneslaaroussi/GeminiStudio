@@ -38,6 +38,9 @@ export function rotateGeminiKey(): void {
 
 /** Reset current key index to 0. Call when all keys have been tried and failed in one request (loop back). */
 export function resetGeminiKeyIndexToZero(): void {
+  if (keys.length > 1 && process.env.NODE_ENV !== "test") {
+    console.warn("[gemini-api-keys] All keys exhausted, resetting to key index 0");
+  }
   currentIndex = 0;
 }
 

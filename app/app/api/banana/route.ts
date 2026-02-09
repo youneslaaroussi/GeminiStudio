@@ -111,7 +111,11 @@ export async function POST(request: NextRequest) {
     };
     const bananaModelIds = getBananaModelIds();
     let response: Response | null = null;
-    for (const modelId of bananaModelIds) {
+    for (let i = 0; i < bananaModelIds.length; i++) {
+      const modelId = bananaModelIds[i]!;
+      if (i > 0) {
+        console.warn("[banana] Trying model %s (fallback %d)", modelId, i + 1);
+      }
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
       response = await fetchWithGeminiKeyRotation(url, {
         method: "POST",
@@ -119,6 +123,9 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify(body),
       });
       if (response.ok) break;
+      if (i < bananaModelIds.length - 1) {
+        console.warn("[banana] Model %s failed (HTTP %s), trying next model", modelId, response.status);
+      }
     }
     if (!response!.ok) {
       const text = await response!.text();

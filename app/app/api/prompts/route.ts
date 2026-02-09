@@ -73,7 +73,11 @@ export async function POST(request: NextRequest) {
     };
     const promptModelIds = getPromptModelIds();
     let response: Response | null = null;
-    for (const modelId of promptModelIds) {
+    for (let i = 0; i < promptModelIds.length; i++) {
+      const modelId = promptModelIds[i]!;
+      if (i > 0) {
+        console.warn("[prompts] Trying model %s (fallback %d)", modelId, i + 1);
+      }
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
       response = await fetchWithGeminiKeyRotation(url, {
         method: "POST",
@@ -81,6 +85,9 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify(requestBody),
       });
       if (response.ok) break;
+      if (i < promptModelIds.length - 1) {
+        console.warn("[prompts] Model %s failed (HTTP %s), trying next model", modelId, response.status);
+      }
     }
     if (!response!.ok) {
       const text = await response!.text();

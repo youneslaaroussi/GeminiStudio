@@ -69,6 +69,8 @@ def reset_key_index_to_zero() -> None:
     """Reset current key index to 0. Call when all keys have been tried and failed in one request (loop back)."""
     global _index
     with _lock:
+        if _keys and len(_keys) > 1:
+            logger.warning("[API_KEY_PROVIDER] All keys exhausted, resetting to key index 0")
         _index = 0
 
 

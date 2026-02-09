@@ -110,7 +110,9 @@ def create_graph(settings: Settings | None = None):
     async def call_model(state: MessagesState, config: RunnableConfig):
         messages = [system_message] + list(state["messages"])
         last_exc: BaseException | None = None
-        for model_id in chat_model_ids:
+        for model_idx, model_id in enumerate(chat_model_ids):
+            if model_idx > 0:
+                logger.info("[AGENT] Trying model %s (fallback %d)", model_id, model_idx + 1)
             for attempt in range(n_keys):
                 api_key = get_current_key()
                 if not api_key:
@@ -126,6 +128,8 @@ def create_graph(settings: Settings | None = None):
                         logger.warning("[AGENT] Quota exhausted (429), rotating to next API key: %s", e)
                         rotate_next_key()
                         continue
+                    if model_idx < len(chat_model_ids) - 1:
+                        logger.warning("[AGENT] Model %s failed: %s", model_id, e)
                     raise
         if last_exc is not None:
             reset_key_index_to_zero()
