@@ -128,12 +128,25 @@ def create_graph(settings: Settings | None = None):
                         logger.warning("[AGENT] Quota exhausted (429), rotating to next API key: %s", e)
                         rotate_next_key()
                         continue
-                    if model_idx < len(chat_model_ids) - 1:
-                        logger.warning("[AGENT] Model %s failed: %s", model_id, e)
+                    if is_quota_exhausted(e) and keys_count() == 1:
+                        logger.warning(
+                            "[AGENT] 429 with single key (add more keys in GEMINI_API_KEYS for rotation)"
+                        )
                     raise
-        if last_exc is not None:
-            reset_key_index_to_zero()
-            raise last_exc
+            # All keys failed for this model
+            if last_exc is not None:
+                reset_key_index_to_zero()
+                if model_idx < len(chat_model_ids) - 1:
+                    n = keys_count()
+                    logger.warning(
+                        "[AGENT] Model %s failed after trying %d key(s), trying next model: %s",
+                        model_id,
+                        n,
+                        chat_model_ids[model_idx + 1],
+                    )
+                    last_exc = None  # clear so we try next model
+                    continue
+                raise last_exc
         return {"messages": []}
 
     def call_tool(state: MessagesState, config: RunnableConfig):
