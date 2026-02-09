@@ -42,6 +42,7 @@ import type { ResolvedVideoClip, ResolvedImageClip } from "@/app/types/timeline"
 import { usePlaybackResolvedLayers } from "@/app/lib/hooks/usePlaybackResolvedLayers";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 // Wrapper component that gets selected video or image clip for the Effects tab (from resolved layers so clip has src for APIs)
 function EffectsPanelWrapper({ resolvedLayers }: { resolvedLayers: import("@/app/types/timeline").ResolvedLayer[] }) {
@@ -96,11 +97,33 @@ export function EditorLayout() {
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
   const [isPreviewFullscreen, setPreviewFullscreen] = useState(false);
-  const [currentLayout, setCurrentLayout] = useState<EditorLayoutPreset>("agentic");
+  
+  // Load layout preference from localStorage on mount
+  const [currentLayout, setCurrentLayout] = useState<EditorLayoutPreset>(() => {
+    if (typeof window === "undefined") return "agentic";
+    try {
+      const stored = localStorage.getItem("gemini-studio-layout");
+      if (stored && (stored === "agentic" || stored === "manual" || stored === "review" || stored === "timeline")) {
+        return stored as EditorLayoutPreset;
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return "agentic";
+  });
+  
   const layoutConfig = LAYOUT_PRESETS[currentLayout];
 
   const handleLayoutChange = useCallback((layout: EditorLayoutPreset) => {
     setCurrentLayout(layout);
+    // Persist layout preference to localStorage
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("gemini-studio-layout", layout);
+      } catch {
+        // Ignore storage errors
+      }
+    }
     const config = LAYOUT_PRESETS[layout];
     if (config.defaultRightTab) {
       setRightPanelTab(config.defaultRightTab);
@@ -830,7 +853,11 @@ export function EditorLayout() {
         {/* Floating Voice Chat - button expands into panel from bottom center */}
         <div
           ref={voiceChatPanelRef}
-          className="fixed z-50 flex flex-col items-center"
+          className={cn(
+            "fixed flex flex-col items-center",
+            // Ensure voice chat is above preview when not fullscreen, but below fullscreen preview
+            isPreviewFullscreen ? "z-[10001]" : "z-50"
+          )}
           style={
             voiceChatPosition
               ? { left: voiceChatPosition.left, bottom: voiceChatPosition.bottom, transform: "translateX(-50%)" }

@@ -82,6 +82,7 @@ export interface PreviewPanelHandle {
   recenter: () => void;
   enterFullscreen: () => void;
   exitFullscreen: () => void;
+  recompile: () => void;
   isFullscreen: boolean;
 }
 
@@ -196,6 +197,10 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     scenePlayerRef.current?.recenter();
   }, []);
 
+  const handleRecompile = useCallback(() => {
+    scenePlayerRef.current?.recompile();
+  }, []);
+
   const handleRefresh = useCallback(() => {
     setPlayerKey((k) => k + 1);
   }, []);
@@ -253,8 +258,9 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     recenter: handleRecenter,
     enterFullscreen,
     exitFullscreen,
+    recompile: handleRecompile,
     isFullscreen,
-  }), [handleRecenter, enterFullscreen, exitFullscreen, isFullscreen]);
+  }), [handleRecenter, enterFullscreen, exitFullscreen, handleRecompile, isFullscreen]);
 
   useEffect(() => {
     const onFullscreenChangeEvent = () => {
@@ -330,19 +336,6 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
     };
   }, []);
 
-  const totalClips = layers.reduce((acc, layer) => acc + layer.clips.length, 0);
-  const counts = useMemo(
-    () =>
-      layers.reduce<Record<string, number>>(
-        (acc, layer) => {
-          acc[layer.type] = (acc[layer.type] ?? 0) + layer.clips.length;
-          return acc;
-        },
-        { video: 0, audio: 0, text: 0, image: 0, component: 0 }
-      ),
-    [layers]
-  );
-
   // Preload timeline media assets
   const preloadProgress = usePreloadTimelineMedia(layers);
 
@@ -375,7 +368,15 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
   }, [sceneCodeJson]);
 
   return (
-    <div ref={fullscreenRef} className="h-full flex flex-col min-w-0 bg-background">
+    <div 
+      ref={fullscreenRef} 
+      className={cn(
+        "h-full flex flex-col min-w-0 bg-background",
+        // Ensure proper z-index stacking - only when fullscreen should it overlay other UI
+        // When not fullscreen, use normal stacking context (no z-index)
+        isFullscreen && "z-[9999]"
+      )}
+    >
       <div className="flex items-center justify-between border-b border-border px-3 py-2 shrink-0">
         <Tabs value={previewTab} onValueChange={(v) => setPreviewTab(v as "preview" | "code")} className="flex-1 min-w-0">
           <div className="flex items-center gap-3">
@@ -388,17 +389,27 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
                 Scene Code
               </TabsTrigger>
             </TabsList>
-            <p className="text-xs text-muted-foreground shrink-0">
-              {totalClips} clip{totalClips !== 1 ? "s" : ""} on timeline
-              <span className="ml-1">
-                ({counts.video} video, {counts.audio} audio, {counts.text} text, {counts.image} image)
-              </span>
-            </p>
           </div>
         </Tabs>
         <div className="flex items-center gap-2 shrink-0">
           {/* Controls and indicator dots */}
           <TooltipProvider delayDuration={300}>
+            {/* Compile button */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  onClick={handleRecompile}
+                >
+                  <Code2 className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>Recompile scene</p>
+              </TooltipContent>
+            </Tooltip>
             {/* Refresh button */}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -571,7 +582,7 @@ export const PreviewPanel = forwardRef<PreviewPanelHandle, PreviewPanelProps>(fu
           {/* Fullscreen overlay controls */}
           {isFullscreen && (
             <div
-              className={`absolute bottom-0 left-0 right-0 z-10 flex flex-col bg-black/70 backdrop-blur-sm transition-opacity duration-300 ${
+              className={`absolute bottom-0 left-0 right-0 z-[10000] flex flex-col bg-black/70 backdrop-blur-sm transition-opacity duration-300 ${
                 fullscreenControlsVisible ? "opacity-100" : "opacity-0"
               }`}
             >

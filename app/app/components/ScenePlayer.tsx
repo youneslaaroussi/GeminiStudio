@@ -14,9 +14,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import { getAuthHeaders } from '@/app/lib/hooks/useAuthFetch';
 import { computeCodeHash, getCachedScene, setCachedScene } from '@/app/lib/cache/scene-cache';
 import { requestCompileScene } from '@/app/lib/compile-scene-client';
+import { CameraGizmo } from './CameraGizmo';
 
 export interface ScenePlayerHandle {
   recenter: () => void;
+  recompile: () => void;
 }
 
 interface SceneBBox {
@@ -181,12 +183,64 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   const [zoom, setZoom] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
 
-  // Expose recenter function via ref
-  useImperativeHandle(ref, () => ({
-    recenter: () => {
-      setZoomToFit(true);
-    },
-  }), []);
+
+  // Gizmo controls
+  const handleZoomIn = useCallback(() => {
+    const center = {
+      x: 0, // Center of container (relative to center)
+      y: 0,
+    };
+
+    const ratio = 1 + ZOOM_SPEED;
+    const { zoom: currentZoom, x: currentX, y: currentY } = transformRef.current;
+
+    setZoomToFit(false);
+    setZoom(currentZoom * ratio);
+    setPosition({
+      x: center.x + (currentX - center.x) * ratio,
+      y: center.y + (currentY - center.y) * ratio,
+    });
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    const center = {
+      x: 0, // Center of container (relative to center)
+      y: 0,
+    };
+
+    const ratio = 1 - ZOOM_SPEED;
+    const { zoom: currentZoom, x: currentX, y: currentY } = transformRef.current;
+
+    setZoomToFit(false);
+    setZoom(currentZoom * ratio);
+    setPosition({
+      x: center.x + (currentX - center.x) * ratio,
+      y: center.y + (currentY - center.y) * ratio,
+    });
+  }, []);
+
+  const handlePan = useCallback((deltaX: number, deltaY: number) => {
+    setZoomToFit(false);
+    
+    // If we were in zoomToFit, we need to ensure the "zoom" state is set to the calculated zoom
+    if (zoomToFitRef.current) {
+      setZoom(transformRef.current.zoom);
+    }
+
+    setPosition((prev) => {
+      const startX = zoomToFitRef.current ? transformRef.current.x : prev.x;
+      const startY = zoomToFitRef.current ? transformRef.current.y : prev.y;
+      
+      return {
+        x: startX - deltaX,
+        y: startY - deltaY,
+      };
+    });
+  }, []);
+
+  const handleRecenter = useCallback(() => {
+    setZoomToFit(true);
+  }, []);
 
   // --- Smart compilation with component awareness ---
   const projectId = useProjectStore((s) => s.projectId);
@@ -308,6 +362,16 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
       }
     }
   }, [projectId, loadCompiledJs, componentFiles, codeHash]);
+
+  // Expose recenter and recompile functions via ref
+  useImperativeHandle(ref, () => ({
+    recenter: () => {
+      setZoomToFit(true);
+    },
+    recompile: () => {
+      void compileAndLoad(componentFiles, codeHash);
+    },
+  }), [compileAndLoad, componentFiles, codeHash]);
 
   // Initial compile on mount
   useEffect(() => {
@@ -1219,6 +1283,12 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
             )}
           </div>
         </div>
+        {/* Camera Gizmo */}
+        <CameraGizmo
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onPan={handlePan}
+        />
       </div>
       <AnimatePresence>
         {isCompiling && (
