@@ -194,7 +194,7 @@ export function UploadDialog({
 
     try {
       const token = await getAuthToken();
-      const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+      const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
       const planResponse = await fetch("/api/assets/direct/plan", {
         method: "POST",
