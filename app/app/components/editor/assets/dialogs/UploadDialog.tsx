@@ -41,6 +41,7 @@ import {
   CREDITS_PER_ACTION,
   getUploadCreditBreakdown,
 } from "@/app/lib/credits-config";
+import { isVideoFile } from "@/app/lib/uploads/file-utils";
 
 interface QueuedFile {
   id: string;
@@ -176,74 +177,148 @@ export function UploadDialog({
     setError(null);
     setProgress(0);
 
-    const formData = new FormData();
-    formData.append("projectId", projectId);
-    queuedFiles.forEach((item) => formData.append("files", item.file));
-
-    // Add transcode options if enabled and there are video files
-    if (transcodeOptions.enabled && hasVideoFiles) {
-      const transcodePayload: Record<string, unknown> = {
-        outputFormat: transcodeOptions.outputFormat,
-        videoCodec: transcodeOptions.videoCodec,
-        audioCodec: transcodeOptions.audioCodec,
-      };
-      if (transcodeOptions.videoBitrate) {
-        transcodePayload.videoBitrate = transcodeOptions.videoBitrate * 1000;
-      }
-      if (transcodeOptions.audioBitrate) {
-        transcodePayload.audioBitrate = transcodeOptions.audioBitrate * 1000;
-      }
-      formData.append("transcodeOptions", JSON.stringify(transcodePayload));
-    }
+    const normalizedTranscodeOptions =
+      transcodeOptions.enabled && hasVideoFiles
+        ? {
+            outputFormat: transcodeOptions.outputFormat,
+            videoCodec: transcodeOptions.videoCodec,
+            audioCodec: transcodeOptions.audioCodec,
+            ...(transcodeOptions.videoBitrate
+              ? { videoBitrate: transcodeOptions.videoBitrate * 1000 }
+              : {}),
+            ...(transcodeOptions.audioBitrate
+              ? { audioBitrate: transcodeOptions.audioBitrate * 1000 }
+              : {}),
+          }
+        : undefined;
 
     try {
-      // Get auth token
       const token = await getAuthToken();
+      const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
 
-      const result = await new Promise<{ assets: RemoteAsset[]; transcodeStarted?: boolean; convertStarted?: boolean }>(
-        (resolve, reject) => {
+      const planResponse = await fetch("/api/assets/direct/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({
+          projectId,
+          files: queuedFiles.map((item) => ({
+            id: item.id,
+            name: item.file.name,
+            mimeType: item.file.type || "application/octet-stream",
+            size: item.file.size,
+          })),
+        }),
+      });
+
+      if (!planResponse.ok) {
+        if (planResponse.status === 401) {
+          throw new Error("Unauthorized. Please log in again.");
+        }
+        if (planResponse.status === 402) {
+          const payload = await planResponse.json().catch(() => null);
+          throw new Error(
+            (payload && typeof payload.error === "string"
+              ? payload.error
+              : "Insufficient credits to upload files")
+          );
+        }
+        if (planResponse.status === 503) {
+          throw new Error("Asset service not available. Check ASSET_SERVICE_URL.");
+        }
+        const payload = await planResponse.json().catch(() => null);
+        throw new Error(payload?.error || "Failed to start uploads");
+      }
+
+      const plan = (await planResponse.json()) as {
+        creditsUsed?: number;
+        uploads: Array<{
+          id: string;
+          uploadUrl: string;
+          gcsUri: string;
+          fileName: string;
+          mimeType: string;
+          size: number;
+        }>;
+      };
+
+      const totalBytes = totalSize || 1;
+      let uploadedBytes = 0;
+
+      for (const upload of plan.uploads) {
+        const queued = queuedFiles.find((item) => item.id === upload.id);
+        if (!queued) {
+          throw new Error("Upload plan mismatch");
+        }
+        await new Promise<void>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
-          xhr.open("POST", "/api/assets");
-
-          // Set auth header if we have a token
-          if (token) {
-            xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-          }
-
+          xhr.open("PUT", upload.uploadUrl);
+          xhr.setRequestHeader(
+            "Content-Type",
+            queued.file.type || "application/octet-stream"
+          );
           xhr.upload.onprogress = (event) => {
             if (event.lengthComputable) {
-              setProgress(Math.round((event.loaded / event.total) * 100));
+              const percent = ((uploadedBytes + event.loaded) / totalBytes) * 100;
+              setProgress(Math.round(percent));
             }
           };
           xhr.onerror = () => reject(new Error("Upload failed"));
           xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300) {
-              try {
-                resolve(JSON.parse(xhr.responseText));
-              } catch {
-                reject(new Error("Invalid response"));
-              }
-            } else if (xhr.status === 401) {
-              reject(new Error("Unauthorized. Please log in again."));
-            } else if (xhr.status === 402) {
-              // Insufficient credits
-              try {
-                const data = JSON.parse(xhr.responseText);
-                reject(new Error(data.error || "Insufficient credits"));
-              } catch {
-                reject(new Error("Insufficient credits to upload files"));
-              }
-            } else if (xhr.status === 503) {
-              reject(new Error("Asset service not available. Check ASSET_SERVICE_URL."));
+              uploadedBytes += queued.file.size;
+              setProgress(Math.round((uploadedBytes / totalBytes) * 100));
+              resolve();
             } else {
               reject(new Error("Upload failed"));
             }
           };
-          xhr.send(formData);
-        }
-      );
+          xhr.send(queued.file);
+        });
+      }
 
-      onUploadComplete(result.assets, { transcodeStarted: result.transcodeStarted, convertStarted: result.convertStarted });
+      const finalizeResponse = await fetch("/api/assets/direct/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({
+          projectId,
+          creditsUsed: plan.creditsUsed ?? 0,
+          uploads: plan.uploads.map((upload) => {
+            const queued = queuedFiles.find((item) => item.id === upload.id);
+            if (!queued) {
+              throw new Error("Upload plan mismatch");
+            }
+            const file = queued.file;
+            const isVideo = isVideoFile(file.type, file.name);
+            return {
+              id: upload.id,
+              gcsUri: upload.gcsUri,
+              fileName: file.name,
+              mimeType: file.type || "application/octet-stream",
+              size: file.size,
+              transcodeOptions: isVideo ? normalizedTranscodeOptions : undefined,
+            };
+          }),
+        }),
+      });
+
+      if (!finalizeResponse.ok) {
+        if (finalizeResponse.status === 401) {
+          throw new Error("Unauthorized. Please log in again.");
+        }
+        const payload = await finalizeResponse.json().catch(() => null);
+        throw new Error(payload?.error || "Failed to register uploads");
+      }
+
+      const result = (await finalizeResponse.json()) as {
+        assets: RemoteAsset[];
+        transcodeStarted?: boolean;
+        convertStarted?: boolean;
+      };
+
+      onUploadComplete(result.assets, {
+        transcodeStarted: result.transcodeStarted,
+        convertStarted: result.convertStarted,
+      });
       setQueuedFiles([]);
       onOpenChange(false);
     } catch (err) {

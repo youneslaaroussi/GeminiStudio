@@ -1,56 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import type { RemoteAsset, ComponentInputDef } from "@/app/types/assets";
+import type { RemoteAsset } from "@/app/types/assets";
 import {
   isAssetServiceEnabled,
   uploadToAssetService,
   listAssetsFromService,
-  type AssetServiceAsset,
   type TranscodeOptions,
 } from "@/app/lib/server/asset-service-client";
 import { verifyBearerToken } from "@/app/lib/server/auth";
-import { deductCredits, getBilling } from "@/app/lib/server/credits";
-import {
-  getUploadActionFromMimeType,
-  getCreditsForAction,
-} from "@/app/lib/credits-config";
+import { toRemoteAsset } from "./utils";
+import { calculateTotalCredits, verifyAndDeductCredits, CreditsError } from "./credits";
+import { isHeicFile, isVideoFile } from "@/app/lib/uploads/file-utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-/**
- * Convert asset service response to RemoteAsset format.
- * Uses signed URL for direct GCS playback; client should call playback-url when url is empty.
- */
-function toRemoteAsset(asset: AssetServiceAsset, projectId: string): RemoteAsset {
-  const url = asset.signedUrl ?? "";
-
-  const result: RemoteAsset = {
-    id: asset.id,
-    name: asset.name,
-    url,
-    mimeType: asset.mimeType,
-    size: asset.size,
-    type: asset.type as RemoteAsset["type"],
-    uploadedAt: asset.uploadedAt,
-    width: asset.width,
-    height: asset.height,
-    duration: asset.duration,
-    gcsUri: asset.gcsUri,
-    signedUrl: asset.signedUrl,
-    description: asset.description,
-    notes: asset.notes,
-    transcodeStatus: asset.transcodeStatus as RemoteAsset["transcodeStatus"],
-    transcodeError: asset.transcodeError,
-  };
-
-  // Component asset fields
-  if (asset.code !== undefined) result.code = asset.code;
-  if (asset.componentName !== undefined) result.componentName = asset.componentName;
-  if (asset.inputDefs !== undefined) result.inputDefs = asset.inputDefs as ComponentInputDef[];
-
-  return result;
-}
 
 export async function GET(request: NextRequest) {
   if (!isAssetServiceEnabled()) {
@@ -133,86 +96,39 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Calculate total credits needed for all files
-  const totalCreditsNeeded = files.reduce((sum, file) => {
-    const action = getUploadActionFromMimeType(file.type);
-    return sum + getCreditsForAction(action);
-  }, 0);
+  const totalCreditsNeeded = calculateTotalCredits(files.map((file) => ({ mimeType: file.type })));
 
-  // Check if user has enough credits
   try {
-    const billing = await getBilling(userId);
-    if (billing.credits < totalCreditsNeeded) {
-      return NextResponse.json(
-        {
-          error: `Insufficient credits. You need ${totalCreditsNeeded} R-Credits to upload these files. You have ${billing.credits}.`,
-          reason: "insufficient_credits",
-          required: totalCreditsNeeded,
-          current: billing.credits,
-        },
-        { status: 402 }
-      );
-    }
+    await verifyAndDeductCredits(userId, totalCreditsNeeded);
   } catch (error) {
-    console.error("Failed to check credits:", error);
-    return NextResponse.json(
-      { error: "Failed to verify credits" },
-      { status: 500 }
-    );
-  }
-
-  // Deduct credits upfront (before uploading)
-  try {
-    await deductCredits(userId, totalCreditsNeeded, "asset_upload");
-  } catch (error) {
-    console.error("Failed to deduct credits:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
-    if (message.includes("Insufficient")) {
-      return NextResponse.json(
-        { error: message, reason: "insufficient_credits" },
-        { status: 402 }
-      );
+    if (error instanceof CreditsError) {
+      return NextResponse.json(error.responseBody, { status: error.status });
     }
-    return NextResponse.json(
-      { error: "Failed to process credits" },
-      { status: 500 }
-    );
+    throw error;
   }
 
   const uploaded: RemoteAsset[] = [];
-
-  // Video extensions to check (browsers often send wrong MIME types)
-  const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.wmv', '.flv', '.m4v', '.mpeg', '.mpg', '.3gp'];
-  
-  // HEIC/HEIF extensions that need conversion
-  const heicExtensions = ['.heic', '.heif'];
 
   try {
     let transcodeStarted = false;
     let convertStarted = false;
     for (const file of files) {
-      // Check if video by MIME type OR file extension (browsers often send wrong MIME types for .MOV etc)
-      const ext = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
-      const isVideo = file.type.startsWith("video/") || videoExtensions.includes(ext);
-      
-      // Check if HEIC/HEIF image that needs conversion
-      const isHeic = file.type.startsWith("image/heic") || 
-                     file.type.startsWith("image/heif") || 
-                     heicExtensions.includes(ext);
-      
-      if (isVideo && transcodeOptions) {
-        console.log(`[upload] Video detected: ${file.name} (type: ${file.type}, ext: ${ext}), forwarding transcode options`);
+      const videoFile = isVideoFile(file.type, file.name);
+      const heicFile = isHeicFile(file.type, file.name);
+
+      if (videoFile && transcodeOptions) {
+        console.log(`[upload] Video detected: ${file.name} (type: ${file.type}), forwarding transcode options`);
       }
-      
-      if (isHeic) {
-        console.log(`[upload] HEIC/HEIF detected: ${file.name} (type: ${file.type}, ext: ${ext}), will convert to PNG`);
+
+      if (heicFile) {
+        console.log(`[upload] HEIC/HEIF detected: ${file.name} (type: ${file.type}), will convert to PNG`);
         convertStarted = true;
       }
       
       const result = await uploadToAssetService(userId, projectId, file, {
         source: "web",
         runPipeline: true,
-        transcodeOptions: isVideo ? transcodeOptions : undefined,
+        transcodeOptions: videoFile ? transcodeOptions : undefined,
       });
       uploaded.push(toRemoteAsset(result.asset, projectId));
       if (result.transcodeStarted) {

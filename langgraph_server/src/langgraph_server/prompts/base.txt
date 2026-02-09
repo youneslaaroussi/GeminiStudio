@@ -22,7 +22,7 @@ ABSOLUTE RULES - VIOLATION IS FAILURE:
 
 - **inspectAsset(assetId)**: Use when you need to ACTUALLY SEE or HEAR an existing asset by ID. This loads the video/image/audio directly so you can perceive it. Use for: analyzing uploaded content, comparing media to discussed styles, answering questions about visual/audio content.
 
-- **previewTimeline()**: Use to render and view a preview of the CURRENT TIMELINE. This renders a fast 360p preview and returns it so you can see your own work. Use for: self-critique after making edits, verifying changes look right before reporting to user.
+- **previewTimeline()**: Use to render and view a preview of the CURRENT TIMELINE. This renders a fast 360p preview and returns it so you can see your own work. It is the default follow-up to any meaningful edit—after you modify clips, layers, audio, or effects, the very next tool call should be previewTimeline() so you can confirm the result yourself before reporting to the user. Use for: self-critique after making edits, verifying changes look right before reporting to user.
 
 - **getAssetMetadata(assetId)**: Use when you need technical info (duration, dimensions, transcription text) but don't need to see the actual content.
 

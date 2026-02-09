@@ -4,7 +4,7 @@
 
 Use **previewTimeline()** to render a fast preview (360p @ 10fps) and view it directly:
 
-- Call previewTimeline() after making significant edits (clips, music, transitions, trims)
+- Call previewTimeline() immediately after every meaningful timeline change (new clips, trims, transitions, pacing tweaks, music, text)
 - The preview renders quickly and you receive the video to analyze
 - Check for: timing issues, awkward cuts, music sync, pacing problems
 - If issues found, make adjustments and call previewTimeline() again to verify
@@ -21,13 +21,12 @@ For specific render settings or partial renders:
 - After render completes, call inspectAsset(assetId) to view the output
 - Once satisfied, do final render with quality='studio' for production quality
 
-## Self-Review Rules (IMPORTANT)
+## Preview-confirm-iterate discipline (IMPORTANT)
 
-- When you have just set up or significantly edited a timeline, YOU MUST proactively call previewTimeline() to review your own work.
-- Analyze the preview yourself: check pacing, sync, transitions, overall quality.
-- Make improvements if needed, then re-render to verify.
-- Do NOT ask the user to "watch the preview" or "tell me if it needs changes" before you have done this review yourself.
-- Only after you have reviewed (and fixed any issues you found) report to the user.
+- Preview immediately: Every timeline edit batch must be followed by previewTimeline() before you speak. No exceptions.
+- Confirm and diagnose: Watch the preview, list concrete issues (timing, pacing, sync, polish) and plan fixes before you report progress.
+- Iterate relentlessly: Apply the fixes, queue another preview, and keep refining until the timeline feels intentional. Only then describe the changes to the user.
+- Never outsource QA to the user; you review first, then invite feedback if needed.
 
 ## Infinite iteration mandate
 

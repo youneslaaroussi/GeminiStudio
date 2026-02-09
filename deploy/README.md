@@ -246,9 +246,9 @@ This creates:
 - Pub/Sub topics
 - `generated.env` file with all configuration
 
-### 4b. GCS CORS (for direct playback and LiveSession media)
+### 4b. GCS CORS (for direct playback, uploads, LiveSession media)
 
-Preview and LiveSession use signed URLs so the browser fetches media directly from GCS. **The bucket must have CORS enabled** or you’ll see errors like “blocked by CORS policy: No 'Access-Control-Allow-Origin' header”.
+The web app now talks to GCS directly for large uploads (signed `PUT` requests) and for playback via signed `GET`/`HEAD`. **The bucket must have CORS enabled** or you’ll see errors like “blocked by CORS policy: No 'Access-Control-Allow-Origin' header”.
 
 From repo root:
 
@@ -266,7 +266,7 @@ Equivalent manual step:
 gsutil cors set deploy/gcs-cors.json gs://geminivideostudio-storage
 ```
 
-Allowed origins: `https://www.geminivideo.studio`, `https://geminivideo.studio`, `http://localhost:3000`. To add more, edit `deploy/gcs-cors.json` and re-run the script.
+Allowed origins: `https://www.geminivideo.studio`, `https://geminivideo.studio`, `http://localhost:3000`. The default config already enables `GET/HEAD/PUT` so browsers can upload and download directly. To add more origins or HTTP verbs, edit `deploy/gcs-cors.json` and re-run the script.
 
 ### 5. Setup the VM
 

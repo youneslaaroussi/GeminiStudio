@@ -155,6 +155,40 @@ export async function uploadToAssetService(
   return response.json();
 }
 
+export interface RegisterGcsAssetPayload {
+  gcsUri: string;
+  name?: string;
+  source?: string;
+  runPipeline?: boolean;
+  threadId?: string | null;
+  transcodeOptions?: TranscodeOptions;
+  transcodeFormat?: string;
+  transcodeVideoBitrate?: number;
+}
+
+export async function registerGcsAssetOnService(
+  userId: string,
+  projectId: string,
+  payload: RegisterGcsAssetPayload
+): Promise<UploadResponse> {
+  const body = JSON.stringify(payload);
+  const response = await fetch(
+    `${ASSET_SERVICE_URL}/api/assets/${userId}/${projectId}/register-gcs`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders(body) },
+      body,
+    }
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Asset service register failed: ${response.status} - ${text}`);
+  }
+
+  return response.json();
+}
+
 /**
  * List assets for a project.
  */

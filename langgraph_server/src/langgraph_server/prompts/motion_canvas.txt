@@ -25,19 +25,31 @@ When you create or edit Motion Canvas components (createComponent, editComponent
 ## Scene hierarchy and refs
 
 - JSX creates **real Node instances** (no React, no virtual DOM). Build tree with view.add(<Node />) or node.add(<Child />). First child = back, last child = front.
-- **References**: createRef<Type>() then ref={ref} on the node; ref() returns the instance. makeRef(object, key) assigns the created node to object[key] (e.g. makeRef(items, i) for arrays). createRefArray<Type>() appends each ref to the array. createRefMap() for named refs (labels.a(), labels.b()). ref is a callback that receives the node after creation.
+- **References**: createRef<Type>() then ref={ref} on the node; ref() returns the instance. makeRef(object, key) assigns the created node to object[key] (e.g. makeRef(items, i) for arrays). createRefArray<Type>() appends each ref to the array. createRefMap() for named refs (labels.a(), labels.b()). ref is a callback that receives the node after creation. Use `makeRefs<typeof Component>()` when a child component expects a `refs` prop so you only define the ref shape once.
 - **Hierarchy helpers**: node.add(), node.insert(), node.remove(), node.removeChildren(), node.reparent(newParent); node.moveUp(), moveDown(), moveToTop(), moveToBottom(), moveTo(index), moveAbove(other), moveBelow(other). Query: node.findAll(predicate), findFirst, findLast, findAncestor; use is(Txt) for type predicates.
 
 ## Positioning and transform
 
-- **Coordinate system**: origin (0,0) is **center** of frame. X: negative = left, positive = right. Y: **positive = down**, negative = up (y increases downward). position, scale, rotation are in **parent local space**. Use absolutePosition(), absoluteScale(), absoluteRotation() for world space; setting them converts to local. Matrices: localToWorld(), worldToLocal(), localToParent(), parentToWorld(), worldToParent() for point transforms.
+- **Coordinate system**: origin (0,0) is **center**. X < 0 = left, X > 0 = right. Y increases downward. Every node reads transforms relative to its **parent**, so moving a container moves its descendants.
+- **Local vs world**: `node.position`, `node.scale`, `node.rotation` operate in parent space (vectors or scalars with compound signals like position.x()). Use `node.absolutePosition()`, `node.absoluteScale()`, `node.absoluteRotation()` when you need world coordinates (e.g. align nodes in different parents); assigning to the absolute signal converts it back to local under the hood.
+- **Matrices**: for advanced conversions, nodes expose `localToWorld()`, `worldToLocal()`, `localToParent()`, `parentToWorld()`, and `worldToParent()` DOMMatrix helpers. Transform vectors manually when needed (e.g. `Vector2.zero.transformAsPoint(node.localToWorld())`).
+
+## Layout fundamentals
+
+- Any Layout-derived node (Layout, Rect, Circle, etc.) becomes a **layout root** when you pass the `layout` prop. Its descendants become layout children handled by Flexbox, while the root can still be positioned manually.
+- Layout nodes expose **size** (Vector2Length) and **offset** signals. Size accepts numbers (px), `'50%'` strings, or `null` (auto). Offset repositions the node's origin relative to its bounds ([-1,-1] = top-left, [1,1] = bottom-right) and affects rotation/scale pivots.
+- Use cardinal helpers (top, bottom, left, right, topLeft, bottomRight, etc.) to align nodes to edges/corners: e.g. `label.top = rect.bottom` pins the top edge of one node to another's bottom edge.
+- Flexbox props mirror CSS: `direction`, `alignItems`, `justifyContent`, `gap`, `padding`, `margin`. Combine them to stack elements (`direction="column"`, `gap={16}`, `justifyContent="end"` for bar charts).
+- Plain Node instances act as **groups** — they ignore layout but let you apply shared filters/opacity/rotation to a subset of layout children.
 
 ## Tweening and animation
 
-- **Property tween**: yield* node().position([100, 0], 2) or .to([200, 0], 2). Third arg = timing (e.g. easeInOutCubic), fourth = custom interpolation (e.g. Vector2.arcLerp).
-- **Manual tween**: yield* tween(2, value => { ... }); value 0..1; use map(from, to, value) or easeInOutCubic(value, from, to).
-- **Interpolation**: Color.lerp(a, b, t), Vector2.lerp, Vector2.arcLerp. spring(PlopSpring, from, to, settleTolerance?, callback) for spring physics; presets PlopSpring, SmoothSpring.
-- **Save/restore**: node.save(); later yield* node.restore(duration) to tween back. State is stacked. all(...tweens) runs in parallel.
+- **Signal tweens**: every signal shares the `(target, duration, timingFn?, interpolator?)` signature: `yield* rect().fill('#e13238', 1)` or `yield* circle().position.x(300, 2, easeOutQuad)`. Chain `.to()` for back-to-back motions.
+- **Manual tween**: `yield* tween(duration, value => { ... })` gives you raw control. The callback receives progress ∈ [0,1]; combine with `map(from, to, value)` or pass ranges directly to easing helpers like `easeInOutCubic(value, -300, 300)`.
+- **Timing & interpolation**: Use any `(t: number) => number` as the timing function (easeInOutCubic, easeOutQuad, etc.). Interpolators convert eased progress into actual values: `Vector2.lerp`, `Vector2.arcLerp` (curved paths), `Color.lerp`, or your own.
+- **Springs**: `spring(PlopSpring, from, to, settleTolerance?, callback)` animates using Hooke's law. Provide `settleTolerance` (e.g. 1 pixel) so the generator finishes when the value is close enough. Presets include PlopSpring and SmoothSpring; define custom `{ mass, stiffness, damping, initialVelocity }` objects as needed.
+- **Save/restore**: `node.save()` captures the node's state; `yield* node.restore(duration, timingFn?)` tweens back. Saves stack (LIFO). Useful for reversible transitions.
+- **Parallelism**: `yield* all(tween1, tween2, ...)` runs tweens concurrently and resolves when the last one finishes.
 
 ## Primitives (use inside components)
 
@@ -234,6 +246,13 @@ export class ProgressBar extends Node {
 
 When providing code to createComponent or editComponent, supply complete, valid TSX that compiles. Match input_defs to the component's signal props (name, type, default, label; for type "enum" include options) so the timeline can control them.
 
+## Effects (reactive side effects)
+
+- **createEffect(() => { ... })** runs the callback immediately after any dependency signal used inside changes. Use it for imperative side effects that must stay in sync with signals (adding/removing nodes, triggering background animations, logging). Avoid heavy work inside effects if the dependencies update often.
+- **createDeferredEffect(() => { ... })** batches dependency changes and runs once at the end of each frame where any dependency changed. Use it when multiple signals update frequently and you only need a single reaction per frame.
+- Common pattern: keep an array of refs, compare its length to `Math.round(count())`, add missing nodes via `container().add(...)` (optionally scheduling entry tweens with `spawn()`), and remove extras with exit tweens before calling `.remove()`. Effects ensure the hierarchy matches the signal without manual polling.
+- Effects return an unsubscribe function; store it if you need to dispose the effect later. Prefer regular signals for visual properties, and reserve effects for mutation-heavy workflows.
+
 ## Shaders (experimental)
 
 - Shaders allow custom WebGL effects on any node via the **shaders** property.
@@ -281,9 +300,9 @@ When providing code to createComponent or editComponent, supply complete, valid 
 
 ## Random values
 
-- **Reproducible randomness**: use **useRandom()** from '@motion-canvas/core' (do **not** import `random` — it is not exported). In class components, call it in the constructor or a field: `private readonly _random = useRandom();` then use `this._random.nextInt(0, 10)`. In scene generators: `const random = useRandom(); const n = random.nextInt(0, 10);`
-  - **Custom seed**: `useRandom(123)` for a fixed sequence. The default seed is stored in the scene meta file.
-- **API**: see Random in Motion Canvas core (nextInt, nextFloat, etc.). Use for varied heights, positions, or visual variety while keeping the animation deterministic.
+- **Deterministic RNG**: call **useRandom()** from '@motion-canvas/core' (never Math.random). The generator's seed is stored alongside the scene, so repeated renders stay identical. Example: `const random = useRandom(); const n = random.nextInt(0, 10);`.
+- **Custom seed**: pass `useRandom(123)` (or any number) to force a specific deterministic sequence without editing scene metadata.
+- **API**: generators expose helpers like `nextInt`, `nextFloat`, `shuffle`, etc. Use them for varied heights, offsets, and colors while preserving reproducibility.
 
 ## Geographic / map path data (d3-geo)
 

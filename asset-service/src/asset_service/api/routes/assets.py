@@ -79,6 +79,13 @@ class UploadResponse(BaseModel):
     transcodeStarted: bool = False
 
 
+def _is_unsupported_video_format(mime: str, filename: str) -> bool:
+    if mime in ("video/quicktime", "video/x-msvideo"):
+        return True
+    ext = (filename or "").lower().split(".")[-1]
+    return ext in ("mov", "avi", "qt")
+
+
 @router.post("/{user_id}/{project_id}/upload", response_model=UploadResponse)
 async def upload_asset(
     request: Request,
@@ -205,12 +212,6 @@ async def upload_asset(
         if transcode_video_bitrate:
             parsed_transcode_opts["videoBitrate"] = transcode_video_bitrate
 
-    def _is_unsupported_video_format(mime: str, filename: str) -> bool:
-        if mime in ("video/quicktime", "video/x-msvideo"):
-            return True
-        ext = (filename or "").lower().split(".")[-1]
-        return ext in ("mov", "avi", "qt")
-
     transcode_started = False
     pipeline_started = False
     need_transcode_then_pipeline = (
@@ -300,6 +301,9 @@ class RegisterGcsRequest(BaseModel):
     source: str = "render"  # Source identifier
     runPipeline: bool = True  # Whether to run the analysis pipeline
     threadId: str | None = None  # For agent notifications
+    transcodeOptions: dict[str, Any] | None = None
+    transcodeFormat: str | None = None
+    transcodeVideoBitrate: int | None = None
 
 
 @router.post("/{user_id}/{project_id}/register-gcs", response_model=UploadResponse)
@@ -401,9 +405,50 @@ async def register_gcs_asset(
 
     saved_asset = await asyncio.to_thread(save_asset, user_id, project_id, asset_data, settings)
 
+    parsed_transcode_opts: dict[str, Any] = {}
+    if body.transcodeOptions:
+        parsed_transcode_opts = dict(body.transcodeOptions)
+    elif body.transcodeFormat or body.transcodeVideoBitrate:
+        if body.transcodeFormat:
+            parsed_transcode_opts["outputFormat"] = body.transcodeFormat
+        if body.transcodeVideoBitrate:
+            parsed_transcode_opts["videoBitrate"] = body.transcodeVideoBitrate
+
+    transcode_started = False
     # Queue pipeline if requested
     pipeline_started = False
-    if body.runPipeline:
+    need_transcode_then_pipeline = (
+        asset_type == "video"
+        and body.runPipeline
+        and (
+            _is_unsupported_video_format(mime_type, filename)
+            or parsed_transcode_opts
+        )
+    )
+
+    if need_transcode_then_pipeline:
+        try:
+            queue = await get_task_queue()
+            agent_metadata = (
+                {"threadId": body.threadId, "userId": user_id, "projectId": project_id}
+                if body.threadId
+                else None
+            )
+            await queue.enqueue_transcode(
+                user_id=user_id,
+                project_id=project_id,
+                asset_id=asset_id,
+                asset_data=saved_asset,
+                params=parsed_transcode_opts,
+                trigger_pipeline_after=True,
+                agent_metadata=agent_metadata,
+            )
+            transcode_started = True
+            pipeline_started = True
+            logger.info(f"Queued transcode then pipeline for GCS asset {asset_id}")
+        except Exception as e:
+            logger.error(f"Failed to queue transcode for registered GCS asset {asset_id}: {e}")
+    elif body.runPipeline:
         try:
             queue = await get_task_queue()
             agent_metadata = (
@@ -443,7 +488,7 @@ async def register_gcs_asset(
     return UploadResponse(
         asset=AssetResponse(**response_asset),
         pipelineStarted=pipeline_started,
-        transcodeStarted=False,
+        transcodeStarted=transcode_started,
     )
 
 

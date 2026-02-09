@@ -1219,7 +1219,57 @@ Assets: {len(assets_info)}"""
             try:
                 last_response = None
                 tool_calls_made = []
+                reported_thought_signatures: dict[str, str] = {}
+                reported_anonymous_thoughts: set[str] = set()
                 from langchain_core.messages import ToolMessage
+
+                async def _send_new_thoughts(ai_message: AIMessage) -> None:
+                    """Forward fresh Gemini thinking/reasoning chunks directly to Telegram."""
+                    content = getattr(ai_message, "content", None)
+                    if not isinstance(content, list):
+                        return
+
+                    new_texts: list[str] = []
+                    for block in content:
+                        if not isinstance(block, dict):
+                            continue
+                        block_type = block.get("type")
+                        text = None
+                        signature = None
+
+                        if block_type == "thinking":
+                            text = block.get("thinking") or block.get("text")
+                            signature = block.get("signature")
+                        elif block_type == "reasoning":
+                            text = block.get("reasoning") or block.get("text")
+                            extras = block.get("extras") or {}
+                            signature = extras.get("signature")
+                        else:
+                            continue
+
+                        if not text:
+                            continue
+                        stripped = (text or "").strip()
+                        if not stripped:
+                            continue
+
+                        if signature:
+                            prev = reported_thought_signatures.get(signature)
+                            if prev == stripped:
+                                continue
+                            reported_thought_signatures[signature] = stripped
+                        else:
+                            if stripped in reported_anonymous_thoughts:
+                                continue
+                            reported_anonymous_thoughts.add(stripped)
+                        new_texts.append(stripped)
+
+                    for chunk in new_texts:
+                        try:
+                            await send_telegram_message(chat_id, chunk, self.settings, italic=True)
+                        except Exception as e:
+                            logger.debug("Failed to forward thinking chunk to Telegram: %s", e)
+                            break
 
                 async for event in graph.astream({"messages": langchain_messages}, config=config, stream_mode="values", context=agent_context):
                     messages = event.get("messages", [])
@@ -1229,21 +1279,13 @@ Assets: {len(assets_info)}"""
                     if isinstance(last_msg, ToolMessage):
                         logger.info("[TELEGRAM] Tool result for %s: %s", last_msg.name if hasattr(last_msg, 'name') else 'unknown', str(last_msg.content)[:500])
                     if isinstance(last_msg, AIMessage):
+                        await _send_new_thoughts(last_msg)
                         if hasattr(last_msg, 'tool_calls') and last_msg.tool_calls:
                             for tc in last_msg.tool_calls:
                                 tool_name = tc.get("name", "unknown")
                                 tool_args = tc.get("args", {})
                                 logger.info("[TELEGRAM] Tool call: %s(%s)", tool_name, str(tool_args)[:200])
                                 tool_calls_made.append(tool_name)
-                                async def _send_tool_status() -> None:
-                                    try:
-                                        from ..status_generator import generate_status_message
-                                        msg = await generate_status_message("tool", tool_name=tool_name, for_telegram=True, settings=self.settings)
-                                        if msg:
-                                            await send_telegram_message(chat_id, msg, self.settings, italic=True)
-                                    except Exception as e:
-                                        logger.debug("Failed to send tool status to Telegram: %s", e)
-                                asyncio.create_task(_send_tool_status())
                         else:
                             content = last_msg.content
                             if isinstance(content, str):
