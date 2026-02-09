@@ -37,7 +37,27 @@ export function createComponentElements({ clips, view }: CreateComponentElements
       // Only pass defined input values so we don't overwrite component signals with undefined
       const inputs = clip.inputs ?? {};
       const definedInputs = Object.fromEntries(
-        Object.entries(inputs).filter(([, v]) => v !== undefined && v !== null)
+        Object.entries(inputs)
+          .filter(([, v]) => v !== undefined && v !== null)
+          .map(([key, value]) => {
+            // Convert literal escape sequences to actual characters for string inputs
+            // Preserve all whitespace including spaces, tabs, and newlines
+            if (typeof value === 'string') {
+              let processed = value;
+              // IMPORTANT: Order matters! Handle \\n and \\t BEFORE \\\\
+              // Convert literal escape sequences: \\n -> newline, \\t -> tab
+              // After JSON.parse, "\\n" becomes "\n" (backslash + n), so we match literal \n
+              processed = processed.replace(/\\n/g, '\n');
+              processed = processed.replace(/\\t/g, '\t');
+              processed = processed.replace(/\\r/g, '\r');
+              // Handle double backslashes AFTER single escape sequences
+              // This preserves literal backslashes that aren't part of escape sequences
+              processed = processed.replace(/\\\\/g, '\\');
+              // Preserve all other whitespace (spaces, etc.) as-is - no trimming or normalization
+              return [key, processed];
+            }
+            return [key, value];
+          })
       ) as Record<string, string | number | boolean>;
 
       // Stable key by clip id only (no inputs fingerprint). When the key included inputsKey,

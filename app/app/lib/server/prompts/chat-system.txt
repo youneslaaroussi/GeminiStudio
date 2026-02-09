@@ -160,19 +160,20 @@ When helping with scene code or custom components, the project uses **Motion Can
 
 ### Code (syntax highlighting)
 
+- **Code**: code (string or CODE-tagged template), fontSize, fill, **fontFamily**. **CRITICAL: Always set fontFamily="JetBrains Mono Variable" (not "JetBrains Mono") for Code components to ensure proper character width measurement.**
 - **CODE** tag: use `code={CODE\`...${signal}\`}` so signals update the snippet; plain template strings capture values once.
 - **Code.createSignal**(initial) for reactive code; use inside CODE templates. Animation methods live on the **code** property: code().code(newVal, duration), code().code.append(text, duration), .insert([line,col], text, duration), .replace(range, text, duration), .remove(range, duration), .edit(duration)\`...\`, .selection(ranges, duration).
 - **Grammars**: Project uses **@lezer/javascript** (JS/TS/JSX). For other languages install and set **highlighter** on the node: npm i @lezer/python → `import {parser} from '@lezer/python'; const PyHighlighter = new LezerHighlighter(parser);` then `<Code highlighter={PyHighlighter} code={...} />`. Available: @lezer/javascript, @lezer/python, @lezer/rust, @lezer/cpp, @lezer/html, @lezer/css, @lezer/json, @lezer/markdown, @lezer/go, @lezer/java, @lezer/php, @lezer/xml, @lezer/yaml, @lezer/sass, @lezer/clojure, @lezer/julia.
 
 ### Available fonts
 
-Use the **exact** fontFamily string in Txt or components so text renders (e.g. fontFamily="Inter Variable", fontFamily="Poppins", fontFamily="JetBrains Mono Variable"). Do not use generic names like "sans-serif" or unlisted fonts. **For Code components, ALWAYS use fontFamily="JetBrains Mono Variable" (not "JetBrains Mono") for proper character width measurement.**
+Use the **exact** fontFamily string in Txt or components so text renders (e.g. fontFamily="Inter Variable", fontFamily="Poppins", fontFamily="JetBrains Mono Variable"). **For Code components, you MUST use fontFamily="JetBrains Mono Variable" (not "JetBrains Mono") to ensure proper character width measurement.** Do not use generic names like "sans-serif" or unlisted fonts.
 
 **Variable:** Inter Variable, Open Sans Variable, Montserrat Variable, IBM Plex Sans Variable, Public Sans Variable, DM Sans Variable, Noto Sans Variable, Plus Jakarta Sans Variable, Mulish Variable, Nunito Sans Variable, Nunito Variable, Merriweather Variable, Roboto Variable, Work Sans Variable, Space Grotesk Variable, Manrope Variable, Outfit Variable, Raleway Variable, Playfair Display Variable, Crimson Pro Variable, Literata Variable, Vollkorn Variable, Lora Variable.
 
 **Fixed-weight:** Poppins, Roboto, Montserrat, Playfair Display, Raleway, Lato, Ubuntu, Cabin, Rubik, Quicksand, Comfortaa, Kalam, Pacifico, Bebas Neue, Oswald, Anton, Righteous, Lobster, Dancing Script, Barlow, Fira Sans, IBM Plex Sans, Source Sans Pro, Noto Sans, Work Sans, Space Grotesk, Manrope, Outfit, DM Sans, Plus Jakarta Sans, Mulish, Nunito, Nunito Sans, Merriweather, Public Sans, Crimson Pro, Literata, Libre Baskerville, Spectral, Crimson Text, Vollkorn, Lora, Alegreya, Cormorant, PT Serif.
 
-**Monospace (code):** **JetBrains Mono Variable** (MUST use this exact name for Code components - "JetBrains Mono" does not work correctly for character width measurement).
+**Monospace (code):** JetBrains Mono Variable. **IMPORTANT: For Code components, ALWAYS use fontFamily="JetBrains Mono Variable" (not "JetBrains Mono") to ensure proper character width measurement.**
 
 ### Latex — pitfalls
 

@@ -3,6 +3,8 @@
 import type { ComponentClip, VisualEffectType } from "@/app/types/timeline";
 import type { ComponentInputDef } from "@/app/types/assets";
 import { EditableInput } from "@/app/components/ui/EditableInput";
+import { EditableTextarea } from "@/app/components/ui/EditableTextarea";
+import { cn } from "@/lib/utils";
 import {
   toNumber,
   inputClassName,
@@ -123,15 +125,35 @@ function InputField({
 
   switch (def.type) {
     case "string":
+      // Convert literal \n sequences to actual newlines for display
+      let stringValue = String(value);
+      // Replace literal backslash-n with actual newline characters
+      stringValue = stringValue.replace(/\\n/g, '\n');
+      const isMultiline = stringValue.includes('\n') || stringValue.length > 50;
       return (
         <div>
           <label className={labelClassName}>{label}</label>
-          <EditableInput
-            type="text"
-            value={String(value)}
-            className={inputClassName}
-            onValueCommit={(val) => onChange(val)}
-          />
+          {isMultiline ? (
+            <EditableTextarea
+              value={stringValue}
+              className={cn(inputClassName, "min-h-[100px] resize-y text-sm")}
+              style={{ 
+                fontFamily: 'var(--font-keyboard)',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'normal'
+              }}
+              onValueCommit={(val) => onChange(val)}
+              rows={Math.max(3, stringValue.split('\n').length)}
+            />
+          ) : (
+            <EditableInput
+              type="text"
+              value={stringValue}
+              className={inputClassName}
+              style={{ fontFamily: 'var(--font-keyboard)' }}
+              onValueCommit={(val) => onChange(val)}
+            />
+          )}
         </div>
       );
     case "number":

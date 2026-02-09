@@ -21,7 +21,7 @@ export function useEditableInput({ value, onCommit }: UseEditableInputOptions) {
     setDraft(null);
   }, []);
 
-  const handleChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = useCallback((event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setDraft(event.target.value);
   }, []);
 
@@ -30,8 +30,10 @@ export function useEditableInput({ value, onCommit }: UseEditableInputOptions) {
   }, [commit]);
 
   const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === 'Enter') {
+    (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      // For textarea, allow Enter for newlines, only blur on Escape
+      const isTextarea = event.currentTarget instanceof HTMLTextAreaElement;
+      if (!isTextarea && event.key === 'Enter') {
         event.currentTarget.blur();
       } else if (event.key === 'Escape') {
         event.preventDefault();

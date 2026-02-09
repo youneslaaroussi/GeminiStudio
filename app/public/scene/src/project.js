@@ -31769,7 +31769,17 @@ function createComponentElements({ clips, view }) {
       const ref = createRef();
       const inputs = clip2.inputs ?? {};
       const definedInputs = Object.fromEntries(
-        Object.entries(inputs).filter(([, v]) => v !== void 0 && v !== null)
+        Object.entries(inputs).filter(([, v]) => v !== void 0 && v !== null).map(([key, value]) => {
+          if (typeof value === "string") {
+            let processed = value;
+            processed = processed.replace(/\\n/g, "\n");
+            processed = processed.replace(/\\t/g, "	");
+            processed = processed.replace(/\\r/g, "\r");
+            processed = processed.replace(/\\\\/g, "\\");
+            return [key, processed];
+          }
+          return [key, value];
+        })
       );
       const props = {
         ...definedInputs,
