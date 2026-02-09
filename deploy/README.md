@@ -115,13 +115,17 @@ Deploy all GeminiStudio backend services on a single GCE VM with Docker Compose.
    CICD_SA_EMAIL="gemini-studio-cicd@${PROJECT_ID}.iam.gserviceaccount.com"
 
    # Grant deployment permissions
-   gcloud projects add-iam-policy-binding $PROJECT_ID \
+  gcloud projects add-iam-policy-binding $PROJECT_ID \
      --member="serviceAccount:$CICD_SA_EMAIL" \
      --role="roles/compute.instanceAdmin.v1"
 
-   gcloud projects add-iam-policy-binding $PROJECT_ID \
+  gcloud projects add-iam-policy-binding $PROJECT_ID \
      --member="serviceAccount:$CICD_SA_EMAIL" \
      --role="roles/iam.serviceAccountUser"
+
+  gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:$CICD_SA_EMAIL" \
+     --role="roles/iap.tunnelResourceAccessor"
 
    # Create and download key for GitHub Actions
    gcloud iam service-accounts keys create cicd-service-account.json \
@@ -266,6 +270,8 @@ Allowed origins: `https://www.geminivideo.studio`, `https://geminivideo.studio`,
 
 ### 5. Setup the VM
 
+Because the firewall only trusts Cloudflare, every `gcloud compute ssh` / `gcloud compute scp` command must tunnel through IAP. The commands below already include `--tunnel-through-iap`; keep that flag anytime you copy them elsewhere.
+
 **Important:** CI/CD does NOT copy service account files - they must be manually provisioned on the VM. The `secrets/` folder is gitignored and excluded from deployments.
 
 You need TWO service account files:
@@ -277,25 +283,28 @@ You need TWO service account files:
 
 ```bash
 # Create secrets directory on VM
-gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo mkdir -p /opt/gemini-studio/deploy/secrets'
+gcloud compute ssh gemini-studio --zone=us-central1-a --tunnel-through-iap --command='sudo mkdir -p /opt/gemini-studio/deploy/secrets'
 
 # Copy the generated .env file
 gcloud compute scp ../generated.env gemini-studio:/opt/gemini-studio/deploy/.env \
-  --zone=us-central1-a
+  --zone=us-central1-a \
+  --tunnel-through-iap
 
 # Copy GCP service account (for Storage, Pub/Sub, Vertex AI, Speech)
 gcloud compute scp ./google-service-account.json gemini-studio:/tmp/google-sa.json \
-  --zone=us-central1-a
-gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo mv /tmp/google-sa.json /opt/gemini-studio/deploy/secrets/google-service-account.json && sudo chmod 644 /opt/gemini-studio/deploy/secrets/google-service-account.json'
+  --zone=us-central1-a \
+  --tunnel-through-iap
+gcloud compute ssh gemini-studio --zone=us-central1-a --tunnel-through-iap --command='sudo mv /tmp/google-sa.json /opt/gemini-studio/deploy/secrets/google-service-account.json && sudo chmod 644 /opt/gemini-studio/deploy/secrets/google-service-account.json'
 
 # Copy Firebase service account (MUST match your Firebase project ID)
 # Download from: Firebase Console → Project Settings → Service Accounts → Generate new private key
 gcloud compute scp ./firebase-service-account.json gemini-studio:/tmp/firebase-sa.json \
-  --zone=us-central1-a
-gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo mv /tmp/firebase-sa.json /opt/gemini-studio/deploy/secrets/firebase-service-account.json && sudo chmod 644 /opt/gemini-studio/deploy/secrets/firebase-service-account.json'
+  --zone=us-central1-a \
+  --tunnel-through-iap
+gcloud compute ssh gemini-studio --zone=us-central1-a --tunnel-through-iap --command='sudo mv /tmp/firebase-sa.json /opt/gemini-studio/deploy/secrets/firebase-service-account.json && sudo chmod 644 /opt/gemini-studio/deploy/secrets/firebase-service-account.json'
 
 # SSH into the VM
-gcloud compute ssh gemini-studio --zone=us-central1-a
+gcloud compute ssh gemini-studio --zone=us-central1-a --tunnel-through-iap
 ```
 
 **Verify the Firebase service account project matches your app:**
@@ -389,10 +398,11 @@ terraform apply
 
 # Copy updated .env to VM
 gcloud compute scp ../generated.env gemini-studio:/opt/gemini-studio/deploy/.env \
-  --zone=us-central1-a
+  --zone=us-central1-a \
+  --tunnel-through-iap
 
 # Restart services to pick up changes
-gcloud compute ssh gemini-studio --zone=us-central1-a -- \
+gcloud compute ssh gemini-studio --zone=us-central1-a --tunnel-through-iap -- \
   "cd /opt/gemini-studio/deploy && docker compose restart"
 ```
 
@@ -435,12 +445,12 @@ This means your `firebase-service-account.json` is from a different project than
 2. Click "Generate new private key"
 3. Copy to VM:
    ```bash
-   gcloud compute scp firebase-service-account.json gemini-studio:/tmp/firebase-sa.json --zone=us-central1-a
-   gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo mv /tmp/firebase-sa.json /opt/gemini-studio/deploy/secrets/firebase-service-account.json && sudo chmod 644 /opt/gemini-studio/deploy/secrets/firebase-service-account.json'
+   gcloud compute scp firebase-service-account.json gemini-studio:/tmp/firebase-sa.json --zone=us-central1-a --tunnel-through-iap
+   gcloud compute ssh gemini-studio --zone=us-central1-a --tunnel-through-iap --command='sudo mv /tmp/firebase-sa.json /opt/gemini-studio/deploy/secrets/firebase-service-account.json && sudo chmod 644 /opt/gemini-studio/deploy/secrets/firebase-service-account.json'
    ```
 4. Restart frontend:
    ```bash
-   gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml restart frontend'
+   gcloud compute ssh gemini-studio --zone=us-central1-a --tunnel-through-iap --command='sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml restart frontend'
    ```
 
 ### Out of memory
@@ -466,7 +476,7 @@ The renderer service publishes render completion/failure events to Pub/Sub. If y
 PROJECT_ID=$(gcloud config get-value project)
 
 # Find which service account is being used
-gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo cat /opt/gemini-studio/deploy/secrets/google-service-account.json | grep client_email'
+gcloud compute ssh gemini-studio --zone=us-central1-a --tunnel-through-iap --command='sudo cat /opt/gemini-studio/deploy/secrets/google-service-account.json | grep client_email'
 
 # Grant Pub/Sub Publisher role (replace with the email from above)
 SERVICE_ACCOUNT="your-service-account@your-project.iam.gserviceaccount.com"
@@ -476,7 +486,7 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
   --role="roles/pubsub.publisher"
 
 # Restart renderer to apply changes
-gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml restart renderer'
+gcloud compute ssh gemini-studio --zone=us-central1-a --tunnel-through-iap --command='sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml restart renderer'
 ```
 
 **Important**: The Docker containers use the service account JSON file mounted at `/app/secrets/google-service-account.json`, NOT the VM's compute service account. Make sure you grant permissions to the correct service account.
@@ -504,10 +514,10 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
   --role="roles/pubsub.subscriber"
 
 # 3. Restart LangGraph to pick up permissions
-gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml restart langgraph-server'
+gcloud compute ssh gemini-studio --zone=us-central1-a --tunnel-through-iap --command='sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml restart langgraph-server'
 
 # 4. Check logs to verify subscription is active
-gcloud compute ssh gemini-studio --zone=us-central1-a --command='sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml logs langgraph-server --tail=50'
+gcloud compute ssh gemini-studio --zone=us-central1-a --tunnel-through-iap --command='sudo docker compose -f /opt/gemini-studio/deploy/docker-compose.yml logs langgraph-server --tail=50'
 ```
 
 Look for log messages like:

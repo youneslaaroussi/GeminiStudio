@@ -85,7 +85,7 @@ jobs:
             gcloud compute instances add-metadata $INSTANCE_NAME --zone=$ZONE --project=$PROJECT_ID --metadata=ssh-keys="$NEW"
             echo "Waiting for SSH key to propagate on instance..."
             for i in $(seq 1 30); do
-              if gcloud compute ssh runner@$INSTANCE_NAME --zone=$ZONE --project=$PROJECT_ID --command='echo SSH ready' 2>/dev/null; then
+              if gcloud compute ssh runner@$INSTANCE_NAME --zone=$ZONE --project=$PROJECT_ID --tunnel-through-iap --command='echo SSH ready' 2>/dev/null; then
                 echo "SSH connection successful after $i attempt(s)"
                 break
               fi
@@ -105,7 +105,8 @@ jobs:
             gcloud compute scp /tmp/repo.tar.gz \
               runner@$INSTANCE_NAME:/tmp/repo.tar.gz \
               --zone=$ZONE \
-              --project=$PROJECT_ID
+              --project=$PROJECT_ID \
+              --tunnel-through-iap
 
       - run:
           name: Deploy to VM
@@ -209,11 +210,13 @@ jobs:
 
             gcloud compute scp /tmp/deploy.env runner@$INSTANCE_NAME:/tmp/deploy.env \
               --zone=$ZONE \
-              --project=$PROJECT_ID
+              --project=$PROJECT_ID \
+              --tunnel-through-iap
 
             gcloud compute ssh runner@$INSTANCE_NAME \
               --zone=$ZONE \
               --project=$PROJECT_ID \
+              --tunnel-through-iap \
               --command='set -e
                 sudo mkdir -p /opt/gemini-studio
                 sudo chown -R $(whoami):$(whoami) /opt/gemini-studio
