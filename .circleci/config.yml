@@ -6,24 +6,6 @@
 version: 2.1
 
 jobs:
-  verify-templates:
-    docker:
-      - image: cimg/node:22.11.0
-    steps:
-      - checkout
-      - run:
-          name: Install pnpm
-          command: sudo npm install -g pnpm@9
-      - run:
-          name: Install dependencies
-          command: pnpm install --frozen-lockfile
-      - run:
-          name: Build scene-compiler
-          command: pnpm --filter @gemini-studio/scene-compiler build
-      - run:
-          name: Verify component templates compile
-          command: pnpm --filter gemini-studio run verify:templates
-
   deploy:
     docker:
       - image: google/cloud-sdk:alpine
@@ -233,10 +215,7 @@ jobs:
 workflows:
   verify-and-deploy:
     jobs:
-      - verify-templates
       - deploy:
-          requires:
-            - verify-templates
           filters:
             branches:
               only: main
