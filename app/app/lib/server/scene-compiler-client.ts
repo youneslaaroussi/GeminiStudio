@@ -35,6 +35,8 @@ export interface CompileSceneRequest {
   files?: Record<string, string>;
   /** When false, skip tsc diagnostics (faster). Default true. */
   includeDiagnostics?: boolean;
+  /** When true, bypass server-side compile cache for a fresh build */
+  skipCache?: boolean;
 }
 
 /** A single type/lint diagnostic from the compiler. */

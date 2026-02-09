@@ -9,6 +9,8 @@
 export type CompileSceneBody = {
   files?: Record<string, string>;
   includeDiagnostics?: boolean;
+  /** When true, bypass server-side compile cache for a fresh build */
+  skipCache?: boolean;
 };
 
 type Waiter = { resolve: (res: Response) => void; reject: (err: unknown) => void };

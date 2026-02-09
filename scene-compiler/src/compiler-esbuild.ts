@@ -562,7 +562,7 @@ export async function compileSceneEsbuild(
   // --- Check cache ---
   const cacheHash = computeInputHash(config.baseSceneDir, request.files);
   const cached = getCached(cacheHash);
-  if (cached) {
+  if (cached && !request.skipCache) {
     // When diagnostics were requested and the cached result has them, or
     // when diagnostics were NOT requested, we can return the cached result.
     const wantDiagnostics = request.includeDiagnostics !== false;

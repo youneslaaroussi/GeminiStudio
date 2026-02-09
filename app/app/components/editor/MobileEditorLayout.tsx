@@ -382,14 +382,26 @@ export function MobileEditorLayout() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab content - all stay mounted, visibility controlled by CSS */}
+        {/* Tab content - all stay mounted, visibility and z-index controlled by CSS */}
         <div className="flex-1 min-h-0 relative">
-          <div className={cn("absolute inset-0", activeTab === "chat" ? "visible" : "invisible pointer-events-none")}>
+          <div
+            className={cn(
+              "absolute inset-0",
+              activeTab === "chat" ? "visible z-10" : "invisible pointer-events-none z-0 hidden"
+            )}
+          >
             <div className="h-full w-full bg-card overflow-hidden">
               <ChatPanel />
             </div>
           </div>
-          <div className={cn("absolute inset-0 flex flex-col", activeTab === "preview" ? "visible" : "invisible pointer-events-none")}>
+          <div
+            className={cn(
+              "absolute inset-0 flex flex-col",
+              activeTab === "preview"
+                ? "visible z-10"
+                : "invisible pointer-events-none z-0 hidden"
+            )}
+          >
             <div className="flex-1 min-h-0 bg-card overflow-hidden">
               <PreviewPanel
                 ref={previewRef}
@@ -430,12 +442,22 @@ export function MobileEditorLayout() {
               onSeek={setCurrentTime}
             />
           </div>
-          <div className={cn("absolute inset-0", activeTab === "assets" ? "visible" : "invisible pointer-events-none")}>
+          <div
+            className={cn(
+              "absolute inset-0",
+              activeTab === "assets" ? "visible z-10" : "invisible pointer-events-none z-0 hidden"
+            )}
+          >
             <div className="h-full w-full bg-card overflow-hidden">
               <AssetsPanel onSetAssetTabReady={handleAssetTabReady} />
             </div>
           </div>
-          <div className={cn("absolute inset-0", activeTab === "render" ? "visible" : "invisible pointer-events-none")}>
+          <div
+            className={cn(
+              "absolute inset-0",
+              activeTab === "render" ? "visible z-10" : "invisible pointer-events-none z-0 hidden"
+            )}
+          >
             <ScrollArea className="h-full w-full">
               <div className="p-4 space-y-4">
                 <div>

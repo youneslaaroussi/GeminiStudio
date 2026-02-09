@@ -39,9 +39,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { files, includeDiagnostics } = body as {
+    const { files, includeDiagnostics, skipCache } = body as {
       files?: Record<string, string>;
       includeDiagnostics?: boolean;
+      skipCache?: boolean;
     };
 
     // Validate files if provided
@@ -73,6 +74,7 @@ export async function POST(request: NextRequest) {
     const result = await compileScene({
       files,
       includeDiagnostics: includeDiagnostics !== false,
+      skipCache,
     });
 
     // 4. Return compiled JS

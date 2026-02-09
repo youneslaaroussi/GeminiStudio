@@ -186,6 +186,8 @@ export interface CompileRequest {
   files?: Record<string, string>;
   /** When false, skip tsc --noEmit (faster; no diagnostics returned). Default true for backward compatibility. */
   includeDiagnostics?: boolean;
+  /** When true, bypass server-side compile cache for a fresh build */
+  skipCache?: boolean;
 }
 
 export interface CompileResult {

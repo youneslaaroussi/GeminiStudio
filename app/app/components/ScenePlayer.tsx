@@ -293,34 +293,38 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
   }, []);
 
   // Compile and load scene
-  const compileAndLoad = useCallback(async (files: Record<string, string>, hash: string) => {
-    if (isCompilingRef.current) {
-      pendingRecompileRef.current = true;
-      return;
-    }
-    isCompilingRef.current = true;
-    setIsCompiling(true);
-    try {
-      // Try IndexedDB cache first
-      if (projectId) {
-        const cached = await getCachedScene(projectId, hash);
-        if (cached) {
-          console.log('[ScenePlayer] Using cached scene for hash', hash);
-          const proj = await loadCompiledJs(cached.js);
-          compiledCodeHashRef.current = hash;
-          setProject(proj);
-          setError(null);
-          // Still recompile in background to ensure cache stays fresh
-          // (but don't block the UI)
-          isCompilingRef.current = false;
-          setIsCompiling(false);
-          return;
-        }
+  const compileAndLoad = useCallback(
+    async (files: Record<string, string>, hash: string, skipCache = false) => {
+      if (isCompilingRef.current) {
+        pendingRecompileRef.current = true;
+        return;
       }
+      isCompilingRef.current = true;
+      setIsCompiling(true);
+      try {
+        // Try IndexedDB cache first (unless skipCache, e.g. manual recompile)
+        if (projectId && !skipCache) {
+          const cached = await getCachedScene(projectId, hash);
+          if (cached) {
+            console.log('[ScenePlayer] Using cached scene for hash', hash);
+            const proj = await loadCompiledJs(cached.js);
+            compiledCodeHashRef.current = hash;
+            setProject(proj);
+            setError(null);
+            // Still recompile in background to ensure cache stays fresh
+            // (but don't block the UI)
+            isCompilingRef.current = false;
+            setIsCompiling(false);
+            return;
+          }
+        }
 
       const authHeaders = await getAuthHeaders();
       const res = await requestCompileScene(
-        { files: Object.keys(files).length > 0 ? files : undefined },
+        {
+          files: Object.keys(files).length > 0 ? files : undefined,
+          skipCache: skipCache || undefined,
+        },
         authHeaders
       );
       if (!res.ok) {
@@ -369,7 +373,7 @@ export const ScenePlayer = forwardRef<ScenePlayerHandle, ScenePlayerProps>(funct
       setZoomToFit(true);
     },
     recompile: () => {
-      void compileAndLoad(componentFiles, codeHash);
+      void compileAndLoad(componentFiles, codeHash, true);
     },
   }), [compileAndLoad, componentFiles, codeHash]);
 

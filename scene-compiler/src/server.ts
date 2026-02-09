@@ -15,6 +15,7 @@ const compile = useEsbuild ? compileSceneEsbuild : compileScene;
 const compileRequestSchema = z.object({
   files: z.record(z.string(), z.string()).optional(),
   includeDiagnostics: z.boolean().optional(),
+  skipCache: z.boolean().optional(),
 });
 
 export const createServer = (config: CompilerConfig): Express => {
@@ -39,7 +40,7 @@ export const createServer = (config: CompilerConfig): Express => {
         return;
       }
 
-      const { files, includeDiagnostics } = parse.data;
+      const { files, includeDiagnostics, skipCache } = parse.data;
 
       // Check total input size of file overrides
       if (files) {
@@ -61,7 +62,7 @@ export const createServer = (config: CompilerConfig): Express => {
 
       try {
         const result = await Promise.race([
-          compile(config, { files, includeDiagnostics }),
+          compile(config, { files, includeDiagnostics, skipCache }),
           new Promise<never>((_, reject) => {
             controller.signal.addEventListener('abort', () =>
               reject(new Error(`Build timed out after ${config.buildTimeoutMs}ms`)),

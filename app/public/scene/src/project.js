@@ -31843,6 +31843,65 @@ function* playComponent({ entry, sceneWidth, sceneHeight }) {
   }
   yield* applyExitTransition(node, clip2.exitTransition, sceneWidth, sceneHeight);
 }
+const INVALID_COLOR_VALUES = /* @__PURE__ */ new Set([
+  "transparent",
+  "none",
+  "inherit",
+  "initial",
+  "unset",
+  "currentcolor",
+  "currentColor"
+]);
+const COLOR_KEYS = /* @__PURE__ */ new Set([
+  "fill",
+  "backgroundColor",
+  "background",
+  "color",
+  "barColor",
+  "labelColor",
+  "formulaColor"
+]);
+function isColorKey(key) {
+  return COLOR_KEYS.has(key) || key.endsWith("Color");
+}
+function isInvalidColorValue(value) {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "" || INVALID_COLOR_VALUES.has(normalized);
+}
+function sanitizeColorsInObject(obj) {
+  if (obj === null || obj === void 0) return obj;
+  if (typeof obj !== "object") return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeColorsInObject);
+  }
+  const result = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (isColorKey(key) && isInvalidColorValue(value)) {
+      continue;
+    }
+    result[key] = sanitizeColorsInObject(value);
+  }
+  return result;
+}
+function filterInvalidColors(data) {
+  return sanitizeColorsInObject(data);
+}
+const STEPS = [
+  filterInvalidColors
+  // Add more correction steps here as needed.
+];
+function correctSceneData(data) {
+  let result = data;
+  for (const step of STEPS) {
+    result = step(result);
+  }
+  return result;
+}
+function correctLayers(layers) {
+  const corrected = correctSceneData({ layers });
+  return corrected.layers ?? layers;
+}
 var __defProp2 = Object.defineProperty;
 var __decorateClass = (decorators, target, key, kind) => {
   var result = void 0;
@@ -31934,7 +31993,7 @@ const description = makeScene2D(function* (view) {
     distanceFromBottom: 140,
     style: "pill"
   };
-  const layers = scene.variables.get("layers", [])();
+  const layers = correctLayers(scene.variables.get("layers", [])());
   const transitions = scene.variables.get("transitions", {})();
   const captionSettings = scene.variables.get("captionSettings", defaultCaptionSettings)();
   const textClipSettings = scene.variables.get("textClipSettings", {

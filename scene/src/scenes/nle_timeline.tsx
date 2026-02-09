@@ -14,6 +14,7 @@ import {
   playComponent,
 } from '../lib/clips';
 import { normalizeRawSegments, makeTransitionKey } from '../lib/helpers';
+import { correctLayers } from '../lib/correction';
 import type {
   Layer,
   VideoClip,
@@ -51,7 +52,7 @@ export default makeScene2D(function* (view) {
   };
 
   // Get variables from the player (read once for layout; style read reactively below)
-  const layers = scene.variables.get<Layer[]>('layers', [])();
+  const layers = correctLayers(scene.variables.get<Layer[]>('layers', [])());
   const transitions = scene.variables.get<Record<string, ClipTransition>>('transitions', {})();
   const captionSettings = scene.variables.get<CaptionSettings>('captionSettings', defaultCaptionSettings)();
   const textClipSettings = scene.variables.get<TextClipSettings>('textClipSettings', {
